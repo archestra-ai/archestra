@@ -1,6 +1,6 @@
 "use client";
 
-import type { SsoProviderFormValues } from "@shared";
+import type { IdentityProviderFormValues } from "@shared";
 import { Info } from "lucide-react";
 import { useCallback, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 
 interface TeamSyncConfigFormProps {
-  form: UseFormReturn<SsoProviderFormValues>;
+  form: UseFormReturn<IdentityProviderFormValues>;
 }
 
 const HANDLEBARS_EXAMPLES = [

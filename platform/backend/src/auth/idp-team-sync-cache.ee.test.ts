@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@/test";
-import { extractGroupsFromClaims } from "./sso-team-sync-cache.ee";
+import { extractGroupsFromClaims } from "./idp-team-sync-cache.ee";
 
 describe("extractGroupsFromClaims", () => {
   describe("without teamSyncConfig", () => {

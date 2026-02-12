@@ -161,22 +161,22 @@ function extractProfileIdFromResourcePath(resourcePath: string): string | null {
 
 /**
  * Get the external IdP issuer URL for a profile, if configured.
- * Returns null if the profile doesn't have an SSO provider or if it's not OIDC.
+ * Returns null if the profile doesn't have an identity provider or if it's not OIDC.
  */
 async function getExternalIdpIssuerForProfile(
   profileId: string,
 ): Promise<string | null> {
   const [agent] = await db
-    .select({ ssoProviderId: dbSchema.agentsTable.ssoProviderId })
+    .select({ identityProviderId: dbSchema.agentsTable.identityProviderId })
     .from(dbSchema.agentsTable)
     .where(eq(dbSchema.agentsTable.id, profileId));
 
-  if (!agent?.ssoProviderId) return null;
+  if (!agent?.identityProviderId) return null;
 
   const [provider] = await db
-    .select({ issuer: dbSchema.ssoProvidersTable.issuer })
-    .from(dbSchema.ssoProvidersTable)
-    .where(eq(dbSchema.ssoProvidersTable.id, agent.ssoProviderId));
+    .select({ issuer: dbSchema.identityProvidersTable.issuer })
+    .from(dbSchema.identityProvidersTable)
+    .where(eq(dbSchema.identityProvidersTable.id, agent.identityProviderId));
 
   return provider?.issuer ?? null;
 }

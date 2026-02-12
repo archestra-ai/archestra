@@ -7,18 +7,18 @@ import {
 } from "@shared";
 import { useCallback, useState } from "react";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
+import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { LoadingSpinner } from "@/components/loading";
-import { SsoProviderIcon } from "@/components/sso-provider-icons.ee";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import config from "@/lib/config";
-import { useSsoProviders } from "@/lib/sso-provider.query.ee";
-import { CreateSsoProviderDialog } from "./create-sso-provider-dialog.ee";
-import { EditSsoProviderDialog } from "./edit-sso-provider-dialog.ee";
+import { useIdentityProviders } from "@/lib/identity-provider.query.ee";
+import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
+import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 
 /** Configuration for a predefined SSO provider card */
-interface SsoProviderConfig {
+interface IdpConfig {
   /** Internal ID for the config (used as React key) */
   id: string;
   /** Canonical provider ID used for registration and callbacks */
@@ -67,7 +67,7 @@ interface SsoProviderConfig {
 }
 
 // Predefined SSO provider configurations
-const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
+const IDP_CONFIGS: IdpConfig[] = [
   {
     id: "okta",
     // Use the canonical provider ID from shared constants
@@ -254,24 +254,23 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
   },
 ];
 
-type SsoProvider = NonNullable<
-  ReturnType<typeof useSsoProviders>["data"]
+type IdentityProvider = NonNullable<
+  ReturnType<typeof useIdentityProviders>["data"]
 >[number];
 
-export function SsoProvidersSettingsContent() {
-  const { data: ssoProviders = [], isLoading } = useSsoProviders();
+export function IdentityProvidersSettingsContent() {
+  const { data: identityProviders = [], isLoading } = useIdentityProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
-    config: SsoProviderConfig;
+    config: IdpConfig;
   } | null>(null);
-  const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(
-    null,
-  );
+  const [editingProvider, setEditingProvider] =
+    useState<IdentityProvider | null>(null);
 
   // Find existing providers by matching provider ID
   const getProviderStatus = useCallback(
-    (config: SsoProviderConfig) => {
-      const provider = ssoProviders.find((p) => {
+    (config: IdpConfig) => {
+      const provider = identityProviders.find((p) => {
         // For predefined providers, match exactly by canonical provider ID
         if (config.providerId) {
           return p.providerId === config.providerId;
@@ -292,11 +291,11 @@ export function SsoProvidersSettingsContent() {
       });
       return provider;
     },
-    [ssoProviders],
+    [identityProviders],
   );
 
   const handleProviderClick = useCallback(
-    (config: SsoProviderConfig) => {
+    (config: IdpConfig) => {
       const existingProvider = getProviderStatus(config);
 
       if (existingProvider) {
@@ -339,7 +338,7 @@ export function SsoProvidersSettingsContent() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {SSO_PROVIDER_CONFIGS.map((config) => {
+        {IDP_CONFIGS.map((config) => {
           const existingProvider = getProviderStatus(config);
 
           return (
@@ -353,7 +352,7 @@ export function SsoProvidersSettingsContent() {
                   <div
                     className={`p-2 rounded-lg ${config.bgColor} text-gray-900`}
                   >
-                    <SsoProviderIcon
+                    <IdentityProviderIcon
                       providerId={config.providerId || config.id}
                       size={24}
                     />
@@ -385,7 +384,7 @@ export function SsoProvidersSettingsContent() {
 
       {/* Create Dialog */}
       {createConfig && (
-        <CreateSsoProviderDialog
+        <CreateIdentityProviderDialog
           open={!!createConfig}
           onOpenChange={(open) => !open && setCreateConfig(null)}
           defaultValues={
@@ -445,8 +444,8 @@ export function SsoProvidersSettingsContent() {
 
       {/* Edit Dialog */}
       {editingProvider && (
-        <EditSsoProviderDialog
-          ssoProviderId={editingProvider.id}
+        <EditIdentityProviderDialog
+          identityProviderId={editingProvider.id}
           open={!!editingProvider}
           onOpenChange={(open) => !open && setEditingProvider(null)}
         />

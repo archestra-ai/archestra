@@ -4,7 +4,7 @@ import { SSO_PROVIDER_ID } from "@shared";
 import { Globe } from "lucide-react";
 import Image from "next/image";
 
-interface SsoProviderIconProps {
+interface IdentityProviderIconProps {
   providerId: string;
   size?: number;
   className?: string;
@@ -14,11 +14,11 @@ interface SsoProviderIconProps {
  * Returns the appropriate icon for an SSO provider.
  * Uses brand icons for known providers (Google, Okta, GitHub) and a generic icon for others.
  */
-export function SsoProviderIcon({
+export function IdentityProviderIcon({
   providerId,
   size = 16,
   className,
-}: SsoProviderIconProps) {
+}: IdentityProviderIconProps) {
   const lowerProviderId = providerId.toLowerCase();
 
   // Google - use brand icon

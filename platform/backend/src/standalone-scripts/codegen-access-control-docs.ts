@@ -20,7 +20,7 @@ function getResourceDescription(resource: Resource): string {
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
     organization: "Organization settings",
-    ssoProvider: "SSO providers for authentication",
+    identityProvider: "Identity providers for authentication",
     member: "Organization members and their roles",
     invitation: "Member invitations and onboarding",
     internalMcpCatalog: "Internal MCP server catalog management",

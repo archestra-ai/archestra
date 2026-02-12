@@ -2,7 +2,7 @@
  * E2E tests for MCP Gateway authentication via external IdP JWKS.
  *
  * Tests the flow:
- * 1. Create SSO provider with OIDC config (Keycloak)
+ * 1. Create identity provider with OIDC config (Keycloak)
  * 2. Create MCP Gateway profile linked to the IdP
  * 3. Obtain JWT from Keycloak (direct grant)
  * 4. Authenticate to MCP Gateway using the JWT
@@ -10,10 +10,10 @@
  */
 import {
   API_BASE_URL,
-  IS_CI,
+  KC_TEST_USER,
   MCP_GATEWAY_URL_SUFFIX,
-  UI_BASE_URL,
 } from "../../consts";
+import { getKeycloakJwt } from "../../utils";
 import { expect, test } from "./fixtures";
 import {
   assignArchestraToolsToProfile,
@@ -25,112 +25,6 @@ import {
 } from "./mcp-gateway-utils";
 
 // =============================================================================
-// Keycloak Configuration (matches helm/e2e-tests/values.yaml)
-// =============================================================================
-
-const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
-const KEYCLOAK_BACKEND_URL = IS_CI
-  ? "http://e2e-tests-keycloak:8080"
-  : "http://localhost:30081";
-const KEYCLOAK_REALM = "archestra";
-
-const KEYCLOAK_OIDC = {
-  clientId: "archestra-oidc",
-  clientSecret: "archestra-oidc-secret",
-  issuer: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`,
-  discoveryEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
-  tokenEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
-  jwksEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
-};
-
-// Test user in Keycloak (matches helm/e2e-tests/values.yaml)
-const KC_TEST_USER = {
-  username: "admin",
-  password: "password",
-  email: "admin@example.com",
-  name: "Admin User",
-};
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-/**
- * Get a JWT access token from Keycloak using the resource owner password
- * credentials grant (direct access grant).
- */
-async function getKeycloakJwt(): Promise<string> {
-  const response = await fetch(KEYCLOAK_OIDC.tokenEndpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "password",
-      client_id: KEYCLOAK_OIDC.clientId,
-      client_secret: KEYCLOAK_OIDC.clientSecret,
-      username: KC_TEST_USER.username,
-      password: KC_TEST_USER.password,
-      scope: "openid",
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `Keycloak token request failed: ${response.status} ${text}`,
-    );
-  }
-
-  const data = (await response.json()) as { access_token: string };
-  return data.access_token;
-}
-
-/**
- * Create an SSO provider via the API with OIDC config pointing to Keycloak.
- * Returns the created provider's ID.
- */
-async function createSsoProvider(
-  request: Parameters<typeof makeApiRequest>[0]["request"],
-  providerId: string,
-): Promise<string> {
-  const response = await makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: "/api/sso-providers",
-    data: {
-      providerId,
-      issuer: KEYCLOAK_OIDC.issuer,
-      domain: "jwks-test.example.com",
-      oidcConfig: {
-        issuer: KEYCLOAK_OIDC.issuer,
-        pkce: true,
-        clientId: KEYCLOAK_OIDC.clientId,
-        clientSecret: KEYCLOAK_OIDC.clientSecret,
-        discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
-        jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
-      },
-    },
-  });
-
-  const provider = await response.json();
-  return provider.id;
-}
-
-/**
- * Delete an SSO provider via the API.
- */
-async function deleteSsoProvider(
-  request: Parameters<typeof makeApiRequest>[0]["request"],
-  id: string,
-): Promise<void> {
-  await makeApiRequest({
-    request,
-    method: "delete",
-    urlSuffix: `/api/sso-providers/${id}`,
-    ignoreStatusCheck: true,
-  });
-}
-
-// =============================================================================
 // Tests
 // =============================================================================
 
@@ -139,6 +33,8 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     request,
     createAgent,
     deleteAgent,
+    createIdentityProvider,
+    deleteIdentityProvider,
   }) => {
     test.slow();
 
@@ -147,9 +43,12 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     expect(jwt).toBeTruthy();
     expect(jwt.split(".")).toHaveLength(3);
 
-    // STEP 2: Create SSO provider with Keycloak OIDC config
+    // STEP 2: Create identity provider with Keycloak OIDC config
     const providerName = `JwksTest${Date.now()}`;
-    const ssoProviderId = await createSsoProvider(request, providerName);
+    const identityProviderId = await createIdentityProvider(
+      request,
+      providerName,
+    );
 
     let profileId: string | undefined;
     try {
@@ -160,27 +59,28 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       );
       const agent = await agentResponse.json();
       profileId = agent.id;
+      const pid = profileId as string;
 
       // Link the IdP to the profile
       await makeApiRequest({
         request,
         method: "put",
-        urlSuffix: `/api/agents/${profileId}`,
-        data: { ssoProviderId },
+        urlSuffix: `/api/agents/${pid}`,
+        data: { identityProviderId },
       });
 
       // STEP 4: Assign Archestra tools to the profile
-      await assignArchestraToolsToProfile(request, profileId);
+      await assignArchestraToolsToProfile(request, pid);
 
       // STEP 5: Initialize MCP session with the external JWT
       await initializeMcpSession(request, {
-        profileId,
+        profileId: pid,
         token: jwt,
       });
 
       // STEP 6: List tools - should succeed with JWKS auth
       const tools = await listMcpTools(request, {
-        profileId,
+        profileId: pid,
         token: jwt,
       });
       expect(tools.length).toBeGreaterThan(0);
@@ -191,7 +91,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
 
       // STEP 7: Call whoami tool - should return external identity info
       const result = await callMcpTool(request, {
-        profileId,
+        profileId: pid,
         token: jwt,
         toolName: "archestra__whoami",
       });
@@ -227,7 +127,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       if (profileId) {
         await deleteAgent(request, profileId);
       }
-      await deleteSsoProvider(request, ssoProviderId);
+      await deleteIdentityProvider(request, identityProviderId);
     }
   });
 
@@ -235,10 +135,15 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     request,
     createAgent,
     deleteAgent,
+    createIdentityProvider,
+    deleteIdentityProvider,
   }) => {
-    // Create SSO provider and profile
+    // Create identity provider and profile
     const providerName = `JwksReject${Date.now()}`;
-    const ssoProviderId = await createSsoProvider(request, providerName);
+    const identityProviderId = await createIdentityProvider(
+      request,
+      providerName,
+    );
 
     let profileId: string | undefined;
     try {
@@ -254,7 +159,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         request,
         method: "put",
         urlSuffix: `/api/agents/${profileId}`,
-        data: { ssoProviderId },
+        data: { identityProviderId },
       });
 
       // Try to call MCP Gateway with an invalid JWT
@@ -278,7 +183,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       if (profileId) {
         await deleteAgent(request, profileId);
       }
-      await deleteSsoProvider(request, ssoProviderId);
+      await deleteIdentityProvider(request, identityProviderId);
     }
   });
 

@@ -672,33 +672,35 @@ export async function validateExternalIdpToken(
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
   try {
-    // Look up the agent to check if it has an SSO provider configured
+    // Look up the agent to check if it has an identity provider configured
     const agent = await AgentModel.findById(profileId);
-    if (!agent?.ssoProviderId) {
+    if (!agent?.identityProviderId) {
       return null;
     }
 
-    // Look up the SSO provider to get OIDC config
-    const ssoProvider = await findSsoProviderById(agent.ssoProviderId);
-    if (!ssoProvider) {
+    // Look up the identity provider to get OIDC config
+    const idpProvider = await findIdentityProviderById(
+      agent.identityProviderId,
+    );
+    if (!idpProvider) {
       logger.warn(
-        { profileId, ssoProviderId: agent.ssoProviderId },
-        "validateExternalIdpToken: SSO provider not found",
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: Identity provider not found",
       );
       return null;
     }
 
     // Only OIDC providers support JWKS validation
-    if (!ssoProvider.oidcConfig) {
+    if (!idpProvider.oidcConfig) {
       logger.debug(
-        { profileId, ssoProviderId: agent.ssoProviderId },
-        "validateExternalIdpToken: SSO provider has no OIDC config",
+        { profileId, identityProviderId: agent.identityProviderId },
+        "validateExternalIdpToken: Identity provider has no OIDC config",
       );
       return null;
     }
 
     const oidcConfig = parseJsonField<OidcConfigForJwks>(
-      ssoProvider.oidcConfig,
+      idpProvider.oidcConfig,
     );
     if (!oidcConfig) {
       return null;
@@ -709,10 +711,10 @@ export async function validateExternalIdpToken(
     // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
     // Fall back to OIDC discovery from the issuer URL.
     const jwksUrl =
-      oidcConfig.jwksEndpoint ?? (await discoverJwksUrl(ssoProvider.issuer));
+      oidcConfig.jwksEndpoint ?? (await discoverJwksUrl(idpProvider.issuer));
     if (!jwksUrl) {
       logger.warn(
-        { profileId, issuer: ssoProvider.issuer },
+        { profileId, issuer: idpProvider.issuer },
         "validateExternalIdpToken: could not determine JWKS URL",
       );
       return null;
@@ -721,7 +723,7 @@ export async function validateExternalIdpToken(
     // Validate the JWT
     const result = await jwksValidator.validateJwt({
       token: tokenValue,
-      issuerUrl: ssoProvider.issuer,
+      issuerUrl: idpProvider.issuer,
       jwksUrl,
       audience: oidcConfig.clientId ?? null,
     });
@@ -733,7 +735,7 @@ export async function validateExternalIdpToken(
     logger.info(
       {
         profileId,
-        ssoProviderId: agent.ssoProviderId,
+        identityProviderId: agent.identityProviderId,
         sub: result.sub,
         email: result.email,
       },
@@ -741,14 +743,14 @@ export async function validateExternalIdpToken(
     );
 
     return {
-      tokenId: `external_idp:${agent.ssoProviderId}:${result.sub}`,
+      tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
       teamId: null,
       isOrganizationToken: true,
       organizationId: agent.organizationId,
       isExternalIdp: true,
       externalIdentity: {
-        idpId: agent.ssoProviderId,
-        idpName: ssoProvider.providerId,
+        idpId: agent.identityProviderId,
+        idpName: idpProvider.providerId,
         sub: result.sub,
         email: result.email,
         name: result.name,
@@ -776,20 +778,20 @@ type OidcConfigForJwks = {
 };
 
 /**
- * Simple SSO provider lookup by ID (no org check).
- * Uses direct DB query since the SsoProviderModel is enterprise-only (.ee.ts).
- * The schema file (sso-provider.ts) is NOT .ee, so this is safe to use.
+ * Simple identity provider lookup by ID (no org check).
+ * Uses direct DB query since the IdentityProviderModel is enterprise-only (.ee.ts).
+ * The schema file (identity-provider.ts) is NOT .ee, so this is safe to use.
  */
-async function findSsoProviderById(id: string) {
+async function findIdentityProviderById(id: string) {
   const [provider] = await db
     .select({
-      id: dbSchema.ssoProvidersTable.id,
-      providerId: dbSchema.ssoProvidersTable.providerId,
-      issuer: dbSchema.ssoProvidersTable.issuer,
-      oidcConfig: dbSchema.ssoProvidersTable.oidcConfig,
+      id: dbSchema.identityProvidersTable.id,
+      providerId: dbSchema.identityProvidersTable.providerId,
+      issuer: dbSchema.identityProvidersTable.issuer,
+      oidcConfig: dbSchema.identityProvidersTable.oidcConfig,
     })
-    .from(dbSchema.ssoProvidersTable)
-    .where(eq(dbSchema.ssoProvidersTable.id, id));
+    .from(dbSchema.identityProvidersTable)
+    .where(eq(dbSchema.identityProvidersTable.id, id));
 
   return provider ?? null;
 }

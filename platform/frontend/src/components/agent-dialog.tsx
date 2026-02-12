@@ -90,11 +90,11 @@ import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 
-const { useSsoProviders } = config.enterpriseLicenseActivated
+const { useIdentityProviders } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/sso-provider.query.ee")
+    await import("@/lib/identity-provider.query.ee")
   : {
-      useSsoProviders: () => ({
+      useIdentityProviders: () => ({
         data: [] as Array<{ id: string; providerId: string; issuer: string }>,
       }),
     };
@@ -398,7 +398,7 @@ export function AgentDialog({
   const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
   const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
-  const { data: ssoProviders = [] } = useSsoProviders();
+  const { data: identityProviders = [] } = useIdentityProviders();
   const agentLlmApiKeyId = (agent as Record<string, unknown> | undefined)
     ?.llmApiKeyId as string | null | undefined;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
@@ -447,7 +447,9 @@ export function AgentDialog({
   const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
   const [toolsShowAll, setToolsShowAll] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
-  const [ssoProviderId, setSsoProviderId] = useState<string | null>(null);
+  const [identityProviderId, setIdentityProviderId] = useState<string | null>(
+    null,
+  );
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
@@ -503,8 +505,8 @@ export function AgentDialog({
           agentData.considerContextUntrusted || false,
         );
         // SSO provider ID (for MCP Gateway JWKS auth)
-        setSsoProviderId(
-          ((agentData as Record<string, unknown>).ssoProviderId as
+        setIdentityProviderId(
+          ((agentData as Record<string, unknown>).identityProviderId as
             | string
             | null) ?? null,
         );
@@ -529,7 +531,7 @@ export function AgentDialog({
         setAssignedTeamIds([]);
         setLabels([]);
         setConsiderContextUntrusted(false);
-        setSsoProviderId(null);
+        setIdentityProviderId(null);
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
@@ -738,7 +740,7 @@ export function AgentDialog({
               llmModel: llmModel || null,
             }),
             ...(agentType === "mcp_gateway" && {
-              ssoProviderId: ssoProviderId || null,
+              identityProviderId: identityProviderId || null,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -762,7 +764,7 @@ export function AgentDialog({
             llmModel: llmModel || null,
           }),
           ...(agentType === "mcp_gateway" && {
-            ssoProviderId: ssoProviderId || null,
+            identityProviderId: identityProviderId || null,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -818,7 +820,7 @@ export function AgentDialog({
     incomingEmailEnabled,
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
-    ssoProviderId,
+    identityProviderId,
     agentType,
     agent,
     isInternalAgent,
@@ -1085,7 +1087,7 @@ export function AgentDialog({
             )}
 
             {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
-            {agentType === "mcp_gateway" && ssoProviders.length > 0 && (
+            {agentType === "mcp_gateway" && identityProviders.length > 0 && (
               <div className="space-y-2">
                 <Label>Identity Provider (JWKS Auth)</Label>
                 <p className="text-sm text-muted-foreground">
@@ -1094,9 +1096,9 @@ export function AgentDialog({
                   authenticate using JWTs issued by this IdP.
                 </p>
                 <Select
-                  value={ssoProviderId ?? "none"}
+                  value={identityProviderId ?? "none"}
                   onValueChange={(value) =>
-                    setSsoProviderId(value === "none" ? null : value)
+                    setIdentityProviderId(value === "none" ? null : value)
                   }
                 >
                   <SelectTrigger>
@@ -1104,7 +1106,7 @@ export function AgentDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No Identity Provider</SelectItem>
-                    {ssoProviders.map((provider) => (
+                    {identityProviders.map((provider) => (
                       <SelectItem key={provider.id} value={provider.id}>
                         {provider.providerId} ({provider.issuer})
                       </SelectItem>

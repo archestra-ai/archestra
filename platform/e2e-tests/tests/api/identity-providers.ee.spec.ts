@@ -1,8 +1,8 @@
 import { API_BASE_URL, UI_BASE_URL } from "../../consts";
 import { expect, test } from "./fixtures";
 
-test.describe("SSO Providers API", () => {
-  test("should list SSO providers (authenticated)", async ({
+test.describe("Identity Providers API", () => {
+  test("should list identity providers (authenticated)", async ({
     request,
     createApiKey,
     deleteApiKey,
@@ -15,7 +15,7 @@ test.describe("SSO Providers API", () => {
       const response = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/sso-providers",
+        urlSuffix: "/api/identity-providers",
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
@@ -30,7 +30,7 @@ test.describe("SSO Providers API", () => {
     }
   });
 
-  test("should list public SSO providers (unauthenticated)", async ({
+  test("should list public identity providers (unauthenticated)", async ({
     request,
     makeApiRequest,
   }) => {
@@ -38,7 +38,7 @@ test.describe("SSO Providers API", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/sso-providers/public",
+      urlSuffix: "/api/identity-providers/public",
       headers: {
         "Content-Type": "application/json",
       },
@@ -61,7 +61,7 @@ test.describe("SSO Providers API", () => {
     }
   });
 
-  test("should return 404 for non-existent SSO provider", async ({
+  test("should return 404 for non-existent identity provider", async ({
     request,
     createApiKey,
     deleteApiKey,
@@ -74,7 +74,7 @@ test.describe("SSO Providers API", () => {
       const response = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/sso-providers/non-existent-id",
+        urlSuffix: "/api/identity-providers/non-existent-id",
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
@@ -88,9 +88,9 @@ test.describe("SSO Providers API", () => {
     }
   });
 
-  test("should require authentication for full SSO providers list", async () => {
+  test("should require authentication for full identity providers list", async () => {
     // Use native fetch to ensure completely unauthenticated request
-    const response = await fetch(`${API_BASE_URL}/api/sso-providers`, {
+    const response = await fetch(`${API_BASE_URL}/api/identity-providers`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -102,15 +102,18 @@ test.describe("SSO Providers API", () => {
     expect(response.status).toBe(401);
   });
 
-  test("should require authentication for individual SSO provider", async () => {
+  test("should require authentication for individual identity provider", async () => {
     // Use native fetch to ensure completely unauthenticated request
-    const response = await fetch(`${API_BASE_URL}/api/sso-providers/some-id`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: UI_BASE_URL,
+    const response = await fetch(
+      `${API_BASE_URL}/api/identity-providers/some-id`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
       },
-    });
+    );
 
     // Should return 401 Unauthorized
     expect(response.status).toBe(401);
@@ -129,7 +132,7 @@ test.describe("SSO Providers API", () => {
       const response = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/sso-providers/idp-logout-url",
+        urlSuffix: "/api/identity-providers/idp-logout-url",
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
@@ -146,7 +149,7 @@ test.describe("SSO Providers API", () => {
 
   test("should require authentication for IdP logout URL", async () => {
     const response = await fetch(
-      `${API_BASE_URL}/api/sso-providers/idp-logout-url`,
+      `${API_BASE_URL}/api/identity-providers/idp-logout-url`,
       {
         method: "GET",
         headers: {

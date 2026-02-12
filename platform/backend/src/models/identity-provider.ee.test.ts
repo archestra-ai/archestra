@@ -1,12 +1,14 @@
-import type { SsoRoleMappingConfig } from "@shared";
+import type { IdpRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
-import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache.ee";
+import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AccountModel from "./account";
-import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider.ee";
+import IdentityProviderModel, {
+  type IdpGetRoleData,
+} from "./identity-provider.ee";
 
 // Mock the logger to avoid console output during tests
 vi.mock("@/logging", () => ({
@@ -50,7 +52,7 @@ const mockProvider = {
 };
 
 // Helper to create test params with proper typing for resolveSsoRole tests
-// Note: userInfo is included for compatibility with better-auth's SsoGetRoleData type
+// Note: userInfo is included for compatibility with better-auth's IdpGetRoleData type
 // but role mapping only uses token claims
 function createParams(
   params: Partial<{
@@ -58,24 +60,24 @@ function createParams(
     token: Record<string, unknown>;
     provider: { providerId: string };
   }>,
-): SsoGetRoleData {
-  return params as unknown as SsoGetRoleData;
+): IdpGetRoleData {
+  return params as unknown as IdpGetRoleData;
 }
 
-describe("SsoProviderModel", () => {
+describe("IdentityProviderModel", () => {
   describe("findAllPublic", () => {
     test("returns empty array when no providers exist", async () => {
-      const providers = await SsoProviderModel.findAllPublic();
+      const providers = await IdentityProviderModel.findAllPublic();
       expect(providers).toEqual([]);
     });
 
     test("returns only id and providerId fields", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "Okta",
         oidcConfig: {
           clientId: "test-client-id",
@@ -86,7 +88,7 @@ describe("SsoProviderModel", () => {
         },
       });
 
-      const providers = await SsoProviderModel.findAllPublic();
+      const providers = await IdentityProviderModel.findAllPublic();
 
       expect(providers).toHaveLength(1);
       expect(providers[0]).toHaveProperty("id");
@@ -103,15 +105,15 @@ describe("SsoProviderModel", () => {
 
     test("returns multiple providers", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      await makeSsoProvider(org.id, { providerId: "Okta" });
-      await makeSsoProvider(org.id, { providerId: "Google" });
-      await makeSsoProvider(org.id, { providerId: "GitHub" });
+      await makeIdentityProvider(org.id, { providerId: "Okta" });
+      await makeIdentityProvider(org.id, { providerId: "Google" });
+      await makeIdentityProvider(org.id, { providerId: "GitHub" });
 
-      const providers = await SsoProviderModel.findAllPublic();
+      const providers = await IdentityProviderModel.findAllPublic();
 
       expect(providers).toHaveLength(3);
       const providerIds = providers.map((p) => p.providerId);
@@ -126,13 +128,13 @@ describe("SsoProviderModel", () => {
       makeOrganization,
     }) => {
       const org = await makeOrganization();
-      const providers = await SsoProviderModel.findAll(org.id);
+      const providers = await IdentityProviderModel.findAll(org.id);
       expect(providers).toEqual([]);
     });
 
     test("returns full provider data including parsed oidcConfig", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
       const oidcConfig = {
@@ -144,14 +146,14 @@ describe("SsoProviderModel", () => {
         scopes: ["openid", "email", "profile"],
       };
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "Okta",
         issuer: "https://okta.example.com",
         domain: "example.com",
         oidcConfig,
       });
 
-      const providers = await SsoProviderModel.findAll(org.id);
+      const providers = await IdentityProviderModel.findAll(org.id);
 
       expect(providers).toHaveLength(1);
       expect(providers[0].providerId).toBe("Okta");
@@ -163,7 +165,7 @@ describe("SsoProviderModel", () => {
 
     test("returns full provider data including parsed samlConfig", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
       const samlConfig = {
@@ -174,12 +176,12 @@ describe("SsoProviderModel", () => {
         spMetadata: {},
       };
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "SAML-Provider",
         samlConfig,
       });
 
-      const providers = await SsoProviderModel.findAll(org.id);
+      const providers = await IdentityProviderModel.findAll(org.id);
 
       expect(providers).toHaveLength(1);
       expect(providers[0].samlConfig).toEqual(samlConfig);
@@ -188,15 +190,15 @@ describe("SsoProviderModel", () => {
 
     test("handles providers without oidcConfig or samlConfig", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "BasicProvider",
       });
 
-      const providers = await SsoProviderModel.findAll(org.id);
+      const providers = await IdentityProviderModel.findAll(org.id);
 
       expect(providers).toHaveLength(1);
       expect(providers[0].oidcConfig).toBeUndefined();
@@ -205,13 +207,13 @@ describe("SsoProviderModel", () => {
 
     test("only returns providers for the specified organization (multi-tenant isolation)", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org1 = await makeOrganization();
       const org2 = await makeOrganization();
 
       // Create providers for both organizations
-      await makeSsoProvider(org1.id, {
+      await makeIdentityProvider(org1.id, {
         providerId: "Org1-Okta",
         oidcConfig: {
           clientId: "org1-client",
@@ -221,7 +223,7 @@ describe("SsoProviderModel", () => {
           discoveryEndpoint: "https://org1.okta.com/.well-known",
         },
       });
-      await makeSsoProvider(org2.id, {
+      await makeIdentityProvider(org2.id, {
         providerId: "Org2-Okta",
         oidcConfig: {
           clientId: "org2-client",
@@ -233,13 +235,13 @@ describe("SsoProviderModel", () => {
       });
 
       // Org1 should only see their own provider
-      const org1Providers = await SsoProviderModel.findAll(org1.id);
+      const org1Providers = await IdentityProviderModel.findAll(org1.id);
       expect(org1Providers).toHaveLength(1);
       expect(org1Providers[0].providerId).toBe("Org1-Okta");
       expect(org1Providers[0].oidcConfig?.clientSecret).toBe("ORG1_SECRET");
 
       // Org2 should only see their own provider
-      const org2Providers = await SsoProviderModel.findAll(org2.id);
+      const org2Providers = await IdentityProviderModel.findAll(org2.id);
       expect(org2Providers).toHaveLength(1);
       expect(org2Providers[0].providerId).toBe("Org2-Okta");
       expect(org2Providers[0].oidcConfig?.clientSecret).toBe("ORG2_SECRET");
@@ -255,7 +257,7 @@ describe("SsoProviderModel", () => {
       makeOrganization,
     }) => {
       const org = await makeOrganization();
-      const provider = await SsoProviderModel.findById(
+      const provider = await IdentityProviderModel.findById(
         "non-existent-id",
         org.id,
       );
@@ -264,23 +266,26 @@ describe("SsoProviderModel", () => {
 
     test("returns null when provider exists but belongs to different organization", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org1 = await makeOrganization();
       const org2 = await makeOrganization();
 
-      const inserted = await makeSsoProvider(org1.id, {
+      const inserted = await makeIdentityProvider(org1.id, {
         providerId: "Okta",
       });
 
       // Try to find with wrong organization
-      const provider = await SsoProviderModel.findById(inserted.id, org2.id);
+      const provider = await IdentityProviderModel.findById(
+        inserted.id,
+        org2.id,
+      );
       expect(provider).toBeNull();
     });
 
     test("returns provider when found with correct organization", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
       const oidcConfig = {
@@ -291,13 +296,16 @@ describe("SsoProviderModel", () => {
         discoveryEndpoint: "https://okta.example.com/.well-known",
       };
 
-      const inserted = await makeSsoProvider(org.id, {
+      const inserted = await makeIdentityProvider(org.id, {
         providerId: "Okta",
         issuer: "https://okta.example.com",
         oidcConfig,
       });
 
-      const provider = await SsoProviderModel.findById(inserted.id, org.id);
+      const provider = await IdentityProviderModel.findById(
+        inserted.id,
+        org.id,
+      );
 
       expect(provider).not.toBeNull();
       expect(provider?.id).toBe(inserted.id);
@@ -311,7 +319,7 @@ describe("SsoProviderModel", () => {
       makeOrganization,
     }) => {
       const org = await makeOrganization();
-      const result = await SsoProviderModel.update(
+      const result = await IdentityProviderModel.update(
         "non-existent-id",
         { issuer: "https://new-issuer.com" },
         org.id,
@@ -321,16 +329,16 @@ describe("SsoProviderModel", () => {
 
     test("returns null when provider belongs to different organization", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org1 = await makeOrganization();
       const org2 = await makeOrganization();
 
-      const inserted = await makeSsoProvider(org1.id, {
+      const inserted = await makeIdentityProvider(org1.id, {
         providerId: "Okta",
       });
 
-      const result = await SsoProviderModel.update(
+      const result = await IdentityProviderModel.update(
         inserted.id,
         { issuer: "https://new-issuer.com" },
         org2.id,
@@ -340,17 +348,17 @@ describe("SsoProviderModel", () => {
 
     test("updates provider and returns updated data", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      const inserted = await makeSsoProvider(org.id, {
+      const inserted = await makeIdentityProvider(org.id, {
         providerId: "Okta",
         issuer: "https://old-issuer.com",
         domain: "old.example.com",
       });
 
-      const updated = await SsoProviderModel.update(
+      const updated = await IdentityProviderModel.update(
         inserted.id,
         {
           issuer: "https://new-issuer.com",
@@ -367,7 +375,7 @@ describe("SsoProviderModel", () => {
 
     test("can update oidcConfig", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
       const initialOidcConfig = {
@@ -378,7 +386,7 @@ describe("SsoProviderModel", () => {
         discoveryEndpoint: "https://old.example.com/.well-known",
       };
 
-      const inserted = await makeSsoProvider(org.id, {
+      const inserted = await makeIdentityProvider(org.id, {
         providerId: "Okta",
         oidcConfig: initialOidcConfig,
       });
@@ -393,7 +401,7 @@ describe("SsoProviderModel", () => {
         scopes: ["openid", "email"],
       });
 
-      const updated = await SsoProviderModel.update(
+      const updated = await IdentityProviderModel.update(
         inserted.id,
         // biome-ignore lint/suspicious/noExplicitAny: test uses raw string for DB update
         { oidcConfig: newOidcConfig as any },
@@ -411,60 +419,72 @@ describe("SsoProviderModel", () => {
       makeOrganization,
     }) => {
       const org = await makeOrganization();
-      const result = await SsoProviderModel.delete("non-existent-id", org.id);
+      const result = await IdentityProviderModel.delete(
+        "non-existent-id",
+        org.id,
+      );
       expect(result).toBe(false);
     });
 
     test("returns false when provider belongs to different organization", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org1 = await makeOrganization();
       const org2 = await makeOrganization();
 
-      const inserted = await makeSsoProvider(org1.id, {
+      const inserted = await makeIdentityProvider(org1.id, {
         providerId: "Okta",
       });
 
-      const result = await SsoProviderModel.delete(inserted.id, org2.id);
+      const result = await IdentityProviderModel.delete(inserted.id, org2.id);
       expect(result).toBe(false);
 
       // Verify provider still exists
-      const provider = await SsoProviderModel.findById(inserted.id, org1.id);
+      const provider = await IdentityProviderModel.findById(
+        inserted.id,
+        org1.id,
+      );
       expect(provider).not.toBeNull();
     });
 
     test("deletes provider and returns true", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      const inserted = await makeSsoProvider(org.id, {
+      const inserted = await makeIdentityProvider(org.id, {
         providerId: "Okta",
       });
 
       // Verify it exists first
-      const beforeDelete = await SsoProviderModel.findById(inserted.id, org.id);
+      const beforeDelete = await IdentityProviderModel.findById(
+        inserted.id,
+        org.id,
+      );
       expect(beforeDelete).not.toBeNull();
 
-      const result = await SsoProviderModel.delete(inserted.id, org.id);
+      const result = await IdentityProviderModel.delete(inserted.id, org.id);
       expect(result).toBe(true);
 
       // Verify it's deleted
-      const afterDelete = await SsoProviderModel.findById(inserted.id, org.id);
+      const afterDelete = await IdentityProviderModel.findById(
+        inserted.id,
+        org.id,
+      );
       expect(afterDelete).toBeNull();
     });
 
     test("cleans up associated SSO accounts when provider is deleted", async ({
       makeOrganization,
       makeUser,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "CleanupTestProvider",
       });
 
@@ -488,7 +508,7 @@ describe("SsoProviderModel", () => {
       expect(ssoAccountsBefore.length).toBe(1);
 
       // Delete the provider
-      const result = await SsoProviderModel.delete(provider.id, org.id);
+      const result = await IdentityProviderModel.delete(provider.id, org.id);
       expect(result).toBe(true);
 
       // Verify the account was also cleaned up
@@ -503,11 +523,11 @@ describe("SsoProviderModel", () => {
   describe("security: findAllPublic vs findAll", () => {
     test("findAllPublic does not expose clientSecret", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "Okta",
         oidcConfig: {
           clientId: "test-client-id",
@@ -518,8 +538,8 @@ describe("SsoProviderModel", () => {
         },
       });
 
-      const publicProviders = await SsoProviderModel.findAllPublic();
-      const allProviders = await SsoProviderModel.findAll(org.id);
+      const publicProviders = await IdentityProviderModel.findAllPublic();
+      const allProviders = await IdentityProviderModel.findAll(org.id);
 
       // Public endpoint should NOT have any config
       expect(publicProviders[0]).not.toHaveProperty("oidcConfig");
@@ -535,11 +555,11 @@ describe("SsoProviderModel", () => {
 
     test("findAllPublic returns minimal data structure", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "Okta",
         issuer: "https://okta.example.com",
         domain: "example.com",
@@ -554,7 +574,7 @@ describe("SsoProviderModel", () => {
         },
       });
 
-      const publicProviders = await SsoProviderModel.findAllPublic();
+      const publicProviders = await IdentityProviderModel.findAllPublic();
 
       // Should only have exactly 2 keys
       const keys = Object.keys(publicProviders[0]);
@@ -574,11 +594,11 @@ describe("SsoProviderModel", () => {
   describe("domainVerified workaround", () => {
     test("SAML providers are created with domainVerified: true", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      const samlProvider = await makeSsoProvider(org.id, {
+      const samlProvider = await makeIdentityProvider(org.id, {
         providerId: "SAML-Test",
         samlConfig: {
           issuer: "https://idp.example.com",
@@ -589,7 +609,10 @@ describe("SsoProviderModel", () => {
         },
       });
 
-      const provider = await SsoProviderModel.findById(samlProvider.id, org.id);
+      const provider = await IdentityProviderModel.findById(
+        samlProvider.id,
+        org.id,
+      );
 
       expect(provider).not.toBeNull();
       expect(provider?.domainVerified).toBe(true);
@@ -597,11 +620,11 @@ describe("SsoProviderModel", () => {
 
     test("OIDC providers are created with domainVerified: true", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
-      const oidcProvider = await makeSsoProvider(org.id, {
+      const oidcProvider = await makeIdentityProvider(org.id, {
         providerId: "OIDC-Test",
         oidcConfig: {
           clientId: "test-client",
@@ -612,7 +635,10 @@ describe("SsoProviderModel", () => {
         },
       });
 
-      const provider = await SsoProviderModel.findById(oidcProvider.id, org.id);
+      const provider = await IdentityProviderModel.findById(
+        oidcProvider.id,
+        org.id,
+      );
 
       expect(provider).not.toBeNull();
       // With domainVerification enabled, OIDC providers also need domainVerified: true
@@ -621,12 +647,12 @@ describe("SsoProviderModel", () => {
 
     test("updating a provider ensures domainVerified remains true", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
       // Create a provider (will have domainVerified: true from create)
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "Update-Test",
         oidcConfig: {
           clientId: "test-client",
@@ -639,21 +665,30 @@ describe("SsoProviderModel", () => {
 
       // Manually set domainVerified to false to simulate old data
       // (This simulates providers created before the workaround was added)
-      await SsoProviderModel.setDomainVerifiedForTesting(provider.id, false);
+      await IdentityProviderModel.setDomainVerifiedForTesting(
+        provider.id,
+        false,
+      );
 
       // Verify it's now false
-      const beforeUpdate = await SsoProviderModel.findById(provider.id, org.id);
+      const beforeUpdate = await IdentityProviderModel.findById(
+        provider.id,
+        org.id,
+      );
       expect(beforeUpdate?.domainVerified).toBe(false);
 
       // Update the provider (change domain)
-      await SsoProviderModel.update(
+      await IdentityProviderModel.update(
         provider.id,
         { domain: "updated.example.com" },
         org.id,
       );
 
       // After update, domainVerified should be set back to true
-      const afterUpdate = await SsoProviderModel.findById(provider.id, org.id);
+      const afterUpdate = await IdentityProviderModel.findById(
+        provider.id,
+        org.id,
+      );
       expect(afterUpdate?.domainVerified).toBe(true);
     });
   });
@@ -662,7 +697,7 @@ describe("SsoProviderModel", () => {
 describe("evaluateRoleMapping", () => {
   describe("when no config is provided", () => {
     test("returns fallback role when config is undefined", () => {
-      const result = SsoProviderModel.evaluateRoleMapping(undefined, {
+      const result = IdentityProviderModel.evaluateRoleMapping(undefined, {
         token: { email: "user@example.com" },
         provider: mockProvider,
       });
@@ -674,7 +709,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("returns custom fallback role when provided", () => {
-      const result = SsoProviderModel.evaluateRoleMapping(
+      const result = IdentityProviderModel.evaluateRoleMapping(
         undefined,
         {
           token: { email: "user@example.com" },
@@ -692,12 +727,12 @@ describe("evaluateRoleMapping", () => {
 
   describe("when config has no rules", () => {
     test("returns defaultRole from config when set", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [],
         defaultRole: "admin",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { email: "user@example.com" },
         provider: mockProvider,
       });
@@ -709,11 +744,11 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("returns fallback role when defaultRole is not set", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { email: "user@example.com" },
         provider: mockProvider,
       });
@@ -727,7 +762,7 @@ describe("evaluateRoleMapping", () => {
 
   describe("ID token claims", () => {
     test("uses token claims for rule evaluation", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals tokenClaim "from-token"}}true{{/equals}}',
@@ -736,7 +771,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { tokenClaim: "from-token" },
         provider: mockProvider,
       });
@@ -748,7 +783,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("handles missing token gracefully", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
@@ -758,7 +793,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         // token is undefined
         provider: mockProvider,
       });
@@ -772,7 +807,7 @@ describe("evaluateRoleMapping", () => {
 
   describe("Handlebars template evaluation", () => {
     test("matches simple equality expression", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals role "administrator"}}true{{/equals}}',
@@ -781,7 +816,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { role: "administrator" },
         provider: mockProvider,
       });
@@ -793,7 +828,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("matches includes expression for groups array", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -803,7 +838,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users", "archestra-admins", "developers"] },
         provider: mockProvider,
       });
@@ -815,7 +850,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("handles null groups gracefully", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admin"}}true{{/includes}}',
@@ -825,7 +860,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { email: "user@example.com" }, // no groups
         provider: mockProvider,
       });
@@ -837,7 +872,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("matches array element check with each loop", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -847,7 +882,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { roles: ["viewer", "platform-admin", "editor"] },
         provider: mockProvider,
       });
@@ -859,7 +894,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("matches compound expressions with AND", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -869,7 +904,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { department: "IT", title: "Engineer" },
         provider: mockProvider,
       });
@@ -882,7 +917,7 @@ describe("evaluateRoleMapping", () => {
 
     test("matches compound expressions with OR (using multiple rules)", () => {
       // OR logic is implemented using multiple rules - first match wins
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -895,7 +930,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { role: "admin", groups: [] },
         provider: mockProvider,
       });
@@ -907,7 +942,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("does not match when expression evaluates to empty", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals role "administrator"}}true{{/equals}}',
@@ -917,7 +952,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { role: "user" },
         provider: mockProvider,
       });
@@ -929,7 +964,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("does not match empty array result", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -940,7 +975,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users", "developers"] },
         provider: mockProvider,
       });
@@ -952,12 +987,12 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("does not match empty result from expression", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [{ expression: "{{nonExistentField}}", role: "admin" }],
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users"] },
         provider: mockProvider,
       });
@@ -968,11 +1003,11 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("matches when if helper evaluates to truthy", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [{ expression: "{{#if isAdmin}}true{{/if}}", role: "admin" }],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { isAdmin: true },
         provider: mockProvider,
       });
@@ -984,12 +1019,12 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("does not match when if helper evaluates to falsy", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [{ expression: "{{#if isAdmin}}true{{/if}}", role: "admin" }],
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { isAdmin: false },
         provider: mockProvider,
       });
@@ -1001,7 +1036,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("matches when exists helper finds value", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: "{{#exists adminGroup}}true{{/exists}}",
@@ -1010,7 +1045,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { adminGroup: "yes" },
         provider: mockProvider,
       });
@@ -1022,12 +1057,12 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("does not match empty string result", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [{ expression: "{{adminGroup}}", role: "admin" }],
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { adminGroup: "" },
         provider: mockProvider,
       });
@@ -1041,7 +1076,7 @@ describe("evaluateRoleMapping", () => {
 
   describe("rule ordering (first match wins)", () => {
     test("returns first matching rule when multiple rules match", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "super-admins"}}true{{/includes}}',
@@ -1058,7 +1093,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users", "admins"] }, // Matches both admins and users
         provider: mockProvider,
       });
@@ -1070,7 +1105,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("evaluates rules in order until first match", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals role "super-admin"}}true{{/equals}}',
@@ -1084,7 +1119,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { role: "admin" },
         provider: mockProvider,
       });
@@ -1097,7 +1132,7 @@ describe("evaluateRoleMapping", () => {
 
     test("evaluates second rule when first rule does not match", () => {
       // Scenario: User in team-b should match second rule, not first (team-a)
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -1112,7 +1147,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       // User is only in team-b, should match the second rule
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["team-b"] },
         provider: mockProvider,
       });
@@ -1124,7 +1159,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("evaluates third rule when first two rules do not match", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "super-admins"}}true{{/includes}}',
@@ -1143,7 +1178,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       // User is only in editors group, should match the third rule
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["editors", "viewers"] },
         provider: mockProvider,
       });
@@ -1155,7 +1190,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("falls back to default when no rules match", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -1170,7 +1205,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       // User is in team-c which doesn't match any rule
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["team-c"] },
         provider: mockProvider,
       });
@@ -1184,7 +1219,7 @@ describe("evaluateRoleMapping", () => {
     test("all rules are evaluated - real world scenario with copied/modified rules", () => {
       // Real-world scenario: Admin copies a working rule for team-a and modifies it for team-b
       // Both rules should be independently evaluated
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             // First rule: team-a gets admin
@@ -1201,7 +1236,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       // Test team-a user
-      const teamAResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const teamAResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["team-a"] },
         provider: mockProvider,
       });
@@ -1209,7 +1244,7 @@ describe("evaluateRoleMapping", () => {
       expect(teamAResult.matched).toBe(true);
 
       // Test team-b user - this was the reported issue scenario
-      const teamBResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const teamBResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["team-b"] },
         provider: mockProvider,
       });
@@ -1217,7 +1252,7 @@ describe("evaluateRoleMapping", () => {
       expect(teamBResult.matched).toBe(true);
 
       // Test user in neither team
-      const noTeamResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const noTeamResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["team-c"] },
         provider: mockProvider,
       });
@@ -1225,10 +1260,13 @@ describe("evaluateRoleMapping", () => {
       expect(noTeamResult.matched).toBe(false);
 
       // Test user in both teams - should match first rule (team-a)
-      const bothTeamsResult = SsoProviderModel.evaluateRoleMapping(config, {
-        token: { groups: ["team-a", "team-b"] },
-        provider: mockProvider,
-      });
+      const bothTeamsResult = IdentityProviderModel.evaluateRoleMapping(
+        config,
+        {
+          token: { groups: ["team-a", "team-b"] },
+          provider: mockProvider,
+        },
+      );
       expect(bothTeamsResult.role).toBe("admin"); // First match wins
       expect(bothTeamsResult.matched).toBe(true);
     });
@@ -1236,7 +1274,7 @@ describe("evaluateRoleMapping", () => {
 
   describe("error handling", () => {
     test("continues to next rule on Handlebars syntax error", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           { expression: "{{#invalid}}", role: "broken" }, // Invalid Handlebars
           {
@@ -1246,7 +1284,7 @@ describe("evaluateRoleMapping", () => {
         ],
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { role: "admin" },
         provider: mockProvider,
       });
@@ -1258,7 +1296,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("uses default role when all rules have errors", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           { expression: "{{#invalid}}", role: "broken1" },
           { expression: "{{#alsoInvalid}}", role: "broken2" },
@@ -1266,7 +1304,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "fallback",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { role: "admin" },
         provider: mockProvider,
       });
@@ -1280,7 +1318,7 @@ describe("evaluateRoleMapping", () => {
 
   describe("strict mode", () => {
     test("returns error when strict mode is enabled and no rules match", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1290,7 +1328,7 @@ describe("evaluateRoleMapping", () => {
         strictMode: true,
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users"] }, // Does not contain 'admins'
         provider: mockProvider,
       });
@@ -1303,14 +1341,14 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("returns error when strict mode is enabled and no rules configured", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [],
         strictMode: true,
       };
 
       // When no rules are configured, it returns default role even with strictMode
       // because strict mode is about "no rules matching", not "no rules configured"
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users"] },
         provider: mockProvider,
       });
@@ -1321,7 +1359,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("returns matched role when strict mode is enabled and a rule matches", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1331,7 +1369,7 @@ describe("evaluateRoleMapping", () => {
         strictMode: true,
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["admins"] },
         provider: mockProvider,
       });
@@ -1343,7 +1381,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("returns default role when strict mode is disabled and no rules match", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1354,7 +1392,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["users"] },
         provider: mockProvider,
       });
@@ -1368,7 +1406,7 @@ describe("evaluateRoleMapping", () => {
 
   describe("real-world scenarios", () => {
     test("Okta groups claim mapping", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1385,7 +1423,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       // Admin user
-      const adminResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const adminResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["Everyone", "Archestra-Admins", "IT-Department"] },
         provider: mockProvider,
       });
@@ -1393,7 +1431,7 @@ describe("evaluateRoleMapping", () => {
       expect(adminResult.matched).toBe(true);
 
       // Regular user
-      const userResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const userResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["Everyone", "Archestra-Users"] },
         provider: mockProvider,
       });
@@ -1401,7 +1439,7 @@ describe("evaluateRoleMapping", () => {
       expect(userResult.matched).toBe(true);
 
       // Unknown user falls back to default
-      const unknownResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const unknownResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { groups: ["Everyone", "External-Partners"] },
         provider: mockProvider,
       });
@@ -1410,7 +1448,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("Azure AD / Entra ID group object ID mapping", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1421,7 +1459,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "member",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: {
           groups: [
             "a1b2c3d4-e5f6-7890-abcd-ef1234567890", // Admin group GUID
@@ -1438,7 +1476,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("Keycloak realm roles mapping", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1454,7 +1492,7 @@ describe("evaluateRoleMapping", () => {
         defaultRole: "viewer",
       };
 
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
+      const result = IdentityProviderModel.evaluateRoleMapping(config, {
         token: {
           roles: [
             "default-roles-myrealm",
@@ -1472,7 +1510,7 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("SAML attribute mapping (department-based)", () => {
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1488,21 +1526,21 @@ describe("evaluateRoleMapping", () => {
       };
 
       // IT Admin
-      const itAdminResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const itAdminResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { department: "IT", jobTitle: "Administrator" },
         provider: mockProvider,
       });
       expect(itAdminResult.role).toBe("admin");
 
       // IT User (not admin)
-      const itUserResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const itUserResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { department: "IT", jobTitle: "Developer" },
         provider: mockProvider,
       });
       expect(itUserResult.role).toBe("power_user");
 
       // Non-IT user
-      const otherResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const otherResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: { department: "Sales", jobTitle: "Manager" },
         provider: mockProvider,
       });
@@ -1511,7 +1549,7 @@ describe("evaluateRoleMapping", () => {
 
     test("multi-tenant SaaS with organization roles", () => {
       // Using flat role structure since Handlebars doesn't support complex filtering
-      const config: SsoRoleMappingConfig = {
+      const config: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes orgRoles "owner"}}true{{/includes}}',
@@ -1526,7 +1564,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       // Organization owner
-      const ownerResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const ownerResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: {
           orgRoles: ["owner", "billing"],
         },
@@ -1535,7 +1573,7 @@ describe("evaluateRoleMapping", () => {
       expect(ownerResult.role).toBe("admin");
 
       // Organization member
-      const memberResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const memberResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: {
           orgRoles: ["member"],
         },
@@ -1544,7 +1582,7 @@ describe("evaluateRoleMapping", () => {
       expect(memberResult.role).toBe("member");
 
       // Not part of organization (strict mode denies)
-      const outsiderResult = SsoProviderModel.evaluateRoleMapping(config, {
+      const outsiderResult = IdentityProviderModel.evaluateRoleMapping(config, {
         token: {
           orgRoles: [], // No roles
         },
@@ -1565,7 +1603,7 @@ describe("resolveSsoRole", () => {
         token: { email: "user@example.com" },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe(MEMBER_ROLE_NAME);
     });
@@ -1574,10 +1612,10 @@ describe("resolveSsoRole", () => {
   describe("when SSO provider has no role mapping configured", () => {
     test("returns default member role", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const provider = await makeSsoProvider(org.id);
+      const provider = await makeIdentityProvider(org.id);
 
       const params = createParams({
         user: { id: "user-1", email: "user@example.com" },
@@ -1585,7 +1623,7 @@ describe("resolveSsoRole", () => {
         token: { email: "user@example.com" },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe(MEMBER_ROLE_NAME);
     });
@@ -1594,10 +1632,10 @@ describe("resolveSsoRole", () => {
   describe("role mapping with rules", () => {
     test("returns matched role when rule matches", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1606,7 +1644,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1616,17 +1654,17 @@ describe("resolveSsoRole", () => {
         token: { groups: ["users", "admins"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
     });
 
     test("returns default role when no rule matches", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1635,7 +1673,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "viewer",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1645,17 +1683,17 @@ describe("resolveSsoRole", () => {
         token: { groups: ["users"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("viewer");
     });
 
     test("uses token claims when data source is token", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals role "super-admin"}}true{{/equals}}',
@@ -1664,7 +1702,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1674,7 +1712,7 @@ describe("resolveSsoRole", () => {
         token: { role: "super-admin" },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
     });
@@ -1683,10 +1721,10 @@ describe("resolveSsoRole", () => {
   describe("strict mode", () => {
     test("throws APIError when strict mode is enabled and no rules match", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1695,7 +1733,7 @@ describe("resolveSsoRole", () => {
         ],
         strictMode: true,
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1705,20 +1743,20 @@ describe("resolveSsoRole", () => {
         token: { groups: ["users"] },
       });
 
-      await expect(SsoProviderModel.resolveSsoRole(params)).rejects.toThrow(
-        APIError,
-      );
-      await expect(SsoProviderModel.resolveSsoRole(params)).rejects.toThrow(
-        "Access denied",
-      );
+      await expect(
+        IdentityProviderModel.resolveSsoRole(params),
+      ).rejects.toThrow(APIError);
+      await expect(
+        IdentityProviderModel.resolveSsoRole(params),
+      ).rejects.toThrow("Access denied");
     });
 
     test("returns role normally when strict mode is enabled and rule matches", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1727,7 +1765,7 @@ describe("resolveSsoRole", () => {
         ],
         strictMode: true,
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1737,7 +1775,7 @@ describe("resolveSsoRole", () => {
         token: { groups: ["admins"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
     });
@@ -1746,7 +1784,7 @@ describe("resolveSsoRole", () => {
   describe("skip role sync", () => {
     test("returns existing role when skipRoleSync is enabled and user has membership", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
       makeUser,
       makeMember,
     }) => {
@@ -1754,7 +1792,7 @@ describe("resolveSsoRole", () => {
       const user = await makeUser();
       await makeMember(user.id, org.id, { role: "viewer" });
 
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1763,7 +1801,7 @@ describe("resolveSsoRole", () => {
         ],
         skipRoleSync: true,
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1773,7 +1811,7 @@ describe("resolveSsoRole", () => {
         token: { groups: ["admins"] }, // Would normally map to admin
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       // Should return existing role, not re-evaluate mapping
       expect(result).toBe("viewer");
@@ -1781,14 +1819,14 @@ describe("resolveSsoRole", () => {
 
     test("evaluates rules when skipRoleSync is enabled but user has no membership (first login)", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
       makeUser,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
       // No membership created
 
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1797,7 +1835,7 @@ describe("resolveSsoRole", () => {
         ],
         skipRoleSync: true,
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1807,7 +1845,7 @@ describe("resolveSsoRole", () => {
         token: { groups: ["admins"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       // Should evaluate rules since this is first login
       expect(result).toBe("admin");
@@ -1815,7 +1853,7 @@ describe("resolveSsoRole", () => {
 
     test("evaluates rules when skipRoleSync is disabled", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
       makeUser,
       makeMember,
     }) => {
@@ -1823,7 +1861,7 @@ describe("resolveSsoRole", () => {
       const user = await makeUser();
       await makeMember(user.id, org.id, { role: "viewer" });
 
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -1832,7 +1870,7 @@ describe("resolveSsoRole", () => {
         ],
         skipRoleSync: false,
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -1842,7 +1880,7 @@ describe("resolveSsoRole", () => {
         token: { groups: ["admins"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       // Should re-evaluate rules even though user has existing membership
       expect(result).toBe("admin");
@@ -1852,10 +1890,10 @@ describe("resolveSsoRole", () => {
   describe("real-world scenarios", () => {
     test("Okta groups claim mapping for admin", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1870,7 +1908,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "Okta",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -1884,17 +1922,17 @@ describe("resolveSsoRole", () => {
         },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
     });
 
     test("Keycloak realm roles for editor", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1909,7 +1947,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "viewer",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "Keycloak",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -1926,17 +1964,17 @@ describe("resolveSsoRole", () => {
         },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("editor");
     });
 
     test("Azure AD group GUID mapping", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression:
@@ -1946,7 +1984,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "EntraID",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -1962,7 +2000,7 @@ describe("resolveSsoRole", () => {
         },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
     });
@@ -1971,14 +2009,14 @@ describe("resolveSsoRole", () => {
   describe("multiple rules evaluation (integration)", () => {
     test("second rule matches when user is in team-b but not team-a", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       // This test explicitly verifies the scenario where:
       // - Admin configured rule 1 for team-a users -> admin
       // - Admin copied and modified rule 2 for team-b users -> editor
       // - A user in team-b (but not team-a) should get editor role
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -1991,7 +2029,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "TestOIDC",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -2003,17 +2041,17 @@ describe("resolveSsoRole", () => {
         token: { groups: ["team-b", "general-users"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("editor");
     });
 
     test("third rule matches when first two do not apply", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "super-admins"}}true{{/includes}}',
@@ -2030,7 +2068,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "viewer",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "TestOIDC",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -2041,17 +2079,17 @@ describe("resolveSsoRole", () => {
         token: { groups: ["editors", "viewers"] },
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("editor");
     });
 
     test("all rules are evaluated independently for different users", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -2068,7 +2106,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "TestOIDC",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -2079,7 +2117,9 @@ describe("resolveSsoRole", () => {
         provider: { providerId: provider.providerId },
         token: { groups: ["team-a"] },
       });
-      expect(await SsoProviderModel.resolveSsoRole(teamAParams)).toBe("admin");
+      expect(await IdentityProviderModel.resolveSsoRole(teamAParams)).toBe(
+        "admin",
+      );
 
       // Test team-b user gets editor
       const teamBParams = createParams({
@@ -2087,7 +2127,9 @@ describe("resolveSsoRole", () => {
         provider: { providerId: provider.providerId },
         token: { groups: ["team-b"] },
       });
-      expect(await SsoProviderModel.resolveSsoRole(teamBParams)).toBe("editor");
+      expect(await IdentityProviderModel.resolveSsoRole(teamBParams)).toBe(
+        "editor",
+      );
 
       // Test team-c user gets viewer
       const teamCParams = createParams({
@@ -2095,7 +2137,9 @@ describe("resolveSsoRole", () => {
         provider: { providerId: provider.providerId },
         token: { groups: ["team-c"] },
       });
-      expect(await SsoProviderModel.resolveSsoRole(teamCParams)).toBe("viewer");
+      expect(await IdentityProviderModel.resolveSsoRole(teamCParams)).toBe(
+        "viewer",
+      );
 
       // Test user with no matching team gets default
       const noTeamParams = createParams({
@@ -2103,17 +2147,17 @@ describe("resolveSsoRole", () => {
         provider: { providerId: provider.providerId },
         token: { groups: ["unrelated-group"] },
       });
-      expect(await SsoProviderModel.resolveSsoRole(noTeamParams)).toBe(
+      expect(await IdentityProviderModel.resolveSsoRole(noTeamParams)).toBe(
         "member",
       );
     });
 
     test("first match wins when user is in multiple matching groups", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -2126,7 +2170,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "TestOIDC",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
@@ -2138,7 +2182,7 @@ describe("resolveSsoRole", () => {
         token: { groups: ["team-b", "team-a"] }, // Note: team-b listed first in array
       });
 
-      const result = await SsoProviderModel.resolveSsoRole(params);
+      const result = await IdentityProviderModel.resolveSsoRole(params);
 
       // Rule order matters, not group array order - team-a rule is first
       expect(result).toBe("admin");
@@ -2148,10 +2192,10 @@ describe("resolveSsoRole", () => {
   describe("database round-trip for multiple rules", () => {
     test("multiple rules survive create and read from database", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -2171,13 +2215,13 @@ describe("resolveSsoRole", () => {
       };
 
       // Create provider with multiple rules
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "MultiRuleTest",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
       // Read it back from database
-      const retrieved = await SsoProviderModel.findByProviderId(
+      const retrieved = await IdentityProviderModel.findByProviderId(
         provider.providerId,
       );
 
@@ -2192,12 +2236,12 @@ describe("resolveSsoRole", () => {
 
     test("multiple rules survive update operation", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
 
       // Create with one rule
-      const initialRoleMapping: SsoRoleMappingConfig = {
+      const initialRoleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -2207,13 +2251,13 @@ describe("resolveSsoRole", () => {
         defaultRole: "member",
       };
 
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         providerId: "UpdateTest",
         roleMapping: initialRoleMapping as unknown as Record<string, unknown>,
       });
 
       // Update with multiple rules (simulating user adding a second rule in UI)
-      const updatedRoleMapping: SsoRoleMappingConfig = {
+      const updatedRoleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -2227,7 +2271,7 @@ describe("resolveSsoRole", () => {
         defaultRole: "member",
       };
 
-      const updated = await SsoProviderModel.update(
+      const updated = await IdentityProviderModel.update(
         provider.id,
         {
           roleMapping: updatedRoleMapping,
@@ -2241,7 +2285,7 @@ describe("resolveSsoRole", () => {
       expect(updated?.roleMapping?.rules?.[1]?.role).toBe("editor");
 
       // Also read from database to double-check persistence
-      const retrieved = await SsoProviderModel.findByProviderId(
+      const retrieved = await IdentityProviderModel.findByProviderId(
         provider.providerId,
       );
 
@@ -2252,10 +2296,10 @@ describe("resolveSsoRole", () => {
 
     test("findAll returns multiple rules correctly", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "team-a"}}true{{/includes}}',
@@ -2269,13 +2313,13 @@ describe("resolveSsoRole", () => {
         defaultRole: "member",
       };
 
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "FindAllTest",
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
       // Use findAll which is used by the admin API
-      const allProviders = await SsoProviderModel.findAll(org.id);
+      const allProviders = await IdentityProviderModel.findAll(org.id);
       const provider = allProviders.find((p) => p.providerId === "FindAllTest");
 
       expect(provider?.roleMapping?.rules).toHaveLength(2);
@@ -2284,13 +2328,13 @@ describe("resolveSsoRole", () => {
     });
   });
 
-  describe("SSO groups caching for team sync", () => {
+  describe("IdP groups caching for team sync", () => {
     test("caches SSO groups when role mapping is configured and user has groups", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#includes groups "admins"}}true{{/includes}}',
@@ -2299,7 +2343,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -2309,10 +2353,10 @@ describe("resolveSsoRole", () => {
         token: { groups: ["engineering", "admins"] },
       });
 
-      await SsoProviderModel.resolveSsoRole(params);
+      await IdentityProviderModel.resolveSsoRole(params);
 
       // Verify groups were cached
-      const cachedData = await retrieveSsoGroups(
+      const cachedData = await retrieveIdpGroups(
         provider.providerId,
         "groupuser@example.com",
       );
@@ -2323,11 +2367,11 @@ describe("resolveSsoRole", () => {
 
     test("caches SSO groups when no role mapping is configured but user has groups", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
       // Create provider without role mapping
-      const provider = await makeSsoProvider(org.id);
+      const provider = await makeIdentityProvider(org.id);
 
       const params = createParams({
         user: { id: "user-1", email: "noroles@example.com" },
@@ -2335,10 +2379,10 @@ describe("resolveSsoRole", () => {
         token: { groups: ["team-a", "team-b"] },
       });
 
-      await SsoProviderModel.resolveSsoRole(params);
+      await IdentityProviderModel.resolveSsoRole(params);
 
       // Verify groups were cached even without role mapping
-      const cachedData = await retrieveSsoGroups(
+      const cachedData = await retrieveIdpGroups(
         provider.providerId,
         "noroles@example.com",
       );
@@ -2349,10 +2393,10 @@ describe("resolveSsoRole", () => {
 
     test("does not cache groups when user email is missing", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const provider = await makeSsoProvider(org.id);
+      const provider = await makeIdentityProvider(org.id);
 
       const params = createParams({
         user: null, // No user email
@@ -2360,7 +2404,7 @@ describe("resolveSsoRole", () => {
         token: { groups: ["team-a"] },
       });
 
-      await SsoProviderModel.resolveSsoRole(params);
+      await IdentityProviderModel.resolveSsoRole(params);
 
       // Cannot retrieve without email - this test verifies the code path
       // The caching should be skipped when user?.email is falsy
@@ -2370,10 +2414,10 @@ describe("resolveSsoRole", () => {
 
     test("does not cache groups when no groups are present in claims", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const provider = await makeSsoProvider(org.id);
+      const provider = await makeIdentityProvider(org.id);
 
       const params = createParams({
         user: { id: "user-1", email: "nogroups@example.com" },
@@ -2381,10 +2425,10 @@ describe("resolveSsoRole", () => {
         token: { email: "nogroups@example.com" }, // No groups claim
       });
 
-      await SsoProviderModel.resolveSsoRole(params);
+      await IdentityProviderModel.resolveSsoRole(params);
 
       // Verify nothing was cached (no groups to cache)
-      const cachedData = await retrieveSsoGroups(
+      const cachedData = await retrieveIdpGroups(
         provider.providerId,
         "nogroups@example.com",
       );
@@ -2393,10 +2437,10 @@ describe("resolveSsoRole", () => {
 
     test("extracts groups from token claims for caching", async ({
       makeOrganization,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const org = await makeOrganization();
-      const roleMapping: SsoRoleMappingConfig = {
+      const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals role "admin"}}true{{/equals}}',
@@ -2405,7 +2449,7 @@ describe("resolveSsoRole", () => {
         ],
         defaultRole: "member",
       };
-      const provider = await makeSsoProvider(org.id, {
+      const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
       });
 
@@ -2415,10 +2459,10 @@ describe("resolveSsoRole", () => {
         token: { groups: ["from-token"], role: "admin" },
       });
 
-      await SsoProviderModel.resolveSsoRole(params);
+      await IdentityProviderModel.resolveSsoRole(params);
 
       // Groups extracted from token (we only use ID token claims now)
-      const cachedData = await retrieveSsoGroups(
+      const cachedData = await retrieveIdpGroups(
         provider.providerId,
         "tokenuser@example.com",
       );

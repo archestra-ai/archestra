@@ -4,8 +4,8 @@ import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
-import { usePublicSsoProviders } from "@/lib/sso-provider.query.ee";
-import { SsoProviderSelector } from "./sso-provider-selector.ee";
+import { usePublicIdentityProviders } from "@/lib/identity-provider.query.ee";
+import { IdentityProviderSelector } from "./identity-provider-selector.ee";
 
 // Mock next/navigation
 vi.mock("next/navigation", () => ({
@@ -21,9 +21,9 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
   },
 }));
 
-// Mock SSO providers query
-vi.mock("@/lib/sso-provider.query.ee", () => ({
-  usePublicSsoProviders: vi.fn(),
+// Mock identity providers query
+vi.mock("@/lib/identity-provider.query.ee", () => ({
+  usePublicIdentityProviders: vi.fn(),
 }));
 
 // Mock config
@@ -33,9 +33,9 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 
-// Mock SSO provider icons to avoid Next.js Image issues
-vi.mock("./sso-provider-icons.ee", () => ({
-  SsoProviderIcon: () => <span data-testid="sso-icon" />,
+// Mock identity provider icons to avoid Next.js Image issues
+vi.mock("./identity-provider-icons.ee", () => ({
+  IdentityProviderIcon: () => <span data-testid="idp-icon" />,
 }));
 
 // Mock window.location.origin
@@ -45,7 +45,7 @@ Object.defineProperty(window, "location", {
   writable: true,
 });
 
-describe("SsoProviderSelector", () => {
+describe("IdentityProviderSelector", () => {
   const mockSearchParams = {
     get: vi.fn(),
   };
@@ -55,10 +55,10 @@ describe("SsoProviderSelector", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
     );
-    vi.mocked(usePublicSsoProviders).mockReturnValue({
+    vi.mocked(usePublicIdentityProviders).mockReturnValue({
       data: [{ id: "1", providerId: "google" }],
       isLoading: false,
-    } as ReturnType<typeof usePublicSsoProviders>);
+    } as ReturnType<typeof usePublicIdentityProviders>);
   });
 
   describe("callbackURL handling", () => {
@@ -66,7 +66,7 @@ describe("SsoProviderSelector", () => {
       mockSearchParams.get.mockReturnValue(null);
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -81,7 +81,7 @@ describe("SsoProviderSelector", () => {
       mockSearchParams.get.mockReturnValue("%2Fdashboard");
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -96,7 +96,7 @@ describe("SsoProviderSelector", () => {
       mockSearchParams.get.mockReturnValue("%2Fsettings%2Fteams%2F123");
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -114,7 +114,7 @@ describe("SsoProviderSelector", () => {
       mockSearchParams.get.mockReturnValue("%ZZ");
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -130,7 +130,7 @@ describe("SsoProviderSelector", () => {
       mockSearchParams.get.mockReturnValue("%2");
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -149,7 +149,7 @@ describe("SsoProviderSelector", () => {
       );
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -166,7 +166,7 @@ describe("SsoProviderSelector", () => {
       );
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -181,7 +181,7 @@ describe("SsoProviderSelector", () => {
       mockSearchParams.get.mockReturnValue(encodeURIComponent("dashboard"));
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -198,7 +198,7 @@ describe("SsoProviderSelector", () => {
       );
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -215,7 +215,7 @@ describe("SsoProviderSelector", () => {
       );
       const user = userEvent.setup();
 
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       await user.click(screen.getByRole("button", { name: /sign in with/i }));
 
@@ -231,7 +231,7 @@ describe("SsoProviderSelector", () => {
     it("should not render when enterprise license is not activated", () => {
       vi.mocked(config).enterpriseLicenseActivated = false;
 
-      const { container } = render(<SsoProviderSelector />);
+      const { container } = render(<IdentityProviderSelector />);
 
       expect(container.firstChild).toBeNull();
 
@@ -240,35 +240,35 @@ describe("SsoProviderSelector", () => {
     });
 
     it("should not render when loading", () => {
-      vi.mocked(usePublicSsoProviders).mockReturnValue({
+      vi.mocked(usePublicIdentityProviders).mockReturnValue({
         data: [],
         isLoading: true,
-      } as unknown as ReturnType<typeof usePublicSsoProviders>);
+      } as unknown as ReturnType<typeof usePublicIdentityProviders>);
 
-      const { container } = render(<SsoProviderSelector />);
+      const { container } = render(<IdentityProviderSelector />);
 
       expect(container.firstChild).toBeNull();
     });
 
-    it("should not render when no SSO providers are available", () => {
-      vi.mocked(usePublicSsoProviders).mockReturnValue({
+    it("should not render when no identity providers are available", () => {
+      vi.mocked(usePublicIdentityProviders).mockReturnValue({
         data: [],
         isLoading: false,
-      } as unknown as ReturnType<typeof usePublicSsoProviders>);
+      } as unknown as ReturnType<typeof usePublicIdentityProviders>);
 
-      const { container } = render(<SsoProviderSelector />);
+      const { container } = render(<IdentityProviderSelector />);
 
       expect(container.firstChild).toBeNull();
     });
 
     it("should show divider by default", () => {
-      render(<SsoProviderSelector />);
+      render(<IdentityProviderSelector />);
 
       expect(screen.getByText("Or continue with SSO")).toBeInTheDocument();
     });
 
     it("should hide divider when showDivider is false", () => {
-      render(<SsoProviderSelector showDivider={false} />);
+      render(<IdentityProviderSelector showDivider={false} />);
 
       expect(
         screen.queryByText("Or continue with SSO"),

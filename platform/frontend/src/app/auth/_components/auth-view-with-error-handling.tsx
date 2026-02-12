@@ -22,18 +22,18 @@ import {
 import config from "@/lib/config";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
-const { SsoProviderSelector } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
-    await import("@/components/sso-provider-selector.ee")
+const { IdentityProviderSelector } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
+    await import("@/components/identity-provider-selector.ee")
   : {
-      SsoProviderSelector: () => null,
+      IdentityProviderSelector: () => null,
     };
 
-const { usePublicSsoProviders } = config.enterpriseLicenseActivated
+const { usePublicIdentityProviders } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
-    await import("@/lib/sso-provider.query.ee")
+    await import("@/lib/identity-provider.query.ee")
   : {
-      usePublicSsoProviders: () => ({
+      usePublicIdentityProviders: () => ({
         data: [],
         isLoading: false,
         isError: false,
@@ -133,13 +133,15 @@ export function AuthViewWithErrorHandling({
     title: string;
     message: string;
   } | null>(null);
-  const { data: ssoProvidersData, isLoading: isLoadingSsoProviders } =
-    usePublicSsoProviders();
+  const { data: identityProvidersData, isLoading: isLoadingIdentityProviders } =
+    usePublicIdentityProviders();
 
   const isBasicAuthDisabled = config.disableBasicAuth;
   // Extract providers array - data can be null or an array of providers
-  const ssoProviders = Array.isArray(ssoProvidersData) ? ssoProvidersData : [];
-  const hasSsoProviders = ssoProviders.length > 0;
+  const identityProviders = Array.isArray(identityProvidersData)
+    ? identityProvidersData
+    : [];
+  const hasIdentityProviders = identityProviders.length > 0;
 
   // Check for SSO error in query params
   useEffect(() => {
@@ -247,12 +249,12 @@ export function AuthViewWithErrorHandling({
   const alwaysShowAuthView = !isSignInPage && path !== "sign-up";
 
   // When basic auth is disabled and SSO providers are still loading, wait (only for sign-in)
-  if (isBasicAuthDisabled && isLoadingSsoProviders && isSignInPage) {
+  if (isBasicAuthDisabled && isLoadingIdentityProviders && isSignInPage) {
     return null;
   }
 
   // When basic auth is disabled and no SSO providers are configured, show a message
-  if (isBasicAuthDisabled && !hasSsoProviders && isSignInPage) {
+  if (isBasicAuthDisabled && !hasIdentityProviders && isSignInPage) {
     return (
       <Card className="max-w-md w-full">
         <CardHeader className="text-center">
@@ -304,7 +306,7 @@ export function AuthViewWithErrorHandling({
   // When basic auth is disabled but SSO providers exist, show SSO in a card
   if (
     isBasicAuthDisabled &&
-    hasSsoProviders &&
+    hasIdentityProviders &&
     isSignInPage &&
     config.enterpriseLicenseActivated
   ) {
@@ -319,7 +321,7 @@ export function AuthViewWithErrorHandling({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SsoProviderSelector showDivider={false} />
+            <IdentityProviderSelector showDivider={false} />
           </CardContent>
         </Card>
       </div>
@@ -427,7 +429,7 @@ export function AuthViewWithErrorHandling({
           />
         )}
         {isSignInPage && config.enterpriseLicenseActivated && (
-          <SsoProviderSelector showDivider={!isBasicAuthDisabled} />
+          <IdentityProviderSelector showDivider={!isBasicAuthDisabled} />
         )}
       </div>
     </>

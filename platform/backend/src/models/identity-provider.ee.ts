@@ -1,22 +1,22 @@
 import type { SSOOptions } from "@better-auth/sso";
-import type { SsoRoleMappingConfig } from "@shared";
+import type { IdpRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
 import type { BetterAuth } from "@/auth/better-auth";
 import {
-  cacheSsoGroups,
+  cacheIdpGroups,
   extractGroupsFromClaims,
-} from "@/auth/sso-team-sync-cache.ee";
+} from "@/auth/idp-team-sync-cache.ee";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
 import type {
-  InsertSsoProvider,
-  PublicSsoProvider,
-  SsoProvider,
-  UpdateSsoProvider,
+  IdentityProvider,
+  InsertIdentityProvider,
+  PublicIdentityProvider,
+  UpdateIdentityProvider,
 } from "@/types";
 import AccountModel from "./account";
 import MemberModel from "./member";
@@ -38,11 +38,11 @@ interface RoleMappingResult {
   error?: string;
 }
 
-export type SsoGetRoleData = Parameters<
+export type IdpGetRoleData = Parameters<
   NonNullable<NonNullable<SSOOptions["organizationProvisioning"]>["getRole"]>
 >[0];
 
-class SsoProviderModel {
+class IdentityProviderModel {
   /**
    * Evaluates role mapping rules against SSO user data using Handlebars templates.
    *
@@ -59,7 +59,7 @@ class SsoProviderModel {
    * { expression: "{{#each roles}}{{#equals this \"archestra-admin\"}}true{{/equals}}{{/each}}", role: "admin" }
    */
   static evaluateRoleMapping(
-    config: SsoRoleMappingConfig | undefined,
+    config: IdpRoleMappingConfig | undefined,
     context: RoleMappingContext,
     fallbackRole: string = MEMBER_ROLE_NAME,
   ): RoleMappingResult {
@@ -122,7 +122,7 @@ class SsoProviderModel {
         role: null,
         matched: false,
         error:
-          "Access denied: Your account does not match any role mapping rules configured for this SSO provider.",
+          "Access denied: Your account does not match any role mapping rules configured for this identity provider.",
       };
     }
 
@@ -140,7 +140,7 @@ class SsoProviderModel {
   }
 
   /**
-   * Dynamic role assignment based on SSO provider role mapping configuration.
+   * Dynamic role assignment based on identity provider role mapping configuration.
    * Uses Handlebars templates to evaluate user attributes from the IdP.
    *
    * Supports:
@@ -152,7 +152,7 @@ class SsoProviderModel {
    * @returns The resolved role ("member" | "admin" | custom role)
    * @throws APIError with FORBIDDEN if strict mode is enabled and no rules match
    */
-  static async resolveSsoRole(data: SsoGetRoleData): Promise<string> {
+  static async resolveSsoRole(data: IdpGetRoleData): Promise<string> {
     const { user, token, provider } = data;
 
     logger.debug(
@@ -163,7 +163,7 @@ class SsoProviderModel {
         hasToken: !!token,
         tokenKeys: token ? Object.keys(token) : [],
       },
-      "resolveSsoRole: Starting SSO role resolution",
+      "resolveSsoRole: Starting IdP role resolution",
     );
 
     // Better-auth passes the raw OAuth token response, not decoded JWT claims.
@@ -195,28 +195,28 @@ class SsoProviderModel {
     }
 
     try {
-      // Fetch the SSO provider configuration to get role mapping rules
+      // Fetch the identity provider configuration to get role mapping rules
       logger.debug(
         { providerId: provider.providerId },
-        "resolveSsoRole: Fetching SSO provider configuration",
+        "resolveSsoRole: Fetching identity provider configuration",
       );
-      const ssoProvider = await SsoProviderModel.findByProviderId(
+      const idpProvider = await IdentityProviderModel.findByProviderId(
         provider.providerId,
       );
 
       logger.debug(
         {
           providerId: provider.providerId,
-          ssoProviderFound: !!ssoProvider,
-          hasRoleMapping: !!ssoProvider?.roleMapping,
-          roleMappingConfig: ssoProvider?.roleMapping,
-          organizationId: ssoProvider?.organizationId,
+          idpProviderFound: !!idpProvider,
+          hasRoleMapping: !!idpProvider?.roleMapping,
+          roleMappingConfig: idpProvider?.roleMapping,
+          organizationId: idpProvider?.organizationId,
         },
-        "resolveSsoRole: SSO provider configuration retrieved",
+        "resolveSsoRole: Identity provider configuration retrieved",
       );
 
-      if (ssoProvider?.roleMapping) {
-        const roleMapping = ssoProvider.roleMapping;
+      if (idpProvider?.roleMapping) {
+        const roleMapping = idpProvider.roleMapping;
 
         // Handle skipRoleSync: If enabled and user already has a membership in this organization, keep their current role
         logger.debug(
@@ -224,14 +224,14 @@ class SsoProviderModel {
             providerId: provider.providerId,
             skipRoleSync: roleMapping.skipRoleSync,
             userId: user?.id,
-            organizationId: ssoProvider.organizationId,
+            organizationId: idpProvider.organizationId,
           },
           "resolveSsoRole: Checking skipRoleSync configuration",
         );
 
         if (roleMapping.skipRoleSync && user?.id) {
-          const existingMember = ssoProvider.organizationId
-            ? await MemberModel.getByUserId(user.id, ssoProvider.organizationId)
+          const existingMember = idpProvider.organizationId
+            ? await MemberModel.getByUserId(user.id, idpProvider.organizationId)
             : null;
 
           logger.debug(
@@ -249,25 +249,25 @@ class SsoProviderModel {
               {
                 providerId: provider.providerId,
                 userId: user.id,
-                organizationId: ssoProvider.organizationId,
+                organizationId: idpProvider.organizationId,
                 currentRole: existingMember.role,
               },
               "Skip role sync enabled - keeping existing role",
             );
 
-            // Cache SSO groups for team sync before returning (even when skipping role sync)
-            if (user.email && ssoProvider.organizationId) {
+            // Cache IdP groups for team sync before returning (even when skipping role sync)
+            if (user.email && idpProvider.organizationId) {
               const tokenClaims =
                 idTokenClaims || (token as Record<string, unknown>) || {};
               const groups = extractGroupsFromClaims(
                 tokenClaims,
-                ssoProvider.teamSyncConfig,
+                idpProvider.teamSyncConfig,
               );
               if (groups.length > 0) {
-                await cacheSsoGroups(
+                await cacheIdpGroups(
                   provider.providerId,
                   user.email,
-                  ssoProvider.organizationId,
+                  idpProvider.organizationId,
                   groups,
                 );
                 logger.debug(
@@ -276,7 +276,7 @@ class SsoProviderModel {
                     email: user.email,
                     groupCount: groups.length,
                   },
-                  "Cached SSO groups for team sync (skipRoleSync path)",
+                  "Cached IdP groups for team sync (skipRoleSync path)",
                 );
               }
             }
@@ -299,7 +299,7 @@ class SsoProviderModel {
           "resolveSsoRole: Evaluating role mapping rules with token claims",
         );
 
-        const result = SsoProviderModel.evaluateRoleMapping(
+        const result = IdentityProviderModel.evaluateRoleMapping(
           roleMapping,
           {
             token: tokenClaims,
@@ -326,7 +326,7 @@ class SsoProviderModel {
               providerId: provider.providerId,
               email: user?.email,
             },
-            "SSO login denied due to strict mode",
+            "IdP login denied due to strict mode",
           );
           throw new APIError("FORBIDDEN", {
             message: result.error,
@@ -339,20 +339,20 @@ class SsoProviderModel {
             assignedRole: result.role,
             matched: result.matched,
           },
-          "SSO role mapping evaluated",
+          "IdP role mapping evaluated",
         );
 
-        // Cache SSO groups for team sync (if user email is available)
-        if (user?.email && ssoProvider.organizationId) {
+        // Cache IdP groups for team sync (if user email is available)
+        if (user?.email && idpProvider.organizationId) {
           const groups = extractGroupsFromClaims(
             tokenClaims,
-            ssoProvider.teamSyncConfig,
+            idpProvider.teamSyncConfig,
           );
           if (groups.length > 0) {
-            await cacheSsoGroups(
+            await cacheIdpGroups(
               provider.providerId,
               user.email,
-              ssoProvider.organizationId,
+              idpProvider.organizationId,
               groups,
             );
           }
@@ -362,18 +362,18 @@ class SsoProviderModel {
       }
 
       // If no role mapping is configured but we still have groups, cache them for team sync
-      if (ssoProvider?.organizationId && user?.email) {
+      if (idpProvider?.organizationId && user?.email) {
         const tokenClaimsForCache =
           idTokenClaims || (token as Record<string, unknown>) || {};
         const groups = extractGroupsFromClaims(
           tokenClaimsForCache,
-          ssoProvider.teamSyncConfig,
+          idpProvider.teamSyncConfig,
         );
         if (groups.length > 0) {
-          await cacheSsoGroups(
+          await cacheIdpGroups(
             provider.providerId,
             user.email,
-            ssoProvider.organizationId,
+            idpProvider.organizationId,
             groups,
           );
           logger.debug(
@@ -382,7 +382,7 @@ class SsoProviderModel {
               email: user.email,
               groupCount: groups.length,
             },
-            "Cached SSO groups for team sync (no role mapping configured)",
+            "Cached IdP groups for team sync (no role mapping configured)",
           );
         }
       }
@@ -400,7 +400,7 @@ class SsoProviderModel {
       }
       logger.error(
         { err: error, providerId: provider?.providerId },
-        "resolveSsoRole: Error evaluating SSO role mapping",
+        "resolveSsoRole: Error evaluating IdP role mapping",
       );
     }
 
@@ -416,33 +416,33 @@ class SsoProviderModel {
   }
 
   /**
-   * Find all SSO providers with minimal public info only.
+   * Find all identity providers with minimal public info only.
    * Use this for public/unauthenticated endpoints (e.g., login page SSO buttons).
    * Does NOT expose any sensitive configuration data.
    */
-  static async findAllPublic(): Promise<PublicSsoProvider[]> {
-    const ssoProviders = await db
+  static async findAllPublic(): Promise<PublicIdentityProvider[]> {
+    const idpProviders = await db
       .select({
-        id: schema.ssoProvidersTable.id,
-        providerId: schema.ssoProvidersTable.providerId,
+        id: schema.identityProvidersTable.id,
+        providerId: schema.identityProvidersTable.providerId,
       })
-      .from(schema.ssoProvidersTable);
+      .from(schema.identityProvidersTable);
 
-    return ssoProviders;
+    return idpProviders;
   }
 
   /**
-   * Find all SSO providers with full configuration including secrets.
+   * Find all identity providers with full configuration including secrets.
    * Use this only for authenticated admin endpoints.
    * Filters by organizationId to enforce multi-tenant isolation.
    */
-  static async findAll(organizationId: string): Promise<SsoProvider[]> {
-    const ssoProviders = await db
+  static async findAll(organizationId: string): Promise<IdentityProvider[]> {
+    const idpProviders = await db
       .select()
-      .from(schema.ssoProvidersTable)
-      .where(eq(schema.ssoProvidersTable.organizationId, organizationId));
+      .from(schema.identityProvidersTable)
+      .where(eq(schema.identityProvidersTable.organizationId, organizationId));
 
-    return ssoProviders.map((provider) => ({
+    return idpProviders.map((provider) => ({
       ...provider,
       oidcConfig: provider.oidcConfig
         ? JSON.parse(provider.oidcConfig as unknown as string)
@@ -462,77 +462,77 @@ class SsoProviderModel {
   static async findById(
     id: string,
     organizationId: string,
-  ): Promise<SsoProvider | null> {
-    const [ssoProvider] = await db
+  ): Promise<IdentityProvider | null> {
+    const [idpProvider] = await db
       .select()
-      .from(schema.ssoProvidersTable)
+      .from(schema.identityProvidersTable)
       .where(
         and(
-          eq(schema.ssoProvidersTable.id, id),
-          eq(schema.ssoProvidersTable.organizationId, organizationId),
+          eq(schema.identityProvidersTable.id, id),
+          eq(schema.identityProvidersTable.organizationId, organizationId),
         ),
       );
 
-    if (!ssoProvider) {
+    if (!idpProvider) {
       return null;
     }
 
     return {
-      ...ssoProvider,
-      oidcConfig: ssoProvider.oidcConfig
-        ? JSON.parse(ssoProvider.oidcConfig as unknown as string)
+      ...idpProvider,
+      oidcConfig: idpProvider.oidcConfig
+        ? JSON.parse(idpProvider.oidcConfig as unknown as string)
         : undefined,
-      samlConfig: ssoProvider.samlConfig
-        ? JSON.parse(ssoProvider.samlConfig as unknown as string)
+      samlConfig: idpProvider.samlConfig
+        ? JSON.parse(idpProvider.samlConfig as unknown as string)
         : undefined,
-      roleMapping: ssoProvider.roleMapping
-        ? JSON.parse(ssoProvider.roleMapping as unknown as string)
+      roleMapping: idpProvider.roleMapping
+        ? JSON.parse(idpProvider.roleMapping as unknown as string)
         : undefined,
-      teamSyncConfig: ssoProvider.teamSyncConfig
-        ? JSON.parse(ssoProvider.teamSyncConfig as unknown as string)
+      teamSyncConfig: idpProvider.teamSyncConfig
+        ? JSON.parse(idpProvider.teamSyncConfig as unknown as string)
         : undefined,
     };
   }
 
   /**
-   * Find SSO provider by providerId (the user-facing unique identifier).
+   * Find identity provider by providerId (the user-facing unique identifier).
    * Used by role mapping during SSO authentication.
    */
   static async findByProviderId(
     providerId: string,
-  ): Promise<SsoProvider | null> {
-    const [ssoProvider] = await db
+  ): Promise<IdentityProvider | null> {
+    const [idpProvider] = await db
       .select()
-      .from(schema.ssoProvidersTable)
-      .where(eq(schema.ssoProvidersTable.providerId, providerId));
+      .from(schema.identityProvidersTable)
+      .where(eq(schema.identityProvidersTable.providerId, providerId));
 
-    if (!ssoProvider) {
+    if (!idpProvider) {
       return null;
     }
 
     return {
-      ...ssoProvider,
-      oidcConfig: ssoProvider.oidcConfig
-        ? JSON.parse(ssoProvider.oidcConfig as unknown as string)
+      ...idpProvider,
+      oidcConfig: idpProvider.oidcConfig
+        ? JSON.parse(idpProvider.oidcConfig as unknown as string)
         : undefined,
-      samlConfig: ssoProvider.samlConfig
-        ? JSON.parse(ssoProvider.samlConfig as unknown as string)
+      samlConfig: idpProvider.samlConfig
+        ? JSON.parse(idpProvider.samlConfig as unknown as string)
         : undefined,
-      roleMapping: ssoProvider.roleMapping
-        ? JSON.parse(ssoProvider.roleMapping as unknown as string)
+      roleMapping: idpProvider.roleMapping
+        ? JSON.parse(idpProvider.roleMapping as unknown as string)
         : undefined,
-      teamSyncConfig: ssoProvider.teamSyncConfig
-        ? JSON.parse(ssoProvider.teamSyncConfig as unknown as string)
+      teamSyncConfig: idpProvider.teamSyncConfig
+        ? JSON.parse(idpProvider.teamSyncConfig as unknown as string)
         : undefined,
     };
   }
 
   static async create(
-    data: Omit<InsertSsoProvider, "id">,
+    data: Omit<InsertIdentityProvider, "id">,
     organizationId: string,
     headers: HeadersInit,
     auth: BetterAuth,
-  ): Promise<SsoProvider> {
+  ): Promise<IdentityProvider> {
     // Parse JSON configs if they exist
     const parsedData = {
       providerId: data.providerId,
@@ -573,22 +573,22 @@ class SsoProviderModel {
     // The provider ID should be unique, so we can find by providerId and organizationId
     const createdProvider = await db
       .select()
-      .from(schema.ssoProvidersTable)
+      .from(schema.identityProvidersTable)
       .where(
         and(
-          eq(schema.ssoProvidersTable.providerId, data.providerId),
-          eq(schema.ssoProvidersTable.organizationId, organizationId),
+          eq(schema.identityProvidersTable.providerId, data.providerId),
+          eq(schema.identityProvidersTable.organizationId, organizationId),
         ),
       );
 
     const [provider] = createdProvider;
     if (!provider) {
-      throw new Error("Failed to create SSO provider");
+      throw new Error("Failed to create identity provider");
     }
 
     /**
      * WORKAROUND: With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
-     * all SSO providers require `domainVerified: true` for sign-in to work without DNS verification.
+     * all identity providers require `domainVerified: true` for sign-in to work without DNS verification.
      * We auto-set this for all providers to bypass the DNS verification requirement.
      * See: https://github.com/better-auth/better-auth/issues/6481
      * TODO: Remove this workaround once the upstream issue is fixed.
@@ -606,7 +606,7 @@ class SsoProviderModel {
         : JSON.stringify(data.teamSyncConfig)
       : undefined;
     await db
-      .update(schema.ssoProvidersTable)
+      .update(schema.identityProvidersTable)
       .set({
         domainVerified: true,
         ...(roleMappingJson && {
@@ -617,7 +617,7 @@ class SsoProviderModel {
             teamSyncConfigJson as unknown as typeof data.teamSyncConfig,
         }),
       })
-      .where(eq(schema.ssoProvidersTable.id, provider.id));
+      .where(eq(schema.identityProvidersTable.id, provider.id));
 
     return {
       ...provider,
@@ -643,11 +643,11 @@ class SsoProviderModel {
 
   static async update(
     id: string,
-    data: Partial<UpdateSsoProvider>,
+    data: Partial<UpdateIdentityProvider>,
     organizationId: string,
-  ): Promise<SsoProvider | null> {
+  ): Promise<IdentityProvider | null> {
     // First check if the provider exists
-    const existingProvider = await SsoProviderModel.findById(
+    const existingProvider = await IdentityProviderModel.findById(
       id,
       organizationId,
     );
@@ -675,7 +675,7 @@ class SsoProviderModel {
     // WORKAROUND: Always ensure domainVerified is true to enable account linking
     // See: https://github.com/better-auth/better-auth/issues/6481
     const [updatedProvider] = await db
-      .update(schema.ssoProvidersTable)
+      .update(schema.identityProvidersTable)
       .set({
         ...restData,
         domainVerified: true,
@@ -689,8 +689,8 @@ class SsoProviderModel {
       })
       .where(
         and(
-          eq(schema.ssoProvidersTable.id, id),
-          eq(schema.ssoProvidersTable.organizationId, organizationId),
+          eq(schema.identityProvidersTable.id, id),
+          eq(schema.identityProvidersTable.organizationId, organizationId),
         ),
       )
       .returning();
@@ -716,7 +716,7 @@ class SsoProviderModel {
 
   static async delete(id: string, organizationId: string): Promise<boolean> {
     // First check if the provider exists
-    const existingProvider = await SsoProviderModel.findById(
+    const existingProvider = await IdentityProviderModel.findById(
       id,
       organizationId,
     );
@@ -728,7 +728,7 @@ class SsoProviderModel {
     await db.transaction(async (tx) => {
       /**
        * Clean up associated SSO accounts to prevent orphaned records
-       * This is important because orphaned accounts can cause issues with future SSO logins
+       * This is important because orphaned accounts can cause issues with future IdP logins
        * (e.g., the syncSsoRole/syncSsoTeams functions might pick up the wrong account)
        */
       const deletedAccounts = await AccountModel.deleteByProviderId(
@@ -738,24 +738,24 @@ class SsoProviderModel {
       if (deletedAccounts > 0) {
         logger.info(
           { providerId: existingProvider.providerId, deletedAccounts },
-          "Cleaned up SSO accounts for deleted provider",
+          "Cleaned up SSO accounts for deleted identity provider",
         );
       }
 
       // Delete from database
       const deleted = await tx
-        .delete(schema.ssoProvidersTable)
+        .delete(schema.identityProvidersTable)
         .where(
           and(
-            eq(schema.ssoProvidersTable.id, id),
-            eq(schema.ssoProvidersTable.organizationId, organizationId),
+            eq(schema.identityProvidersTable.id, id),
+            eq(schema.identityProvidersTable.organizationId, organizationId),
           ),
         )
-        .returning({ id: schema.ssoProvidersTable.id });
+        .returning({ id: schema.identityProvidersTable.id });
 
       if (deleted.length === 0) {
         // Rollback if provider wasn't deleted (though it existed in check above)
-        throw new Error("Failed to delete SSO provider");
+        throw new Error("Failed to delete identity provider");
       }
     });
 
@@ -775,17 +775,17 @@ class SsoProviderModel {
   ): Promise<void> {
     logger.debug(
       { id, domainVerified },
-      "SsoProviderModel.setDomainVerifiedForTesting: setting domainVerified",
+      "IdentityProviderModel.setDomainVerifiedForTesting: setting domainVerified",
     );
     await db
-      .update(schema.ssoProvidersTable)
+      .update(schema.identityProvidersTable)
       .set({ domainVerified })
-      .where(eq(schema.ssoProvidersTable.id, id));
+      .where(eq(schema.identityProvidersTable.id, id));
     logger.debug(
       { id, domainVerified },
-      "SsoProviderModel.setDomainVerifiedForTesting: completed",
+      "IdentityProviderModel.setDomainVerifiedForTesting: completed",
     );
   }
 }
 
-export default SsoProviderModel;
+export default IdentityProviderModel;

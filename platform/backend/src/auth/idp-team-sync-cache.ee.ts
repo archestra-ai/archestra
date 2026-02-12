@@ -1,19 +1,19 @@
-import type { SsoTeamSyncConfig } from "@shared";
+import type { IdpTeamSyncConfig } from "@shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { extractGroupsWithTemplate } from "@/templating";
 
 /**
- * Cache for SSO groups during login flow.
+ * Cache for IdP groups during login flow.
  *
- * This cache stores the user's SSO groups from the token/userInfo
+ * This cache stores the user's IdP groups from the token/userInfo
  * so they can be used in the after hook for team synchronization.
  *
  * The cache is keyed by a composite of providerId and user email.
  * Entries automatically expire after 60 seconds to prevent stale data.
  */
 
-interface SsoGroupsCacheEntry {
+interface IdpGroupsCacheEntry {
   groups: string[];
   organizationId: string;
 }
@@ -26,14 +26,14 @@ const CACHE_TTL_MS = 60_000; // 60 seconds
 function getCacheKey(
   providerId: string,
   email: string,
-): `${typeof CacheKey.SsoGroups}-${string}` {
-  return `${CacheKey.SsoGroups}-${providerId}:${email.toLowerCase()}`;
+): `${typeof CacheKey.IdpGroups}-${string}` {
+  return `${CacheKey.IdpGroups}-${providerId}:${email.toLowerCase()}`;
 }
 
 /**
- * Store SSO groups for a user during login
+ * Store IdP groups for a user during login
  */
-export async function cacheSsoGroups(
+export async function cacheIdpGroups(
   providerId: string,
   email: string,
   organizationId: string,
@@ -42,9 +42,9 @@ export async function cacheSsoGroups(
   const key = getCacheKey(providerId, email);
   logger.debug(
     { providerId, email, organizationId, groupCount: groups.length },
-    "[ssoTeamSyncCache] Caching SSO groups",
+    "[idpTeamSyncCache] Caching IdP groups",
   );
-  await cacheManager.set<SsoGroupsCacheEntry>(
+  await cacheManager.set<IdpGroupsCacheEntry>(
     key,
     { groups, organizationId },
     CACHE_TTL_MS,
@@ -52,28 +52,28 @@ export async function cacheSsoGroups(
 }
 
 /**
- * Retrieve and remove SSO groups for a user after login
+ * Retrieve and remove IdP groups for a user after login
  * Returns null if no entry exists or if the entry has expired
  */
-export async function retrieveSsoGroups(
+export async function retrieveIdpGroups(
   providerId: string,
   email: string,
 ): Promise<{ groups: string[]; organizationId: string } | null> {
   const key = getCacheKey(providerId, email);
 
   // Use atomic getAndDelete to prevent race conditions where multiple
-  // concurrent requests could retrieve the same SSO groups
-  const entry = await cacheManager.getAndDelete<SsoGroupsCacheEntry>(key);
+  // concurrent requests could retrieve the same IdP groups
+  const entry = await cacheManager.getAndDelete<IdpGroupsCacheEntry>(key);
 
   logger.debug(
     { providerId, email, found: !!entry },
-    "[ssoTeamSyncCache] Retrieving SSO groups",
+    "[idpTeamSyncCache] Retrieving IdP groups",
   );
 
   if (!entry) {
     logger.debug(
       { providerId, email },
-      "[ssoTeamSyncCache] No cached groups found",
+      "[idpTeamSyncCache] No cached groups found",
     );
     return null;
   }
@@ -85,7 +85,7 @@ export async function retrieveSsoGroups(
       groupCount: entry.groups.length,
       organizationId: entry.organizationId,
     },
-    "[ssoTeamSyncCache] Retrieved valid cached groups",
+    "[idpTeamSyncCache] Retrieved valid cached groups",
   );
 
   return {
@@ -135,7 +135,7 @@ function normalizeGroups(value: unknown): string[] {
  */
 export function extractGroupsFromClaims(
   claims: Record<string, unknown>,
-  teamSyncConfig?: SsoTeamSyncConfig,
+  teamSyncConfig?: IdpTeamSyncConfig,
 ): string[] {
   // If team sync is explicitly disabled, return empty array
   if (teamSyncConfig?.enabled === false) {

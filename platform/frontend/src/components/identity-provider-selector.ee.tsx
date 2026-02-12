@@ -3,14 +3,14 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { SsoProviderIcon } from "@/components/sso-provider-icons.ee";
+import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
-import { usePublicSsoProviders } from "@/lib/sso-provider.query.ee";
+import { usePublicIdentityProviders } from "@/lib/identity-provider.query.ee";
 import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
 
-interface SsoProviderSelectorProps {
+interface IdentityProviderSelectorProps {
   /**
    * Whether to show the "Or continue with SSO" divider above the SSO buttons.
    * Set to false when basic auth is disabled and there's no form above.
@@ -19,11 +19,12 @@ interface SsoProviderSelectorProps {
   showDivider?: boolean;
 }
 
-export function SsoProviderSelector({
+export function IdentityProviderSelector({
   showDivider = true,
-}: SsoProviderSelectorProps) {
+}: IdentityProviderSelectorProps) {
   const searchParams = useSearchParams();
-  const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
+  const { data: identityProviders = [], isLoading } =
+    usePublicIdentityProviders();
 
   // Get the redirectTo URL from search params, defaulting to "/"
   // Validates that the path is safe (relative path, no protocol) to prevent open redirect attacks
@@ -54,7 +55,7 @@ export function SsoProviderSelector({
   if (
     !config.enterpriseLicenseActivated ||
     isLoading ||
-    ssoProviders.length === 0
+    identityProviders.length === 0
   ) {
     return null;
   }
@@ -75,14 +76,14 @@ export function SsoProviderSelector({
       )}
 
       <div className="space-y-2">
-        {ssoProviders.map((provider) => (
+        {identityProviders.map((provider) => (
           <Button
             key={provider.id}
             variant="outline"
             className="w-full"
             onClick={() => handleSsoSignIn(provider.providerId)}
           >
-            <SsoProviderIcon
+            <IdentityProviderIcon
               providerId={provider.providerId}
               className="mr-2"
             />

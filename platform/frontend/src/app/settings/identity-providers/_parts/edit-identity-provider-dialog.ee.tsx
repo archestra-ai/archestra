@@ -1,7 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
+import {
+  IdentityProviderFormSchema,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -26,32 +29,32 @@ import {
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
-  useDeleteSsoProvider,
-  useSsoProvider,
-  useUpdateSsoProvider,
-} from "@/lib/sso-provider.query.ee";
+  useDeleteIdentityProvider,
+  useIdentityProvider,
+  useUpdateIdentityProvider,
+} from "@/lib/identity-provider.query.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
-interface EditSsoProviderDialogProps {
-  ssoProviderId: string;
+interface EditIdentityProviderDialogProps {
+  identityProviderId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function EditSsoProviderDialog({
-  ssoProviderId,
+export function EditIdentityProviderDialog({
+  identityProviderId,
   open,
   onOpenChange,
-}: EditSsoProviderDialogProps) {
-  const { data: provider, isLoading } = useSsoProvider(ssoProviderId);
-  const updateSsoProvider = useUpdateSsoProvider();
-  const deleteSsoProvider = useDeleteSsoProvider();
+}: EditIdentityProviderDialogProps) {
+  const { data: provider, isLoading } = useIdentityProvider(identityProviderId);
+  const updateIdentityProvider = useUpdateIdentityProvider();
+  const deleteIdentityProvider = useDeleteIdentityProvider();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const form = useForm<SsoProviderFormValues>({
+  const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
-    resolver: zodResolver(SsoProviderFormSchema as any),
+    resolver: zodResolver(IdentityProviderFormSchema as any),
     defaultValues: {
       providerId: "",
       issuer: "",
@@ -129,15 +132,15 @@ export function EditSsoProviderDialog({
   }, [provider, form]);
 
   const onSubmit = useCallback(
-    async (data: SsoProviderFormValues) => {
+    async (data: IdentityProviderFormValues) => {
       if (!provider) return;
-      await updateSsoProvider.mutateAsync({
+      await updateIdentityProvider.mutateAsync({
         id: provider.id,
         data,
       });
       onOpenChange(false);
     },
-    [provider, updateSsoProvider, onOpenChange],
+    [provider, updateIdentityProvider, onOpenChange],
   );
 
   const handleClose = useCallback(() => {
@@ -146,10 +149,10 @@ export function EditSsoProviderDialog({
 
   const handleDelete = useCallback(async () => {
     if (!provider) return;
-    await deleteSsoProvider.mutateAsync(provider.id);
+    await deleteIdentityProvider.mutateAsync(provider.id);
     setShowDeleteConfirm(false);
     onOpenChange(false);
-  }, [provider, deleteSsoProvider, onOpenChange]);
+  }, [provider, deleteIdentityProvider, onOpenChange]);
 
   if (isLoading || !provider) {
     return null;
@@ -159,7 +162,7 @@ export function EditSsoProviderDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Edit SSO Provider</DialogTitle>
+          <DialogTitle>Edit Identity Provider</DialogTitle>
           <DialogDescription>
             Update the configuration for "{provider.providerId}".
           </DialogDescription>
@@ -183,7 +186,7 @@ export function EditSsoProviderDialog({
                 <PermissionButton
                   type="button"
                   variant="destructive"
-                  permissions={{ ssoProvider: ["delete"] }}
+                  permissions={{ identityProvider: ["delete"] }}
                   onClick={() => setShowDeleteConfirm(true)}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
@@ -195,10 +198,10 @@ export function EditSsoProviderDialog({
                   </Button>
                   <PermissionButton
                     type="submit"
-                    permissions={{ ssoProvider: ["update"] }}
-                    disabled={updateSsoProvider.isPending}
+                    permissions={{ identityProvider: ["update"] }}
+                    disabled={updateIdentityProvider.isPending}
                   >
-                    {updateSsoProvider.isPending
+                    {updateIdentityProvider.isPending
                       ? "Updating..."
                       : "Update Provider"}
                   </PermissionButton>
@@ -213,7 +216,7 @@ export function EditSsoProviderDialog({
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete SSO Provider</AlertDialogTitle>
+            <AlertDialogTitle>Delete Identity Provider</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{provider.providerId}"? This
               action cannot be undone. Users will no longer be able to sign in
@@ -223,12 +226,12 @@ export function EditSsoProviderDialog({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <PermissionButton
-              permissions={{ ssoProvider: ["delete"] }}
+              permissions={{ identityProvider: ["delete"] }}
               onClick={handleDelete}
-              disabled={deleteSsoProvider.isPending}
+              disabled={deleteIdentityProvider.isPending}
               variant="destructive"
             >
-              {deleteSsoProvider.isPending ? "Deleting..." : "Delete"}
+              {deleteIdentityProvider.isPending ? "Deleting..." : "Delete"}
             </PermissionButton>
           </AlertDialogFooter>
         </AlertDialogContent>

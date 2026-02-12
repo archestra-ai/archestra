@@ -3,73 +3,77 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
-import { SSO_PROVIDERS_API_PREFIX } from "@/constants";
+import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
 import logger from "@/logging";
 import AccountModel from "@/models/account";
-import SsoProviderModel from "@/models/sso-provider.ee";
+import IdentityProviderModel from "@/models/identity-provider.ee";
 import {
   ApiError,
   constructResponseSchema,
-  InsertSsoProviderSchema,
-  PublicSsoProviderSchema,
-  SelectSsoProviderSchema,
-  UpdateSsoProviderSchema,
+  InsertIdentityProviderSchema,
+  PublicIdentityProviderSchema,
+  SelectIdentityProviderSchema,
+  UpdateIdentityProviderSchema,
 } from "@/types";
 
-const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Public endpoint for login page - returns only minimal provider info.
    * Does NOT expose any sensitive configuration data like client secrets.
    * Auth is skipped for this endpoint in middleware.
    */
   fastify.get(
-    `${SSO_PROVIDERS_API_PREFIX}/public`,
+    `${IDENTITY_PROVIDERS_API_PREFIX}/public`,
     {
       schema: {
-        operationId: RouteId.GetPublicSsoProviders,
+        operationId: RouteId.GetPublicIdentityProviders,
         description:
-          "Get public SSO provider list for login page (no secrets exposed)",
-        tags: ["SSO Providers"],
-        response: constructResponseSchema(z.array(PublicSsoProviderSchema)),
+          "Get public identity provider list for login page (no secrets exposed)",
+        tags: ["Identity Providers"],
+        response: constructResponseSchema(
+          z.array(PublicIdentityProviderSchema),
+        ),
       },
     },
     async (_request, reply) => {
-      return reply.send(await SsoProviderModel.findAllPublic());
+      return reply.send(await IdentityProviderModel.findAllPublic());
     },
   );
 
   /**
    * Admin endpoint - returns full provider config including secrets.
-   * Requires authentication and ssoProvider:read permission.
+   * Requires authentication and identityProvider:read permission.
    */
   fastify.get(
-    SSO_PROVIDERS_API_PREFIX,
+    IDENTITY_PROVIDERS_API_PREFIX,
     {
       schema: {
-        operationId: RouteId.GetSsoProviders,
+        operationId: RouteId.GetIdentityProviders,
         description:
-          "Get all SSO providers with full configuration (admin only)",
-        tags: ["SSO Providers"],
-        response: constructResponseSchema(z.array(SelectSsoProviderSchema)),
+          "Get all identity providers with full configuration (admin only)",
+        tags: ["Identity Providers"],
+        response: constructResponseSchema(
+          z.array(SelectIdentityProviderSchema),
+        ),
       },
     },
     async ({ organizationId }, reply) => {
-      return reply.send(await SsoProviderModel.findAll(organizationId));
+      return reply.send(await IdentityProviderModel.findAll(organizationId));
     },
   );
 
   /**
-   * Returns the IdP logout URL for the current user's SSO provider.
+   * Returns the IdP logout URL for the current user's identity provider.
    * Used during sign-out to also terminate the IdP session (RP-Initiated Logout).
    */
   fastify.get(
-    `${SSO_PROVIDERS_API_PREFIX}/idp-logout-url`,
+    `${IDENTITY_PROVIDERS_API_PREFIX}/idp-logout-url`,
     {
       schema: {
-        operationId: RouteId.GetSsoProviderIdpLogoutUrl,
+        operationId: RouteId.GetIdentityProviderIdpLogoutUrl,
         description:
-          "Get the IdP logout URL for the current user's SSO provider",
-        tags: ["SSO Providers"],
+          "Get the IdP logout URL for the current user's identity provider",
+        tags: ["Identity Providers"],
         response: constructResponseSchema(
           z.object({ url: z.string().nullable() }),
         ),
@@ -82,44 +86,44 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    `${SSO_PROVIDERS_API_PREFIX}/:id`,
+    `${IDENTITY_PROVIDERS_API_PREFIX}/:id`,
     {
       schema: {
-        operationId: RouteId.GetSsoProvider,
-        description: "Get SSO provider by ID",
-        tags: ["SSO Providers"],
+        operationId: RouteId.GetIdentityProvider,
+        description: "Get identity provider by ID",
+        tags: ["Identity Providers"],
         params: z.object({
           id: z.string(),
         }),
-        response: constructResponseSchema(SelectSsoProviderSchema),
+        response: constructResponseSchema(SelectIdentityProviderSchema),
       },
     },
     async ({ params, organizationId }, reply) => {
-      const provider = await SsoProviderModel.findById(
+      const provider = await IdentityProviderModel.findById(
         params.id,
         organizationId,
       );
       if (!provider) {
-        throw new ApiError(404, "SSO provider not found");
+        throw new ApiError(404, "Identity provider not found");
       }
       return reply.send(provider);
     },
   );
 
   fastify.post(
-    SSO_PROVIDERS_API_PREFIX,
+    IDENTITY_PROVIDERS_API_PREFIX,
     {
       schema: {
-        operationId: RouteId.CreateSsoProvider,
-        description: "Create a new SSO provider",
-        tags: ["SSO Providers"],
-        body: InsertSsoProviderSchema,
-        response: constructResponseSchema(SelectSsoProviderSchema),
+        operationId: RouteId.CreateIdentityProvider,
+        description: "Create a new identity provider",
+        tags: ["Identity Providers"],
+        body: InsertIdentityProviderSchema,
+        response: constructResponseSchema(SelectIdentityProviderSchema),
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
       return reply.send(
-        await SsoProviderModel.create(
+        await IdentityProviderModel.create(
           {
             ...body,
             userId: user.id,
@@ -133,35 +137,39 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.put(
-    `${SSO_PROVIDERS_API_PREFIX}/:id`,
+    `${IDENTITY_PROVIDERS_API_PREFIX}/:id`,
     {
       schema: {
-        operationId: RouteId.UpdateSsoProvider,
-        description: "Update SSO provider",
-        tags: ["SSO Providers"],
+        operationId: RouteId.UpdateIdentityProvider,
+        description: "Update identity provider",
+        tags: ["Identity Providers"],
         params: z.object({
           id: z.string(),
         }),
-        body: UpdateSsoProviderSchema,
-        response: constructResponseSchema(SelectSsoProviderSchema),
+        body: UpdateIdentityProviderSchema,
+        response: constructResponseSchema(SelectIdentityProviderSchema),
       },
     },
     async ({ params: { id }, body, organizationId }, reply) => {
-      const provider = await SsoProviderModel.update(id, body, organizationId);
+      const provider = await IdentityProviderModel.update(
+        id,
+        body,
+        organizationId,
+      );
       if (!provider) {
-        throw new ApiError(404, "SSO provider not found");
+        throw new ApiError(404, "Identity provider not found");
       }
       return reply.send(provider);
     },
   );
 
   fastify.delete(
-    `${SSO_PROVIDERS_API_PREFIX}/:id`,
+    `${IDENTITY_PROVIDERS_API_PREFIX}/:id`,
     {
       schema: {
-        operationId: RouteId.DeleteSsoProvider,
-        description: "Delete SSO provider",
-        tags: ["SSO Providers"],
+        operationId: RouteId.DeleteIdentityProvider,
+        description: "Delete identity provider",
+        tags: ["Identity Providers"],
         params: z.object({
           id: z.string(),
         }),
@@ -169,16 +177,19 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, organizationId }, reply) => {
-      const success = await SsoProviderModel.delete(params.id, organizationId);
+      const success = await IdentityProviderModel.delete(
+        params.id,
+        organizationId,
+      );
       if (!success) {
-        throw new ApiError(404, "SSO provider not found");
+        throw new ApiError(404, "Identity provider not found");
       }
       return reply.send({ success: true });
     },
   );
 };
 
-export default ssoProviderRoutes;
+export default identityProviderRoutes;
 
 // === Internal helpers ===
 
@@ -191,17 +202,17 @@ export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
   }
 
   // Find the SSO provider configuration
-  const ssoProvider = await SsoProviderModel.findByProviderId(
+  const idpProvider = await IdentityProviderModel.findByProviderId(
     ssoAccount.providerId,
   );
-  if (!ssoProvider?.oidcConfig?.discoveryEndpoint) {
+  if (!idpProvider?.oidcConfig?.discoveryEndpoint) {
     return null;
   }
 
   // Fetch the OIDC discovery document to get the end_session_endpoint
   let endSessionEndpoint: string | undefined;
   try {
-    const response = await fetch(ssoProvider.oidcConfig.discoveryEndpoint, {
+    const response = await fetch(idpProvider.oidcConfig.discoveryEndpoint, {
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
@@ -235,8 +246,8 @@ export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
   if (ssoAccount.idToken) {
     logoutUrl.searchParams.set("id_token_hint", ssoAccount.idToken);
   }
-  if (ssoProvider.oidcConfig.clientId) {
-    logoutUrl.searchParams.set("client_id", ssoProvider.oidcConfig.clientId);
+  if (idpProvider.oidcConfig.clientId) {
+    logoutUrl.searchParams.set("client_id", idpProvider.oidcConfig.clientId);
   }
   logoutUrl.searchParams.set(
     "post_logout_redirect_uri",

@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, type SsoProviderFormValues } from "@shared";
+import { E2eTestId, type IdentityProviderFormValues } from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
 import { useCallback, useId, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/tooltip";
 
 interface RoleMappingFormProps {
-  form: UseFormReturn<SsoProviderFormValues>;
+  form: UseFormReturn<IdentityProviderFormValues>;
 }
 
 const HANDLEBARS_EXAMPLES = [
@@ -121,7 +121,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
                     <p>
-                      Map SSO provider attributes to Archestra roles using
+                      Map identity provider attributes to Archestra roles using
                       Handlebars templates. Rules are evaluated in order - first
                       match wins.
                     </p>
@@ -142,7 +142,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   variant="outline"
                   size="sm"
                   onClick={addRule}
-                  data-testid={E2eTestId.SsoRoleMappingAddRule}
+                  data-testid={E2eTestId.IdpRoleMappingAddRule}
                 >
                   <Plus className="mr-1 h-4 w-4" />
                   Add Rule
@@ -184,7 +184,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                   placeholder='{{#includes groups "admin"}}true{{/includes}}'
                                   className="font-mono text-sm"
                                   data-testid={
-                                    E2eTestId.SsoRoleMappingRuleTemplate
+                                    E2eTestId.IdpRoleMappingRuleTemplate
                                   }
                                   {...field}
                                 />
@@ -208,7 +208,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                 <FormControl>
                                   <SelectTrigger
                                     data-testid={
-                                      E2eTestId.SsoRoleMappingRuleRole
+                                      E2eTestId.IdpRoleMappingRuleRole
                                     }
                                   >
                                     <SelectValue placeholder="Select role" />
@@ -248,7 +248,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   >
                     <FormControl>
                       <SelectTrigger
-                        data-testid={E2eTestId.SsoRoleMappingDefaultRole}
+                        data-testid={E2eTestId.IdpRoleMappingDefaultRole}
                       >
                         <SelectValue placeholder="Select default role" />
                       </SelectTrigger>

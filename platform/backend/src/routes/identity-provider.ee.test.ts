@@ -1,6 +1,6 @@
 import { afterEach, vi } from "vitest";
 import { describe, expect, test } from "@/test";
-import { getIdpLogoutUrl } from "./sso-provider.ee";
+import { getIdpLogoutUrl } from "./identity-provider.ee";
 
 // Mock the logger to avoid console output during tests
 vi.mock("@/logging", () => ({
@@ -33,13 +33,13 @@ describe("getIdpLogoutUrl", () => {
     makeUser,
     makeAccount,
     makeOrganization,
-    makeSsoProvider,
+    makeIdentityProvider,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
 
     // Create an SSO provider with SAML config (no OIDC)
-    await makeSsoProvider(org.id, {
+    await makeIdentityProvider(org.id, {
       providerId: "saml-provider",
       samlConfig: {
         entityId: "https://saml.example.com",
@@ -61,12 +61,12 @@ describe("getIdpLogoutUrl", () => {
     makeUser,
     makeAccount,
     makeOrganization,
-    makeSsoProvider,
+    makeIdentityProvider,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
 
-    await makeSsoProvider(org.id, {
+    await makeIdentityProvider(org.id, {
       providerId: "oidc-provider",
       oidcConfig: {
         clientId: "test-client",
@@ -112,12 +112,12 @@ describe("getIdpLogoutUrl", () => {
     makeUser,
     makeAccount,
     makeOrganization,
-    makeSsoProvider,
+    makeIdentityProvider,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
 
-    await makeSsoProvider(org.id, {
+    await makeIdentityProvider(org.id, {
       providerId: "oidc-failing",
       oidcConfig: {
         clientId: "test-client",
@@ -144,12 +144,12 @@ describe("getIdpLogoutUrl", () => {
     makeUser,
     makeAccount,
     makeOrganization,
-    makeSsoProvider,
+    makeIdentityProvider,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
 
-    await makeSsoProvider(org.id, {
+    await makeIdentityProvider(org.id, {
       providerId: "oidc-500",
       oidcConfig: {
         clientId: "test-client",
@@ -179,12 +179,12 @@ describe("getIdpLogoutUrl", () => {
     makeUser,
     makeAccount,
     makeOrganization,
-    makeSsoProvider,
+    makeIdentityProvider,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
 
-    await makeSsoProvider(org.id, {
+    await makeIdentityProvider(org.id, {
       providerId: "oidc-no-logout",
       oidcConfig: {
         clientId: "test-client",

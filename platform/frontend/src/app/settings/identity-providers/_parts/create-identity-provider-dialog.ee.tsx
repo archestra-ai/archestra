@@ -1,7 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
+import {
+  IdentityProviderFormSchema,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -15,14 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useCreateSsoProvider } from "@/lib/sso-provider.query.ee";
+import { useCreateIdentityProvider } from "@/lib/identity-provider.query.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
-interface CreateSsoProviderDialogProps {
+interface CreateIdentityProviderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  defaultValues?: Partial<SsoProviderFormValues>;
+  defaultValues?: Partial<IdentityProviderFormValues>;
   providerName?: string;
   /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
   hidePkce?: boolean;
@@ -32,7 +35,7 @@ interface CreateSsoProviderDialogProps {
   providerType?: "oidc" | "saml";
 }
 
-export function CreateSsoProviderDialog({
+export function CreateIdentityProviderDialog({
   open,
   onOpenChange,
   defaultValues,
@@ -40,12 +43,12 @@ export function CreateSsoProviderDialog({
   hidePkce,
   hideProviderId,
   providerType = "oidc",
-}: CreateSsoProviderDialogProps) {
-  const createSsoProvider = useCreateSsoProvider();
+}: CreateIdentityProviderDialogProps) {
+  const createIdentityProvider = useCreateIdentityProvider();
 
-  const form = useForm<SsoProviderFormValues>({
+  const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
-    resolver: zodResolver(SsoProviderFormSchema as any),
+    resolver: zodResolver(IdentityProviderFormSchema as any),
     defaultValues: defaultValues || {
       providerId: "",
       issuer: "",
@@ -80,12 +83,12 @@ export function CreateSsoProviderDialog({
   });
 
   const onSubmit = useCallback(
-    async (data: SsoProviderFormValues) => {
-      await createSsoProvider.mutateAsync(data);
+    async (data: IdentityProviderFormValues) => {
+      await createIdentityProvider.mutateAsync(data);
       form.reset();
       onOpenChange(false);
     },
-    [createSsoProvider, form, onOpenChange],
+    [createIdentityProvider, form, onOpenChange],
   );
 
   const handleClose = useCallback(() => {
@@ -100,7 +103,9 @@ export function CreateSsoProviderDialog({
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {providerName ? `Configure ${providerName}` : "Add SSO Provider"}
+            {providerName
+              ? `Configure ${providerName}`
+              : "Add Identity Provider"}
           </DialogTitle>
           <DialogDescription>
             {providerName
@@ -132,10 +137,10 @@ export function CreateSsoProviderDialog({
               </Button>
               <PermissionButton
                 type="submit"
-                permissions={{ ssoProvider: ["create"] }}
-                disabled={createSsoProvider.isPending}
+                permissions={{ identityProvider: ["create"] }}
+                disabled={createIdentityProvider.isPending}
               >
-                {createSsoProvider.isPending
+                {createIdentityProvider.isPending
                   ? "Creating..."
                   : "Create Provider"}
               </PermissionButton>

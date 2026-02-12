@@ -1,15 +1,15 @@
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { jwtDecode } from "jwt-decode";
-import { extractGroupsFromClaims } from "@/auth/sso-team-sync-cache.ee";
+import { extractGroupsFromClaims } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
 import logger from "@/logging";
 // Direct imports to avoid circular dependencies when importing from barrel files
 import AccountModel from "@/models/account";
+import IdentityProviderModel, {
+  type IdpGetRoleData,
+} from "@/models/identity-provider.ee";
 import MemberModel from "@/models/member";
-import SsoProviderModel, {
-  type SsoGetRoleData,
-} from "@/models/sso-provider.ee";
 import TeamModel from "@/models/team";
 
 // NOTE: better-auth and @better-auth/sso are pinned to 1.4.17. Do NOT upgrade to 1.4.18+
@@ -24,18 +24,18 @@ export const ssoConfig = {
     // (i.e., first-time SSO logins for a user). For existing users who already have memberships,
     // this callback is NOT called. To sync roles on every SSO login, we use the `syncSsoRole`
     // function in `handleAfterHook` which runs on every `/sso/callback/*` request.
-    getRole: async (data: SsoGetRoleData) => {
+    getRole: async (data: IdpGetRoleData) => {
       logger.debug(
         {
           providerId: data.provider?.providerId,
           userId: data.user?.id,
           userEmail: data.user?.email,
         },
-        "SSO getRole callback: Invoking SsoProviderModel.resolveSsoRole",
+        "SSO getRole callback: Invoking IdentityProviderModel.resolveSsoRole",
       );
 
       // Cast to the expected union type (better-auth expects "member" | "admin")
-      const resolvedRole = (await SsoProviderModel.resolveSsoRole(data)) as
+      const resolvedRole = (await IdentityProviderModel.resolveSsoRole(data)) as
         | "member"
         | "admin";
 
@@ -95,9 +95,9 @@ export async function syncSsoRole(
   const providerId = ssoAccount.providerId;
 
   // Get the SSO provider to find the organization ID and role mapping config
-  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+  const idpProvider = await IdentityProviderModel.findByProviderId(providerId);
 
-  if (!ssoProvider?.organizationId) {
+  if (!idpProvider?.organizationId) {
     logger.debug(
       { providerId, userEmail },
       "SSO provider not found or has no organization, skipping role sync",
@@ -106,7 +106,7 @@ export async function syncSsoRole(
   }
 
   // Check if role mapping is configured
-  const roleMapping = ssoProvider.roleMapping;
+  const roleMapping = idpProvider.roleMapping;
   if (!roleMapping?.rules?.length) {
     logger.debug(
       { providerId, userEmail },
@@ -153,13 +153,13 @@ export async function syncSsoRole(
   }
 
   // Evaluate role mapping rules
-  const result = SsoProviderModel.evaluateRoleMapping(
+  const result = IdentityProviderModel.evaluateRoleMapping(
     roleMapping,
     {
       token: tokenClaims,
       provider: {
-        id: ssoProvider.id,
-        providerId: ssoProvider.providerId,
+        id: idpProvider.id,
+        providerId: idpProvider.providerId,
       },
     },
     "member",
@@ -196,12 +196,12 @@ export async function syncSsoRole(
   // Get the user's current membership
   const existingMember = await MemberModel.getByUserId(
     userId,
-    ssoProvider.organizationId,
+    idpProvider.organizationId,
   );
 
   if (!existingMember) {
     logger.debug(
-      { providerId, userEmail, organizationId: ssoProvider.organizationId },
+      { providerId, userEmail, organizationId: idpProvider.organizationId },
       "User has no membership in organization, skipping role sync (will be handled by organizationProvisioning)",
     );
     return;
@@ -211,7 +211,7 @@ export async function syncSsoRole(
   if (existingMember.role !== result.role) {
     await MemberModel.updateRole(
       userId,
-      ssoProvider.organizationId,
+      idpProvider.organizationId,
       result.role,
     );
     logger.info(
@@ -219,7 +219,7 @@ export async function syncSsoRole(
         userId,
         userEmail,
         providerId,
-        organizationId: ssoProvider.organizationId,
+        organizationId: idpProvider.organizationId,
         previousRole: existingMember.role,
         newRole: result.role,
         matched: result.matched,
@@ -285,9 +285,9 @@ export async function syncSsoTeams(
   const providerId = ssoAccount.providerId;
 
   // Get the SSO provider to find the organization ID and teamSyncConfig
-  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+  const idpProvider = await IdentityProviderModel.findByProviderId(providerId);
 
-  if (!ssoProvider?.organizationId) {
+  if (!idpProvider?.organizationId) {
     logger.debug(
       { providerId, userEmail },
       "SSO provider not found or has no organization, skipping team sync",
@@ -296,7 +296,7 @@ export async function syncSsoTeams(
   }
 
   // Check if team sync is explicitly disabled
-  if (ssoProvider.teamSyncConfig?.enabled === false) {
+  if (idpProvider.teamSyncConfig?.enabled === false) {
     logger.debug(
       { providerId, userEmail },
       "Team sync is disabled for this SSO provider",
@@ -319,7 +319,7 @@ export async function syncSsoTeams(
     const idTokenClaims = jwtDecode<Record<string, unknown>>(
       ssoAccount.idToken,
     );
-    groups = extractGroupsFromClaims(idTokenClaims, ssoProvider.teamSyncConfig);
+    groups = extractGroupsFromClaims(idTokenClaims, idpProvider.teamSyncConfig);
     logger.debug(
       {
         providerId,
@@ -345,7 +345,7 @@ export async function syncSsoTeams(
     return;
   }
 
-  const organizationId = ssoProvider.organizationId;
+  const organizationId = idpProvider.organizationId;
 
   try {
     const { added, removed } = await TeamModel.syncUserTeams(

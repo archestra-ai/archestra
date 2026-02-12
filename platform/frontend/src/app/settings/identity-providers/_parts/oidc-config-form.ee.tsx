@@ -1,6 +1,6 @@
 "use client";
 
-import type { SsoProviderFormValues } from "@shared";
+import type { IdentityProviderFormValues } from "@shared";
 import { Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -21,7 +21,7 @@ import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
 interface OidcConfigFormProps {
-  form: UseFormReturn<SsoProviderFormValues>;
+  form: UseFormReturn<IdentityProviderFormValues>;
   /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
@@ -57,7 +57,7 @@ export function OidcConfigForm({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">SSO Provider Configuration</h3>
+        <h3 className="text-lg font-medium">Identity Provider Configuration</h3>
         <p className="text-sm text-muted-foreground">
           Configure your OpenID Connect provider settings.
         </p>
@@ -72,10 +72,10 @@ export function OidcConfigForm({
               <FormItem>
                 <FormLabel>Provider ID</FormLabel>
                 <FormControl>
-                  <Input placeholder="my-company-sso" {...field} />
+                  <Input placeholder="my-company-idp" {...field} />
                 </FormControl>
                 <FormDescription>
-                  Unique identifier for this SSO provider. Used in callback
+                  Unique identifier for this identity provider. Used in callback
                   URLs.
                 </FormDescription>
                 <FormMessage />

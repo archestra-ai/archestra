@@ -14,8 +14,8 @@ export default function SettingsLayout({
     organization: ["read"],
   });
 
-  const { data: userCanReadSsoProviders } = useHasPermissions({
-    ssoProvider: ["read"],
+  const { data: userCanReadIdentityProviders } = useHasPermissions({
+    identityProvider: ["read"],
   });
 
   const { data: userCanUpdateOrganization } = useHasPermissions({
@@ -36,13 +36,13 @@ export default function SettingsLayout({
           { label: "Roles", href: "/settings/roles" },
           /**
            * Identity Providers tab is only shown when enterprise license is activated
-           * and the user has the permission to read SSO providers.
+           * and the user has the permission to read identity providers.
            */
-          ...(config.enterpriseLicenseActivated && userCanReadSsoProviders
+          ...(config.enterpriseLicenseActivated && userCanReadIdentityProviders
             ? [
                 {
                   label: "Identity Providers",
-                  href: "/settings/sso-providers",
+                  href: "/settings/identity-providers",
                 },
               ]
             : []),

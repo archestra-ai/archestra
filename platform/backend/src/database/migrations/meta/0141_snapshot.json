@@ -1,5 +1,5 @@
 {
-  "id": "84608ca9-0e75-4019-a981-4a41f8b3ee64",
+  "id": "64561a9a-8684-4088-9603-67a19b3d8ef1",
   "prevId": "fa9bbe3b-543f-4c71-a26a-b37bb50645ca",
   "version": "7",
   "dialect": "postgresql",
@@ -561,6 +561,21 @@
           "columns": [
             {
               "expression": "agent_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_sso_provider_id_idx": {
+          "name": "agents_sso_provider_id_idx",
+          "columns": [
+            {
+              "expression": "sso_provider_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

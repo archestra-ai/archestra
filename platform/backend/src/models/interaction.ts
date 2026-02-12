@@ -167,7 +167,7 @@ async function getAgentNamesById(
  * Resolve an external agent ID to a human-readable label.
  * - Single agent ID: Returns the agent name
  * - Delegation chain: Returns only the last (most specific) agent name
- * - Non-UUID: Returns null (will fall back to Main/Subagent)
+ * - Non-UUID: Returns the original string as-is
  */
 function resolveExternalAgentIdLabel(
   externalAgentId: string | null,
@@ -227,6 +227,15 @@ function buildExternalAgentDisplayName(
 }
 
 class InteractionModel {
+  static async existsByExecutionId(executionId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.executionId, executionId))
+      .limit(1);
+    return result !== undefined;
+  }
+
   static async create(data: InsertInteraction) {
     const [interaction] = await db
       .insert(schema.interactionsTable)

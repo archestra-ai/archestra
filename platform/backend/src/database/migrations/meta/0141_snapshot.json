@@ -1,5 +1,5 @@
 {
-  "id": "64561a9a-8684-4088-9603-67a19b3d8ef1",
+  "id": "cf91fef9-0dc1-446c-a166-6dce5a25a924",
   "prevId": "fa9bbe3b-543f-4c71-a26a-b37bb50645ca",
   "version": "7",
   "dialect": "postgresql",
@@ -519,12 +519,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "sso_provider_id": {
-          "name": "sso_provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -570,21 +564,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "agents_sso_provider_id_idx": {
-          "name": "agents_sso_provider_id_idx",
-          "columns": [
-            {
-              "expression": "sso_provider_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -594,19 +573,6 @@
           "tableTo": "chat_api_keys",
           "columnsFrom": [
             "llm_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_sso_provider_id_sso_provider_id_fk": {
-          "name": "agents_sso_provider_id_sso_provider_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "sso_provider",
-          "columnsFrom": [
-            "sso_provider_id"
           ],
           "columnsTo": [
             "id"
@@ -1886,6 +1852,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
         "user_id": {
           "name": "user_id",
           "type": "text",
@@ -2017,6 +1989,21 @@
           "columns": [
             {
               "expression": "external_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interactions_execution_id_idx": {
+          "name": "interactions_execution_id_idx",
+          "columns": [
+            {
+              "expression": "execution_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3216,12 +3203,6 @@
         "auth_method": {
           "name": "auth_method",
           "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "external_identity": {
-          "name": "external_identity",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

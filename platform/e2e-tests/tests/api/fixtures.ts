@@ -19,6 +19,7 @@ import {
 export interface TestFixtures {
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
+  createLlmProxy: typeof createLlmProxy;
   deleteAgent: typeof deleteAgent;
   createApiKey: typeof createApiKey;
   deleteApiKey: typeof deleteApiKey;
@@ -105,6 +106,22 @@ const createAgent = async (request: APIRequestContext, name: string) =>
     data: {
       name,
       teams: [],
+    },
+  });
+
+/**
+ * Create an LLM Proxy
+ * (authnz is handled by the authenticated session)
+ */
+const createLlmProxy = async (request: APIRequestContext, name: string) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/agents",
+    data: {
+      name,
+      teams: [],
+      agentType: "llm_proxy",
     },
   });
 
@@ -775,6 +792,9 @@ export const test = base.extend<TestFixtures>({
   },
   createAgent: async ({}, use) => {
     await use(createAgent);
+  },
+  createLlmProxy: async ({}, use) => {
+    await use(createLlmProxy);
   },
   deleteAgent: async ({}, use) => {
     await use(deleteAgent);

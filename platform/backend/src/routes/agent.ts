@@ -227,6 +227,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       metrics.llm.initializeMetrics(labelKeys);
       metrics.mcp.initializeMcpMetrics(labelKeys);
+      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
 
       return reply.send(agent);
     },
@@ -319,6 +320,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       metrics.llm.initializeMetrics(labelKeys);
       metrics.mcp.initializeMcpMetrics(labelKeys);
+      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
 
       return reply.send(agent);
     },

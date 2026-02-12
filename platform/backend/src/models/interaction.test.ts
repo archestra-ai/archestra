@@ -2124,6 +2124,78 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("existsByExecutionId", () => {
+    test("returns false when no interaction has the execution id", async () => {
+      const exists = await InteractionModel.existsByExecutionId(
+        "non-existent-exec-id",
+      );
+      expect(exists).toBe(false);
+    });
+
+    test("returns true when an interaction has the execution id", async () => {
+      await InteractionModel.create({
+        profileId,
+        executionId: "test-exec-123",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const exists =
+        await InteractionModel.existsByExecutionId("test-exec-123");
+      expect(exists).toBe(true);
+    });
+
+    test("returns true when multiple interactions share the execution id", async () => {
+      await InteractionModel.create({
+        profileId,
+        executionId: "shared-exec-id",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "First" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId,
+        executionId: "shared-exec-id",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Second" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const exists =
+        await InteractionModel.existsByExecutionId("shared-exec-id");
+      expect(exists).toBe(true);
+    });
+  });
+
   describe("getUniqueUserIds", () => {
     test("returns unique user IDs with names", async ({
       makeAdmin,

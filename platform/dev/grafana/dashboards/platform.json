@@ -1468,7 +1468,7 @@
         "type": "prometheus",
         "uid": "$metrics_datasource"
       },
-      "description": "Total unique executions per agent, identified by X-Archestra-Execution-Id header. Shows a sliding window — values rise as new executions enter the window and drop as old ones fall out.",
+      "description": "How many times each agent was executed. Only counts executions that happened within the time range selected in the top-right time picker (e.g. 'Last 1 hour' shows only the last hour's executions).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1532,7 +1532,7 @@
         "type": "prometheus",
         "uid": "$metrics_datasource"
       },
-      "description": "LLM inference cost per agent. Shows a sliding window — each point represents the total cost in the preceding interval. Values rise as new costs enter the window and drop as old ones fall out.",
+      "description": "How much each agent spent on LLM API calls (input + output tokens) over time. Each point on the chart shows the cost accumulated during that time interval — not the running total. Change the time range in the top-right time picker to see a different period.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1631,7 +1631,7 @@
         "type": "prometheus",
         "uid": "$metrics_datasource"
       },
-      "description": "Inference + N8N cost: LLM token cost + execution cost ($1 per execution). Shows a sliding window — values rise as new costs enter the window and drop as old ones fall out.\nFormula: sum(llm_cost_total) by (agent_id) + round(sum(agent_executions_total) by (agent_id)) * 1",
+      "description": "Combined cost per agent: LLM API cost + a fixed cost per execution. The per-execution cost is configurable in the query (default: $1). Each point on the chart shows the cost accumulated during that time interval — not the running total. Change the time range in the top-right time picker to see a different period.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1722,7 +1722,7 @@
           "refId": "A"
         }
       ],
-      "title": "Inference + N8N Cost",
+      "title": "Inference + Execution Cost",
       "type": "timeseries"
     },
     {

@@ -125,15 +125,7 @@ function OAuthCallbackContent() {
     };
 
     handleOAuthCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- router.push is stable but not memoized,
-    // and we intentionally run this effect only once per callback (guarded by sessionStorage)
-  }, [
-    searchParams,
-    callbackMutation.mutateAsync,
-    installMutation.mutateAsync,
-    reauthMutation.mutateAsync,
-    router.push,
-  ]);
+  }, [searchParams, callbackMutation, installMutation, reauthMutation, router]);
 
   // This component always redirects on success or error, so just show loading state
   return (

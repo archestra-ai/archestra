@@ -36,7 +36,7 @@ function SignUpWithInvitationContent() {
       setHasProcessed(true);
       acceptMutation.mutateAsync(invitationId);
     }
-  }, [session, invitationId, hasProcessed, acceptMutation.mutateAsync]);
+  }, [session, invitationId, hasProcessed, acceptMutation]);
 
   // Prefill email field (but keep it editable for form validation)
   useEffect(() => {

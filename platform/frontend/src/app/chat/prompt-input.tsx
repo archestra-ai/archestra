@@ -154,7 +154,7 @@ const PromptInputContent = ({
       isRestored.current = true;
     }, 0);
     return () => clearTimeout(timeout);
-  }, [storageKey, controller.textInput.setInput]);
+  }, [storageKey, controller.textInput]);
 
   // Save draft on change
   useEffect(() => {

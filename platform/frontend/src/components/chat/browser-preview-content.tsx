@@ -45,7 +45,7 @@ interface BrowserPreviewContentProps {
   /** Whether Playwright MCP tools are available */
   hasPlaywrightMcpTools?: boolean;
   /** Whether Playwright MCP server is installed (but tools may not be assigned) */
-  isPlaywrightInstalled?: boolean;
+  isPlaywrightInstalledByCurrentUser?: boolean;
   /** Whether tools are being assigned to the agent */
   isAssigningTools?: boolean;
   /** Called to install browser (Playwright MCP) */
@@ -77,7 +77,7 @@ export function BrowserPreviewContent({
   className,
   isInstallingBrowser = false,
   hasPlaywrightMcpTools = false,
-  isPlaywrightInstalled = false,
+  isPlaywrightInstalledByCurrentUser = false,
   isAssigningTools = false,
   onInstallBrowser,
   onAssignToolsToAgent,
@@ -480,7 +480,7 @@ export function BrowserPreviewContent({
                       : "Required only before first usage of the Browser Preview"}
                   </p>
                 </>
-              ) : !isPlaywrightInstalled && !installationFailed ? (
+              ) : !isPlaywrightInstalledByCurrentUser && !installationFailed ? (
                 // Not installed at all - show install button
                 <>
                   <Button

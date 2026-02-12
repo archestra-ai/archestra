@@ -2,9 +2,17 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Globe, Loader2, RefreshCw } from "lucide-react";
+import { useState } from "react";
 import { SetupDialog } from "@/components/setup-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles, useUpdateProfile } from "@/lib/agent.query";
 import { useHasPlaywrightMcpTools } from "@/lib/chat.query";
@@ -22,12 +30,16 @@ export function DefaultAgentSetupDialog({
 }: DefaultAgentSetupDialogProps) {
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
 
+  const { data: bindings } = useChatOpsBindings();
+
   const hasMsTeamsAgent =
     agents?.some((a) =>
       Array.isArray(a.allowedChatops)
         ? a.allowedChatops.includes("ms-teams")
         : false,
     ) ?? false;
+
+  const hasBindings = !!bindings && bindings.length > 0;
 
   return (
     <SetupDialog
@@ -37,6 +49,7 @@ export function DefaultAgentSetupDialog({
       description="Enable MS Teams on your agent, then bind it to a channel so it can receive and respond to messages."
       canProceed={(step) => {
         if (step === 0) return hasMsTeamsAgent;
+        if (step === 2) return hasBindings;
         return true;
       }}
       steps={[
@@ -339,18 +352,40 @@ export function StepStartChatting({
   showStepHeader?: boolean;
 } = {}) {
   const isK8sEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+  const { data: bindings } = useChatOpsBindings();
+  const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
+
+  // Build list of agents that are bound to at least one MS Teams channel
+  const boundAgentIds = new Set(
+    bindings?.map((b) => b.agentId).filter(Boolean) ?? [],
+  );
+  const boundAgents = agents?.filter((a) => boundAgentIds.has(a.id)) ?? [];
+
+  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(
+    undefined,
+  );
+  // Auto-select first bound agent when data loads
+  const effectiveAgentId =
+    selectedAgentId ?? (boundAgents.length > 0 ? boundAgents[0].id : undefined);
+
   const {
-    hasPlaywrightMcp,
+    hasPlaywrightMcpTools,
     isInstalling,
     installBrowser,
     reinstallRequired,
     installationFailed,
     playwrightServerId,
     reinstallBrowser,
-  } = useHasPlaywrightMcpTools(undefined);
+    assignToolsToAgent,
+    isAssigningTools,
+    isPlaywrightInstalledByCurrentUser,
+  } = useHasPlaywrightMcpTools(effectiveAgentId);
 
   const browserReady =
-    hasPlaywrightMcp && !reinstallRequired && !installationFailed;
+    hasPlaywrightMcpTools &&
+    isPlaywrightInstalledByCurrentUser &&
+    !reinstallRequired &&
+    !installationFailed;
 
   return (
     <div
@@ -410,44 +445,90 @@ export function StepStartChatting({
                 <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
                 <span>Browser tools are installed and ready to use.</span>
               </div>
+            ) : !effectiveAgentId ? (
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Bind an agent to a Teams channel first to install browser tools.
+              </p>
             ) : (
               <>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Install the Browser tools so your agent can browse websites
-                  and retrieve live content when asked.
+                  and retrieve live content when asked. Select agent that will
+                  have browser tools assigned.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isInstalling}
-                  onClick={() => {
-                    if (
-                      (reinstallRequired || installationFailed) &&
-                      playwrightServerId
-                    ) {
-                      reinstallBrowser(playwrightServerId);
-                    } else {
-                      installBrowser();
+                {boundAgents.length > 0 && (
+                  <Select
+                    value={effectiveAgentId}
+                    onValueChange={setSelectedAgentId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {boundAgents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {isPlaywrightInstalledByCurrentUser &&
+                !hasPlaywrightMcpTools ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isAssigningTools}
+                    onClick={() =>
+                      assignToolsToAgent({ agentId: effectiveAgentId })
                     }
-                  }}
-                >
-                  {isInstalling ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Installing...
-                    </>
-                  ) : reinstallRequired || installationFailed ? (
-                    <>
-                      <Globe className="h-4 w-4 mr-2" />
-                      Reinstall Browser
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="h-4 w-4 mr-2" />
-                      Install Browser
-                    </>
-                  )}
-                </Button>
+                  >
+                    {isAssigningTools ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Assigning tools...
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Assign tools to agent
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isInstalling}
+                    onClick={() => {
+                      if (
+                        (reinstallRequired || installationFailed) &&
+                        playwrightServerId
+                      ) {
+                        reinstallBrowser(playwrightServerId);
+                      } else {
+                        installBrowser(effectiveAgentId);
+                      }
+                    }}
+                  >
+                    {isInstalling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Installing...
+                      </>
+                    ) : reinstallRequired || installationFailed ? (
+                      <>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Reinstall Browser
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Install Browser
+                      </>
+                    )}
+                  </Button>
+                )}
               </>
             )}
           </div>

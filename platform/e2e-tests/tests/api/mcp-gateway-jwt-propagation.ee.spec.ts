@@ -75,28 +75,8 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const catalogName = `jwks-propagation-test-${Date.now()}`;
 
     try {
-      // STEP 4: Register the upstream MCP server as a remote MCP catalog item
-      const catalogResponse = await createMcpCatalogItem(request, {
-        name: catalogName,
-        description: "E2E test: JWKS MCP server for JWT propagation testing",
-        serverType: "remote",
-        serverUrl: `${MCP_SERVER_JWKS_BACKEND_URL}/mcp`,
-      });
-      const catalogItem = await catalogResponse.json();
-      catalogId = catalogItem.id;
-
-      // STEP 5: Install the MCP server (creates an mcp_server record)
-      // Pass the JWT as accessToken so the backend can authenticate with
-      // the upstream server during tool discovery (it requires JWT auth)
-      const installResponse = await installMcpServer(request, {
-        name: catalogName,
-        catalogId,
-        accessToken: jwt,
-      });
-      const mcpServer = await installResponse.json();
-      serverId = mcpServer.id;
-
-      // STEP 6: Create an MCP Gateway profile linked to the IdP
+      // STEP 4: Create an MCP Gateway profile linked to the IdP
+      // (created before installing the MCP server so we can pass agentIds)
       const agentResponse = await createAgent(
         request,
         `JWT Propagation E2E ${Date.now()}`,
@@ -116,7 +96,30 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         },
       });
 
-      // STEP 7: Wait for tools from the upstream server to be discovered
+      // STEP 5: Register the upstream MCP server as a remote MCP catalog item
+      const catalogResponse = await createMcpCatalogItem(request, {
+        name: catalogName,
+        description: "E2E test: JWKS MCP server for JWT propagation testing",
+        serverType: "remote",
+        serverUrl: `${MCP_SERVER_JWKS_BACKEND_URL}/mcp`,
+      });
+      const catalogItem = await catalogResponse.json();
+      catalogId = catalogItem.id;
+
+      // STEP 6: Install the MCP server (creates an mcp_server record)
+      // Pass the JWT as accessToken so the backend can authenticate with
+      // the upstream server during tool discovery (it requires JWT auth).
+      // Pass agentIds so discovered tools are automatically assigned to the profile.
+      const installResponse = await installMcpServer(request, {
+        name: catalogName,
+        catalogId,
+        accessToken: jwt,
+        agentIds: [pid],
+      });
+      const mcpServer = await installResponse.json();
+      serverId = mcpServer.id;
+
+      // STEP 7: Verify tools from the upstream server were discovered and assigned
       // The tool name format is: <catalogName>__<toolName>
       const getServerInfoToolName = `${catalogName}${MCP_SERVER_TOOL_NAME_SEPARATOR}get-server-info`;
       const agentTool = await waitForAgentTool(
@@ -240,26 +243,6 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const catalogName = `jwks-reject-test-${Date.now()}`;
 
     try {
-      // Register upstream server
-      const catalogResponse = await createMcpCatalogItem(request, {
-        name: catalogName,
-        description: "E2E test: JWT rejection test",
-        serverType: "remote",
-        serverUrl: `${MCP_SERVER_JWKS_BACKEND_URL}/mcp`,
-      });
-      const catalogItem = await catalogResponse.json();
-      catalogId = catalogItem.id;
-
-      // Pass JWT as accessToken so the backend can authenticate during
-      // tool discovery (the upstream server requires JWT auth)
-      const installResponse = await installMcpServer(request, {
-        name: catalogName,
-        catalogId,
-        accessToken: jwt,
-      });
-      const mcpServer = await installResponse.json();
-      serverId = mcpServer.id;
-
       // Create MCP Gateway WITHOUT IdP (so archestra token is used, not JWT)
       const agentResponse = await createAgent(
         request,
@@ -276,7 +259,29 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         data: { agentType: "mcp_gateway" },
       });
 
-      // Wait for tools
+      // Register upstream server
+      const catalogResponse = await createMcpCatalogItem(request, {
+        name: catalogName,
+        description: "E2E test: JWT rejection test",
+        serverType: "remote",
+        serverUrl: `${MCP_SERVER_JWKS_BACKEND_URL}/mcp`,
+      });
+      const catalogItem = await catalogResponse.json();
+      catalogId = catalogItem.id;
+
+      // Pass JWT as accessToken so the backend can authenticate during
+      // tool discovery (the upstream server requires JWT auth).
+      // Pass agentIds so discovered tools are automatically assigned to the profile.
+      const installResponse = await installMcpServer(request, {
+        name: catalogName,
+        catalogId,
+        accessToken: jwt,
+        agentIds: [pid],
+      });
+      const mcpServer = await installResponse.json();
+      serverId = mcpServer.id;
+
+      // Wait for tools to be assigned
       const toolName = `${catalogName}${MCP_SERVER_TOOL_NAME_SEPARATOR}get-server-info`;
       await waitForAgentTool(request, pid, toolName, {
         maxAttempts: 30,

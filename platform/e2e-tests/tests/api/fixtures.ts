@@ -351,6 +351,7 @@ const installMcpServer = async (
     userConfigValues?: Record<string, string>;
     environmentValues?: Record<string, string>;
     accessToken?: string;
+    agentIds?: string[];
   },
 ) =>
   makeApiRequest({

@@ -914,9 +914,10 @@ async function resolveAndVerifySender(
 
   const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
-    logger.warn(
+    logger.warn("[ChatOps] Sender is not a registered Archestra user");
+    logger.debug(
       { senderEmail: message.senderEmail },
-      "[ChatOps] Sender is not a registered Archestra user",
+      "[ChatOps] Unregistered sender email",
     );
     await context.sendActivity(
       `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,

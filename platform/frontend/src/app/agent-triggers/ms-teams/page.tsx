@@ -71,7 +71,6 @@ export default function MsTeamsPage() {
 
   const localDevOrQuickstartFirstStep = (
     <SetupStep
-      stepNumber={1}
       title="Make Archestra reachable from the Internet"
       description="The MS Teams bot needs to connect to an Archestra webhook — your instance must be publicly accessible"
       done={!!ngrokDomain}
@@ -143,7 +142,6 @@ export default function MsTeamsPage() {
         </div>
         {firstStep}
         <SetupStep
-          stepNumber={2}
           title="Connect MS Teams"
           description="Allow agents to be triggered via Teams"
           done={!!msTeams?.configured}
@@ -181,7 +179,6 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
         <SetupStep
-          stepNumber={3}
           title="Setup Agent to work with MS Teams"
           description="Enable MS Teams on your agent and bind it to a channel"
           done={hasBindings}
@@ -283,7 +280,7 @@ function ChannelBindingsSection() {
   };
 
   return (
-    <section className="flex flex-col gap-4 mt-[-8]">
+    <section className="flex flex-col gap-4 -mt-2">
       <div>
         <h2 className="text-lg font-semibold">Channel Bindings</h2>
         <p className="text-sm text-muted-foreground mt-1">
@@ -604,7 +601,7 @@ function TryItOutDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[900px]! w-[65vw]">
+      <DialogContent className="!max-w-[900px] w-[65vw]">
         <DialogHeader>
           <DialogTitle>Try it out</DialogTitle>
           <DialogDescription>
@@ -625,7 +622,6 @@ function SetupStep({
   onAction,
   children,
 }: {
-  stepNumber: number;
   title: string;
   description: string;
   done: boolean;

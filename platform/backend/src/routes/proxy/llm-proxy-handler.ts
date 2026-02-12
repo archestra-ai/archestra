@@ -140,18 +140,14 @@ export async function handleLLMProxy<
   );
 
   if (executionId) {
-    if (!metrics.agentExecution.hasSeenExecution(executionId)) {
-      const existsInDb =
-        await InteractionModel.existsByExecutionId(executionId);
-      if (!existsInDb) {
-        metrics.agentExecution.reportAgentExecution({
-          executionId,
-          profile: resolvedAgent,
-          externalAgentId,
-        });
-      } else {
-        metrics.agentExecution.markSeen(executionId);
-      }
+    const existsInDb =
+      await InteractionModel.existsByExecutionId(executionId);
+    if (!existsInDb) {
+      metrics.agentExecution.reportAgentExecution({
+        executionId,
+        profile: resolvedAgent,
+        externalAgentId,
+      });
     }
   }
 

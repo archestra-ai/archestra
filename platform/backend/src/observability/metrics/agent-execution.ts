@@ -14,9 +14,6 @@ import { sanitizeLabelKey } from "./utils";
 let agentExecutionsTotal: client.Counter<string>;
 let currentLabelKeys: string[] = [];
 
-const MAX_SEEN_EXECUTIONS = 100_000;
-let seenExecutionIds = new Map<string, true>();
-
 /**
  * Initialize agent execution metrics with dynamic label keys.
  * @param labelKeys Array of agent label keys to include as metric labels
@@ -54,40 +51,8 @@ export function initializeAgentExecutionMetrics(labelKeys: string[]): void {
 }
 
 /**
- * Check if an execution ID has been seen in the in-memory LRU cache.
- * On hit, refreshes the entry to keep it from being evicted.
- */
-export function hasSeenExecution(executionId: string): boolean {
-  if (seenExecutionIds.has(executionId)) {
-    // Move to most-recently-used end
-    seenExecutionIds.delete(executionId);
-    seenExecutionIds.set(executionId, true);
-    return true;
-  }
-  return false;
-}
-
-/**
- * Add an execution ID to the LRU cache without incrementing the counter.
- * Used when the execution already exists in the database.
- */
-export function markSeen(executionId: string): void {
-  if (seenExecutionIds.has(executionId)) {
-    // Move to most-recently-used end
-    seenExecutionIds.delete(executionId);
-  } else if (seenExecutionIds.size >= MAX_SEEN_EXECUTIONS) {
-    // Evict least-recently-used (first key in Map)
-    const oldest = seenExecutionIds.keys().next().value;
-    if (oldest !== undefined) {
-      seenExecutionIds.delete(oldest);
-    }
-  }
-  seenExecutionIds.set(executionId, true);
-}
-
-/**
- * Reports a unique agent execution and adds it to the LRU cache.
- * Caller is responsible for deduplication (checking hasSeenExecution / DB).
+ * Reports a unique agent execution.
+ * Caller is responsible for deduplication (checking DB).
  */
 export function reportAgentExecution(params: {
   executionId: string;
@@ -100,8 +65,6 @@ export function reportAgentExecution(params: {
     );
     return;
   }
-
-  markSeen(params.executionId);
 
   const labels: Record<string, string> = {
     agent_id: params.externalAgentId ?? "",
@@ -117,13 +80,4 @@ export function reportAgentExecution(params: {
   }
 
   agentExecutionsTotal.inc(labels);
-}
-
-// Exported for testing only
-export function _resetSeenExecutionIds(): void {
-  seenExecutionIds = new Map<string, true>();
-}
-
-export function _getSeenExecutionIdsSize(): number {
-  return seenExecutionIds.size;
 }

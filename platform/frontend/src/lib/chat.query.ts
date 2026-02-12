@@ -5,8 +5,9 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
@@ -15,7 +16,6 @@ const {
   getChatConversations,
   getChatConversation,
   getChatAgentMcpTools,
-  getChatGlobalTools,
   createChatConversation,
   updateChatConversation,
   deleteChatConversation,
@@ -27,6 +27,8 @@ const {
   installMcpServer,
   reinstallMcpServer,
   getMcpServer,
+  getInternalMcpCatalogTools,
+  bulkAssignTools,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -391,43 +393,28 @@ export function useAgentDelegationTools(agentId: string | undefined) {
 }
 
 /**
- * Get globally available tools with IDs for the current user.
- * These are tools from catalogs marked as isGloballyAvailable where the user
- * has a personal server installed (e.g., Playwright browser tools).
- */
-export function useGlobalChatTools() {
-  return useQuery({
-    queryKey: ["chat", "global-tools"],
-    queryFn: async () => {
-      const { data, error } = await getChatGlobalTools();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
-      return data ?? [];
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000,
-  });
-}
-
-/**
  * Install browser preview (Playwright) for the current user with polling for completion.
  * Creates a personal Playwright server if one doesn't exist.
  * Polls for installation status since local servers are deployed asynchronously to K8s.
  */
-export function useBrowserInstallation() {
+function useBrowserInstallation(onInstallComplete?: (agentId: string) => void) {
   const [installingServerId, setInstallingServerId] = useState<string | null>(
     null,
   );
+  const [installingAgentId, setInstallingAgentId] = useState<string | null>(
+    null,
+  );
   const queryClient = useQueryClient();
+  const onInstallCompleteRef = useRef(onInstallComplete);
+  onInstallCompleteRef.current = onInstallComplete;
 
   const installMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (agentId: string) => {
       const { data, error } = await installMcpServer({
         body: {
           name: PLAYWRIGHT_MCP_SERVER_NAME,
           catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+          agentIds: [agentId],
         },
       });
       if (error) {
@@ -436,9 +423,10 @@ export function useBrowserInstallation() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, agentId) => {
       if (data?.id) {
         setInstallingServerId(data.id);
+        setInstallingAgentId(agentId);
       }
     },
   });
@@ -481,20 +469,26 @@ export function useBrowserInstallation() {
     enabled: !!installingServerId,
   });
 
-  // When installation completes, invalidate queries
+  // When installation completes, invalidate queries and assign tools
   useEffect(() => {
     if (statusQuery.data === "success") {
+      const agentId = installingAgentId;
       setInstallingServerId(null);
-      queryClient.invalidateQueries({ queryKey: ["chat", "global-tools"] });
+      setInstallingAgentId(null);
+      queryClient.invalidateQueries({ queryKey: ["profile-tools"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Browser installed successfully");
+      if (agentId) {
+        onInstallCompleteRef.current?.(agentId);
+      }
     }
     if (statusQuery.data === "error") {
       setInstallingServerId(null);
+      setInstallingAgentId(null);
       toast.error("Failed to install browser");
     }
-  }, [statusQuery.data, queryClient]);
+  }, [statusQuery.data, queryClient, installingAgentId]);
 
   return {
     isInstalling:
@@ -509,10 +503,75 @@ export function useBrowserInstallation() {
   };
 }
 
-export function useHasPlaywrightMcpTools(agentId: string | undefined) {
-  const toolsQuery = useChatProfileMcpTools(agentId);
-  const globalToolsQuery = useGlobalChatTools();
-  const browserInstall = useBrowserInstallation();
+export function useHasPlaywrightMcpTools(
+  agentId: string | undefined,
+  conversationId?: string,
+) {
+  const toolsQuery = useProfileToolsWithIds(agentId);
+  const queryClient = useQueryClient();
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+
+  // Mutation to assign all Playwright tools to the current agent
+  const assignToolsMutation = useMutation({
+    mutationFn: async ({
+      agentId: targetAgentId,
+      conversationId,
+    }: {
+      agentId: string;
+      conversationId?: string;
+    }) => {
+      const { data: catalogTools } = await getInternalMcpCatalogTools({
+        path: { id: PLAYWRIGHT_MCP_CATALOG_ID },
+      });
+      if (!catalogTools?.length) {
+        throw new Error("No Playwright tools found");
+      }
+      const assignments = catalogTools.map((tool) => ({
+        agentId: targetAgentId,
+        toolId: tool.id,
+        useDynamicTeamCredential: true,
+      }));
+      const { data } = await bulkAssignTools({ body: { assignments } });
+      if (data?.failed?.length) {
+        throw new Error(data.failed[0].error);
+      }
+      // If conversation has custom tool selection, add new tools to enabled list
+      if (conversationId) {
+        const enabledData = await fetchConversationEnabledTools(conversationId);
+        if (enabledData?.hasCustomSelection) {
+          const newToolIds = catalogTools.map((t) => t.id);
+          const merged = [
+            ...new Set([...enabledData.enabledToolIds, ...newToolIds]),
+          ];
+          await updateConversationEnabledTools({
+            path: { id: conversationId },
+            body: { toolIds: merged },
+          });
+        }
+      }
+    },
+    onSuccess: (_data, { agentId: targetAgentId, conversationId }) => {
+      invalidateToolAssignmentQueries(queryClient, targetAgentId);
+      if (conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId, "enabled-tools"],
+        });
+      }
+      toast.success("Playwright tools assigned to agent");
+    },
+    onError: (error: Error) => {
+      handleApiError({ error });
+    },
+  });
+
+  // After browser install completes, automatically assign tools to the agent
+  const browserInstall = useBrowserInstallation((installedAgentId) => {
+    assignToolsMutation.mutate({
+      agentId: installedAgentId,
+      conversationId: conversationIdRef.current,
+    });
+  });
 
   // Fetch user's Playwright server to check reinstallRequired
   const playwrightServersQuery = useMcpServers({
@@ -525,22 +584,25 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
     (s) => s.ownerId === currentUserId,
   );
 
-  // Only check global tools with PLAYWRIGHT_MCP_CATALOG_ID
-  // Profile tools (e.g., microsoft__playwright-mcp) should NOT enable browser preview
-  // Those tools work as regular MCP tools but without the integrated preview feature
-  const hasPlaywrightMcp =
-    globalToolsQuery.data?.some(
+  // Check if agent has Playwright tools assigned via agent_tools
+  const hasPlaywrightMcpTools =
+    toolsQuery.data?.some(
       (tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID,
     ) ?? false;
 
+  const isPlaywrightInstalled = !!playwrightServer;
+
   return {
-    hasPlaywrightMcp,
+    hasPlaywrightMcpTools,
+    isPlaywrightInstalled,
     reinstallRequired: playwrightServer?.reinstallRequired ?? false,
     installationFailed: playwrightServer?.localInstallationStatus === "error",
     playwrightServerId: playwrightServer?.id,
-    isLoading: toolsQuery.isLoading || globalToolsQuery.isLoading,
+    isLoading: toolsQuery.isLoading,
     isInstalling: browserInstall.isInstalling,
+    isAssigningTools: assignToolsMutation.isPending,
     installBrowser: browserInstall.installBrowser,
     reinstallBrowser: browserInstall.reinstallBrowser,
+    assignToolsToAgent: assignToolsMutation.mutateAsync,
   };
 }

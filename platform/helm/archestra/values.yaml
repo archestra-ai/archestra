@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.0.41" # x-release-please-version
+  imageTag: "1.0.42" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -131,6 +131,29 @@ archestra:
     # or if you handle readiness checks in another way
     waitForPostgres:
       enabled: true
+
+    # Vault secret injection init container
+    # Similar to Vault Agent Injector (writes secrets to a shared volume) but:
+    # - No extra infrastructure needed (no Vault Agent Injector deployment)
+    # - Secrets are loaded as env vars, not files
+    # Uses the existing ARCHESTRA_HASHICORP_VAULT_* env vars for connectivity and auth
+    #
+    # Example:
+    #   vaultSecrets:
+    #     enabled: true
+    #     secrets:
+    #       - envVar: DATABASE_URL
+    #         path: secret/data/team/database_url
+    #         key: url
+    #       - envVar: MS_TEAMS_SECRET
+    #         path: secret/data/team/ms_teams_secret
+    #         key: value
+    vaultSecrets:
+      enabled: false
+      # Container entrypoint to exec after loading secrets (must match Dockerfile ENTRYPOINT)
+      entrypoint: /docker-entrypoint.sh
+      # Each entry: envVar (env var name), path (Vault API path after /v1/), key (key within secret data)
+      secrets: []
 
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
@@ -397,6 +420,11 @@ postgresql:
   #       - name: ARCHESTRA_DATABASE_URL
   #         secretName: my-db-secret
   #         secretKey: database-url
+  #
+  # Option 3 - Database URL from Vault init container (set to "vault"):
+  #   external_database_url: "from_vault"
+  #   This skips ARCHESTRA_DATABASE_URL secret creation and instead relies on the vault-secrets init container
+  #   to provide the database URL at runtime.
   #
   # IMPORTANT: When using external database, you MUST also set enabled=false
   external_database_url: null

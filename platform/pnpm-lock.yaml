@@ -236,6 +236,9 @@ importers:
       handlebars:
         specifier: ^4.7.8
         version: 4.7.8
+      ipaddr.js:
+        specifier: ^2.3.0
+        version: 2.3.0
       js-yaml:
         specifier: ^4.1.1
         version: 4.1.1

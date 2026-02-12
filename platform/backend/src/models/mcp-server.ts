@@ -8,6 +8,7 @@ import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
+import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
 
@@ -335,6 +336,18 @@ class McpServerModel {
 
     if (!mcpServer) {
       return false;
+    }
+
+    // Clean up any persisted HTTP session IDs tied to this server.
+    // Without this, stale rows can linger until TTL cleanup after uninstall/delete.
+    try {
+      await McpHttpSessionModel.deleteByMcpServerId(id);
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
+      );
+      // Continue with deletion even if session cleanup fails
     }
 
     // Clean up agent_tools that reference this server

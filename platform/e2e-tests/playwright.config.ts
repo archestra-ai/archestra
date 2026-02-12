@@ -177,6 +177,7 @@ export default defineConfig({
     {
       name: projectNames.api,
       testDir: "./tests/api",
+      testIgnore: [testPatterns.vaultK8s],
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

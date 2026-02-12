@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Tooltip,
   TooltipContent,
@@ -72,56 +73,6 @@ function formatDuration(start: Date | string, end: Date | string): string {
 
 type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
-
-function Pagination({
-  pageIndex,
-  pageSize,
-  total,
-  onPaginationChange,
-}: {
-  pageIndex: number;
-  pageSize: number;
-  total: number;
-  onPaginationChange: (params: { pageIndex: number; pageSize: number }) => void;
-}) {
-  const totalPages = Math.ceil(total / pageSize);
-  const canPrevious = pageIndex > 0;
-  const canNext = pageIndex < totalPages - 1;
-
-  return (
-    <div className="flex items-center justify-between px-2 py-4">
-      <div className="text-sm text-muted-foreground">
-        Showing {pageIndex * pageSize + 1} to{" "}
-        {Math.min((pageIndex + 1) * pageSize, total)} of {total} results
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            onPaginationChange({ pageIndex: pageIndex - 1, pageSize })
-          }
-          disabled={!canPrevious}
-        >
-          Previous
-        </Button>
-        <span className="text-sm">
-          Page {pageIndex + 1} of {totalPages}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            onPaginationChange({ pageIndex: pageIndex + 1, pageSize })
-          }
-          disabled={!canNext}
-        >
-          Next
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function SessionRow({
   session,
@@ -192,7 +143,7 @@ function SessionRow({
               <Link
                 href={`/chat?conversation=${session.sessionId}`}
                 onClick={(e) => e.stopPropagation()}
-                className="flex-shrink-0"
+                className="shrink-0"
               >
                 <Badge
                   variant="outline"
@@ -214,7 +165,7 @@ function SessionRow({
               </span>
               <Badge
                 variant="secondary"
-                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 flex-shrink-0"
+                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
               >
                 Claude Code
               </Badge>
@@ -535,34 +486,36 @@ function SessionsTable({
             : "No sessions found"}
         </p>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[200px]">Session</TableHead>
-                <TableHead className="w-[100px] whitespace-nowrap">
-                  Requests
-                </TableHead>
-                <TableHead className="w-[200px]">Models</TableHead>
-                <TableHead className="w-[140px] whitespace-nowrap">
-                  Cost
-                </TableHead>
-                <TableHead className="w-[160px]">Time</TableHead>
-                <TableHead className="min-w-[100px]">Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessions.map((session, index) => (
-                <SessionRow
-                  key={`${session.sessionId ?? "single"}-${session.profileId}-${index}`}
-                  session={session}
-                  agents={agents}
-                />
-              ))}
-            </TableBody>
-          </Table>
+        <div className="w-full space-y-4">
+          <div className="overflow-hidden rounded-md border">
+            <Table className="table-auto min-w-[900px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[200px]">Session</TableHead>
+                  <TableHead className="w-[100px] whitespace-nowrap">
+                    Requests
+                  </TableHead>
+                  <TableHead className="w-[200px]">Models</TableHead>
+                  <TableHead className="w-[140px] whitespace-nowrap">
+                    Cost
+                  </TableHead>
+                  <TableHead className="w-[160px]">Time</TableHead>
+                  <TableHead className="min-w-[100px]">Details</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session, index) => (
+                  <SessionRow
+                    key={`${session.sessionId ?? "single"}-${session.profileId}-${index}`}
+                    session={session}
+                    agents={agents}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           {paginationMeta && (
-            <Pagination
+            <TablePagination
               pageIndex={pageIndex}
               pageSize={pageSize}
               total={paginationMeta.total}

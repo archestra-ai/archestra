@@ -663,6 +663,92 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
   });
 });
 
+test.describe("SSO IdP Logout (RP-Initiated Logout)", () => {
+  test("should terminate IdP session on Archestra sign-out", async ({
+    page,
+    browser,
+    goToPage,
+  }) => {
+    test.slow();
+    const providerName = `IdPLogoutOIDC${Date.now()}`;
+
+    // STEP 1: Authenticate as admin and create OIDC provider
+    await ensureAdminAuthenticated(page);
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await fillOidcProviderForm(page, providerName);
+    await clickButton({ page, options: { name: "Create Provider" } });
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 2: Login via SSO in a fresh context
+    const ssoContext = await browser.newContext({ storageState: undefined });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
+
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // STEP 3: Sign out from Archestra
+      // Navigate to sign-out which should redirect to Keycloak logout, then back to sign-in
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-out`);
+
+      // Wait for the redirect chain:
+      // Archestra sign-out -> Keycloak end_session_endpoint -> post_logout_redirect_uri (/auth/sign-in)
+      // The URL should eventually land back on the sign-in page
+      await ssoPage.waitForURL(/\/auth\/sign-in/, { timeout: 30000 });
+      await ssoPage.waitForLoadState("networkidle");
+
+      // STEP 4: Verify IdP session was terminated
+      // Click SSO button again - Keycloak should require re-authentication (not auto-login)
+      const ssoButtonAgain = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButtonAgain).toBeVisible({ timeout: 10000 });
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
+
+      // Should redirect to Keycloak login form (not auto-login)
+      await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
+        timeout: 30000,
+      });
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Verify Keycloak is showing the login form (not auto-redirecting)
+      const usernameField = ssoPage.getByLabel("Username or email");
+      await expect(usernameField).toBeVisible({ timeout: 10000 });
+
+      // IdP session was terminated - Keycloak requires re-authentication
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 5: Cleanup - delete the SSO provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await deleteProviderViaDialog(page);
+  });
+});
+
 test.describe("SSO Role Mapping E2E", () => {
   test("should evaluate second rule when first rule does not match", async ({
     page,

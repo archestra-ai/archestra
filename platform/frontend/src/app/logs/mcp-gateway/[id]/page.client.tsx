@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -148,7 +148,9 @@ function McpToolCallDetail({
                   <div className="text-sm text-muted-foreground mb-2">
                     Tool Name
                   </div>
-                  <div className="font-medium font-mono">{toolCall.name}</div>
+                  <div className="font-medium font-mono">
+                    {parseFullToolName(toolCall.name).toolName || toolCall.name}
+                  </div>
                 </div>
               )}
               <div>

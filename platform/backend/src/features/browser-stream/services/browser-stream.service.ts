@@ -10,12 +10,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import {
-  BrowserTabStateModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
-  ToolModel,
-} from "@/models";
+import { BrowserTabStateModel, ToolModel } from "@/models";
 import { ApiError } from "@/types";
 import {
   shouldLogBrowserStreamScreenshots,
@@ -189,15 +184,11 @@ export class BrowserStreamService {
   /**
    * Get tools for an agent with caching to reduce database queries.
    * Tools are cached for 30 seconds with LRU eviction.
-   * When userId is provided, also includes tools from globally available catalogs.
    */
   private async getToolsForAgent(
     agentId: string,
-    userId?: string,
   ): Promise<{ name: string; catalogId: string | null }[]> {
-    // Include userId in cache key when provided
-    const cacheKey = userId ? `${agentId}:${userId}` : agentId;
-    const cached = toolsCache.get(cacheKey);
+    const cached = toolsCache.get(agentId);
     if (cached) {
       return cached;
     }
@@ -208,65 +199,16 @@ export class BrowserStreamService {
       catalogId: t.catalogId,
     }));
 
-    // If userId is provided, also include global catalog tools
-    if (userId) {
-      const globalTools = await this.getGlobalCatalogToolsForUser(userId);
-      for (const tool of globalTools) {
-        // Avoid duplicates
-        if (!toolData.some((t) => t.name === tool.name)) {
-          toolData.push(tool);
-        }
-      }
-    }
-
-    toolsCache.set(cacheKey, toolData);
+    toolsCache.set(agentId, toolData);
 
     return toolData;
-  }
-
-  /**
-   * Get tools from globally available catalogs for a user.
-   * These are catalogs marked as `isGloballyAvailable` where the user has a personal server.
-   * Uses batch loading to avoid N+1 queries.
-   */
-  private async getGlobalCatalogToolsForUser(
-    userId: string,
-  ): Promise<{ name: string; catalogId: string }[]> {
-    const globalCatalogs =
-      await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-
-    if (globalCatalogs.length === 0) {
-      return [];
-    }
-
-    const catalogIds = globalCatalogs.map((c) => c.id);
-
-    // Batch load: get all user's personal servers for these catalogs
-    const userServersByCatalog =
-      await McpServerModel.getUserPersonalServersForCatalogs(
-        userId,
-        catalogIds,
-      );
-
-    // Filter to catalogs where user has a personal server
-    const catalogsWithUserServer = catalogIds.filter((id) =>
-      userServersByCatalog.has(id),
-    );
-
-    if (catalogsWithUserServer.length === 0) {
-      return [];
-    }
-
-    // Batch load: get all tools for these catalogs
-    return ToolModel.getToolNamesByCatalogIds(catalogsWithUserServer);
   }
 
   private async findToolName(
     agentId: string,
     matches: (toolName: string) => boolean,
-    userId?: string,
   ): Promise<string | null> {
-    const tools = await this.getToolsForAgent(agentId, userId);
+    const tools = await this.getToolsForAgent(agentId);
 
     // Only consider tools from the builtin playwright-browser catalog
     for (const tool of tools) {
@@ -286,13 +228,9 @@ export class BrowserStreamService {
    * Check if Playwright MCP browser tools are available for an agent.
    * Only considers tools from the builtin playwright-browser catalog (PLAYWRIGHT_MCP_CATALOG_ID).
    * @param agentId - The agent ID
-   * @param userId - Optional user ID to check global catalog tools
    */
-  async checkAvailability(
-    agentId: string,
-    userId?: string,
-  ): Promise<AvailabilityResult> {
-    const tools = await this.getToolsForAgent(agentId, userId);
+  async checkAvailability(agentId: string): Promise<AvailabilityResult> {
+    const tools = await this.getToolsForAgent(agentId);
 
     // Only include tools from the builtin playwright-browser catalog
     const browserToolNames = tools
@@ -311,76 +249,55 @@ export class BrowserStreamService {
    * Matches tools like "browser_navigate" or "playwright__browser_navigate"
    * but NOT "browser_navigate_back" or "browser_navigate_forward"
    */
-  private async findNavigateTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => {
-        // Check if it ends with "browser_navigate" (to match both
-        // "browser_navigate" and "prefix__browser_navigate")
-        if (toolName.endsWith("browser_navigate")) return true;
-        // Check for __navigate suffix (older naming convention)
-        if (toolName.endsWith("__navigate")) return true;
-        // As a fallback, check for playwright navigate but exclude back/forward
-        if (
-          toolName.includes("playwright") &&
-          toolName.includes("navigate") &&
-          !toolName.includes("_back") &&
-          !toolName.includes("_forward")
-        ) {
-          return true;
-        }
-        return false;
-      },
-      userId,
-    );
+  private async findNavigateTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) => {
+      // Check if it ends with "browser_navigate" (to match both
+      // "browser_navigate" and "prefix__browser_navigate")
+      if (toolName.endsWith("browser_navigate")) return true;
+      // Check for __navigate suffix (older naming convention)
+      if (toolName.endsWith("__navigate")) return true;
+      // As a fallback, check for playwright navigate but exclude back/forward
+      if (
+        toolName.includes("playwright") &&
+        toolName.includes("navigate") &&
+        !toolName.includes("_back") &&
+        !toolName.includes("_forward")
+      ) {
+        return true;
+      }
+      return false;
+    });
   }
 
   /**
    * Find the Playwright browser navigate back tool for an agent
    * Matches tools like "browser_navigate_back" or "playwright__browser_navigate_back"
    */
-  private async findNavigateBackTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_navigate_back"),
-      userId,
+  private async findNavigateBackTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_navigate_back"),
     );
   }
 
   /**
    * Find the Playwright browser screenshot tool for an agent
    */
-  private async findScreenshotTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
+  private async findScreenshotTool(agentId: string): Promise<string | null> {
     // Prefer browser_take_screenshot or browser_screenshot
     return this.findToolName(
       agentId,
       (toolName) =>
         toolName.includes("browser_take_screenshot") ||
         toolName.includes("browser_screenshot"),
-      userId,
     );
   }
 
   /**
    * Find the Playwright browser tabs tool for an agent
    */
-  private async findTabsTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_tabs"),
-      userId,
+  private async findTabsTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_tabs"),
     );
   }
 
@@ -504,7 +421,7 @@ export class BrowserStreamService {
     userContext: BrowserUserContext,
     initialUrl?: string,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       logTabSyncInfo(
         { agentId, conversationId },
@@ -569,10 +486,7 @@ export class BrowserStreamService {
             storedUrl &&
             !this.isBlankUrl(storedUrl);
           if (shouldRestoreStoredUrl) {
-            const navigateTool = await this.findNavigateTool(
-              agentId,
-              userContext.userId,
-            );
+            const navigateTool = await this.findNavigateTool(agentId);
             if (navigateTool) {
               await this.executeTool({
                 toolName: navigateTool,
@@ -675,10 +589,7 @@ export class BrowserStreamService {
       const urlToLoad =
         storedUrl && !this.isBlankUrl(storedUrl) ? storedUrl : initialUrl;
       if (urlToLoad) {
-        const navigateTool = await this.findNavigateTool(
-          agentId,
-          userContext.userId,
-        );
+        const navigateTool = await this.findNavigateTool(agentId);
         if (navigateTool) {
           await this.executeTool({
             toolName: navigateTool,
@@ -803,70 +714,33 @@ export class BrowserStreamService {
   /**
    * Find the Playwright browser click tool for an agent
    */
-  private async findClickTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_click"),
-      userId,
+  private async findClickTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_click"),
     );
   }
 
-  /**
-   * Find the Playwright browser type tool for an agent
-   */
-  private async findTypeTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_type"),
-      userId,
+  private async findTypeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_type"),
     );
   }
 
-  /**
-   * Find the Playwright browser press key tool for an agent
-   */
-  private async findPressKeyTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_press_key"),
-      userId,
+  private async findPressKeyTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_press_key"),
     );
   }
 
-  /**
-   * Find the Playwright browser snapshot tool for an agent
-   */
-  private async findSnapshotTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_snapshot"),
-      userId,
+  private async findSnapshotTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_snapshot"),
     );
   }
 
-  /**
-   * Find the Playwright browser resize tool for an agent
-   */
-  private async findResizeTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_resize"),
-      userId,
+  private async findResizeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_resize"),
     );
   }
 
@@ -881,7 +755,7 @@ export class BrowserStreamService {
     width: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
     height: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   ): Promise<void> {
-    const resizeTool = await this.findResizeTool(agentId, userContext.userId);
+    const resizeTool = await this.findResizeTool(agentId);
     if (!resizeTool) {
       logger.debug(
         { agentId },
@@ -949,7 +823,7 @@ export class BrowserStreamService {
       "[BrowserNavigate] Tab selected/created",
     );
 
-    const toolName = await this.findNavigateTool(agentId, userContext.userId);
+    const toolName = await this.findNavigateTool(agentId);
     if (!toolName) {
       logger.error(
         { agentId, conversationId },
@@ -1046,10 +920,7 @@ export class BrowserStreamService {
     }
 
     // Find the browser_navigate_back tool
-    const navigateBackTool = await this.findNavigateBackTool(
-      agentId,
-      userContext.userId,
-    );
+    const navigateBackTool = await this.findNavigateBackTool(agentId);
     if (!navigateBackTool) {
       logger.error(
         { agentId, conversationId },
@@ -1121,7 +992,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       throw new ApiError(400, "No browser tabs tool available for this agent");
     }
@@ -1146,7 +1017,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       throw new ApiError(400, "No browser tabs tool available");
     }
@@ -1176,7 +1047,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       await browserStateManager.clear(
         agentId,
@@ -1390,7 +1261,7 @@ export class BrowserStreamService {
     // Tab is selected once on subscription. After that, we just capture
     // whatever is current, so LLM navigation works correctly.
 
-    const toolName = await this.findScreenshotTool(agentId, userContext.userId);
+    const toolName = await this.findScreenshotTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,
@@ -1682,7 +1553,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<string | undefined> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       return undefined;
     }
@@ -1707,14 +1578,9 @@ export class BrowserStreamService {
    * Find the Playwright browser run_code tool for an agent
    * This tool allows running arbitrary Playwright code including mouse operations
    */
-  private async findRunCodeTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_run_code"),
-      userId,
+  private async findRunCodeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_run_code"),
     );
   }
 
@@ -1755,10 +1621,7 @@ export class BrowserStreamService {
 
     if (x !== undefined && y !== undefined) {
       // Use browser_run_code for native Playwright mouse click
-      const runCodeTool = await this.findRunCodeTool(
-        agentId,
-        userContext.userId,
-      );
+      const runCodeTool = await this.findRunCodeTool(agentId);
       if (runCodeTool) {
         // Validate coordinates to prevent code injection and ensure reasonable bounds
         const safeX = Math.round(x);
@@ -1825,7 +1688,7 @@ export class BrowserStreamService {
       throw new ApiError(400, "browser_run_code failed for coordinate clicks");
     } else if (element) {
       // Element ref-based click using browser_click
-      const toolName = await this.findClickTool(agentId, userContext.userId);
+      const toolName = await this.findClickTool(agentId);
       if (!toolName) {
         throw new ApiError(
           400,
@@ -1886,10 +1749,7 @@ export class BrowserStreamService {
 
     // If no element specified, use page.keyboard.type() to type into focused element
     if (!element) {
-      const runCodeTool = await this.findRunCodeTool(
-        agentId,
-        userContext.userId,
-      );
+      const runCodeTool = await this.findRunCodeTool(agentId);
       if (runCodeTool) {
         logger.debug(
           { agentId, conversationId, textLength: text.length },
@@ -1922,7 +1782,7 @@ export class BrowserStreamService {
     }
 
     // Fall back to browser_type tool (requires element ref)
-    const toolName = await this.findTypeTool(agentId, userContext.userId);
+    const toolName = await this.findTypeTool(agentId);
     if (!toolName) {
       throw new ApiError(400, "No browser type tool available for this agent");
     }
@@ -1979,7 +1839,7 @@ export class BrowserStreamService {
       );
     }
 
-    const toolName = await this.findPressKeyTool(agentId, userContext.userId);
+    const toolName = await this.findPressKeyTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,
@@ -2028,7 +1888,7 @@ export class BrowserStreamService {
       );
     }
 
-    const toolName = await this.findSnapshotTool(agentId, userContext.userId);
+    const toolName = await this.findSnapshotTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,

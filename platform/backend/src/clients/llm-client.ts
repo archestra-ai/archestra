@@ -92,29 +92,48 @@ const envApiKeyGetters: Record<
 /**
  * Resolve API key for a provider using priority:
  * agent's configured key > conversation > personal > team > org_wide > environment variable
+ *
+ * When userId is provided: resolves via getCurrentApiKey (agent key > personal > team > org_wide).
+ * When no userId: checks org_wide keys only.
  */
 export async function resolveProviderApiKey(params: {
   organizationId: string;
-  userId: string;
+  userId?: string;
   provider: SupportedChatProvider;
   conversationId?: string | null;
   agentLlmApiKeyId?: string | null;
-}): Promise<{ apiKey: string | undefined; source: string }> {
+}): Promise<{
+  apiKey: string | undefined;
+  source: string;
+  chatApiKeyId: string | undefined;
+}> {
   const { organizationId, userId, provider, conversationId, agentLlmApiKeyId } =
     params;
 
-  // Get user's team IDs for API key resolution
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  // Try scope-based resolution
+  let resolvedApiKey: {
+    id: string;
+    secretId: string | null;
+    scope: string;
+  } | null = null;
 
-  // Try scope-based resolution (checks agent key, conversation key, then personal > team > org_wide)
-  const resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
-    organizationId,
-    userId,
-    userTeamIds,
-    provider,
-    conversationId: conversationId ?? null,
-    agentLlmApiKeyId,
-  });
+  if (userId) {
+    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+    resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
+      organizationId,
+      userId,
+      userTeamIds,
+      provider,
+      conversationId: conversationId ?? null,
+      agentLlmApiKeyId,
+    });
+  } else {
+    resolvedApiKey = await ChatApiKeyModel.findByScope(
+      organizationId,
+      provider,
+      "org_wide",
+    );
+  }
 
   if (resolvedApiKey?.secretId) {
     const secret = await secretManager().getSecret(resolvedApiKey.secretId);
@@ -128,17 +147,25 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.cohereApiKey ??
       secret?.secret?.bedrockApiKey;
     if (secretValue) {
-      return { apiKey: secretValue as string, source: resolvedApiKey.scope };
+      return {
+        apiKey: secretValue as string,
+        source: resolvedApiKey.scope,
+        chatApiKeyId: resolvedApiKey.id,
+      };
     }
   }
 
   // Fall back to environment variable
   const envApiKey = envApiKeyGetters[provider]();
   if (envApiKey) {
-    return { apiKey: envApiKey, source: "environment" };
+    return {
+      apiKey: envApiKey,
+      source: "environment",
+      chatApiKeyId: undefined,
+    };
   }
 
-  return { apiKey: undefined, source: "environment" };
+  return { apiKey: undefined, source: "environment", chatApiKeyId: undefined };
 }
 
 /**
@@ -159,6 +186,8 @@ export function isApiKeyRequired(
 /**
  * Fast models for each provider, used for title generation and other quick operations.
  * These are optimized for speed and cost rather than capability.
+ *
+ * TODO: Replace this hardcoded map with fast model values from the models database table.
  */
 export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   anthropic: "claude-3-5-haiku-20241022",

@@ -665,6 +665,12 @@ const start = async () => {
     registerHealthEndpoint(fastify);
     registerReadinessEndpoint(fastify);
 
+    if (process.env.ENABLE_E2E_TEST_ENDPOINTS === "true") {
+      fastify.get("/test", async () => ({
+        value: process.env.TEST_VALUE ?? null,
+      }));
+    }
+
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);
 

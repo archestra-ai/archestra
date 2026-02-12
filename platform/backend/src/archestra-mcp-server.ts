@@ -25,6 +25,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import { ProviderError } from "@/routes/chat/errors";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
@@ -264,11 +265,15 @@ export async function executeArchestraTool(
           "Agent delegation was aborted",
         );
         throw error;
-      } else {
-        logger.error(
-          { error, agentId, targetAgentId: delegation.targetAgent.id },
-          "Agent delegation tool execution failed",
-        );
+      }
+      logger.error(
+        { error, agentId, targetAgentId: delegation.targetAgent.id },
+        "Agent delegation tool execution failed",
+      );
+      // Re-throw ProviderError so it propagates to the parent stream's onError
+      // with the correct provider info (the subagent can't produce output)
+      if (error instanceof ProviderError) {
+        throw error;
       }
       return {
         content: [

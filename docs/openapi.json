@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.41"
+    "version": "1.0.42"
   },
   "components": {
     "schemas": {
@@ -21140,7 +21140,8 @@
                         },
                         "message": {
                           "type": "string"
-                        }
+                        },
+                        "data": {}
                       },
                       "required": [
                         "code",
@@ -28764,7 +28765,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Automatically configure security policies for tools using Anthropic LLM analysis",
+        "description": "Automatically configure security policies for tools using LLM analysis",
         "requestBody": {
           "content": {
             "application/json": {
@@ -28816,12 +28817,21 @@
                           "config": {
                             "type": "object",
                             "properties": {
-                              "toolResultTreatment": {
+                              "toolInvocationAction": {
                                 "type": "string",
                                 "enum": [
-                                  "trusted",
+                                  "allow_when_context_is_untrusted",
+                                  "block_when_context_is_untrusted",
+                                  "block_always"
+                                ]
+                              },
+                              "trustedDataAction": {
+                                "type": "string",
+                                "enum": [
+                                  "mark_as_trusted",
+                                  "mark_as_untrusted",
                                   "sanitize_with_dual_llm",
-                                  "untrusted"
+                                  "block_always"
                                 ]
                               },
                               "reasoning": {
@@ -28829,7 +28839,8 @@
                               }
                             },
                             "required": [
-                              "toolResultTreatment",
+                              "toolInvocationAction",
+                              "trustedDataAction",
                               "reasoning"
                             ],
                             "additionalProperties": false
@@ -31525,6 +31536,18 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }
@@ -47296,266 +47319,6 @@
                       "name",
                       "description",
                       "parameters"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/chat/global-tools": {
-      "get": {
-        "operationId": "getChatGlobalTools",
-        "tags": [
-          "Chat"
-        ],
-        "description": "Get globally available tools with IDs for the current user",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "description": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "catalogId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "description",
-                      "catalogId"
                     ],
                     "additionalProperties": false
                   }
@@ -63566,9 +63329,6 @@
                       "requiresAuth": {
                         "type": "boolean"
                       },
-                      "isGloballyAvailable": {
-                        "type": "boolean"
-                      },
                       "authDescription": {
                         "nullable": true,
                         "type": "string"
@@ -63896,7 +63656,6 @@
                       "repository",
                       "installationCommand",
                       "requiresAuth",
-                      "isGloballyAvailable",
                       "authDescription",
                       "authFields",
                       "serverType",
@@ -64171,9 +63930,6 @@
                     "type": "string"
                   },
                   "requiresAuth": {
-                    "type": "boolean"
-                  },
-                  "isGloballyAvailable": {
                     "type": "boolean"
                   },
                   "authDescription": {
@@ -64542,9 +64298,6 @@
                     "requiresAuth": {
                       "type": "boolean"
                     },
-                    "isGloballyAvailable": {
-                      "type": "boolean"
-                    },
                     "authDescription": {
                       "nullable": true,
                       "type": "string"
@@ -64872,7 +64625,6 @@
                     "repository",
                     "installationCommand",
                     "requiresAuth",
-                    "isGloballyAvailable",
                     "authDescription",
                     "authFields",
                     "serverType",
@@ -65163,9 +64915,6 @@
                     "requiresAuth": {
                       "type": "boolean"
                     },
-                    "isGloballyAvailable": {
-                      "type": "boolean"
-                    },
                     "authDescription": {
                       "nullable": true,
                       "type": "string"
@@ -65493,7 +65242,6 @@
                     "repository",
                     "installationCommand",
                     "requiresAuth",
-                    "isGloballyAvailable",
                     "authDescription",
                     "authFields",
                     "serverType",
@@ -65762,9 +65510,6 @@
                     "type": "string"
                   },
                   "requiresAuth": {
-                    "type": "boolean"
-                  },
-                  "isGloballyAvailable": {
                     "type": "boolean"
                   },
                   "authDescription": {
@@ -66140,9 +65885,6 @@
                     "requiresAuth": {
                       "type": "boolean"
                     },
-                    "isGloballyAvailable": {
-                      "type": "boolean"
-                    },
                     "authDescription": {
                       "nullable": true,
                       "type": "string"
@@ -66470,7 +66212,6 @@
                     "repository",
                     "installationCommand",
                     "requiresAuth",
-                    "isGloballyAvailable",
                     "authDescription",
                     "authFields",
                     "serverType",
@@ -80316,6 +80057,9 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "client_id_metadata_document_supported": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -80328,7 +80072,8 @@
                     "grant_types_supported",
                     "token_endpoint_auth_methods_supported",
                     "code_challenge_methods_supported",
-                    "scopes_supported"
+                    "scopes_supported",
+                    "client_id_metadata_document_supported"
                   ],
                   "additionalProperties": false
                 }
@@ -98650,6 +98395,247 @@
                     "organizationId",
                     "domain",
                     "domainVerified"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sso-providers/idp-logout-url": {
+      "get": {
+        "operationId": "getSsoProviderIdpLogoutUrl",
+        "tags": [
+          "SSO Providers"
+        ],
+        "description": "Get the IdP logout URL for the current user's SSO provider",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
                   ],
                   "additionalProperties": false
                 }

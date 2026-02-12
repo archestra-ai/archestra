@@ -115,4 +115,47 @@ test.describe("SSO Providers API", () => {
     // Should return 401 Unauthorized
     expect(response.status).toBe(401);
   });
+
+  test("should return null IdP logout URL for non-SSO user", async ({
+    request,
+    createApiKey,
+    deleteApiKey,
+    makeApiRequest,
+  }) => {
+    const createResponse = await createApiKey(request);
+    const { key: apiKey, id: keyId } = await createResponse.json();
+
+    try {
+      const response = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/sso-providers/idp-logout-url",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: apiKey,
+        },
+      });
+
+      expect(response.status()).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ url: null });
+    } finally {
+      await deleteApiKey(request, keyId);
+    }
+  });
+
+  test("should require authentication for IdP logout URL", async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/sso-providers/idp-logout-url`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    expect(response.status).toBe(401);
+  });
 });

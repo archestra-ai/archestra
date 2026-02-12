@@ -716,12 +716,16 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    // Derive the JWKS URL from the issuer's OIDC discovery endpoint
-    const jwksUrl = await discoverJwksUrl(ssoProvider.issuer);
+    // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
+    // round-trip, and works when the issuer URL isn't reachable from the backend
+    // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
+    // Fall back to OIDC discovery from the issuer URL.
+    const jwksUrl =
+      oidcConfig.jwksEndpoint ?? (await discoverJwksUrl(ssoProvider.issuer));
     if (!jwksUrl) {
       logger.warn(
         { profileId, issuer: ssoProvider.issuer },
-        "validateExternalIdpToken: could not discover JWKS URL from issuer",
+        "validateExternalIdpToken: could not determine JWKS URL",
       );
       return null;
     }
@@ -780,6 +784,7 @@ export async function validateExternalIdpToken(
 
 type OidcConfigForJwks = {
   clientId?: string;
+  jwksEndpoint?: string;
 };
 
 /**

@@ -1,5 +1,5 @@
 {
-  "id": "f872625b-45a2-4d6e-9870-049b9059e42f",
+  "id": "cf91fef9-0dc1-446c-a166-6dce5a25a924",
   "prevId": "fa9bbe3b-543f-4c71-a26a-b37bb50645ca",
   "version": "7",
   "dialect": "postgresql",
@@ -1277,18 +1277,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "channel_name": {
-          "name": "channel_name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "workspace_name": {
-          "name": "workspace_name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "agent_id": {
           "name": "agent_id",
           "type": "uuid",
@@ -1864,6 +1852,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
         "user_id": {
           "name": "user_id",
           "type": "text",
@@ -1995,6 +1989,21 @@
           "columns": [
             {
               "expression": "external_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interactions_execution_id_idx": {
+          "name": "interactions_execution_id_idx",
+          "columns": [
+            {
+              "expression": "execution_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

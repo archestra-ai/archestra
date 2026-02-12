@@ -575,6 +575,7 @@ const start = async () => {
     const labelKeys = await AgentLabelModel.getAllKeys();
     metrics.llm.initializeMetrics(labelKeys);
     metrics.mcp.initializeMcpMetrics(labelKeys);
+    metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
 
     // Start metrics server
     await startMetricsServer();

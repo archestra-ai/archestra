@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.44](https://github.com/archestra-ai/archestra/compare/platform-v1.0.42...platform-v1.0.44) (2026-02-12)
+
+
+### Features
+
+* add CIMD (Client ID Metadata Documents) support for MCP OAuth 2.1 ([#2735](https://github.com/archestra-ai/archestra/issues/2735)) ([587702c](https://github.com/archestra-ai/archestra/commit/587702ce85737f351d154718d654fc97a839e641))
+* make policy config subagent use multi-provider LLM support ([#2627](https://github.com/archestra-ai/archestra/issues/2627)) ([3641d4b](https://github.com/archestra-ai/archestra/commit/3641d4bf3e0b7b80494d2c5cb01f9b136331213b))
+* **sso:** add RP-Initiated Logout to terminate IdP session on sign-out ([#2738](https://github.com/archestra-ai/archestra/issues/2738)) ([7ae99a4](https://github.com/archestra-ai/archestra/commit/7ae99a4a99317f4eb79abdfe0897abe8397b77fa))
+
+
+### Bug Fixes
+
+* fix golang cve ([#2730](https://github.com/archestra-ai/archestra/issues/2730)) ([68ab982](https://github.com/archestra-ai/archestra/commit/68ab982534d818a229e41399f2332b8ea48975fa))
+* improve KinD cluster creation error messaging in Docker quickstart ([#2732](https://github.com/archestra-ai/archestra/issues/2732)) ([d512b30](https://github.com/archestra-ai/archestra/commit/d512b301969e53413971d6fd453ff8660bd72f89))
+* issue when handling MCP servers which contained `__` in name ([#2728](https://github.com/archestra-ai/archestra/issues/2728)) ([d5a1f7b](https://github.com/archestra-ai/archestra/commit/d5a1f7be82d5661f93b9f4c89ce33ed3dad69223))
+* mobile responsiveness on mcp registry and logs pages ([#2712](https://github.com/archestra-ai/archestra/issues/2712)) ([5a47cb8](https://github.com/archestra-ai/archestra/commit/5a47cb8e7c54dc3184d17fc13b0fcabaa301834c))
+* propagate correct provider in A2A/chat error responses ([#2688](https://github.com/archestra-ai/archestra/issues/2688)) ([307166e](https://github.com/archestra-ai/archestra/commit/307166e929a1c44c348f279649bcc86452b63d39))
+* stop button terminates subagents execution ([#2713](https://github.com/archestra-ai/archestra/issues/2713)) ([35040e0](https://github.com/archestra-ai/archestra/commit/35040e0f0a66bd1b94319575e3ecdd6ca563e759))
+
+
+### Miscellaneous Chores
+
+* add website dev server as optional Tilt resource ([#2724](https://github.com/archestra-ai/archestra/issues/2724)) ([d8940d8](https://github.com/archestra-ai/archestra/commit/d8940d84d14d6c32ec8eddced98a5e0953f302ab))
+* capture MCP metrics from Archestra chat ([#2718](https://github.com/archestra-ai/archestra/issues/2718)) ([2bca4ca](https://github.com/archestra-ai/archestra/commit/2bca4ca33eb1a70a4001210de0ac14f1d59013c5))
+* polish MCP gateway logs columns (+ deduplicate `parseFullToolName` function) ([#2719](https://github.com/archestra-ai/archestra/issues/2719)) ([cc40316](https://github.com/archestra-ai/archestra/commit/cc403165d3eeae1642e9741498f8aaf8ac6b516c))
+* polishing LLM/MCP logs tables ([#2725](https://github.com/archestra-ai/archestra/issues/2725)) ([385f747](https://github.com/archestra-ai/archestra/commit/385f747d6012a2664df7a2ff72bdc0af9fa2716d))
+* **release:** bump version ([ffcb7c3](https://github.com/archestra-ai/archestra/commit/ffcb7c33374f80119c9ef9369125a61ba50d22ba))
+* show playwright mcp as built-in mcp, deprecate isGloballyAvailable flag ([#2729](https://github.com/archestra-ai/archestra/issues/2729)) ([6119bf6](https://github.com/archestra-ai/archestra/commit/6119bf63bb05d309092c99b894260f77f857cd53))
+
 ## [1.0.42](https://github.com/archestra-ai/archestra/compare/platform-v1.0.41...platform-v1.0.42) (2026-02-10)
 
 

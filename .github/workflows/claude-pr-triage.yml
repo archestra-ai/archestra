@@ -15,11 +15,12 @@ jobs:
     uses: ./.github/workflows/check-core-team.yml
     with:
       username: ${{ github.event.pull_request.user.login }}
-      user_type: ${{ github.event.pull_request.user.type }}
 
   triage-pr:
     needs: check-author
-    if: needs.check-author.outputs.should_triage == 'true'
+    if: |
+      needs.check-author.outputs.is_core_team_member != 'true' &&
+      github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -1468,7 +1468,7 @@
         "type": "prometheus",
         "uid": "$metrics_datasource"
       },
-      "description": "How many times each agent was executed. Only counts executions that happened within the time range selected in the top-right time picker (e.g. 'Last 1 hour' shows only the last hour's executions).",
+      "description": "Total number of agent executions within the selected time range (top-right time picker). For example, selecting 'Last 1 hour' counts only executions from the last hour.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1515,7 +1515,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "round(sum by (agent_id) (increase(agent_executions_total{agent_id!=\"\"}[$__range])))",
+          "expr": "round(sum by (agent_id) (sum_over_time(increase(agent_executions_total{agent_id!=\"\"}[5m])[$__range:5m])))",
           "hide": false,
           "instant": true,
           "legendFormat": "{{agent_id}}",
@@ -1532,7 +1532,7 @@
         "type": "prometheus",
         "uid": "$metrics_datasource"
       },
-      "description": "How much each agent spent on LLM API calls (input + output tokens) over time. Each point on the chart shows the cost accumulated during that time interval — not the running total. Change the time range in the top-right time picker to see a different period.",
+      "description": "Running total of LLM API spending per agent. Each line shows accumulated cost over time — it rises as the agent makes more LLM calls. The value at the right edge is the total for the selected period. Adjust the time range (top-right picker) to view different periods.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1614,7 +1614,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_id) (increase(llm_cost_total{agent_id!=\"\"}[$__range]))",
+          "expr": "sum by (agent_id) (sum_over_time(increase(llm_cost_total{agent_id!=\"\"}[5m])[$__range:5m]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{agent_id}}",
@@ -1631,7 +1631,7 @@
         "type": "prometheus",
         "uid": "$metrics_datasource"
       },
-      "description": "Combined cost per agent: LLM API cost + a fixed cost per execution. The per-execution cost is configurable in the query (default: $1). Each point on the chart shows the cost accumulated during that time interval — not the running total. Change the time range in the top-right time picker to see a different period.",
+      "description": "Running total of full operating cost per agent: LLM API spending + a fixed fee per execution (default: $1, configurable in the query). Each line shows accumulated cost over time. The value at the right edge is the total for the selected period. Adjust the time range (top-right picker) to view different periods.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1713,7 +1713,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_id) (increase(llm_cost_total{agent_id!=\"\"}[$__range])) + round(sum by (agent_id) (increase(agent_executions_total{agent_id!=\"\"}[$__range]))) * 1",
+          "expr": "sum by (agent_id) (sum_over_time(increase(llm_cost_total{agent_id!=\"\"}[5m])[$__range:5m])) + round(sum by (agent_id) (sum_over_time(increase(agent_executions_total{agent_id!=\"\"}[5m])[$__range:5m]))) * 1",
           "hide": false,
           "instant": false,
           "legendFormat": "{{agent_id}}",

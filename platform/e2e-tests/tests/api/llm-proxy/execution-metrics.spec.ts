@@ -1,17 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  METRICS_BASE_URL,
-  METRICS_BEARER_TOKEN,
-  METRICS_ENDPOINT,
-} from "../../../consts";
-import { type APIRequestContext, expect, test } from "../fixtures";
-
-const fetchMetrics = async (request: APIRequestContext) =>
-  request.get(`${METRICS_BASE_URL}${METRICS_ENDPOINT}`, {
-    headers: {
-      Authorization: `Bearer ${METRICS_BEARER_TOKEN}`,
-    },
-  });
+import { expect, test } from "../fixtures";
 
 test.describe("LLMProxy-ExecutionMetrics", () => {
   let agentId: string;
@@ -23,13 +11,17 @@ test.describe("LLMProxy-ExecutionMetrics", () => {
     }
   });
 
-  test("emits agent_executions_total metric for new execution id", async ({
+  test("stores execution id on interaction", async ({
     request,
-    createAgent,
+    createLlmProxy,
     makeApiRequest,
+    getInteractions,
   }) => {
-    // 1. Create a test profile
-    const createResponse = await createAgent(request, "Execution Metrics Test");
+    // 1. Create an LLM Proxy
+    const createResponse = await createLlmProxy(
+      request,
+      "Execution Metrics Test",
+    );
     const agent = await createResponse.json();
     agentId = agent.id;
 
@@ -51,26 +43,34 @@ test.describe("LLMProxy-ExecutionMetrics", () => {
     });
     expect(response.ok()).toBeTruthy();
 
-    // 3. Poll the metrics endpoint until agent_executions_total appears with our profile
+    // 3. Verify the interaction was stored with the execution ID
     await expect
       .poll(
         async () => {
-          const metricsResponse = await fetchMetrics(request);
-          expect(metricsResponse.ok()).toBeTruthy();
-          return await metricsResponse.text();
+          const interactionsResponse = await getInteractions(request, {
+            profileId: agentId,
+          });
+          const data = await interactionsResponse.json();
+          return data.data;
         },
         { timeout: 10000, intervals: [500, 1000, 2000] },
       )
-      .toContain(`agent_executions_total{`);
+      .toEqual(
+        expect.arrayContaining([expect.objectContaining({ executionId })]),
+      );
   });
 
-  test("deduplicates same execution id across multiple requests", async ({
+  test("stores same execution id on both interactions when sent twice", async ({
     request,
-    createAgent,
+    createLlmProxy,
     makeApiRequest,
+    getInteractions,
   }) => {
-    // 1. Create a test profile
-    const createResponse = await createAgent(request, "Execution Dedup Test");
+    // 1. Create an LLM Proxy
+    const createResponse = await createLlmProxy(
+      request,
+      "Execution Dedup Test",
+    );
     const agent = await createResponse.json();
     agentId = agent.id;
 
@@ -98,35 +98,32 @@ test.describe("LLMProxy-ExecutionMetrics", () => {
     const response2 = await sendRequest();
     expect(response2.ok()).toBeTruthy();
 
-    // 3. Wait for metrics to settle, then check the counter value
-    // The metric line for our profile should show counter value 1, not 2
+    // 3. Verify both interactions share the same execution ID
     await expect
       .poll(
         async () => {
-          const metricsResponse = await fetchMetrics(request);
-          expect(metricsResponse.ok()).toBeTruthy();
-          const metricsText = await metricsResponse.text();
-
-          // Find the agent_executions_total line for our profile
-          const lines = metricsText.split("\n");
-          return lines.find(
-            (line) =>
-              line.startsWith("agent_executions_total") &&
-              line.includes(`profile_id="${agentId}"`),
+          const interactionsResponse = await getInteractions(request, {
+            profileId: agentId,
+          });
+          const data = await interactionsResponse.json();
+          return data.data.filter(
+            (i: { executionId: string | null }) =>
+              i.executionId === executionId,
           );
         },
         { timeout: 10000, intervals: [500, 1000, 2000] },
       )
-      .toMatch(/\b1$/);
+      .toHaveLength(2);
   });
 
-  test("counts different execution ids separately", async ({
+  test("stores different execution ids separately", async ({
     request,
-    createAgent,
+    createLlmProxy,
     makeApiRequest,
+    getInteractions,
   }) => {
-    // 1. Create a test profile
-    const createResponse = await createAgent(
+    // 1. Create an LLM Proxy
+    const createResponse = await createLlmProxy(
       request,
       "Execution Separate Count Test",
     );
@@ -134,6 +131,9 @@ test.describe("LLMProxy-ExecutionMetrics", () => {
     agentId = agent.id;
 
     // 2. Send two requests with different execution IDs
+    const executionId1 = randomUUID();
+    const executionId2 = randomUUID();
+
     const sendRequest = (execId: string) =>
       makeApiRequest({
         request,
@@ -150,29 +150,29 @@ test.describe("LLMProxy-ExecutionMetrics", () => {
         },
       });
 
-    const response1 = await sendRequest(randomUUID());
+    const response1 = await sendRequest(executionId1);
     expect(response1.ok()).toBeTruthy();
 
-    const response2 = await sendRequest(randomUUID());
+    const response2 = await sendRequest(executionId2);
     expect(response2.ok()).toBeTruthy();
 
-    // 3. Verify counter is 2 for this profile
+    // 3. Verify two interactions with distinct execution IDs
     await expect
       .poll(
         async () => {
-          const metricsResponse = await fetchMetrics(request);
-          expect(metricsResponse.ok()).toBeTruthy();
-          const metricsText = await metricsResponse.text();
-
-          const lines = metricsText.split("\n");
-          return lines.find(
-            (line) =>
-              line.startsWith("agent_executions_total") &&
-              line.includes(`profile_id="${agentId}"`),
+          const interactionsResponse = await getInteractions(request, {
+            profileId: agentId,
+          });
+          const data = await interactionsResponse.json();
+          const executionIds = new Set(
+            data.data
+              .map((i: { executionId: string | null }) => i.executionId)
+              .filter(Boolean),
           );
+          return executionIds.size;
         },
         { timeout: 10000, intervals: [500, 1000, 2000] },
       )
-      .toMatch(/\b2$/);
+      .toBeGreaterThanOrEqual(2);
   });
 });

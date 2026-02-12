@@ -65,6 +65,8 @@ export interface TokenAuthResult {
   isExternalIdp?: boolean;
   /** External identity info for audit logging */
   externalIdentity?: ExternalIdentity;
+  /** Raw JWT token for propagation to underlying MCP servers */
+  rawToken?: string;
 }
 
 /**
@@ -755,6 +757,7 @@ export async function validateExternalIdpToken(
         email: result.email,
         name: result.name,
       },
+      rawToken: tokenValue,
     };
   } catch (error) {
     logger.debug(

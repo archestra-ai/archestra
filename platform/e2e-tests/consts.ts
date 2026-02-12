@@ -124,3 +124,12 @@ export const KC_TEST_USER = {
 
 /** SSO domain - extracted from admin email for account linking */
 export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
+
+// =============================================================================
+// MCP Server JWKS (example server for JWT propagation testing)
+// =============================================================================
+
+export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
+export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-mcp-server-jwks:3456"
+  : "http://localhost:30082";

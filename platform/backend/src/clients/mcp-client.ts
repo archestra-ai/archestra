@@ -81,6 +81,8 @@ export type TokenAuthContext = {
   isExternalIdp?: boolean;
   /** External identity info for audit logging (set when isExternalIdp is true) */
   externalIdentity?: ExternalIdentity;
+  /** Raw JWT token for propagation to underlying MCP servers (set when isExternalIdp is true) */
+  rawToken?: string;
 };
 
 /**
@@ -249,9 +251,15 @@ class McpClient {
     // Build connection cache key using the resolved target server ID.
     // When conversationId is provided, each (agent, conversation) gets its own connection
     // to enable per-session browser context isolation with streamable-http transport.
-    const connectionKey = options?.conversationId
+    // When authenticated via external IdP, each user (sub) gets their own connection
+    // since the JWT is propagated to the underlying MCP server per-user.
+    const externalSub = tokenAuth?.externalIdentity?.sub;
+    let connectionKey = options?.conversationId
       ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
       : `${catalogItem.id}:${targetMcpServerId}`;
+    if (externalSub) {
+      connectionKey = `${connectionKey}:ext:${externalSub}`;
+    }
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
@@ -451,6 +459,7 @@ class McpClient {
             targetMcpServerId,
             secrets,
             connectionKey,
+            tokenAuth,
           ),
         secrets,
       );
@@ -474,6 +483,7 @@ class McpClient {
               secrets,
               transportKind,
               connectionKey,
+              tokenAuth,
             ),
           secrets,
         ),
@@ -953,6 +963,7 @@ class McpClient {
     secrets: Record<string, unknown>,
     transportKind: TransportKind,
     connectionKey?: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -1005,9 +1016,14 @@ class McpClient {
           });
         }
 
+        const localHeaders: Record<string, string> = {};
+        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+          localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        }
+
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
-          requestInit: { headers: new Headers({}) },
+          requestInit: { headers: new Headers(localHeaders) },
         });
       }
 
@@ -1017,7 +1033,10 @@ class McpClient {
         }
 
         const headers: Record<string, string> = {};
-        if (secrets.access_token) {
+        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+          // Propagate external IdP JWT to the underlying MCP server
+          headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        } else if (secrets.access_token) {
           headers.Authorization = `Bearer ${secrets.access_token}`;
         } else if (secrets.raw_access_token) {
           headers.Authorization = String(secrets.raw_access_token);
@@ -1067,6 +1086,7 @@ class McpClient {
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
     connectionKey?: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
@@ -1078,6 +1098,7 @@ class McpClient {
       secrets,
       transportKind,
       connectionKey,
+      tokenAuth,
     );
   }
 

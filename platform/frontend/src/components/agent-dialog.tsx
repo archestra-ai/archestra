@@ -1071,36 +1071,6 @@ export function AgentDialog({
               </div>
             )}
 
-            {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
-            {agentType === "mcp_gateway" && identityProviders.length > 0 && (
-              <div className="space-y-2">
-                <Label>Identity Provider (JWKS Auth)</Label>
-                <p className="text-sm text-muted-foreground">
-                  Optionally select an Identity Provider to validate incoming
-                  JWT tokens via JWKS. When configured, MCP clients can
-                  authenticate using JWTs issued by this IdP.
-                </p>
-                <Select
-                  value={identityProviderId ?? "none"}
-                  onValueChange={(value) =>
-                    setIdentityProviderId(value === "none" ? null : value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No Identity Provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Identity Provider</SelectItem>
-                    {identityProviders.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.providerId} ({provider.issuer})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
             {/* Subagents (MCP Gateway and Agent only) */}
             {showToolsAndSubagents && (
               <div className="space-y-2">
@@ -1421,6 +1391,36 @@ export function AgentDialog({
               labels={labels}
               onLabelsChange={setLabels}
             />
+
+            {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
+            {agentType === "mcp_gateway" && identityProviders.length > 0 && (
+              <div className="space-y-2">
+                <Label>Identity Provider (JWKS Auth)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Optionally select an Identity Provider to validate incoming
+                  JWT tokens via JWKS. When configured, MCP clients can
+                  authenticate using JWTs issued by this IdP.
+                </p>
+                <Select
+                  value={identityProviderId ?? "none"}
+                  onValueChange={(value) =>
+                    setIdentityProviderId(value === "none" ? null : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No Identity Provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Identity Provider</SelectItem>
+                    {identityProviders.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.providerId} ({provider.issuer})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Security (LLM Proxy and Agent only) */}
             {showSecurity && (

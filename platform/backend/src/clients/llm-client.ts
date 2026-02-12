@@ -30,6 +30,7 @@ import { ApiError, type SupportedChatProvider } from "@/types";
 export type LLMModel = Parameters<typeof streamText>[0]["model"];
 
 /**
+ * @deprecated DO NOT USE THIS FUNCTION FOR NEW CODE.
  * Detect which provider a model belongs to based on its name
  * It's a recommended to rely on explicit provider selection whenever possible,
  * Since same models could be served by different providers.

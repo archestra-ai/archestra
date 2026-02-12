@@ -3,10 +3,7 @@ import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
-import {
-  createLLMModelForAgent,
-  detectProviderFromModel,
-} from "@/clients/llm-client";
+import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -339,9 +336,9 @@ async function cleanupBrowserTab(params: {
  * Resolve the model and provider to use for an agent.
  *
  * Priority chain:
- * 1. Agent has explicit llmModel → use it directly
+ * 1. Agent has llmApiKeyId with llmModel → use the model with provider from the key
  * 2. Agent has llmApiKeyId but no llmModel → use best model for that key
- * 3. Agent has neither → find best model across all available API keys (org_wide > team > personal)
+ * 3. Find best model across all available API keys (org_wide > team > personal)
  * 4. Fallback → use config defaults
  */
 async function resolveModelForAgent(params: {
@@ -351,31 +348,40 @@ async function resolveModelForAgent(params: {
 }): Promise<{ model: string; provider: SupportedChatProvider }> {
   const { agent, userId, organizationId } = params;
 
-  // Priority 1: Agent has explicit llmModel
-  if (agent.llmModel) {
-    const provider = detectProviderFromModel(agent.llmModel);
-    logger.debug(
-      { model: agent.llmModel, provider, source: "agent.llmModel" },
-      "Resolved model from agent config",
-    );
-    return { model: agent.llmModel, provider };
-  }
-
-  // Priority 2: Agent has llmApiKeyId — get best model for that key
+  // Priority 1 & 2: Agent has a configured API key
   if (agent.llmApiKeyId) {
-    const bestModel = await ApiKeyModelModel.getBestModel(agent.llmApiKeyId);
-    if (bestModel) {
-      const provider = detectProviderFromModel(bestModel.modelId);
-      logger.debug(
-        {
-          model: bestModel.modelId,
-          provider,
-          apiKeyId: agent.llmApiKeyId,
-          source: "agent.llmApiKeyId",
-        },
-        "Resolved model from agent API key",
-      );
-      return { model: bestModel.modelId, provider };
+    const agentApiKey = await ChatApiKeyModel.findById(agent.llmApiKeyId);
+    if (agentApiKey) {
+      const provider = agentApiKey.provider as SupportedChatProvider;
+
+      // Priority 1: Key + explicit model
+      if (agent.llmModel) {
+        logger.debug(
+          {
+            model: agent.llmModel,
+            provider,
+            apiKeyId: agent.llmApiKeyId,
+            source: "agent.llmApiKeyId+llmModel",
+          },
+          "Resolved model from agent config with provider from API key",
+        );
+        return { model: agent.llmModel, provider };
+      }
+
+      // Priority 2: Key without model — use best model for that key
+      const bestModel = await ApiKeyModelModel.getBestModel(agent.llmApiKeyId);
+      if (bestModel) {
+        logger.debug(
+          {
+            model: bestModel.modelId,
+            provider,
+            apiKeyId: agent.llmApiKeyId,
+            source: "agent.llmApiKeyId.bestModel",
+          },
+          "Resolved best model from agent API key",
+        );
+        return { model: bestModel.modelId, provider };
+      }
     }
   }
 
@@ -414,7 +420,7 @@ async function resolveModelForAgent(params: {
 
     if (withBestModels.length > 0) {
       const selected = withBestModels[0];
-      const provider = detectProviderFromModel(selected.model.modelId);
+      const provider = selected.apiKey.provider as SupportedChatProvider;
       logger.debug(
         {
           model: selected.model.modelId,

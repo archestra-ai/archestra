@@ -699,22 +699,22 @@ export default function ChatPage() {
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
     if (status === "submitted" || status === "streaming") {
-      // Tell backend to abort subagents for this conversation
       if (conversationId) {
-        stopChatStreamMutation.mutate(conversationId);
+        // Set the cache flag first, THEN close the connection so the
+        // connection-close handler on the backend finds the flag.
+        stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+          stop?.();
+        });
+      } else {
+        stop?.();
       }
-      stop?.();
+      return;
     }
 
     const hasText = message.text?.trim();
     const hasFiles = message.files && message.files.length > 0;
 
-    if (
-      !sendMessage ||
-      (!hasText && !hasFiles) ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
+    if (!sendMessage || (!hasText && !hasFiles)) {
       return;
     }
 

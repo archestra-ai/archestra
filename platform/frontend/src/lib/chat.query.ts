@@ -29,6 +29,7 @@ const {
   getMcpServer,
   getInternalMcpCatalogTools,
   bulkAssignTools,
+  stopChatStream,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -188,6 +189,21 @@ export function useDeleteConversation() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
       toast.success("Conversation deleted");
+    },
+  });
+}
+
+export function useStopChatStream() {
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const { data, error } = await stopChatStream({
+        path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
   });
 }

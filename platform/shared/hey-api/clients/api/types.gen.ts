@@ -12882,6 +12882,85 @@ export type StreamChatErrors = {
 
 export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 
+export type StopChatStreamData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/stop';
+};
+
+export type StopChatStreamErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type StopChatStreamError = StopChatStreamErrors[keyof StopChatStreamErrors];
+
+export type StopChatStreamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        stopped: boolean;
+    };
+};
+
+export type StopChatStreamResponse = StopChatStreamResponses[keyof StopChatStreamResponses];
+
 export type GetChatConversationsData = {
     body?: never;
     path?: never;

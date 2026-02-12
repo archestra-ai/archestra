@@ -50,6 +50,7 @@ import {
   useConversation,
   useCreateConversation,
   useHasPlaywrightMcpTools,
+  useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
@@ -446,6 +447,9 @@ export default function ChatPage() {
   // Update enabled tools mutation (for applying pending actions)
   const updateEnabledToolsMutation = useUpdateConversationEnabledTools();
 
+  // Stop chat stream mutation (signals backend to abort subagents)
+  const stopChatStreamMutation = useStopChatStream();
+
   // Persist artifact panel state
   const toggleArtifactPanel = useCallback(() => {
     const newValue = !isArtifactOpen;
@@ -695,6 +699,10 @@ export default function ChatPage() {
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
     if (status === "submitted" || status === "streaming") {
+      // Tell backend to abort subagents for this conversation
+      if (conversationId) {
+        stopChatStreamMutation.mutate(conversationId);
+      }
       stop?.();
     }
 

@@ -443,6 +443,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StreamChat]: {
     conversation: ["read"],
   },
+  [RouteId.StopChatStream]: {
+    conversation: ["read"],
+  },
   [RouteId.GetChatConversations]: {
     conversation: ["read"],
   },

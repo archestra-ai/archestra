@@ -1,30 +1,37 @@
 ---
-title: "Single Sign-On (SSO)"
+title: "Identity Providers"
 category: Archestra Platform
-description: "Configure SSO providers for seamless authentication using OIDC and SAML"
+description: "Configure Identity Providers for SSO authentication and MCP Gateway JWKS validation"
 order: 5
-lastUpdated: 2025-11-28
+lastUpdated: 2025-02-12
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 
-This document covers SSO configuration for Archestra Platform. Include:
-- Overview of SSO support (OIDC and SAML)
+This document covers Identity Provider configuration for Archestra Platform. Include:
+- Overview of Identity Provider support (OIDC and SAML)
+- SSO configuration
+- MCP Gateway JWKS authentication
 - Provider-specific configuration (Okta, Google, GitHub, GitLab, Microsoft Entra ID, Generic OAuth, Generic SAML)
 - Callback URL format
 - Limitations and requirements
 -->
 
-![SSO Providers Overview](/docs/automated_screenshots/platform-single-sign-on_sso-providers-overview.png)
+![Identity Providers Overview](/docs/automated_screenshots/platform-single-sign-on_sso-providers-overview.png)
 
-Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OIDC) and SAML 2.0 providers. Once configured, users can authenticate with their existing identity provider credentials instead of managing separate passwords.
+Archestra supports Identity Provider (IdP) configuration for two purposes:
+
+1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
+2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
-## How SSO Works
+## Single Sign-On (SSO)
 
-1. Admin configures an SSO provider in **Settings > SSO Providers**
+### How SSO Works
+
+1. Admin configures an Identity Provider in **Settings > Identity Providers**
 2. SSO buttons appear on the sign-in page for enabled providers
 3. Users click the SSO button and authenticate with their identity provider
 4. After successful authentication, users are automatically provisioned and logged in
@@ -627,6 +634,44 @@ If a user already has an account (created via email/password), SSO authenticatio
 
 - The email addresses match
 - The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, Entra ID, and all SAML providers are trusted by default)
+
+## MCP Gateway JWKS Authentication
+
+Identity Providers can also be used to authenticate external MCP clients connecting to an MCP Gateway. When an IdP is linked to a gateway, the gateway validates incoming JWT bearer tokens against the IdP's JWKS (JSON Web Key Set) endpoint.
+
+### How It Works
+
+1. Admin configures an OIDC Identity Provider in **Settings > Identity Providers**
+2. Admin creates or edits an MCP Gateway and selects the Identity Provider in the **Identity Provider (JWKS Auth)** dropdown
+3. External MCP client obtains a JWT from the IdP (e.g., via client credentials flow or user login)
+4. Client sends requests to the gateway with `Authorization: Bearer <jwt>`
+5. Gateway discovers the JWKS URL from the IdP's OIDC discovery endpoint
+6. Gateway validates the JWT signature, issuer, audience (IdP's client ID), and expiration
+7. Identity information (sub, email, name) is extracted from the JWT claims for audit logging
+
+### Requirements
+
+- The Identity Provider must be an **OIDC provider** (SAML providers do not support JWKS)
+- The IdP must expose a standard OIDC discovery endpoint (`.well-known/openid-configuration`) with a `jwks_uri`
+- The JWT `iss` claim must match the IdP's issuer URL
+- The JWT `aud` claim must match the IdP's client ID (if configured)
+
+### Authentication Priority
+
+When an MCP Gateway has an Identity Provider configured, incoming tokens are validated in this order:
+
+1. **External IdP JWKS** — JWT validated against the IdP's public keys (for non-`archestra_` tokens)
+2. **Archestra team/organization tokens** — Standard `archestra_` prefixed tokens
+3. **Archestra user tokens** — Personal user tokens
+4. **OAuth 2.1 tokens** — Tokens from the OAuth authorization flow
+
+The first successful validation is used. This means existing Archestra tokens continue to work alongside external IdP JWTs.
+
+### Audit Trail
+
+MCP tool calls authenticated via external IdP are logged with the caller's identity (subject, email, name) extracted from the JWT claims. These appear in the MCP Gateway logs with the auth method "External IdP".
+
+See the [MCP Gateway](/docs/platform-mcp-gateway) documentation for more details on gateway authentication.
 
 ## Removing an SSO Provider
 

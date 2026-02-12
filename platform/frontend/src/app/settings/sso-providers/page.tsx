@@ -9,7 +9,7 @@ const { SsoProvidersSettingsContent } = config.enterpriseLicenseActivated
     await import("./_parts/sso-page.ee")
   : {
       SsoProvidersSettingsContent: () => (
-        <EnterpriseLicenseRequired featureName="SSO" />
+        <EnterpriseLicenseRequired featureName="Identity Providers" />
       ),
     };
 

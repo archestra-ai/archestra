@@ -177,6 +177,46 @@ function McpToolCallDetail({
                   </Badge>
                 </div>
               )}
+              {mcpToolCall.externalIdentity && (
+                <>
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      External Identity (sub)
+                    </div>
+                    <div className="font-medium font-mono text-sm">
+                      {mcpToolCall.externalIdentity.sub}
+                    </div>
+                  </div>
+                  {mcpToolCall.externalIdentity.email && (
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-2">
+                        External Email
+                      </div>
+                      <div className="font-medium">
+                        {mcpToolCall.externalIdentity.email}
+                      </div>
+                    </div>
+                  )}
+                  {mcpToolCall.externalIdentity.name && (
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-2">
+                        External Name
+                      </div>
+                      <div className="font-medium">
+                        {mcpToolCall.externalIdentity.name}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Identity Provider
+                    </div>
+                    <div className="font-medium">
+                      {mcpToolCall.externalIdentity.idpName}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

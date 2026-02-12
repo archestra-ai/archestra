@@ -36,6 +36,14 @@ const mcpToolCallsTable = pgTable(
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),
+    /** External identity info when authenticated via external IdP JWKS (sub, email, name, idpId) */
+    externalIdentity: jsonb("external_identity").$type<{
+      idpId: string;
+      idpName: string;
+      sub: string;
+      email: string | null;
+      name: string | null;
+    } | null>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

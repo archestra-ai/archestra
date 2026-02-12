@@ -86,8 +86,18 @@ import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
+import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+
+const { useSsoProviders } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
+    await import("@/lib/sso-provider.query.ee")
+  : {
+      useSsoProviders: () => ({
+        data: [] as Array<{ id: string; providerId: string; issuer: string }>,
+      }),
+    };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -388,6 +398,7 @@ export function AgentDialog({
   const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
   const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
+  const { data: ssoProviders = [] } = useSsoProviders();
   const agentLlmApiKeyId = (agent as Record<string, unknown> | undefined)
     ?.llmApiKeyId as string | null | undefined;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
@@ -436,6 +447,7 @@ export function AgentDialog({
   const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
   const [toolsShowAll, setToolsShowAll] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
+  const [ssoProviderId, setSsoProviderId] = useState<string | null>(null);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
@@ -490,6 +502,12 @@ export function AgentDialog({
         setConsiderContextUntrusted(
           agentData.considerContextUntrusted || false,
         );
+        // SSO provider ID (for MCP Gateway JWKS auth)
+        setSsoProviderId(
+          ((agentData as Record<string, unknown>).ssoProviderId as
+            | string
+            | null) ?? null,
+        );
         // Email invocation settings
         setIncomingEmailEnabled(agentData.incomingEmailEnabled || false);
         setIncomingEmailSecurityMode(
@@ -511,6 +529,7 @@ export function AgentDialog({
         setAssignedTeamIds([]);
         setLabels([]);
         setConsiderContextUntrusted(false);
+        setSsoProviderId(null);
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
@@ -718,6 +737,9 @@ export function AgentDialog({
               llmApiKeyId: llmApiKeyId || null,
               llmModel: llmModel || null,
             }),
+            ...(agentType === "mcp_gateway" && {
+              ssoProviderId: ssoProviderId || null,
+            }),
             teams: assignedTeamIds,
             labels: updatedLabels,
             ...(showSecurity && { considerContextUntrusted }),
@@ -738,6 +760,9 @@ export function AgentDialog({
             allowedChatops,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
+          }),
+          ...(agentType === "mcp_gateway" && {
+            ssoProviderId: ssoProviderId || null,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -793,6 +818,7 @@ export function AgentDialog({
     incomingEmailEnabled,
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
+    ssoProviderId,
     agentType,
     agent,
     isInternalAgent,
@@ -1055,6 +1081,36 @@ export function AgentDialog({
                     onSelectedCountChange={setSelectedToolsCount}
                   />
                 </div>
+              </div>
+            )}
+
+            {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
+            {agentType === "mcp_gateway" && ssoProviders.length > 0 && (
+              <div className="space-y-2">
+                <Label>Identity Provider (JWKS Auth)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Optionally select an Identity Provider to validate incoming
+                  JWT tokens via JWKS. When configured, MCP clients can
+                  authenticate using JWTs issued by this IdP.
+                </p>
+                <Select
+                  value={ssoProviderId ?? "none"}
+                  onValueChange={(value) =>
+                    setSsoProviderId(value === "none" ? null : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No Identity Provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Identity Provider</SelectItem>
+                    {ssoProviders.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.providerId} ({provider.issuer})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 

@@ -101,6 +101,7 @@ async function handleMcpPostRequest(
           } as any,
           userId: tokenAuthContext?.userId ?? null,
           authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
+          externalIdentity: tokenAuthContext?.externalIdentity ?? null,
         });
         fastify.log.info({ profileId }, "✅ Saved initialize request");
       } catch (dbError) {
@@ -269,6 +270,10 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
+        ...(tokenAuth.externalIdentity && {
+          externalIdentity: tokenAuth.externalIdentity,
+        }),
       };
 
       return handleMcpPostRequest(

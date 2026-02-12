@@ -21413,6 +21413,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "ssoProviderId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -21579,6 +21583,7 @@
                           "incomingEmailAllowedDomain",
                           "llmApiKeyId",
                           "llmModel",
+                          "ssoProviderId",
                           "createdAt",
                           "updatedAt",
                           "tools",
@@ -21956,6 +21961,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "ssoProviderId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -22146,6 +22155,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ssoProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22312,6 +22325,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "ssoProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -22726,6 +22740,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "ssoProviderId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -22892,6 +22910,7 @@
                       "incomingEmailAllowedDomain",
                       "llmApiKeyId",
                       "llmModel",
+                      "ssoProviderId",
                       "createdAt",
                       "updatedAt",
                       "tools",
@@ -23270,6 +23289,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ssoProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -23436,6 +23459,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "ssoProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -23813,6 +23837,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ssoProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -23979,6 +24007,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "ssoProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -24368,6 +24397,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ssoProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -24534,6 +24567,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "ssoProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -24863,6 +24897,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "ssoProviderId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -25060,6 +25098,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ssoProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -25226,6 +25268,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "ssoProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -25868,6 +25911,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "ssoProviderId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -26034,6 +26081,7 @@
                         "incomingEmailAllowedDomain",
                         "llmApiKeyId",
                         "llmModel",
+                        "ssoProviderId",
                         "createdAt",
                         "updatedAt",
                         "tools",
@@ -26480,6 +26528,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ssoProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -26646,6 +26698,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "ssoProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -78491,8 +78544,40 @@
                               "oauth",
                               "user_token",
                               "org_token",
-                              "team_token"
+                              "team_token",
+                              "external_idp"
                             ]
+                          },
+                          "externalIdentity": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "idpId": {
+                                "type": "string"
+                              },
+                              "idpName": {
+                                "type": "string"
+                              },
+                              "sub": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "idpId",
+                              "idpName",
+                              "sub",
+                              "email",
+                              "name"
+                            ],
+                            "additionalProperties": false
                           },
                           "createdAt": {
                             "type": "string",
@@ -78863,8 +78948,40 @@
                         "oauth",
                         "user_token",
                         "org_token",
-                        "team_token"
+                        "team_token",
+                        "external_idp"
                       ]
+                    },
+                    "externalIdentity": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "idpId": {
+                          "type": "string"
+                        },
+                        "idpName": {
+                          "type": "string"
+                        },
+                        "sub": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "idpId",
+                        "idpName",
+                        "sub",
+                        "email",
+                        "name"
+                      ],
+                      "additionalProperties": false
                     },
                     "createdAt": {
                       "type": "string",

@@ -6380,6 +6380,7 @@ export type GetAgentsResponses = {
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
             llmModel: string | null;
+            ssoProviderId: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -6454,6 +6455,7 @@ export type CreateAgentData = {
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
+        ssoProviderId?: string | null;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -6553,6 +6555,7 @@ export type CreateAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6701,6 +6704,7 @@ export type GetAllAgentsResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6840,6 +6844,7 @@ export type GetDefaultMcpGatewayResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6979,6 +6984,7 @@ export type GetDefaultLlmProxyResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -7199,6 +7205,7 @@ export type GetAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -7264,6 +7271,7 @@ export type UpdateAgentData = {
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
+        ssoProviderId?: string | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -7365,6 +7373,7 @@ export type UpdateAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -7507,6 +7516,7 @@ export type GetAgentVersionsResponses = {
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
             llmModel: string | null;
+            ssoProviderId: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -7660,6 +7670,7 @@ export type RollbackAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        ssoProviderId: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -21774,7 +21785,14 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+            externalIdentity?: {
+                idpId: string;
+                idpName: string;
+                sub: string;
+                email: string | null;
+                name: string | null;
+            } | null;
             createdAt: string;
             userName: string | null;
         }>;
@@ -21880,7 +21898,14 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
+        externalIdentity?: {
+            idpId: string;
+            idpName: string;
+            sub: string;
+            email: string | null;
+            name: string | null;
+        } | null;
         createdAt: string;
         userName: string | null;
     };

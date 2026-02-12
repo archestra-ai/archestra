@@ -4,7 +4,7 @@ category: Archestra Platform
 subcategory: Concepts
 order: 5
 description: Unified access point for all MCP servers
-lastUpdated: 2025-10-31
+lastUpdated: 2025-02-12
 ---
 
 <!-- 
@@ -106,3 +106,14 @@ Authorization: Bearer archestra_<token>
 ```
 
 Create tokens in **Settings → Tokens** or via the Archestra API.
+
+### External Identity Provider (JWKS)
+
+For MCP clients that authenticate with an external Identity Provider (Keycloak, Okta, Entra ID, Auth0, etc.), the gateway can validate JWT bearer tokens directly against the IdP's JWKS endpoint. This allows external users to access MCP tools without needing an Archestra account.
+
+```
+POST /v1/mcp/<profile_id>
+Authorization: Bearer <jwt_from_external_idp>
+```
+
+To enable this, configure an Identity Provider in **Settings → Identity Providers**, then select it in the MCP Gateway's **Identity Provider (JWKS Auth)** dropdown. See [Identity Providers](/docs/platform-single-sign-on#mcp-gateway-jwks-authentication) for setup details.

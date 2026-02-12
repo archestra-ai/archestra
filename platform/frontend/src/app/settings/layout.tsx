@@ -35,11 +35,16 @@ export default function SettingsLayout({
           { label: "Teams", href: "/settings/teams" },
           { label: "Roles", href: "/settings/roles" },
           /**
-           * SSO Providers tab is only shown when enterprise license is activated
+           * Identity Providers tab is only shown when enterprise license is activated
            * and the user has the permission to read SSO providers.
            */
           ...(config.enterpriseLicenseActivated && userCanReadSsoProviders
-            ? [{ label: "SSO Providers", href: "/settings/sso-providers" }]
+            ? [
+                {
+                  label: "Identity Providers",
+                  href: "/settings/sso-providers",
+                },
+              ]
             : []),
           { label: "Appearance", href: "/settings/appearance" },
         ]

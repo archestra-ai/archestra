@@ -318,8 +318,8 @@ export function SsoProvidersSettingsContent() {
     return (
       <div>
         <div className="mb-8">
-          <h2 className="text-lg font-semibold">SSO Providers</h2>
-          <EnterpriseLicenseRequired featureName="SSO (Single Sign-On)" />
+          <h2 className="text-lg font-semibold">Identity Providers</h2>
+          <EnterpriseLicenseRequired featureName="Identity Providers" />
         </div>
       </div>
     );
@@ -330,10 +330,11 @@ export function SsoProvidersSettingsContent() {
   return (
     <div>
       <div className="mb-8">
-        <h2 className="text-lg font-semibold">SSO Providers</h2>
+        <h2 className="text-lg font-semibold">Identity Providers</h2>
         <p className="text-sm text-muted-foreground">
-          Manage Single Sign-On (SSO) providers for your organization. Configure
-          OIDC providers to enable seamless authentication.
+          Manage Identity Providers (IdPs) for your organization. Identity
+          Providers can be used for Single Sign-On (SSO) authentication and for
+          validating external JWT tokens on MCP Gateway requests via JWKS.
         </p>
       </div>
 

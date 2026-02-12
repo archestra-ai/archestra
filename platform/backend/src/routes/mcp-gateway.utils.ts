@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
   executeArchestraTool,
@@ -21,6 +22,7 @@ import {
 import { userHasPermission } from "@/auth/utils";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import db, { schema as dbSchema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -35,8 +37,10 @@ import {
 } from "@/models";
 import { metrics } from "@/observability";
 import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
+import { jwksValidator } from "@/services/jwks-validator";
 import {
   type CommonToolCall,
+  type ExternalIdentity,
   type MCPGatewayAuthMethod,
   UuidIdSchema,
 } from "@/types";
@@ -49,6 +53,7 @@ export function deriveAuthMethod(
   tokenAuth: TokenAuthResult | TokenAuthContext | undefined,
 ): MCPGatewayAuthMethod | undefined {
   if (!tokenAuth) return undefined;
+  if (tokenAuth.isExternalIdp) return "external_idp";
   if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
   if (tokenAuth.isUserToken) return "user_token";
   if (tokenAuth.isOrganizationToken) return "org_token";
@@ -68,6 +73,10 @@ export interface TokenAuthResult {
   isUserToken?: boolean;
   /** User ID for user tokens */
   userId?: string;
+  /** True if authenticated via external IdP JWKS */
+  isExternalIdp?: boolean;
+  /** External identity info for audit logging */
+  externalIdentity?: ExternalIdentity;
 }
 
 /**
@@ -135,6 +144,7 @@ export async function createAgentServer(
         toolResult: { tools: toolsList } as any,
         userId: tokenAuth?.userId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
+        externalIdentity: tokenAuth?.externalIdentity ?? null,
       });
       logger.info(
         { agentId, toolsCount: toolsList.length },
@@ -222,6 +232,7 @@ export async function createAgentServer(
               toolResult: response,
               userId: tokenAuth?.userId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
+              externalIdentity: tokenAuth?.externalIdentity ?? null,
             });
           } catch (dbError) {
             logger.info(
@@ -616,15 +627,26 @@ export async function validateOAuthToken(
 }
 
 /**
- * Validate any archestra_ prefixed token for a specific profile
- * Tries team/org tokens first, then user tokens, then OAuth JWT tokens
- * Returns token auth info if valid, null otherwise
+ * Validate any token for a specific profile.
+ * Tries external IdP JWKS first (if configured), then team/org tokens, user tokens, and OAuth tokens.
+ * Returns token auth info if valid, null otherwise.
  */
 export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
-  // First try team/org token validation
+  // Try external IdP JWKS validation first (if profile has an IdP configured)
+  if (!tokenValue.startsWith("archestra_")) {
+    const externalIdpResult = await validateExternalIdpToken(
+      profileId,
+      tokenValue,
+    );
+    if (externalIdpResult) {
+      return externalIdpResult;
+    }
+  }
+
+  // Try team/org token validation
   const teamTokenResult = await validateTeamToken(profileId, tokenValue);
   if (teamTokenResult) {
     return teamTokenResult;
@@ -636,7 +658,7 @@ export async function validateMCPGatewayToken(
     return userTokenResult;
   }
 
-  // Try OAuth JWT token validation (for MCP clients like Open WebUI)
+  // Try OAuth token validation (for MCP clients like Open WebUI)
   if (!tokenValue.startsWith("archestra_")) {
     const oauthResult = await validateOAuthToken(profileId, tokenValue);
     if (oauthResult) {
@@ -649,4 +671,193 @@ export async function validateMCPGatewayToken(
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
   return null;
+}
+
+/**
+ * Validate a JWT from an external Identity Provider via JWKS.
+ * Only attempted when the profile has an associated SSO provider with OIDC config.
+ *
+ * @returns TokenAuthResult with external identity info, or null if validation fails
+ */
+export async function validateExternalIdpToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  try {
+    // Look up the agent to check if it has an SSO provider configured
+    const agent = await AgentModel.findById(profileId);
+    if (!agent?.ssoProviderId) {
+      return null;
+    }
+
+    // Look up the SSO provider to get OIDC config
+    const ssoProvider = await findSsoProviderById(agent.ssoProviderId);
+    if (!ssoProvider) {
+      logger.warn(
+        { profileId, ssoProviderId: agent.ssoProviderId },
+        "validateExternalIdpToken: SSO provider not found",
+      );
+      return null;
+    }
+
+    // Only OIDC providers support JWKS validation
+    if (!ssoProvider.oidcConfig) {
+      logger.debug(
+        { profileId, ssoProviderId: agent.ssoProviderId },
+        "validateExternalIdpToken: SSO provider has no OIDC config",
+      );
+      return null;
+    }
+
+    const oidcConfig = parseJsonField<OidcConfigForJwks>(
+      ssoProvider.oidcConfig,
+    );
+    if (!oidcConfig) {
+      return null;
+    }
+
+    // Derive the JWKS URL from the issuer's OIDC discovery endpoint
+    const jwksUrl = await discoverJwksUrl(ssoProvider.issuer);
+    if (!jwksUrl) {
+      logger.warn(
+        { profileId, issuer: ssoProvider.issuer },
+        "validateExternalIdpToken: could not discover JWKS URL from issuer",
+      );
+      return null;
+    }
+
+    // Validate the JWT
+    const result = await jwksValidator.validateJwt({
+      token: tokenValue,
+      issuerUrl: ssoProvider.issuer,
+      jwksUrl,
+      audience: oidcConfig.clientId ?? null,
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    logger.info(
+      {
+        profileId,
+        ssoProviderId: agent.ssoProviderId,
+        sub: result.sub,
+        email: result.email,
+      },
+      "validateExternalIdpToken: JWT validated via external IdP JWKS",
+    );
+
+    return {
+      tokenId: `external_idp:${agent.ssoProviderId}:${result.sub}`,
+      teamId: null,
+      isOrganizationToken: true,
+      organizationId: agent.organizationId,
+      isExternalIdp: true,
+      externalIdentity: {
+        idpId: agent.ssoProviderId,
+        idpName: ssoProvider.providerId,
+        sub: result.sub,
+        email: result.email,
+        name: result.name,
+      },
+    };
+  } catch (error) {
+    logger.debug(
+      {
+        profileId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "validateExternalIdpToken: unexpected error",
+    );
+    return null;
+  }
+}
+
+// =============================================================================
+// Internal helpers for external IdP validation
+// =============================================================================
+
+type OidcConfigForJwks = {
+  clientId?: string;
+};
+
+/**
+ * Simple SSO provider lookup by ID (no org check).
+ * Uses direct DB query since the SsoProviderModel is enterprise-only (.ee.ts).
+ * The schema file (sso-provider.ts) is NOT .ee, so this is safe to use.
+ */
+async function findSsoProviderById(id: string) {
+  const [provider] = await db
+    .select({
+      id: dbSchema.ssoProvidersTable.id,
+      providerId: dbSchema.ssoProvidersTable.providerId,
+      issuer: dbSchema.ssoProvidersTable.issuer,
+      oidcConfig: dbSchema.ssoProvidersTable.oidcConfig,
+    })
+    .from(dbSchema.ssoProvidersTable)
+    .where(eq(dbSchema.ssoProvidersTable.id, id));
+
+  return provider ?? null;
+}
+
+function parseJsonField<T>(value: unknown): T | null {
+  if (!value) return null;
+  if (typeof value === "object") return value as T;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Cache for OIDC discovery results (issuer → jwks_uri) */
+const oidcDiscoveryCache = new Map<string, string>();
+
+/**
+ * Discover the JWKS URL from an OIDC issuer's well-known configuration.
+ * Results are cached in memory.
+ */
+async function discoverJwksUrl(issuerUrl: string): Promise<string | null> {
+  const cached = oidcDiscoveryCache.get(issuerUrl);
+  if (cached) return cached;
+
+  try {
+    // Normalize issuer URL (remove trailing slash for consistent well-known URL construction)
+    const normalizedIssuer = issuerUrl.replace(/\/$/, "");
+    const discoveryUrl = `${normalizedIssuer}/.well-known/openid-configuration`;
+
+    const response = await fetch(discoveryUrl, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      logger.warn(
+        { issuerUrl, status: response.status },
+        "OIDC discovery failed",
+      );
+      return null;
+    }
+
+    const metadata = (await response.json()) as { jwks_uri?: string };
+    const jwksUri = metadata.jwks_uri;
+    if (!jwksUri || typeof jwksUri !== "string") {
+      logger.warn({ issuerUrl }, "OIDC discovery: no jwks_uri in metadata");
+      return null;
+    }
+
+    oidcDiscoveryCache.set(issuerUrl, jwksUri);
+    return jwksUri;
+  } catch (error) {
+    logger.warn(
+      {
+        issuerUrl,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "OIDC discovery request failed",
+    );
+    return null;
+  }
 }

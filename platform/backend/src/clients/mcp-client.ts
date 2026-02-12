@@ -29,6 +29,7 @@ import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
+  ExternalIdentity,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
 } from "@/types";
@@ -76,6 +77,10 @@ export type TokenAuthContext = {
   isUserToken?: boolean;
   /** Optional user ID for user-owned server priority (set when called from chat or from user token) */
   userId?: string;
+  /** True if authenticated via external IdP JWKS */
+  isExternalIdp?: boolean;
+  /** External identity info for audit logging (set when isExternalIdp is true) */
+  externalIdentity?: ExternalIdentity;
 };
 
 /**
@@ -208,6 +213,7 @@ class McpClient {
       ? {
           userId: tokenAuth.userId,
           authMethod: deriveAuthMethodFromTokenAuth(tokenAuth),
+          externalIdentity: tokenAuth.externalIdentity ?? null,
         }
       : undefined;
 
@@ -886,6 +892,19 @@ class McpClient {
       return { targetMcpServerId: allServers[0].id };
     }
 
+    // Priority 5: External IdP users have no team membership; use first available server
+    if (tokenAuth.isExternalIdp && allServers.length > 0) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          serverId: allServers[0].id,
+        },
+        `Dynamic resolution: using first available server for external IdP user`,
+      );
+      return { targetMcpServerId: allServers[0].id };
+    }
+
     // No server found - return an actionable error with install link
     const context = tokenAuth.userId
       ? `user: ${tokenAuth.userId}`
@@ -1138,7 +1157,11 @@ class McpClient {
     agentId: string,
     error: string,
     mcpServerName: string = "unknown",
-    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
+    authInfo?: {
+      userId?: string;
+      authMethod?: MCPGatewayAuthMethod;
+      externalIdentity?: ExternalIdentity | null;
+    },
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
@@ -1168,7 +1191,11 @@ class McpClient {
     content: unknown,
     isError: boolean,
     template: string | null,
-    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
+    authInfo?: {
+      userId?: string;
+      authMethod?: MCPGatewayAuthMethod;
+      externalIdentity?: ExternalIdentity | null;
+    },
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -1313,7 +1340,11 @@ class McpClient {
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
-    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
+    authInfo?: {
+      userId?: string;
+      authMethod?: MCPGatewayAuthMethod;
+      externalIdentity?: ExternalIdentity | null;
+    },
   ): Promise<void> {
     // Skip high-frequency browser tool logging to prevent DB bloat
     // (screenshots every ~2s, tab list checks, viewport resizes)
@@ -1330,6 +1361,7 @@ class McpClient {
         toolResult,
         userId: authInfo?.userId ?? null,
         authMethod: authInfo?.authMethod ?? null,
+        externalIdentity: authInfo?.externalIdentity ?? null,
       });
 
       const logData: {
@@ -1502,6 +1534,7 @@ class McpClient {
 function deriveAuthMethodFromTokenAuth(
   tokenAuth: TokenAuthContext,
 ): MCPGatewayAuthMethod {
+  if (tokenAuth.isExternalIdp) return "external_idp";
   if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
   if (tokenAuth.isUserToken) return "user_token";
   if (tokenAuth.isOrganizationToken) return "org_token";

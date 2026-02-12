@@ -128,6 +128,7 @@ const agentsTable = pgTable(
   (table) => [
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
+    index("agents_sso_provider_id_idx").on(table.ssoProviderId),
   ],
 );
 

@@ -9,7 +9,6 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
-  OAUTH_TOKEN_ID_PREFIX,
 } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,6 +32,7 @@ import type {
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
 } from "@/types";
+import { deriveAuthMethod } from "@/utils/auth-method";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
@@ -212,7 +212,7 @@ class McpClient {
     const authInfo = tokenAuth
       ? {
           userId: tokenAuth.userId,
-          authMethod: deriveAuthMethodFromTokenAuth(tokenAuth),
+          authMethod: deriveAuthMethod(tokenAuth),
           externalIdentity: tokenAuth.externalIdentity ?? null,
         }
       : undefined;
@@ -1525,20 +1525,6 @@ class McpClient {
     this.activeConnections.clear();
     this.pendingHttpSessionMetadata.clear();
   }
-}
-
-/**
- * Derive a human-readable auth method string from token auth context.
- * Kept here to avoid circular imports with mcp-gateway.utils.ts.
- */
-function deriveAuthMethodFromTokenAuth(
-  tokenAuth: TokenAuthContext,
-): MCPGatewayAuthMethod {
-  if (tokenAuth.isExternalIdp) return "external_idp";
-  if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
-  if (tokenAuth.isUserToken) return "user_token";
-  if (tokenAuth.isOrganizationToken) return "org_token";
-  return "team_token";
 }
 
 /**

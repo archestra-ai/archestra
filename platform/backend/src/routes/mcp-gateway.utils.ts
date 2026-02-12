@@ -41,24 +41,12 @@ import { jwksValidator } from "@/services/jwks-validator";
 import {
   type CommonToolCall,
   type ExternalIdentity,
-  type MCPGatewayAuthMethod,
   UuidIdSchema,
 } from "@/types";
+import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
-/**
- * Derive a human-readable auth method string from token auth context
- */
-export function deriveAuthMethod(
-  tokenAuth: TokenAuthResult | TokenAuthContext | undefined,
-): MCPGatewayAuthMethod | undefined {
-  if (!tokenAuth) return undefined;
-  if (tokenAuth.isExternalIdp) return "external_idp";
-  if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
-  if (tokenAuth.isUserToken) return "user_token";
-  if (tokenAuth.isOrganizationToken) return "org_token";
-  return "team_token";
-}
+export { deriveAuthMethod };
 
 /**
  * Token authentication result
@@ -819,7 +807,13 @@ function parseJsonField<T>(value: unknown): T | null {
   return null;
 }
 
-/** Cache for OIDC discovery results (issuer → jwks_uri) */
+/**
+ * Cache for OIDC discovery results (issuer → jwks_uri).
+ * Bounded to MAX_OIDC_DISCOVERY_CACHE_SIZE entries with LRU-style eviction
+ * (oldest entry removed when full). In practice this cache is very small —
+ * entries correspond to configured SSO providers, not user-controlled input.
+ */
+const MAX_OIDC_DISCOVERY_CACHE_SIZE = 100;
 const oidcDiscoveryCache = new Map<string, string>();
 
 /**
@@ -853,6 +847,11 @@ async function discoverJwksUrl(issuerUrl: string): Promise<string | null> {
       return null;
     }
 
+    // Evict oldest entry if cache is full
+    if (oidcDiscoveryCache.size >= MAX_OIDC_DISCOVERY_CACHE_SIZE) {
+      const oldestKey = oidcDiscoveryCache.keys().next().value;
+      if (oldestKey) oidcDiscoveryCache.delete(oldestKey);
+    }
     oidcDiscoveryCache.set(issuerUrl, jwksUri);
     return jwksUri;
   } catch (error) {

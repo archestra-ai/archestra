@@ -21,6 +21,7 @@ export interface JwksValidationResult {
  * - Key selection by kid (Key ID) header
  */
 class JwksValidator {
+  private static readonly MAX_CACHE_SIZE = 100;
   private jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
   /**
@@ -60,11 +61,17 @@ class JwksValidator {
         rawClaims: payload as Record<string, unknown>,
       };
     } catch (error) {
-      logger.debug(
-        {
-          issuerUrl,
-          error: error instanceof Error ? error.message : String(error),
-        },
+      const message = error instanceof Error ? error.message : String(error);
+      // Expected validation failures (expired, bad signature) log at debug;
+      // unexpected errors (network, malformed key) log at warn.
+      const isExpected =
+        message.includes("expired") ||
+        message.includes("signature") ||
+        message.includes("JWS") ||
+        message.includes("JWT");
+      const level = isExpected ? "debug" : "warn";
+      logger[level](
+        { issuerUrl, error: message },
         "JWKS JWT validation failed",
       );
       return null;
@@ -83,6 +90,11 @@ class JwksValidator {
   ): ReturnType<typeof createRemoteJWKSet> {
     let jwks = this.jwksCache.get(jwksUrl);
     if (!jwks) {
+      // Evict oldest entry if cache is full
+      if (this.jwksCache.size >= JwksValidator.MAX_CACHE_SIZE) {
+        const oldestKey = this.jwksCache.keys().next().value;
+        if (oldestKey) this.jwksCache.delete(oldestKey);
+      }
       jwks = createRemoteJWKSet(new URL(jwksUrl));
       this.jwksCache.set(jwksUrl, jwks);
     }

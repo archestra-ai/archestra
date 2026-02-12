@@ -10,11 +10,18 @@ on:
   issues:
     types: [opened]
 
+permissions: {}
+
 jobs:
+  check-author:
+    uses: ./.github/workflows/check-core-team.yml
+    with:
+      username: ${{ github.event.issue.user.login }}
+
   triage-issue:
-    # Skip issues from bots or repo members/collaborators (only triage external users)
+    needs: check-author
     if: |
-      !contains(fromJson('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.issue.author_association) &&
+      needs.check-author.outputs.is_core_team_member != 'true' &&
       github.event.issue.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 10

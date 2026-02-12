@@ -10,11 +10,18 @@ on:
   pull_request_target: # zizmor: ignore[dangerous-triggers] safe: checks out base repo (not PR code), Claude restricted to GitHub MCP tools only (no bash/file editing)
     types: [opened]
 
+permissions: {}
+
 jobs:
+  check-author:
+    uses: ./.github/workflows/check-core-team.yml
+    with:
+      username: ${{ github.event.pull_request.user.login }}
+
   triage-pr:
-    # Skip PRs from bots or repo members/collaborators (only triage external contributors)
+    needs: check-author
     if: |
-      !contains(fromJson('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association) &&
+      needs.check-author.outputs.is_core_team_member != 'true' &&
       github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 10

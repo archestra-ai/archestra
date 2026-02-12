@@ -651,7 +651,11 @@ export async function waitForServerInstallation(
  * credentials grant (direct access grant).
  */
 export async function getKeycloakJwt(): Promise<string> {
-  const response = await fetch(KEYCLOAK_OIDC.tokenEndpoint, {
+  // Use KEYCLOAK_EXTERNAL_URL because this runs from the Playwright test container
+  // (outside K8s), not from the backend. KEYCLOAK_OIDC.tokenEndpoint uses K8s internal
+  // DNS which is not resolvable from the test container.
+  const tokenUrl = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
+  const response = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({

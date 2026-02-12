@@ -84,8 +84,8 @@ keycloak:
 mcpServerJwks:
   enabled: true
   image:
-    repository: mcp-server-jwks-keycloak
-    tag: "latest"
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
+    tag: "0.0.1"
     pullPolicy: IfNotPresent
   # JWT audience claim the server expects (must match Keycloak client's audience mapper)
   jwtAudience: "archestra-oidc"

@@ -213,13 +213,11 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const healthResponse = await request.get(
       `${MCP_SERVER_JWKS_EXTERNAL_URL}/health`,
     );
-    if (!healthResponse.ok()) {
-      test.skip(
-        true,
-        "MCP server JWKS not available - skipping JWT rejection test",
-      );
-      return;
-    }
+    expect(
+      healthResponse.ok(),
+      `MCP server JWKS not reachable at ${MCP_SERVER_JWKS_EXTERNAL_URL}/health. ` +
+        "Ensure the mcp-server-jwks-keycloak image is built and deployed via e2e Helm chart.",
+    ).toBeTruthy();
 
     // Get a valid JWT (we'll create a profile WITHOUT an IdP,
     // then use an org token — the upstream server will reject it

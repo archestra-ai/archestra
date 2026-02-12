@@ -11,11 +11,15 @@ on:
     types: [opened]
 
 jobs:
+  check-author:
+    uses: ./.github/workflows/check-core-team.yml
+    with:
+      username: ${{ github.event.pull_request.user.login }}
+      user_type: ${{ github.event.pull_request.user.type }}
+
   triage-pr:
-    # Skip PRs from bots or repo members/collaborators (only triage external contributors)
-    if: |
-      !contains(fromJson('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association) &&
-      github.event.pull_request.user.type != 'Bot'
+    needs: check-author
+    if: needs.check-author.outputs.should_triage == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

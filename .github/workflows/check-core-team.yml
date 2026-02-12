@@ -1,0 +1,60 @@
+# Reusable workflow to check if a GitHub user is a core team member.
+# Used by triage workflows to skip triaging PRs/issues from known team members,
+# since author_association can be unreliable in webhook payloads.
+name: Check Core Team Membership
+
+on:
+  workflow_call:
+    inputs:
+      username:
+        description: "GitHub username to check"
+        required: true
+        type: string
+      user_type:
+        description: "GitHub user type (User, Bot, etc.)"
+        required: true
+        type: string
+    outputs:
+      should_triage:
+        description: "Whether the user should be triaged (true = external contributor)"
+        value: ${{ jobs.check.outputs.should_triage }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    outputs:
+      should_triage: ${{ steps.check.outputs.should_triage }}
+    steps:
+      - name: Check if author is core team member or bot
+        id: check
+        env:
+          USERNAME: ${{ inputs.username }}
+          USER_TYPE: ${{ inputs.user_type }}
+        run: |
+          # Maintain this list when team members join or leave
+          CORE_TEAM=(
+            "brojd"
+            "iskhakov"
+            "joeyorlando"
+            "Konstantinov-Innokentii"
+            "Matvey-Kuk"
+          )
+
+          if [[ "$USER_TYPE" == "Bot" ]]; then
+            echo "Skipping bot user: $USERNAME"
+            echo "should_triage=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for member in "${CORE_TEAM[@]}"; do
+            if [[ "$USERNAME" == "$member" ]]; then
+              echo "Skipping core team member: $USERNAME"
+              echo "should_triage=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          echo "External contributor: $USERNAME"
+          echo "should_triage=true" >> "$GITHUB_OUTPUT"

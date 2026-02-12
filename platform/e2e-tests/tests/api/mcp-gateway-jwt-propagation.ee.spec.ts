@@ -86,9 +86,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       catalogId = catalogItem.id;
 
       // STEP 5: Install the MCP server (creates an mcp_server record)
+      // Pass the JWT as accessToken so the backend can authenticate with
+      // the upstream server during tool discovery (it requires JWT auth)
       const installResponse = await installMcpServer(request, {
         name: catalogName,
         catalogId,
+        accessToken: jwt,
       });
       const mcpServer = await installResponse.json();
       serverId = mcpServer.id;
@@ -219,9 +222,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         "Ensure the mcp-server-jwks-keycloak image is built and deployed via e2e Helm chart.",
     ).toBeTruthy();
 
-    // Get a valid JWT (we'll create a profile WITHOUT an IdP,
-    // then use an org token — the upstream server will reject it
-    // because it's not a valid Keycloak JWT)
+    // Get a valid JWT for server installation (tool discovery requires auth),
+    // but later use an org token for the tool call — the upstream server
+    // will reject it because it's not a valid Keycloak JWT
+    const jwt = await getKeycloakJwt();
+    expect(jwt).toBeTruthy();
+
     const providerName = `JwtReject${Date.now()}`;
     const identityProviderId = await createIdentityProvider(
       request,
@@ -244,9 +250,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       const catalogItem = await catalogResponse.json();
       catalogId = catalogItem.id;
 
+      // Pass JWT as accessToken so the backend can authenticate during
+      // tool discovery (the upstream server requires JWT auth)
       const installResponse = await installMcpServer(request, {
         name: catalogName,
         catalogId,
+        accessToken: jwt,
       });
       const mcpServer = await installResponse.json();
       serverId = mcpServer.id;

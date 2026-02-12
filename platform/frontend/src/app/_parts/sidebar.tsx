@@ -20,6 +20,7 @@ import {
   Slack,
   Star,
   Wrench,
+  Zap,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -51,6 +52,7 @@ interface MenuItem {
   title: string;
   url: string;
   icon: LucideIcon;
+  iconClassName?: string;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
@@ -98,6 +100,13 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       url: "/mcp-catalog/registry",
       icon: Router,
       customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
+    },
+    {
+      title: "Agent Triggers",
+      url: "/agent-triggers/ms-teams",
+      icon: Zap,
+      customIsActive: (pathname: string) =>
+        pathname.startsWith("/agent-triggers"),
     },
     {
       title: "Cost & Limits",
@@ -223,7 +232,7 @@ const MainSideBarSection = ({
                   }
                 >
                   <Link href={item.url}>
-                    <item.icon />
+                    <item.icon className={item.iconClassName} />
                     <span>{item.title}</span>
                   </Link>
                 </SidebarMenuButton>

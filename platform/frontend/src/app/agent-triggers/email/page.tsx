@@ -4,14 +4,12 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Mail,
   RefreshCw,
   Trash2,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { EmailNotConfiguredMessage } from "@/components/email-not-configured-message";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +23,7 @@ import {
   useSetupIncomingEmailWebhook,
 } from "@/lib/incoming-email.query";
 
-export default function IncomingEmailSettingsPage() {
+export default function EmailPage() {
   const { data: features, isLoading: featuresLoading } = useFeatures();
   const { data: status, isLoading: statusLoading } = useIncomingEmailStatus();
   const setupMutation = useSetupIncomingEmailWebhook();
@@ -38,29 +36,35 @@ export default function IncomingEmailSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-lg text-muted-foreground">Loading...</p>
+      <div className="flex items-center justify-center h-32">
+        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
   }
 
-  // Check if incoming email feature is enabled
   const emailInfo = features?.incomingEmail;
   if (!emailInfo?.enabled) {
     return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              Incoming Email
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EmailNotConfiguredMessage />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Email is not configured</p>
+            <p className="text-sm text-muted-foreground">
+              See the{" "}
+              <Link
+                href="https://archestra.ai/docs/platform-agents#incoming-email"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                setup guide
+                <ExternalLink className="h-3 w-3" />
+              </Link>{" "}
+              for supported email providers and configuration.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -101,7 +105,7 @@ export default function IncomingEmailSettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* How It Works Card */}
       <Card>
         <CardHeader>
@@ -142,10 +146,7 @@ export default function IncomingEmailSettingsPage() {
       {/* Provider Info Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Email Provider
-          </CardTitle>
+          <CardTitle>Email Provider</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-sm font-mono bg-muted p-3 rounded space-y-1">

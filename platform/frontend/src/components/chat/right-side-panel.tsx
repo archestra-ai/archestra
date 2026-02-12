@@ -21,7 +21,7 @@ interface RightSidePanelProps {
   /** Whether Playwright MCP tools are available */
   hasPlaywrightMcpTools?: boolean;
   /** Whether Playwright MCP server is installed (but tools may not be assigned) */
-  isPlaywrightInstalled?: boolean;
+  isPlaywrightInstalledByCurrentUser?: boolean;
   /** Whether tools are being assigned to the agent */
   isAssigningTools?: boolean;
   /** Called to install browser (Playwright MCP) */
@@ -53,7 +53,7 @@ export function RightSidePanel({
   conversationId,
   isInstallingBrowser = false,
   hasPlaywrightMcpTools = false,
-  isPlaywrightInstalled = false,
+  isPlaywrightInstalledByCurrentUser = false,
   isAssigningTools = false,
   onInstallBrowser,
   onAssignToolsToAgent,
@@ -205,7 +205,9 @@ export function RightSidePanel({
             conversationId={conversationId}
             isInstallingBrowser={isInstallingBrowser}
             hasPlaywrightMcpTools={hasPlaywrightMcpTools}
-            isPlaywrightInstalled={isPlaywrightInstalled}
+            isPlaywrightInstalledByCurrentUser={
+              isPlaywrightInstalledByCurrentUser
+            }
             isAssigningTools={isAssigningTools}
             onInstallBrowser={onInstallBrowser}
             onAssignToolsToAgent={onAssignToolsToAgent}

@@ -714,6 +714,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatOpsBinding]: {
     organization: ["update"],
   },
+  [RouteId.UpdateChatOpsBinding]: {
+    organization: ["update"],
+  },
+  [RouteId.UpdateChatOpsConfigInQuickstart]: {
+    organization: ["update"],
+  },
 };
 
 /**
@@ -792,7 +798,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/secrets": {
     organization: ["update"],
   },
-  "/settings/incoming-email": {
+  // Agent Triggers
+  "/agent-triggers/ms-teams": {
+    organization: ["update"],
+  },
+  "/agent-triggers/email": {
     organization: ["update"],
   },
 

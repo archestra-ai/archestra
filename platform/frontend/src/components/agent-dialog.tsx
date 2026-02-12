@@ -34,7 +34,7 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { EmailNotConfiguredMessage } from "@/components/email-not-configured-message";
+import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -839,9 +839,7 @@ export function AgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const configuredChatopsProviders = chatopsProviders.filter(
-    (provider) => provider.configured,
-  );
+  const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1196,27 +1194,29 @@ export function AgentDialog({
 
             {/* Agent Trigger Rules (Agent only) */}
             {isInternalAgent && (
-              <div className="space-y-2">
-                <Label>Agent Trigger Rules</Label>
-                {configuredChatopsProviders.length > 0 ? (
-                  <div className="space-y-3 pt-1">
-                    {configuredChatopsProviders.map((provider) => (
-                      <div
-                        key={provider.id}
-                        className="flex items-center justify-between"
-                      >
-                        <div className="space-y-0.5">
-                          <label
-                            htmlFor={`chatops-${provider.id}`}
-                            className="text-sm cursor-pointer"
-                          >
-                            {provider.displayName}
-                          </label>
-                          <p className="text-xs text-muted-foreground">
-                            Allow this agent to be triggered via{" "}
-                            {provider.displayName}
-                          </p>
-                        </div>
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold">Agent Trigger Rules</h3>
+
+                {/* ChatOps */}
+                <div className="space-y-3">
+                  {chatopsProviders.map((provider) => (
+                    <div
+                      key={provider.id}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="space-y-0.5">
+                        <label
+                          htmlFor={`chatops-${provider.id}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {provider.displayName}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          Allow this agent to be triggered via{" "}
+                          {provider.displayName}
+                        </p>
+                      </div>
+                      {provider.configured ? (
                         <Switch
                           id={`chatops-${provider.id}`}
                           checked={allowedChatops.includes(provider.id)}
@@ -1235,39 +1235,33 @@ export function AgentDialog({
                             }
                           }}
                         />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No integrations configured. You can integrate with{" "}
-                    <a
-                      href="https://archestra.ai/docs/platform-agents#chatops-microsoft-teams"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline hover:no-underline"
-                    >
-                      Microsoft Teams
-                    </a>{" "}
-                    to trigger agents from chat messages.
-                  </p>
-                )}
-              </div>
-            )}
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMsTeamsSetupOpen(true)}
+                        >
+                          Setup MS Teams
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <MsTeamsSetupDialog
+                  open={msTeamsSetupOpen}
+                  onOpenChange={setMsTeamsSetupOpen}
+                />
 
-            {/* Email Invocation (Agent only) */}
-            {isInternalAgent && (
-              <div className="space-y-2">
-                <Label>Email Invocation</Label>
+                {/* Email */}
                 {features?.incomingEmail?.enabled ? (
-                  <div className="border rounded-lg bg-muted/30 p-4 space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <label
                           htmlFor="incoming-email-enabled"
-                          className="text-sm font-medium cursor-pointer"
+                          className="text-sm cursor-pointer"
                         >
-                          Enable email invocation
+                          Email
                         </label>
                         <p className="text-xs text-muted-foreground">
                           Allow this agent to be triggered via email
@@ -1386,8 +1380,21 @@ export function AgentDialog({
                     )}
                   </div>
                 ) : (
-                  <div className="border rounded-lg bg-muted/30 p-4">
-                    <EmailNotConfiguredMessage />
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-sm">Email</span>
+                      <p className="text-xs text-muted-foreground">
+                        Allow this agent to be triggered via email
+                      </p>
+                    </div>
+                    <a
+                      href="https://archestra.ai/docs/platform-agents#incoming-email"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary underline hover:no-underline"
+                    >
+                      Setup docs
+                    </a>
                   </div>
                 )}
               </div>

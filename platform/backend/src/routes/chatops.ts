@@ -9,6 +9,7 @@ import {
 } from "@/agents/chatops/constants";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -22,7 +23,10 @@ import {
   ChatOpsProviderTypeSchema,
   type IncomingChatMessage,
 } from "@/types/chatops";
-import { ChatOpsChannelBindingResponseSchema } from "@/types/chatops-channel-binding";
+import {
+  ChatOpsChannelBindingResponseSchema,
+  UpdateChatOpsChannelBindingSchema,
+} from "@/types/chatops-channel-binding";
 
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -302,6 +306,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
+            // Fire-and-forget: refresh channel/workspace names if changed
+            refreshBindingNames(context, binding, message).catch(() => {});
+
             // Process message through bound agent
             await chatOpsManager.processMessage({
               message,
@@ -345,6 +352,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 id: z.string(),
                 displayName: z.string(),
                 configured: z.boolean(),
+                credentials: z
+                  .object({
+                    appId: z.string(),
+                    appSecret: z.string(),
+                    tenantId: z.string(),
+                  })
+                  .optional(),
               }),
             ),
           }),
@@ -422,6 +436,102 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success: true });
     },
   );
+
+  /**
+   * Update a channel binding's agent assignment
+   */
+  fastify.patch(
+    "/api/chatops/bindings/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateChatOpsBinding,
+        description: "Update a chatops channel binding",
+        tags: ["ChatOps"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        body: UpdateChatOpsChannelBindingSchema,
+        response: constructResponseSchema(ChatOpsChannelBindingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const existing = await ChatOpsChannelBindingModel.findByIdAndOrganization(
+        id,
+        request.organizationId,
+      );
+
+      if (!existing) {
+        throw new ApiError(404, "Binding not found");
+      }
+
+      const updated = await ChatOpsChannelBindingModel.update(id, request.body);
+
+      if (!updated) {
+        throw new ApiError(500, "Failed to update binding");
+      }
+
+      return reply.send({
+        ...updated,
+        createdAt: updated.createdAt.toISOString(),
+        updatedAt: updated.updatedAt.toISOString(),
+      });
+    },
+  );
+
+  /**
+   * Update MS Teams chatops config in quickstart mode.
+   * Mutates in-memory config and reinitializes the chatops manager.
+   */
+  fastify.put(
+    "/api/chatops/config/ms-teams",
+    {
+      schema: {
+        operationId: RouteId.UpdateChatOpsConfigInQuickstart,
+        description:
+          "Update MS Teams chatops configuration (quickstart mode only)",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          appId: z.string().min(1).max(256).optional(),
+          appSecret: z.string().min(1).max(512).optional(),
+          tenantId: z.string().min(1).max(256).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (config.production && !config.isQuickstart) {
+        throw new ApiError(
+          403,
+          "Only available in quickstart or local development mode. Forbidden in production.",
+        );
+      }
+
+      const { enabled, appId, appSecret, tenantId } = request.body;
+
+      if (enabled !== undefined) {
+        config.chatops.msTeams.enabled = enabled;
+      }
+      if (appId !== undefined) {
+        config.chatops.msTeams.appId = appId;
+        config.chatops.msTeams.graph.clientId = appId;
+      }
+      if (appSecret !== undefined) {
+        config.chatops.msTeams.appSecret = appSecret;
+        config.chatops.msTeams.graph.clientSecret = appSecret;
+      }
+      if (tenantId !== undefined) {
+        config.chatops.msTeams.tenantId = tenantId;
+        config.chatops.msTeams.graph.tenantId = tenantId;
+      }
+
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default chatopsRoutes;
@@ -449,18 +559,31 @@ function getProviderInfo(providerType: ChatOpsProviderType): {
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
+  credentials?: { appId: string; appSecret: string; tenantId: string };
 } {
   switch (providerType) {
     case "ms-teams": {
       const provider = chatOpsManager.getMSTeamsProvider();
+      const { appId, appSecret, tenantId } = config.chatops.msTeams;
       return {
         id: "ms-teams",
         displayName: "Microsoft Teams",
         configured: provider?.isConfigured() ?? false,
+        credentials: {
+          appId: maskValue(appId),
+          appSecret: appSecret ? "••••••••" : "",
+          tenantId: maskValue(tenantId),
+        },
       };
     }
     // When adding new providers, TypeScript will error here until handled
   }
+}
+
+function maskValue(value: string): string {
+  if (!value) return "";
+  if (value.length <= 3) return "•".repeat(value.length);
+  return value.slice(0, 3) + "•".repeat(Math.min(value.length - 3, 8));
 }
 
 /**
@@ -659,12 +782,20 @@ async function handleAgentSelection(
     "[ChatOps] handleAgentSelection: about to upsert binding",
   );
 
+  // Resolve human-readable channel/workspace names (best-effort)
+  const resolvedNames = await resolveTeamsNames(
+    context,
+    channelId || message.channelId,
+  );
+
   // Create or update the binding
   await ChatOpsChannelBindingModel.upsertByChannel({
     organizationId,
     provider: "ms-teams",
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
+    channelName: resolvedNames.channelName,
+    workspaceName: resolvedNames.workspaceName,
     agentId,
   });
 
@@ -694,6 +825,7 @@ async function handleAgentSelection(
         threadId: message.threadId,
         senderId: message.senderId,
         senderName: message.senderName,
+        senderEmail: message.senderEmail,
         text: originalMessageText,
         rawText: originalMessageText,
         timestamp: message.timestamp,
@@ -782,9 +914,10 @@ async function resolveAndVerifySender(
 
   const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
-    logger.warn(
+    logger.warn("[ChatOps] Sender is not a registered Archestra user");
+    logger.debug(
       { senderEmail: message.senderEmail },
-      "[ChatOps] Sender is not a registered Archestra user",
+      "[ChatOps] Unregistered sender email",
     );
     await context.sendActivity(
       `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
@@ -793,6 +926,72 @@ async function resolveAndVerifySender(
   }
 
   return true;
+}
+
+/**
+ * Resolve human-readable channel and workspace names via TeamsInfo.
+ * Returns undefined for names that cannot be resolved — callers treat these as best-effort.
+ */
+async function resolveTeamsNames(
+  context: TurnContext,
+  targetChannelId: string,
+): Promise<{ channelName?: string; workspaceName?: string }> {
+  let channelName: string | undefined;
+  let workspaceName: string | undefined;
+
+  try {
+    const teamDetails = await TeamsInfo.getTeamDetails(context);
+    workspaceName = teamDetails?.name ?? undefined;
+  } catch {
+    /* non-fatal */
+  }
+
+  try {
+    const channels = await TeamsInfo.getTeamChannels(context);
+    const matched = channels?.find((c) => c.id === targetChannelId);
+    channelName = matched?.name ?? undefined;
+  } catch {
+    /* non-fatal */
+  }
+
+  return { channelName, workspaceName };
+}
+
+/**
+ * Refresh channel/workspace display names on a binding if they have changed.
+ * Called fire-and-forget on every incoming message so names stay up-to-date.
+ */
+async function refreshBindingNames(
+  context: TurnContext,
+  binding: {
+    id: string;
+    channelId: string;
+    channelName: string | null;
+    workspaceName: string | null;
+  },
+  message: IncomingChatMessage,
+): Promise<void> {
+  try {
+    const resolved = await resolveTeamsNames(context, message.channelId);
+
+    const namesDiffer =
+      (resolved.channelName !== undefined &&
+        resolved.channelName !== binding.channelName) ||
+      (resolved.workspaceName !== undefined &&
+        resolved.workspaceName !== binding.workspaceName);
+
+    if (namesDiffer) {
+      await ChatOpsChannelBindingModel.updateNames(binding.id, {
+        channelName: resolved.channelName,
+        workspaceName: resolved.workspaceName,
+      });
+    }
+  } catch (error) {
+    logger.debug(
+      { error: error instanceof Error ? error.message : String(error) },
+      "[ChatOps] Failed to refresh binding names",
+    );
+  }
 }
 
 /**

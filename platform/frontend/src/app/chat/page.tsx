@@ -427,7 +427,7 @@ export default function ChatPage() {
   // Check if Playwright MCP is available for browser panel and get install function
   const {
     hasPlaywrightMcpTools,
-    isPlaywrightInstalled,
+    isPlaywrightInstalledByCurrentUser,
     reinstallRequired,
     installationFailed,
     playwrightServerId,
@@ -1321,7 +1321,7 @@ export default function ChatPage() {
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
         hasPlaywrightMcpTools={hasPlaywrightMcpTools}
-        isPlaywrightInstalled={isPlaywrightInstalled}
+        isPlaywrightInstalledByCurrentUser={isPlaywrightInstalledByCurrentUser}
         isAssigningTools={isAssigningTools}
         onInstallBrowser={
           browserToolsAgentId

@@ -606,11 +606,11 @@ export function useHasPlaywrightMcpTools(
       (tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID,
     ) ?? false;
 
-  const isPlaywrightInstalled = !!playwrightServer;
+  const isPlaywrightInstalledByCurrentUser = !!playwrightServer;
 
   return {
     hasPlaywrightMcpTools,
-    isPlaywrightInstalled,
+    isPlaywrightInstalledByCurrentUser,
     reinstallRequired: playwrightServer?.reinstallRequired ?? false,
     installationFailed: playwrightServer?.localInstallationStatus === "error",
     playwrightServerId: playwrightServer?.id,

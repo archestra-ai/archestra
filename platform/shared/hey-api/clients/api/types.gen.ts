@@ -14125,6 +14125,11 @@ export type GetChatOpsStatusResponses = {
             id: string;
             displayName: string;
             configured: boolean;
+            credentials?: {
+                appId: string;
+                appSecret: string;
+                tenantId: string;
+            };
         }>;
     };
 };
@@ -14207,6 +14212,8 @@ export type ListChatOpsBindingsResponses = {
         provider: 'ms-teams';
         channelId: string;
         workspaceId: string | null;
+        channelName: string | null;
+        workspaceName: string | null;
         agentId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -14293,6 +14300,178 @@ export type DeleteChatOpsBindingResponses = {
 };
 
 export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
+
+export type UpdateChatOpsBindingData = {
+    body?: {
+        agentId?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chatops/bindings/{id}';
+};
+
+export type UpdateChatOpsBindingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatOpsBindingError = UpdateChatOpsBindingErrors[keyof UpdateChatOpsBindingErrors];
+
+export type UpdateChatOpsBindingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        provider: 'ms-teams';
+        channelId: string;
+        workspaceId: string | null;
+        channelName: string | null;
+        workspaceName: string | null;
+        agentId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatOpsBindingResponse = UpdateChatOpsBindingResponses[keyof UpdateChatOpsBindingResponses];
+
+export type UpdateChatOpsConfigInQuickstartData = {
+    body?: {
+        enabled?: boolean;
+        appId?: string;
+        appSecret?: string;
+        tenantId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ms-teams';
+};
+
+export type UpdateChatOpsConfigInQuickstartErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatOpsConfigInQuickstartError = UpdateChatOpsConfigInQuickstartErrors[keyof UpdateChatOpsConfigInQuickstartErrors];
+
+export type UpdateChatOpsConfigInQuickstartResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UpdateChatOpsConfigInQuickstartResponse = UpdateChatOpsConfigInQuickstartResponses[keyof UpdateChatOpsConfigInQuickstartResponses];
 
 export type CohereChatWithDefaultAgentData = {
     body?: CohereChatRequestInput;
@@ -15187,6 +15366,14 @@ export type GetFeaturesResponses = {
         };
         mcpServerBaseImage: string;
         orchestratorK8sNamespace: string;
+        isQuickstart: boolean;
+        ngrokDomain: string;
+        chatops: {
+            msTeamsEnabled: boolean;
+            msTeamsAppId: boolean;
+            msTeamsAppSecret: boolean;
+            msTeamsTenantId: boolean;
+        };
     };
 };
 

@@ -122,6 +122,11 @@ export class ChatOpsManager {
     this.startProcessedMessageCleanup();
   }
 
+  async reinitialize(): Promise<void> {
+    await this.cleanup();
+    await this.initialize();
+  }
+
   async cleanup(): Promise<void> {
     if (this.msTeamsProvider) {
       await this.msTeamsProvider.cleanup();

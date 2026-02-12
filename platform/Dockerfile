@@ -169,6 +169,15 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
 
+# Install ngrok for optional tunneling (used with ARCHESTRA_NGROK_AUTH_TOKEN)
+ARG TARGETARCH
+RUN NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${TARGETARCH}.tgz" && \
+    wget -qO /tmp/ngrok.tgz "${NGROK_URL}" && \
+    tar -xzf /tmp/ngrok.tgz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/ngrok && \
+    ngrok version && \
+    rm -f /tmp/ngrok.tgz
+
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
 RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main && \
@@ -549,6 +558,73 @@ awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=
 # Propagate analytics setting to frontend (enabled by default, set to "disabled" to opt-out)
 if [ -n "$ARCHESTRA_ANALYTICS" ]; then
   sed -i "s|environment=\(.*\)|environment=\1,NEXT_PUBLIC_ARCHESTRA_ANALYTICS=\"${ARCHESTRA_ANALYTICS}\"|g" /etc/supervisord.conf
+fi
+
+# Configure ngrok tunnel if auth token is provided
+if [ -n "$ARCHESTRA_NGROK_AUTH_TOKEN" ]; then
+    echo "ngrok auth token detected - enabling tunnel to port 3000"
+    ngrok config add-authtoken "$ARCHESTRA_NGROK_AUTH_TOKEN"
+
+    # Build ngrok command with optional static domain
+    if [ -n "$ARCHESTRA_NGROK_DOMAIN" ]; then
+        NGROK_CMD="ngrok http 3000 --log=stdout --log-format=term --domain=${ARCHESTRA_NGROK_DOMAIN}"
+        echo "Using custom ngrok domain: ${ARCHESTRA_NGROK_DOMAIN}"
+    else
+        NGROK_CMD="ngrok http 3000 --log=stdout --log-format=term"
+    fi
+
+    # Append ngrok program to supervisord config
+    cat >> /etc/supervisord.conf <<NGROK_CONF
+
+[program:ngrok]
+command=/bin/sh -c "sleep 10 && ${NGROK_CMD}"
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=25
+NGROK_CONF
+
+    # If no explicit domain, detect the dynamically assigned ngrok domain
+    # after ngrok starts. Write it to a file so the backend can read it.
+    if [ -z "$ARCHESTRA_NGROK_DOMAIN" ]; then
+        cat > /app/detect-ngrok-domain.sh <<'DETECT_SCRIPT'
+#!/bin/sh
+# Poll ngrok API to discover the dynamically assigned tunnel URL
+for i in $(seq 1 30); do
+    NGROK_RESPONSE=$(wget -qO- http://localhost:4040/api/tunnels 2>/dev/null || true)
+    if [ -n "$NGROK_RESPONSE" ]; then
+        TUNNEL_URL=$(echo "$NGROK_RESPONSE" | sed -n 's/.*"public_url":"\([^"]*\)".*/\1/p' | head -1)
+        if [ -n "$TUNNEL_URL" ]; then
+            # Extract domain from URL (remove https:// prefix)
+            NGROK_DOMAIN=$(echo "$TUNNEL_URL" | sed 's|https://||')
+            echo "Detected ngrok domain: ${NGROK_DOMAIN}"
+            echo "$NGROK_DOMAIN" > /app/data/.ngrok_domain
+            exit 0
+        fi
+    fi
+    sleep 1
+done
+echo "Warning: Could not detect ngrok domain after 30 seconds"
+DETECT_SCRIPT
+        chmod +x /app/detect-ngrok-domain.sh
+
+        cat >> /etc/supervisord.conf <<DETECT_CONF
+
+[program:detect-ngrok-domain]
+command=/bin/sh -c "sleep 15 && /app/detect-ngrok-domain.sh"
+autostart=true
+autorestart=false
+startsecs=0
+priority=26
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+DETECT_CONF
+    fi
 fi
 
 # Add startup banner to supervisord (sleeps 12s to ensure it prints after Next.js logs)

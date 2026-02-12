@@ -1,5 +1,5 @@
 {
-  "id": "a46e9fc6-690a-4ac2-8f5a-6ddbfbcdaadd",
+  "id": "b9206e9d-0302-46b1-b05a-3e0ad195196a",
   "prevId": "cf91fef9-0dc1-446c-a166-6dce5a25a924",
   "version": "7",
   "dialect": "postgresql",
@@ -519,12 +519,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "identity_provider_id": {
-          "name": "identity_provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -570,21 +564,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "agents_identity_provider_id_idx": {
-          "name": "agents_identity_provider_id_idx",
-          "columns": [
-            {
-              "expression": "identity_provider_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -594,19 +573,6 @@
           "tableTo": "chat_api_keys",
           "columnsFrom": [
             "llm_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_identity_provider_id_identity_provider_id_fk": {
-          "name": "agents_identity_provider_id_identity_provider_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "identity_provider",
-          "columnsFrom": [
-            "identity_provider_id"
           ],
           "columnsTo": [
             "id"
@@ -1311,6 +1277,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "channel_name": {
+          "name": "channel_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "workspace_name": {
+          "name": "workspace_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "agent_id": {
           "name": "agent_id",
           "type": "uuid",
@@ -1795,107 +1773,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.identity_provider": {
-      "name": "identity_provider",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "issuer": {
-          "name": "issuer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "oidc_config": {
-          "name": "oidc_config",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "saml_config": {
-          "name": "saml_config",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "role_mapping": {
-          "name": "role_mapping",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "team_sync_config": {
-          "name": "team_sync_config",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_id": {
-          "name": "provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "domain": {
-          "name": "domain",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "domain_verified": {
-          "name": "domain_verified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "identity_provider_user_id_user_id_fk": {
-          "name": "identity_provider_user_id_user_id_fk",
-          "tableFrom": "identity_provider",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "identity_provider_provider_id_unique": {
-          "name": "identity_provider_provider_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "provider_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3341,12 +3218,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "external_identity": {
-          "name": "external_identity",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -4759,6 +4630,107 @@
           "nullsNotDistinct": false,
           "columns": [
             "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sso_provider": {
+      "name": "sso_provider",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oidc_config": {
+          "name": "oidc_config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saml_config": {
+          "name": "saml_config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role_mapping": {
+          "name": "role_mapping",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_sync_config": {
+          "name": "team_sync_config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "domain": {
+          "name": "domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "domain_verified": {
+          "name": "domain_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "sso_provider_user_id_user_id_fk": {
+          "name": "sso_provider_user_id_user_id_fk",
+          "tableFrom": "sso_provider",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sso_provider_provider_id_unique": {
+          "name": "sso_provider_provider_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider_id"
           ]
         }
       },

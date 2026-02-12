@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
@@ -25,6 +25,8 @@ class ChatOpsChannelBindingModel {
         provider: input.provider,
         channelId: input.channelId,
         workspaceId: input.workspaceId ?? null,
+        channelName: input.channelName ?? null,
+        workspaceName: input.workspaceName ?? null,
         agentId: input.agentId,
       })
       .returning();
@@ -52,25 +54,7 @@ class ChatOpsChannelBindingModel {
         eq(schema.chatopsChannelBindingsTable.workspaceId, params.workspaceId),
       );
     } else {
-      // For null workspaceId, we need to check for null explicitly
-      // but Drizzle doesn't have a direct isNull, so we use raw SQL
-      const [binding] = await db
-        .select()
-        .from(schema.chatopsChannelBindingsTable)
-        .where(
-          and(
-            eq(schema.chatopsChannelBindingsTable.provider, params.provider),
-            eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
-          ),
-        )
-        .limit(1);
-
-      // Filter by null workspaceId in JS since it's an edge case
-      if (binding && binding.workspaceId === null) {
-        return binding as ChatOpsChannelBinding;
-      }
-
-      return null;
+      conditions.push(isNull(schema.chatopsChannelBindingsTable.workspaceId));
     }
 
     const [binding] = await db
@@ -165,6 +149,33 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Update channel and workspace display names (internal use only).
+   * Used by the name refresh mechanism — not exposed via API.
+   */
+  static async updateNames(
+    id: string,
+    names: { channelName?: string; workspaceName?: string },
+  ): Promise<ChatOpsChannelBinding | null> {
+    const setFields: Record<string, string> = {};
+    if (names.channelName !== undefined) {
+      setFields.channelName = names.channelName;
+    }
+    if (names.workspaceName !== undefined) {
+      setFields.workspaceName = names.workspaceName;
+    }
+
+    if (Object.keys(setFields).length === 0) return null;
+
+    const [binding] = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set(setFields)
+      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .returning();
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
    * Update a binding by channel (upsert pattern)
    * Creates if not exists, updates if exists
    */
@@ -183,6 +194,20 @@ class ChatOpsChannelBindingModel {
       });
       if (!updated) {
         throw new Error("Failed to update binding");
+      }
+      // Also update names if provided
+      if (
+        input.channelName !== undefined ||
+        input.workspaceName !== undefined
+      ) {
+        const namesUpdated = await ChatOpsChannelBindingModel.updateNames(
+          existing.id,
+          {
+            channelName: input.channelName ?? undefined,
+            workspaceName: input.workspaceName ?? undefined,
+          },
+        );
+        return namesUpdated ?? updated;
       }
       return updated;
     }

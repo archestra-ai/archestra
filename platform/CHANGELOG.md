@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.43](https://github.com/archestra-ai/archestra/compare/platform-v1.0.42...platform-v1.0.43) (2026-02-12)
+
+
+### Bug Fixes
+
+* do not rely on model name in a2a executor ([#2758](https://github.com/archestra-ai/archestra/issues/2758)) ([22cc91c](https://github.com/archestra-ai/archestra/commit/22cc91c2736fcb41e4154c3cca2f1ae659ad5658))
+
 ## [1.0.42](https://github.com/archestra-ai/archestra/compare/platform-v1.0.41...platform-v1.0.42) (2026-02-10)
 
 

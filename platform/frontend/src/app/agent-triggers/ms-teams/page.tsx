@@ -4,12 +4,14 @@ import {
   CheckCircle2,
   Circle,
   ExternalLink,
+  Grip,
   Info,
+  MessageSquare,
   Pencil,
-  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { AgentDialog } from "@/components/agent-dialog";
 import { CopyButton } from "@/components/copy-button";
 import {
   DefaultAgentSetupDialog,
@@ -18,23 +20,23 @@ import {
 import Divider from "@/components/divider";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Table,
   TableBody,
@@ -44,15 +46,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
-  useDeleteChatOpsBinding,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
+import { cn } from "@/lib/utils";
 
 export default function MsTeamsPage() {
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
@@ -63,11 +71,23 @@ export default function MsTeamsPage() {
   const { data: features } = useFeatures();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const { data: bindings } = useChatOpsBindings();
+  const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
 
   const ngrokDomain = features?.ngrokDomain;
 
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
-  const hasBindings = !!bindings && bindings.length > 0;
+  const msTeamsAgentIds = new Set(
+    agents
+      ?.filter((a) =>
+        Array.isArray(a.allowedChatops)
+          ? a.allowedChatops.includes("ms-teams")
+          : false,
+      )
+      .map((a) => a.id) ?? [],
+  );
+  const hasBindings =
+    !!bindings &&
+    bindings.some((b) => b.agentId && msTeamsAgentIds.has(b.agentId));
 
   const localDevOrQuickstartFirstStep = (
     <SetupStep
@@ -121,12 +141,12 @@ export default function MsTeamsPage() {
       : prodFirstStep;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {/* Setup Section */}
-      <section className="flex flex-col gap-6">
+      <section className="flex flex-col gap-4">
         <div>
           <h2 className="text-lg font-semibold">Setup</h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1 text-xs">
             Connect Microsoft Teams so agents can receive and respond to
             messages.{" "}
             <Link
@@ -142,17 +162,15 @@ export default function MsTeamsPage() {
         </div>
         {firstStep}
         <SetupStep
-          title="Connect MS Teams"
-          description="Allow agents to be triggered via Teams"
+          title="Setup MS Teams"
+          description="Register a Teams bot application and and connect it to Archestra"
           done={!!msTeams?.configured}
           ctaLabel="Setup MS Teams"
           onAction={() => setMsTeamsSetupOpen(true)}
+          doneActionLabel="Reconfigure"
+          onDoneAction={() => setMsTeamsSetupOpen(true)}
         >
-          <p>
-            Register a Teams bot application and enter its credentials so
-            Archestra can receive and respond to messages.
-          </p>
-          <div className="flex items-center flex-wrap gap-4 pt-2">
+          <div className="flex items-center flex-wrap gap-4 ">
             <CredentialField
               label="App ID"
               value={msTeams?.credentials?.appId}
@@ -166,53 +184,17 @@ export default function MsTeamsPage() {
               value={msTeams?.credentials?.tenantId}
               optional
             />
-            {msTeams?.configured && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-7 text-foreground"
-                onClick={() => setMsTeamsSetupOpen(true)}
-              >
-                Reconfigure
-              </Button>
-            )}
           </div>
         </SetupStep>
         <SetupStep
-          title="Setup Agent to work with MS Teams"
-          description="Enable MS Teams on your agent and bind it to a channel"
+          title="Connect Agents to MS Teams channels"
+          description="Map your agents to Teams channels — each channel gets its own dedicated agent"
           done={hasBindings}
-          ctaLabel="Setup agent"
+          ctaLabel="Connect"
           onAction={() => setDefaultAgentDialogOpen(true)}
-        >
-          {hasBindings ? (
-            <p>
-              {bindings.length} channel{bindings.length === 1 ? "" : "s"} bound
-              to agents. View bindings below.
-            </p>
-          ) : (
-            <p>
-              Enable MS Teams in your agent&apos;s settings, bind it to Teams
-              channel and you are ready to go!
-            </p>
-          )}
-        </SetupStep>
-
-        {hasBindings && (
-          <div className="flex items-center justify-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-            <span className="text-sm font-medium text-green-700 dark:text-green-400">
-              MS Teams is ready to use
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setTryItOutDialogOpen(true)}
-            >
-              Try it out
-            </Button>
-          </div>
-        )}
+          doneActionLabel="Connect more"
+          onDoneAction={() => setDefaultAgentDialogOpen(true)}
+        />
       </section>
 
       <Divider />
@@ -243,16 +225,8 @@ export default function MsTeamsPage() {
 function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
-  const deleteMutation = useDeleteChatOpsBinding();
   const updateMutation = useUpdateChatOpsBinding();
 
-  const [editingBinding, setEditingBinding] = useState<{
-    id: string;
-    agentId: string | null;
-  } | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
-  const agentMap = new Map(agents?.map((a) => [a.id, a.name]) ?? []);
   const msTeamsAgents =
     agents?.filter((a) =>
       Array.isArray(a.allowedChatops)
@@ -260,100 +234,219 @@ function ChannelBindingsSection() {
         : false,
     ) ?? [];
 
-  const handleEdit = (bindingId: string, currentAgentId: string | null) => {
-    setEditingBinding({ id: bindingId, agentId: currentAgentId });
-  };
+  const [editingAgent, setEditingAgent] = useState<
+    (typeof msTeamsAgents)[number] | null
+  >(null);
 
-  const handleSaveEdit = () => {
-    if (!editingBinding) return;
-    updateMutation.mutate(
-      { id: editingBinding.id, agentId: editingBinding.agentId },
-      { onSuccess: () => setEditingBinding(null) },
+  // Map agentId → list of bindings
+  const bindingsByAgentId = new Map<string, typeof bindings>();
+  for (const b of bindings ?? []) {
+    if (!b.agentId) continue;
+    const list = bindingsByAgentId.get(b.agentId) ?? [];
+    list.push(b);
+    bindingsByAgentId.set(b.agentId, list);
+  }
+
+  // All known channels as MultiSelect items
+  const channelItems =
+    bindings?.map((b) => ({
+      value: b.id,
+      label: `${b.channelName ?? b.channelId}${b.workspaceName ? ` (${b.workspaceName})` : ""}`,
+    })) ?? [];
+
+  const handleChannelsChange = (agentId: string, selectedIds: string[]) => {
+    if (!bindings) return;
+
+    const currentBindingIds = new Set(
+      (bindingsByAgentId.get(agentId) ?? []).map((b) => b.id),
     );
-  };
 
-  const handleDelete = () => {
-    if (!deleteConfirmId) return;
-    deleteMutation.mutate(deleteConfirmId, {
-      onSuccess: () => setDeleteConfirmId(null),
-    });
+    // Newly added channels: assign this agent
+    for (const id of selectedIds) {
+      if (!currentBindingIds.has(id)) {
+        updateMutation.mutate({ id, agentId });
+      }
+    }
+
+    // Removed channels: unassign this agent
+    const selectedSet = new Set(selectedIds);
+    for (const id of currentBindingIds) {
+      if (!selectedSet.has(id)) {
+        updateMutation.mutate({ id, agentId: null });
+      }
+    }
   };
 
   return (
     <section className="flex flex-col gap-4 -mt-2">
       <div>
-        <h2 className="text-lg font-semibold">Channel Bindings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Each Teams channel is bound to an agent that handles incoming messages
-          by default. Use{" "}
+        <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             /select-agent
           </code>{" "}
-          in Teams to create bindings.
+          command in Teams to connect more Archestra Agents to a Teams channels.
         </p>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground py-4">
-          Loading bindings...
-        </p>
-      ) : bindings && bindings.length > 0 ? (
-        <div className="rounded-md border">
+        <p className="text-sm text-muted-foreground py-4">Loading...</p>
+      ) : msTeamsAgents.length > 0 ? (
+        <div className="rounded-md border [&_[data-slot=table-container]]:overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Channel</TableHead>
-                <TableHead>Workspace</TableHead>
-                <TableHead>Agent</TableHead>
-                <TableHead className="w-24">Actions</TableHead>
+                <TableHead className="w-[20%]">Agent</TableHead>
+                <TableHead className="w-[auto]">Channels</TableHead>
+                <TableHead className="w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bindings.map((binding) => (
-                <TableRow key={binding.id}>
-                  <TableCell className="text-sm">
-                    {binding.channelName ?? (
-                      <span className="font-mono text-xs">
-                        {binding.channelId}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {binding.workspaceName ?? (
-                      <span className="font-mono text-xs">
-                        {binding.workspaceId ?? "—"}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {binding.agentId
-                      ? (agentMap.get(binding.agentId) ?? "Unknown agent")
-                      : "No agent assigned"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() =>
-                          handleEdit(binding.id, binding.agentId ?? null)
+              {msTeamsAgents.map((agent) => {
+                const agentBindings = bindingsByAgentId.get(agent.id) ?? [];
+                const selectedIds = agentBindings.map((b) => b.id);
+                return (
+                  <TableRow key={agent.id}>
+                    <TableCell className="text-sm font-medium">
+                      {agent.name}
+                    </TableCell>
+                    <TableCell>
+                      <MultiSelect
+                        value={selectedIds}
+                        onValueChange={(ids) =>
+                          handleChannelsChange(agent.id, ids)
                         }
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteConfirmId(binding.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        items={channelItems}
+                        placeholder="No channels assigned"
+                        disabled={updateMutation.isPending}
+                      />
+                    </TableCell>
+                    <TableCell className="pr-4">
+                      <ButtonGroup>
+                        {agentBindings.length === 1 && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label="Open in Teams"
+                                  asChild
+                                >
+                                  <a
+                                    href={buildTeamsDeepLink(agentBindings[0])}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <img
+                                      src="/icons/ms-teams.png"
+                                      alt="MS Teams"
+                                      className="h-4 w-4"
+                                    />
+                                  </a>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Open in Teams</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {agentBindings.length > 1 && (
+                          <DropdownMenu>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="icon-sm"
+                                      aria-label="Open in Teams"
+                                    >
+                                      <img
+                                        src="/icons/ms-teams.png"
+                                        alt="MS Teams"
+                                        className="h-4 w-4"
+                                      />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Open in Teams</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <DropdownMenuContent align="start">
+                              {agentBindings.map((b) => (
+                                <DropdownMenuItem key={b.id} asChild>
+                                  <a
+                                    href={buildTeamsDeepLink(b)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {b.channelName ?? b.channelId}
+                                    {b.workspaceName
+                                      ? ` (${b.workspaceName})`
+                                      : ""}
+                                  </a>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                aria-label="Chat"
+                                asChild
+                              >
+                                <Link href={`/chat/new?agent_id=${agent.id}`}>
+                                  <MessageSquare className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Chat</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                aria-label="Agent Builder"
+                                asChild
+                              >
+                                <Link
+                                  href={`/agents/builder?agentId=${agent.id}`}
+                                >
+                                  <Grip className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Agent Builder</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                aria-label="Edit"
+                                onClick={() => setEditingAgent(agent)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </ButtonGroup>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -361,90 +454,18 @@ function ChannelBindingsSection() {
         <Card>
           <CardContent className="py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              There are no bindings yet
+              No agents have MS Teams enabled yet
             </p>
           </CardContent>
         </Card>
       )}
 
-      {/* Edit Dialog */}
-      <Dialog
-        open={!!editingBinding}
-        onOpenChange={(open) => {
-          if (!open) setEditingBinding(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Agent Binding</DialogTitle>
-            <DialogDescription>
-              Choose which agent should handle messages in this channel.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Select
-              value={editingBinding?.agentId ?? ""}
-              onValueChange={(value) =>
-                setEditingBinding((prev) =>
-                  prev ? { ...prev, agentId: value || null } : null,
-                )
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select an agent" />
-              </SelectTrigger>
-              <SelectContent>
-                {msTeamsAgents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingBinding(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveEdit}
-              disabled={updateMutation.isPending}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={!!deleteConfirmId}
-        onOpenChange={(open) => {
-          if (!open) setDeleteConfirmId(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Binding</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this channel binding? The channel
-              will no longer have a default agent.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AgentDialog
+        open={!!editingAgent}
+        onOpenChange={(open) => !open && setEditingAgent(null)}
+        agent={editingAgent}
+        agentType="agent"
+      />
     </section>
   );
 }
@@ -620,6 +641,8 @@ function SetupStep({
   done,
   ctaLabel,
   onAction,
+  doneActionLabel,
+  onDoneAction,
   children,
 }: {
   title: string;
@@ -627,12 +650,19 @@ function SetupStep({
   done: boolean;
   ctaLabel: string;
   onAction?: () => void;
+  doneActionLabel?: string;
+  onDoneAction?: () => void;
   children?: React.ReactNode;
 }) {
   return (
-    <Card className="py-4 gap-0">
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4 border-b pb-4">
+    <Card className="py-3 gap-0">
+      <CardHeader className="px-4 gap-0">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-4",
+            children && "pb-2 border-b",
+          )}
+        >
           <CardTitle>
             <div className="flex items-center gap-4">
               {done ? (
@@ -641,16 +671,30 @@ function SetupStep({
                 <Circle className="text-muted-foreground size-5 shrink-0" />
               )}
               <div className="flex flex-col gap-1">
-                <div className="font-medium">{title}</div>
-                <div className="text-muted-foreground text-xs">
+                <div className="font-medium text-sm">{title}</div>
+                <div className="text-muted-foreground text-xs font-normal">
                   {description}
                 </div>
               </div>
             </div>
           </CardTitle>
           <div className="shrink-0">
-            {!done && onAction ? (
-              <Button variant="outline" onClick={onAction}>
+            {done && onDoneAction ? (
+              <Button
+                variant="outline"
+                onClick={onDoneAction}
+                size="sm"
+                className="text-xs"
+              >
+                {doneActionLabel}
+              </Button>
+            ) : !done && onAction ? (
+              <Button
+                variant="outline"
+                onClick={onAction}
+                size="sm"
+                className="text-xs"
+              >
                 {ctaLabel}
               </Button>
             ) : !done ? (
@@ -659,11 +703,28 @@ function SetupStep({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-2 text-sm text-muted-foreground">
-        {children}
-      </CardContent>
+      {children && (
+        <CardContent className="text-xs text-muted-foreground px-4 mt-2">
+          {children}
+        </CardContent>
+      )}
     </Card>
   );
+}
+
+function buildTeamsDeepLink(binding: {
+  channelId: string;
+  channelName?: string | null;
+  workspaceId?: string | null;
+}): string {
+  const channelName = encodeURIComponent(
+    binding.channelName ?? binding.channelId,
+  );
+  const base = `https://teams.microsoft.com/l/channel/${encodeURIComponent(binding.channelId)}/${channelName}`;
+  if (binding.workspaceId) {
+    return `${base}?groupId=${encodeURIComponent(binding.workspaceId)}`;
+  }
+  return base;
 }
 
 function CredentialField({

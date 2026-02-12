@@ -10,6 +10,8 @@ on:
   issues:
     types: [opened]
 
+permissions: {}
+
 jobs:
   check-author:
     uses: ./.github/workflows/check-core-team.yml

@@ -5,7 +5,7 @@ description: |
 
 inputs:
   projects:
-    description: "Playwright project(s) to run (e.g., 'chromium', 'api', 'chromium --project=sso')"
+    description: "Playwright project(s) to run (e.g., 'chromium', 'api', 'chromium --project=identity-providers')"
     required: true
   shard:
     description: "Shard configuration (e.g., '--shard=1/3')"

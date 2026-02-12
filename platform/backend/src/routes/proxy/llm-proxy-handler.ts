@@ -140,8 +140,7 @@ export async function handleLLMProxy<
   );
 
   if (executionId) {
-    const existsInDb =
-      await InteractionModel.existsByExecutionId(executionId);
+    const existsInDb = await InteractionModel.existsByExecutionId(executionId);
     if (!existsInDb) {
       metrics.agentExecution.reportAgentExecution({
         executionId,

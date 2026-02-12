@@ -622,9 +622,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // If agentIds were provided, create agent-tool assignments
         // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
+        // but need credentialSourceMcpServerId to resolve credentials at call time
         if (agentIds && agentIds.length > 0) {
           const toolIds = createdTools.map((t) => t.id);
-          await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds);
+          await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
+            credentialSourceMcpServerId: mcpServer.id,
+          });
         }
 
         // Set status to success for non-local servers

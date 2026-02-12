@@ -8,13 +8,6 @@
 import type { FastifyReply } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
-import {
-  reportBlockedTools,
-  reportLLMCost,
-  reportLLMTokens,
-  reportTimeToFirstToken,
-  reportTokensPerSecond,
-} from "@/llm-metrics";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -23,6 +16,7 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
+import { metrics } from "@/observability";
 import {
   type Agent,
   ApiError,
@@ -503,7 +497,7 @@ async function handleStreaming<
       if (!firstChunkTime) {
         firstChunkTime = Date.now();
         const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
-        reportTimeToFirstToken(
+        metrics.llm.reportTimeToFirstToken(
           providerName,
           agent,
           actualModel,
@@ -582,7 +576,7 @@ async function handleStreaming<
         reply.raw.write(event);
       }
 
-      reportBlockedTools(
+      metrics.llm.reportBlockedTools(
         providerName,
         agent,
         toolCalls.length,
@@ -620,7 +614,7 @@ async function handleStreaming<
 
     const usage = streamAdapter.state.usage;
     if (usage) {
-      reportLLMTokens(
+      metrics.llm.reportLLMTokens(
         providerName,
         agent,
         { input: usage.inputTokens, output: usage.outputTokens },
@@ -630,7 +624,7 @@ async function handleStreaming<
 
       if (usage.outputTokens && firstChunkTime) {
         const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-        reportTokensPerSecond(
+        metrics.llm.reportTokensPerSecond(
           providerName,
           agent,
           actualModel,
@@ -651,7 +645,7 @@ async function handleStreaming<
         usage.outputTokens,
       );
 
-      reportLLMCost(
+      metrics.llm.reportLLMCost(
         providerName,
         agent,
         actualModel,
@@ -778,7 +772,7 @@ async function handleNonStreaming<
         contentMessage,
       );
 
-      reportBlockedTools(
+      metrics.llm.reportBlockedTools(
         providerName,
         agent,
         toolCalls.length,
@@ -799,7 +793,7 @@ async function handleNonStreaming<
         usage.outputTokens,
       );
 
-      reportLLMCost(
+      metrics.llm.reportLLMCost(
         providerName,
         agent,
         actualModel,
@@ -841,7 +835,7 @@ async function handleNonStreaming<
   // for non-streaming requests. We only report cost here to avoid double counting.
   // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
   // mocked API clients can't use an observable fetch.
-  // reportLLMTokens(
+  // metrics.llm.reportLLMTokens(
   //   providerName,
   //   agent,
   //   { input: usage.inputTokens, output: usage.outputTokens },
@@ -860,7 +854,13 @@ async function handleNonStreaming<
     usage.outputTokens,
   );
 
-  reportLLMCost(providerName, agent, actualModel, actualCost, externalAgentId);
+  metrics.llm.reportLLMCost(
+    providerName,
+    agent,
+    actualModel,
+    actualCost,
+    externalAgentId,
+  );
 
   await InteractionModel.create({
     profileId: agent.id,

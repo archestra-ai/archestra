@@ -5,6 +5,7 @@ import {
   isAgentTool,
   isArchestraMcpServerTool,
   isBrowserMcpTool,
+  parseFullToolName,
   TimeInMs,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
@@ -18,13 +19,12 @@ import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentTeamModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { metrics } from "@/observability";
 
 /**
  * MCP Gateway base URL (internal)
@@ -556,6 +556,7 @@ export async function getChatMcpTools({
   conversationId,
   sessionId,
   delegationChain,
+  abortSignal,
 }: {
   agentName: string;
   agentId: string;
@@ -568,12 +569,15 @@ export async function getChatMcpTools({
   sessionId?: string;
   /** Delegation chain of agent IDs for tracking delegated agent calls */
   delegationChain?: string;
+  /** Optional cancellation signal from parent stream execution */
+  abortSignal?: AbortSignal;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
+  const shouldUseToolCache = !abortSignal;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
-  const cachedTools = toolCache.get(toolCacheKey);
+  const cachedTools = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
   if (cachedTools) {
     logger.info(
       {
@@ -679,7 +683,10 @@ export async function getChatMcpTools({
 
             const toolArguments = isRecord(args) ? args : undefined;
 
+            const toolStartTime = Date.now();
+
             try {
+              throwIfAborted(abortSignal);
               // Check if this is an Archestra tool - handle directly without DB lookup
               if (isArchestraMcpServerTool(mcpTool.name)) {
                 const archestraResponse = await executeArchestraTool(
@@ -692,8 +699,16 @@ export async function getChatMcpTools({
                     agentId,
                     organizationId,
                     sessionId,
+                    abortSignal,
                   },
                 );
+
+                reportToolMetrics({
+                  toolName: mcpTool.name,
+                  agentName,
+                  startTime: toolStartTime,
+                  isError: archestraResponse.isError ?? false,
+                });
 
                 // Check for errors
                 if (archestraResponse.isError) {
@@ -732,24 +747,34 @@ export async function getChatMcpTools({
                 toolName: mcpTool.name,
                 toolArguments,
                 agentId,
+                agentName,
                 userId,
                 organizationId,
                 userIsProfileAdmin,
                 conversationId,
                 mcpGwToken,
+                abortSignal,
               });
             } catch (error) {
-              logger.error(
-                {
-                  agentId,
-                  userId,
-                  toolName: mcpTool.name,
-                  err: error,
-                  errorMessage:
-                    error instanceof Error ? error.message : String(error),
-                },
-                "MCP tool execution failed",
-              );
+              reportToolMetrics({
+                toolName: mcpTool.name,
+                agentName,
+                startTime: toolStartTime,
+                isError: true,
+              });
+              const logPayload = {
+                agentId,
+                userId,
+                toolName: mcpTool.name,
+                err: error,
+                errorMessage:
+                  error instanceof Error ? error.message : String(error),
+              };
+              if (isAbortLikeError(error)) {
+                logger.info(logPayload, "MCP tool execution aborted");
+              } else {
+                logger.error(logPayload, "MCP tool execution failed");
+              }
               throw error;
             }
           },
@@ -787,6 +812,7 @@ export async function getChatMcpTools({
           sessionId,
           // Pass delegation chain for tracking delegated agent calls
           delegationChain,
+          abortSignal,
           tokenAuth: mcpGwToken
             ? {
                 tokenId: mcpGwToken.tokenId,
@@ -818,12 +844,22 @@ export async function getChatMcpTools({
                 "Executing agent tool from chat",
               );
 
+              const agentToolStartTime = Date.now();
+
               try {
+                throwIfAborted(abortSignal);
                 const response = await executeArchestraTool(
                   agentTool.name,
                   args,
                   archestraContext,
                 );
+
+                reportToolMetrics({
+                  toolName: agentTool.name,
+                  agentName,
+                  startTime: agentToolStartTime,
+                  isError: response.isError ?? false,
+                });
 
                 if (response.isError) {
                   const errorText = (
@@ -848,17 +884,25 @@ export async function getChatMcpTools({
                   )
                   .join("\n");
               } catch (error) {
-                logger.error(
-                  {
-                    agentId,
-                    userId,
-                    toolName: agentTool.name,
-                    err: error,
-                    errorMessage:
-                      error instanceof Error ? error.message : String(error),
-                  },
-                  "Agent tool execution failed",
-                );
+                reportToolMetrics({
+                  toolName: agentTool.name,
+                  agentName,
+                  startTime: agentToolStartTime,
+                  isError: true,
+                });
+                const logPayload = {
+                  agentId,
+                  userId,
+                  toolName: agentTool.name,
+                  err: error,
+                  errorMessage:
+                    error instanceof Error ? error.message : String(error),
+                };
+                if (isAbortLikeError(error)) {
+                  logger.info(logPayload, "Agent tool execution aborted");
+                } else {
+                  logger.error(logPayload, "Agent tool execution failed");
+                }
                 throw error;
               }
             },
@@ -882,20 +926,10 @@ export async function getChatMcpTools({
       }
     }
 
-    // Fetch tools from globally available catalogs (e.g., Playwright browser preview)
-    // These are personal servers that users can auto-install, tools available for all agents
-    await addGlobalCatalogTools({
-      aiTools,
-      userId,
-      organizationId,
-      userIsProfileAdmin,
-      agentId,
-      conversationId,
-      mcpGwToken,
-    });
-
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
-    toolCache.set(toolCacheKey, aiTools);
+    if (shouldUseToolCache) {
+      toolCache.set(toolCacheKey, aiTools);
+    }
 
     // Apply filtering if enabledToolIds provided and non-empty
     return await filterToolsByEnabledIds(aiTools, enabledToolIds);
@@ -915,6 +949,7 @@ interface ToolExecutionContext {
   toolName: string;
   toolArguments: Record<string, unknown> | undefined;
   agentId: string;
+  agentName: string;
   userId: string;
   organizationId: string;
   userIsProfileAdmin: boolean;
@@ -924,6 +959,7 @@ interface ToolExecutionContext {
     teamId: string | null;
     isOrganizationToken: boolean;
   } | null;
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -942,12 +978,16 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     toolName,
     toolArguments,
     agentId,
+    agentName,
     userId,
     organizationId,
     userIsProfileAdmin,
     conversationId,
     mcpGwToken,
+    abortSignal,
   } = ctx;
+  throwIfAborted(abortSignal);
+  const startTime = Date.now();
 
   // For browser tools, ensure the correct conversation tab is selected first
   const { browserStreamFeature } = await import(
@@ -985,20 +1025,33 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     arguments: toolArguments ?? {},
   };
 
-  const result = await mcpClient.executeToolCall(
-    toolCall,
-    agentId,
-    mcpGwToken
-      ? {
-          tokenId: mcpGwToken.tokenId,
-          teamId: mcpGwToken.teamId,
-          isOrganizationToken: mcpGwToken.isOrganizationToken,
-          organizationId,
-          userId,
-        }
-      : undefined,
-    { conversationId },
-  );
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
+  try {
+    result = await mcpClient.executeToolCall(
+      toolCall,
+      agentId,
+      mcpGwToken
+        ? {
+            tokenId: mcpGwToken.tokenId,
+            teamId: mcpGwToken.teamId,
+            isOrganizationToken: mcpGwToken.isOrganizationToken,
+            organizationId,
+            userId,
+          }
+        : undefined,
+      { conversationId },
+    );
+    reportToolMetrics({
+      toolName,
+      agentName,
+      startTime,
+      isError: result.isError ?? false,
+    });
+  } catch (error) {
+    reportToolMetrics({ toolName, agentName, startTime, isError: true });
+    throw error;
+  }
+  throwIfAborted(abortSignal);
 
   // Check if MCP tool returned an error
   if (result.isError) {
@@ -1057,170 +1110,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       return JSON.stringify(item);
     })
     .join("\n");
-}
-
-/**
- * Add tools from globally available catalogs (e.g., Playwright browser preview).
- * These catalogs are marked as `isGloballyAvailable` and their tools are available
- * for all agents without explicit assignment. Each user gets their own isolated server.
- *
- * Mutates the aiTools object to add global catalog tools.
- */
-async function addGlobalCatalogTools({
-  aiTools,
-  userId,
-  organizationId,
-  userIsProfileAdmin,
-  agentId,
-  conversationId,
-  mcpGwToken,
-}: {
-  aiTools: Record<string, Tool>;
-  userId: string;
-  organizationId: string;
-  userIsProfileAdmin: boolean;
-  agentId: string;
-  conversationId?: string;
-  mcpGwToken: {
-    tokenValue: string;
-    tokenId: string;
-    teamId: string | null;
-    isOrganizationToken: boolean;
-    isUserToken?: boolean;
-  } | null;
-}): Promise<void> {
-  try {
-    // Get all globally available catalogs
-    const globalCatalogs =
-      await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-
-    if (globalCatalogs.length === 0) {
-      return;
-    }
-
-    logger.info(
-      {
-        userId,
-        globalCatalogCount: globalCatalogs.length,
-        catalogNames: globalCatalogs.map((c) => c.name),
-      },
-      "Checking for user's personal servers for global catalogs",
-    );
-
-    for (const catalog of globalCatalogs) {
-      // Check if user has a personal server installed for this catalog
-      const userServer = await McpServerModel.getUserPersonalServerForCatalog(
-        userId,
-        catalog.id,
-      );
-
-      if (!userServer) {
-        logger.debug(
-          { userId, catalogId: catalog.id, catalogName: catalog.name },
-          "User does not have personal server for global catalog",
-        );
-        continue;
-      }
-
-      logger.info(
-        {
-          userId,
-          catalogId: catalog.id,
-          catalogName: catalog.name,
-          serverId: userServer.id,
-        },
-        "User has personal server for global catalog, fetching tools",
-      );
-
-      // Get tools for this catalog from the database
-      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
-
-      if (catalogTools.length === 0) {
-        logger.debug(
-          { userId, catalogId: catalog.id, catalogName: catalog.name },
-          "No tools found for global catalog",
-        );
-        continue;
-      }
-
-      // Convert catalog tools to AI SDK Tool format
-      for (const catalogTool of catalogTools) {
-        // Skip if tool already exists (agent-assigned tools take precedence)
-        if (aiTools[catalogTool.name]) {
-          logger.debug(
-            { userId, toolName: catalogTool.name },
-            "Skipping global catalog tool - already exists from agent assignment",
-          );
-          continue;
-        }
-
-        const normalizedSchema = normalizeJsonSchema(catalogTool.parameters);
-
-        aiTools[catalogTool.name] = {
-          description: catalogTool.description || `Tool: ${catalogTool.name}`,
-          inputSchema: jsonSchema(normalizedSchema),
-          execute: async (args: unknown) => {
-            logger.info(
-              {
-                agentId,
-                userId,
-                toolName: catalogTool.name,
-                catalogId: catalog.id,
-                serverId: userServer.id,
-                arguments: args,
-              },
-              "Executing global catalog tool from chat",
-            );
-
-            const toolArguments = isRecord(args) ? args : undefined;
-
-            try {
-              // Execute via shared helper with browser sync
-              return await executeMcpTool({
-                toolName: catalogTool.name,
-                toolArguments,
-                agentId,
-                userId,
-                organizationId,
-                userIsProfileAdmin,
-                conversationId,
-                mcpGwToken,
-              });
-            } catch (error) {
-              logger.error(
-                {
-                  agentId,
-                  userId,
-                  toolName: catalogTool.name,
-                  err: error,
-                  errorMessage:
-                    error instanceof Error ? error.message : String(error),
-                },
-                "Global catalog tool execution failed",
-              );
-              throw error;
-            }
-          },
-        };
-      }
-
-      logger.info(
-        {
-          userId,
-          catalogId: catalog.id,
-          catalogName: catalog.name,
-          toolCount: catalogTools.length,
-          totalTools: Object.keys(aiTools).length,
-        },
-        "Added global catalog tools to chat tools",
-      );
-    }
-  } catch (error) {
-    logger.error(
-      { userId, error },
-      "Failed to fetch global catalog tools, continuing without them",
-    );
-  }
 }
 
 /**
@@ -1288,4 +1177,42 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+function throwIfAborted(abortSignal?: AbortSignal): void {
+  if (!abortSignal?.aborted) {
+    return;
+  }
+
+  const abortError = new Error("Chat execution aborted");
+  abortError.name = "AbortError";
+  throw abortError;
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "AbortError") {
+    return true;
+  }
+
+  return error.message.toLowerCase().includes("abort");
+}
+
+function reportToolMetrics(params: {
+  toolName: string;
+  agentName: string;
+  startTime: number;
+  isError: boolean;
+}): void {
+  const { serverName } = parseFullToolName(params.toolName);
+  metrics.mcp.reportMcpToolCall({
+    profileName: params.agentName,
+    mcpServerName: serverName ?? "unknown",
+    toolName: params.toolName,
+    durationSeconds: (Date.now() - params.startTime) / 1000,
+    isError: params.isError,
+  });
 }

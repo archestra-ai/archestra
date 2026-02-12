@@ -1,5 +1,5 @@
 {
-  "id": "64958811-29e8-40cf-9776-c8211a26d09f",
+  "id": "fa9bbe3b-543f-4c71-a26a-b37bb50645ca",
   "prevId": "1af10599-db7d-4794-868b-5f2e568b3d14",
   "version": "7",
   "dialect": "postgresql",
@@ -1277,18 +1277,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "channel_name": {
-          "name": "channel_name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "workspace_name": {
-          "name": "workspace_name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "agent_id": {
           "name": "agent_id",
           "type": "uuid",
@@ -2176,13 +2164,6 @@
         },
         "requires_auth": {
           "name": "requires_auth",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_globally_available": {
-          "name": "is_globally_available",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

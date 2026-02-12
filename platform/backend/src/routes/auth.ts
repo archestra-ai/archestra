@@ -3,6 +3,7 @@ import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
+import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -193,6 +194,56 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  // OAuth 2.1 Authorize — intercept to auto-register CIMD clients.
+  // When a URL-formatted client_id arrives, fetch the metadata document
+  // and register the client before forwarding to better-auth.
+  // This specific route takes priority over the catch-all GET /api/auth/*.
+  fastify.route({
+    method: "GET",
+    url: "/api/auth/oauth2/authorize",
+    schema: {
+      tags: ["auth"],
+    },
+    async handler(request, reply) {
+      const query = request.query as Record<string, string>;
+      const clientId = query.client_id;
+
+      if (clientId && isCimdClientId(clientId)) {
+        try {
+          await ensureCimdClientRegistered(clientId);
+        } catch (error) {
+          logger.warn(
+            { err: error, clientId },
+            "[auth:oauth2/authorize] CIMD auto-registration failed",
+          );
+          return reply.status(400).send({
+            error: `CIMD registration failed: ${(error as Error).message}`,
+          });
+        }
+      }
+
+      // Forward to better-auth
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+      });
+
+      const response = await betterAuth.handler(req);
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
   // OAuth 2.1 Token — strip the `resource` parameter before forwarding to
   // better-auth. MCP clients (e.g. Cursor, Claude Code) include `resource`
   // with dynamic per-profile URLs like `/v1/mcp/{profileId}`. better-auth's
@@ -200,6 +251,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // whitelist a dynamic path. Stripping `resource` causes better-auth to
   // issue opaque tokens instead of JWTs, which our MCP Gateway token
   // validator already handles.
+  //
+  // Also handles CIMD: if the client_id is a URL, auto-register the client
+  // before forwarding to better-auth (needed for token refresh where the
+  // authorize endpoint was not hit first in this server instance).
   fastify.route({
     method: "POST",
     url: "/api/auth/oauth2/token",
@@ -208,6 +263,23 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
+
+      // CIMD: auto-register client if client_id is a URL
+      const clientId = body?.client_id as string | undefined;
+      if (clientId && isCimdClientId(clientId)) {
+        try {
+          await ensureCimdClientRegistered(clientId);
+        } catch (error) {
+          logger.warn(
+            { err: error, clientId },
+            "[auth:oauth2/token] CIMD auto-registration failed",
+          );
+          return reply.status(400).send({
+            error: `CIMD registration failed: ${(error as Error).message}`,
+          });
+        }
+      }
+
       if (body?.resource) {
         logger.debug(
           { resource: body.resource },

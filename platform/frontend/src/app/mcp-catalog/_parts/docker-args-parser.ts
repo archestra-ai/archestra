@@ -50,7 +50,13 @@ export function parseDockerArgsToLocalConfig(
   command: string,
   args: string[] | undefined,
   dockerImage: string | undefined,
-): { command?: string; arguments?: string[]; dockerImage: string } | null {
+): {
+  command?: string;
+  arguments?: string[];
+  dockerImage: string;
+  transportType?: "stdio" | "streamable-http";
+  httpPort?: number;
+} | null {
   // If no docker_image provided, not a Docker config
   if (!dockerImage) return null;
 
@@ -85,18 +91,43 @@ export function parseDockerArgsToLocalConfig(
   if (firstItem.startsWith("-")) {
     // First item is a flag, not a command - pass all items as args to image's entrypoint
     // Example: ["mcp/grafana", "-t", "stdio"] → command=undefined, arguments=["-t", "stdio"]
+    const streamableHttpConfig = getStreamableHttpConfig(commandAndArgs);
     return {
       arguments: commandAndArgs,
       dockerImage,
+      ...streamableHttpConfig,
     };
   }
 
   // First item is the command, rest are arguments
   const [actualCommand, ...actualArguments] = commandAndArgs;
 
+  const streamableHttpConfig = getStreamableHttpConfig(commandAndArgs);
   return {
     command: actualCommand,
     arguments: actualArguments.length > 0 ? actualArguments : undefined,
     dockerImage,
+    ...streamableHttpConfig,
+  };
+}
+
+function getStreamableHttpConfig(args: string[]): {
+  transportType?: "streamable-http";
+  httpPort?: number;
+} {
+  const portFlagIndex = args.indexOf("--port");
+  if (portFlagIndex === -1) {
+    return {};
+  }
+
+  const portValue = args[portFlagIndex + 1];
+  const parsedPort = Number.parseInt(portValue ?? "", 10);
+  if (!Number.isFinite(parsedPort)) {
+    return {};
+  }
+
+  return {
+    transportType: "streamable-http",
+    httpPort: parsedPort,
   };
 }

@@ -48,7 +48,6 @@ interface ChatMessagesProps {
   conversationId: string | undefined;
   agentId?: string;
   messages: UIMessage[];
-  hideToolCalls?: boolean;
   status: ChatStatus;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
@@ -91,7 +90,6 @@ export function ChatMessages({
   suggestedPrompt,
   onSuggestedPromptClick,
   messages,
-  hideToolCalls = false,
   status,
   isLoadingConversation = false,
   onMessagesUpdate,
@@ -462,16 +460,6 @@ export function ChatMessages({
                     ) {
                       return null;
                     }
-                  }
-
-                  // Hide tool calls if hideToolCalls is true
-                  if (
-                    hideToolCalls &&
-                    isToolPart(part) &&
-                    (part.type?.startsWith("tool-") ||
-                      part.type === "dynamic-tool")
-                  ) {
-                    return null;
                   }
 
                   switch (part.type) {

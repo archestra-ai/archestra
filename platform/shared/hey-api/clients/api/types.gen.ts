@@ -6262,6 +6262,7 @@ export type PostV1A2aByAgentIdResponses = {
         error?: {
             code: number;
             message: string;
+            data?: unknown;
         };
     };
 };
@@ -8342,7 +8343,8 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             toolId: string;
             success: boolean;
             config?: {
-                toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+                toolInvocationAction: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+                trustedDataAction: 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm' | 'block_always';
                 reasoning: string;
             };
             error?: string;
@@ -9129,6 +9131,20 @@ export type GetOAuthClientInfoResponses = {
 };
 
 export type GetOAuthClientInfoResponse = GetOAuthClientInfoResponses[keyof GetOAuthClientInfoResponses];
+
+export type GetApiAuthOauth2AuthorizeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/authorize';
+};
+
+export type GetApiAuthOauth2AuthorizeResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type PostApiAuthOauth2TokenData = {
     body?: never;
@@ -12866,6 +12882,85 @@ export type StreamChatErrors = {
 
 export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 
+export type StopChatStreamData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/stop';
+};
+
+export type StopChatStreamErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type StopChatStreamError = StopChatStreamErrors[keyof StopChatStreamErrors];
+
+export type StopChatStreamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        stopped: boolean;
+    };
+};
+
+export type StopChatStreamResponse = StopChatStreamResponses[keyof StopChatStreamResponses];
+
 export type GetChatConversationsData = {
     body?: never;
     path?: never;
@@ -13446,86 +13541,6 @@ export type GetChatAgentMcpToolsResponses = {
 };
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
-
-export type GetChatGlobalToolsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat/global-tools';
-};
-
-export type GetChatGlobalToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatGlobalToolsError = GetChatGlobalToolsErrors[keyof GetChatGlobalToolsErrors];
-
-export type GetChatGlobalToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        catalogId: string;
-    }>;
-};
-
-export type GetChatGlobalToolsResponse = GetChatGlobalToolsResponses[keyof GetChatGlobalToolsResponses];
 
 export type GenerateChatConversationTitleData = {
     body?: {
@@ -17920,7 +17935,6 @@ export type GetInternalMcpCatalogResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -18007,7 +18021,6 @@ export type CreateInternalMcpCatalogItemData = {
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
-        isGloballyAvailable?: boolean;
         authDescription?: string | null;
         authFields?: Array<{
             name: string;
@@ -18159,7 +18172,6 @@ export type CreateInternalMcpCatalogItemResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -18396,7 +18408,6 @@ export type GetInternalMcpCatalogItemResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -18482,7 +18493,6 @@ export type UpdateInternalMcpCatalogItemData = {
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
-        isGloballyAvailable?: boolean;
         authDescription?: string | null;
         authFields?: Array<{
             name: string;
@@ -18636,7 +18646,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -22450,6 +22459,7 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
         token_endpoint_auth_methods_supported: Array<string>;
         code_challenge_methods_supported: Array<string>;
         scopes_supported: Array<string>;
+        client_id_metadata_document_supported: boolean;
     };
 };
 
@@ -28005,6 +28015,83 @@ export type CreateSsoProviderResponses = {
 };
 
 export type CreateSsoProviderResponse = CreateSsoProviderResponses[keyof CreateSsoProviderResponses];
+
+export type GetSsoProviderIdpLogoutUrlData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers/idp-logout-url';
+};
+
+export type GetSsoProviderIdpLogoutUrlErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProviderIdpLogoutUrlError = GetSsoProviderIdpLogoutUrlErrors[keyof GetSsoProviderIdpLogoutUrlErrors];
+
+export type GetSsoProviderIdpLogoutUrlResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        url: string | null;
+    };
+};
+
+export type GetSsoProviderIdpLogoutUrlResponse = GetSsoProviderIdpLogoutUrlResponses[keyof GetSsoProviderIdpLogoutUrlResponses];
 
 export type DeleteSsoProviderData = {
     body?: never;

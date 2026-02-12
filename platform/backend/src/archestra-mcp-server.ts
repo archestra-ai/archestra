@@ -25,6 +25,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import { ProviderError } from "@/routes/chat/errors";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
@@ -135,6 +136,8 @@ export interface ArchestraContext {
    * E.g., "agentA:agentB" means agentA delegated to agentB.
    */
   delegationChain?: string;
+  /** Optional cancellation signal from parent chat/tool execution */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -248,6 +251,7 @@ export async function executeArchestraTool(
         parentDelegationChain: context.delegationChain || context.agentId,
         // Propagate conversationId for browser tab isolation
         conversationId: context.conversationId,
+        abortSignal: context.abortSignal,
       });
 
       return {
@@ -255,10 +259,22 @@ export async function executeArchestraTool(
         isError: false,
       };
     } catch (error) {
+      if (isAbortLikeError(error)) {
+        logger.info(
+          { agentId, targetAgentId: delegation.targetAgent.id },
+          "Agent delegation was aborted",
+        );
+        throw error;
+      }
       logger.error(
         { error, agentId, targetAgentId: delegation.targetAgent.id },
         "Agent delegation tool execution failed",
       );
+      // Re-throw ProviderError so it propagates to the parent stream's onError
+      // with the correct provider info (the subagent can't produce output)
+      if (error instanceof ProviderError) {
+        throw error;
+      }
       return {
         content: [
           {
@@ -1945,6 +1961,18 @@ export async function executeArchestraTool(
     code: -32601, // Method not found
     message: `Tool '${toolName}' not found`,
   };
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "AbortError") {
+    return true;
+  }
+
+  return error.message.toLowerCase().includes("abort");
 }
 
 /**

@@ -28,6 +28,8 @@ export const CacheKey = {
   McpSession: "mcp-session",
   /** SSO groups cache during login flow */
   SsoGroups: "sso-groups",
+  /** Chat stream stop signal for cross-pod abort */
+  ChatStop: "chat-stop",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

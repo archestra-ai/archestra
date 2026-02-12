@@ -121,7 +121,8 @@ spec:
                   policies="archestra-secrets" \
                   ttl="{{ .Values.vault.k8sAuth.ttl }}"
 
-                vault write kv/archestra/config \
-                  dburl="postgresql://archestra:archestra_dev_password@archestra-platform-postgresql:5432/archestra_dev"
+                {{- range .Values.vault.secrets }}
+                vault write {{ .path }}{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- end }}
       {{- end }}
 {{- end }}

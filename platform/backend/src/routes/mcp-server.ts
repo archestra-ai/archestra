@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -136,6 +136,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
+        // Playwright browser preview can only be installed as a personal server
+        if (
+          isPlaywrightCatalogItem(serverData.catalogId) &&
+          serverData.teamId
+        ) {
+          throw new ApiError(
+            400,
+            "Playwright browser preview can only be installed as a personal server",
+          );
+        }
+
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
@@ -199,6 +210,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (s) => s.ownerId === user.id && !s.teamId,
           );
           if (existingPersonal) {
+            // If agentIds provided, assign the server's tools to those agents
+            if (agentIds && agentIds.length > 0) {
+              const catalogTools = await ToolModel.findByCatalogId(
+                serverData.catalogId,
+              );
+              const toolIds = catalogTools.map((t) => t.id);
+              if (toolIds.length > 0) {
+                for (const agentId of agentIds) {
+                  await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+                }
+              }
+            }
             return reply.send(existingPersonal);
           }
         }

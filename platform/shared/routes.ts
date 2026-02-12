@@ -198,10 +198,10 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  StopChatStream: "stopChatStream",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
-  GetChatGlobalTools: "getChatGlobalTools",
   CreateChatConversation: "createChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
@@ -268,6 +268,7 @@ export const RouteId = {
   CreateSsoProvider: "createSsoProvider",
   UpdateSsoProvider: "updateSsoProvider",
   DeleteSsoProvider: "deleteSsoProvider",
+  GetSsoProviderIdpLogoutUrl: "getSsoProviderIdpLogoutUrl",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",

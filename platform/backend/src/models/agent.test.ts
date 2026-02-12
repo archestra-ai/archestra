@@ -1,4 +1,5 @@
 import {
+  PLAYWRIGHT_MCP_CATALOG_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
@@ -1548,6 +1549,47 @@ describe("AgentModel", () => {
 
       expect(agentA?.description).toBe("Desc A");
       expect(agentB?.description).toBeNull();
+    });
+  });
+
+  describe("hasPlaywrightToolsAssigned", () => {
+    test("returns false when no playwright tools are assigned", async () => {
+      const agent = await AgentModel.create({
+        name: "No Playwright Agent",
+        teams: [],
+      });
+
+      const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
+      expect(result).toBe(false);
+    });
+
+    test("returns true when playwright tools are assigned", async ({
+      makeTool,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent = await AgentModel.create({
+        name: "Playwright Agent",
+        teams: [],
+      });
+
+      const catalog = await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        name: "Playwright",
+        serverType: "builtin",
+      });
+
+      const tool = await makeTool({
+        name: "playwright__browser_snapshot",
+        description: "Take a snapshot",
+        parameters: {},
+        catalogId: catalog.id,
+      });
+
+      await makeAgentTool(agent.id, tool.id);
+
+      const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
+      expect(result).toBe(true);
     });
   });
 

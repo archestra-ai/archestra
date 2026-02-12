@@ -443,6 +443,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StreamChat]: {
     conversation: ["read"],
   },
+  [RouteId.StopChatStream]: {
+    conversation: ["read"],
+  },
   [RouteId.GetChatConversations]: {
     conversation: ["read"],
   },
@@ -451,9 +454,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatAgentMcpTools]: {
     profile: ["read"],
-  },
-  [RouteId.GetChatGlobalTools]: {
-    conversation: ["read"],
   },
   [RouteId.CreateChatConversation]: {
     conversation: ["create"],
@@ -623,6 +623,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteSsoProvider]: {
     ssoProvider: ["delete"],
   },
+  [RouteId.GetSsoProviderIdpLogoutUrl]: {},
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)

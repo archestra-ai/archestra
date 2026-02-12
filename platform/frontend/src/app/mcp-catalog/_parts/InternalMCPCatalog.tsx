@@ -2,8 +2,8 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isPlaywrightCatalogItem,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
-  PLAYWRIGHT_MCP_CATALOG_ID,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
@@ -290,6 +290,29 @@ export function InternalMCPCatalog({
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
     setLocalServerCatalogItem(catalogItem);
     openDialog("local-install");
+  };
+
+  const handleInstallPlaywright = async (catalogItem: CatalogItem) => {
+    setInstallingItemId(catalogItem.id);
+    const result = await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      dontShowToast: true,
+    });
+
+    const installedServerId = result?.installedServer?.id;
+    if (installedServerId) {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
+      const isFirstInstallation = !installedServers?.some(
+        (s) => s.catalogId === catalogItem.id,
+      );
+      if (isFirstInstallation) {
+        setFirstInstallationServerIds((prev) =>
+          new Set(prev).add(installedServerId),
+        );
+      }
+    }
+    setInstallingItemId(null);
   };
 
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
@@ -638,14 +661,14 @@ export function InternalMCPCatalog({
   const sortInstalledFirst = (items: CatalogItem[]) =>
     [...items].sort((a, b) => {
       // Sort priority: builtin > remote > local
-      const getPriority = (serverType: string) => {
-        if (serverType === "builtin") return 0;
-        if (serverType === "remote") return 1;
+      const getPriority = (item: CatalogItem) => {
+        if (item.serverType === "builtin" || isPlaywrightCatalogItem(item.id))
+          return 0;
+        if (item.serverType === "remote") return 1;
         return 2; // local
       };
 
-      const priorityDiff =
-        getPriority(a.serverType) - getPriority(b.serverType);
+      const priorityDiff = getPriority(a) - getPriority(b);
       if (priorityDiff !== 0) return priorityDiff;
 
       // Secondary sort by createdAt (newest first)
@@ -668,11 +691,7 @@ export function InternalMCPCatalog({
 
   const filteredCatalogItems = sortInstalledFirst(
     filterCatalogItems(catalogItems || [], searchQueryFromUrl),
-  ).filter(
-    (item) =>
-      item.id !== ARCHESTRA_MCP_CATALOG_ID &&
-      item.id !== PLAYWRIGHT_MCP_CATALOG_ID,
-  );
+  ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
 
   const getInstalledServerInfo = (item: CatalogItem) => {
     const installedServer = getAggregatedInstallation(item.id);
@@ -702,14 +721,14 @@ export function InternalMCPCatalog({
   return (
     <div className="space-y-4">
       <div className="space-y-4">
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             onClick={() =>
               userIsMcpServerAdmin
                 ? openDialog("create")
                 : openDialog("custom-request")
             }
-            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            className="bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
           >
             <Plus className="mr-0.5 h-4 w-4" />
             {userIsMcpServerAdmin
@@ -721,7 +740,7 @@ export function InternalMCPCatalog({
             onClick={() => {
               window.location.href = "/connection?tab=mcp";
             }}
-            className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
+            className="bg-linear-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md whitespace-normal text-left h-auto"
           >
             <Cable className="mr-0.5 h-4 w-4" />
             Connect to the Unified MCP Gateway to access those servers
@@ -763,7 +782,11 @@ export function InternalMCPCatalog({
                   onInstallRemoteServer={() =>
                     handleInstallRemoteServer(item, false)
                   }
-                  onInstallLocalServer={() => handleInstallLocalServer(item)}
+                  onInstallLocalServer={() =>
+                    isPlaywrightCatalogItem(item.id)
+                      ? handleInstallPlaywright(item)
+                      : handleInstallLocalServer(item)
+                  }
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
@@ -777,6 +800,7 @@ export function InternalMCPCatalog({
                   onAssignmentsDialogClose={() =>
                     setAutoOpenAssignmentsCatalogId(null)
                   }
+                  isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                 />
               );
             })}

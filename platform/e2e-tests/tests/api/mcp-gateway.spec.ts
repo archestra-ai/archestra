@@ -7,6 +7,7 @@ import {
   TEST_CATALOG_ITEM_NAME,
   TEST_TOOL_NAME,
   UI_BASE_URL,
+  WIREMOCK_INTERNAL_URL,
 } from "../../consts";
 import {
   findCatalogItem,
@@ -1378,5 +1379,380 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
     expect(listResult).toHaveProperty("result");
     expect(listResult.result).toHaveProperty("tools");
     expect(listResult.result.tools.length).toBeGreaterThan(0);
+  });
+});
+
+test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
+  let profileId: string;
+
+  // The CIMD client_id is a URL pointing to a WireMock-served metadata document.
+  // The backend must be able to reach this URL, so we use WIREMOCK_INTERNAL_URL.
+  const cimdClientId = `${WIREMOCK_INTERNAL_URL}/cimd/test-client.json`;
+
+  test.beforeAll(async ({ request, createAgent }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await createAgent(
+      request,
+      `CIMD OAuth Flow Test ${uniqueSuffix}`,
+    );
+    const profile = await createResponse.json();
+    profileId = profile.id;
+
+    // Assign Archestra tools to the profile
+    await assignArchestraToolsToProfile(request, profileId);
+  });
+
+  test.afterAll(async ({ request, deleteAgent }) => {
+    await deleteAgent(request, profileId);
+  });
+
+  test("full OAuth 2.1 flow with CIMD: no registration → authorize → consent → token → MCP tools/list", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // --- Step 1: Generate PKCE code verifier and challenge ---
+    const codeVerifier = crypto.randomBytes(32).toString("base64url");
+    const codeChallenge = crypto
+      .createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url");
+    const state = crypto.randomBytes(16).toString("hex");
+
+    // --- Step 2: Authorize with CIMD client_id (URL) — NO DCR needed ---
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: cimdClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
+
+    const authorizeResponse = await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    let code: string;
+    const authorizeContentType =
+      authorizeResponse.headers()["content-type"] || "";
+
+    if (authorizeContentType.includes("application/json")) {
+      const authorizeResult = await authorizeResponse.json();
+
+      if (authorizeResult.url?.includes("/oauth/consent")) {
+        const consentUrl = new URL(authorizeResult.url, `${API_BASE_URL}`);
+        const oauthQuery = consentUrl.searchParams.toString();
+
+        const consentResponse = await request.post(
+          `${API_BASE_URL}${OAUTH_ENDPOINTS.consent}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Origin: UI_BASE_URL,
+            },
+            data: {
+              accept: true,
+              scope: "mcp",
+              oauth_query: oauthQuery,
+            },
+          },
+        );
+
+        const consentResult = await consentResponse.json();
+        const redirectUri =
+          consentResult.uri || consentResult.url || consentResult.redirectTo;
+        expect(redirectUri).toBeDefined();
+
+        const redirectUrl = new URL(redirectUri);
+        const extractedCode = redirectUrl.searchParams.get("code");
+        expect(extractedCode).toBeDefined();
+        code = extractedCode as string;
+      } else if (authorizeResult.url) {
+        const redirectUrl = new URL(authorizeResult.url);
+        const extractedCode = redirectUrl.searchParams.get("code");
+        expect(extractedCode).toBeDefined();
+        code = extractedCode as string;
+      } else {
+        throw new Error(
+          `Unexpected authorize JSON response: ${JSON.stringify(authorizeResult)}`,
+        );
+      }
+    } else {
+      const finalUrl = new URL(authorizeResponse.url());
+      if (finalUrl.pathname.includes("/oauth/consent")) {
+        const oauthQuery = finalUrl.searchParams.toString();
+        const consentResponse = await request.post(
+          `${API_BASE_URL}${OAUTH_ENDPOINTS.consent}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Origin: UI_BASE_URL,
+            },
+            data: {
+              accept: true,
+              scope: "mcp",
+              oauth_query: oauthQuery,
+            },
+          },
+        );
+        const consentResult = await consentResponse.json();
+        const redirectUri =
+          consentResult.uri || consentResult.url || consentResult.redirectTo;
+        const redirectUrl = new URL(redirectUri);
+        const extractedCode = redirectUrl.searchParams.get("code");
+        expect(extractedCode).toBeDefined();
+        code = extractedCode as string;
+      } else {
+        const extractedCode = finalUrl.searchParams.get("code");
+        expect(extractedCode).toBeDefined();
+        code = extractedCode as string;
+      }
+    }
+
+    expect(code).toBeDefined();
+    expect(code.length).toBeGreaterThan(0);
+
+    // --- Step 3: Token exchange ---
+    const tokenResponse = await request.post(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.token}`,
+      {
+        headers: {
+          Origin: UI_BASE_URL,
+        },
+        form: {
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: "http://127.0.0.1:34567/callback",
+          code_verifier: codeVerifier,
+          client_id: cimdClientId,
+        },
+      },
+    );
+
+    expect(tokenResponse.status()).toBe(200);
+    const tokenResult = await tokenResponse.json();
+    const accessToken = tokenResult.access_token;
+    expect(accessToken).toBeDefined();
+    expect(tokenResult.token_type.toLowerCase()).toBe("bearer");
+
+    // --- Step 4: Use token to access MCP Gateway ---
+    const initResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          clientInfo: { name: "cimd-e2e-client", version: "1.0.0" },
+        },
+      },
+    });
+
+    expect(initResponse.status()).toBe(200);
+    const initResult = await initResponse.json();
+    expect(initResult).toHaveProperty("result");
+    expect(initResult.result).toHaveProperty("serverInfo");
+
+    // --- Step 5: List tools via MCP Gateway ---
+    const toolsResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: {},
+      },
+    });
+
+    expect(toolsResponse.status()).toBe(200);
+    const listResult = await toolsResponse.json();
+    expect(listResult).toHaveProperty("result");
+    expect(listResult.result).toHaveProperty("tools");
+    expect(listResult.result.tools.length).toBeGreaterThan(0);
+
+    // Verify Archestra tools are accessible
+    const archestraWhoami = listResult.result.tools.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (t: any) => t.name === `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
+    );
+    expect(archestraWhoami).toBeDefined();
+  });
+
+  test("CIMD client-info endpoint returns client name from auto-registered CIMD client", async ({
+    request,
+  }) => {
+    // Trigger CIMD auto-registration by hitting the authorize endpoint.
+    // Each test must be self-sufficient — don't rely on previous test side-effects.
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: cimdClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state: crypto.randomBytes(16).toString("hex"),
+      code_challenge: crypto.randomBytes(32).toString("base64url"),
+      code_challenge_method: "S256",
+    });
+    await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      { headers: { Accept: "application/json", Origin: UI_BASE_URL } },
+    );
+
+    // Verify the client-info endpoint returns the name from the CIMD document.
+    const clientInfoResponse = await request.get(
+      `${API_BASE_URL}/api/auth/oauth2/client-info?client_id=${encodeURIComponent(cimdClientId)}`,
+    );
+
+    expect(clientInfoResponse.status()).toBe(200);
+    const clientInfo = await clientInfoResponse.json();
+    expect(clientInfo.client_name).toBe("E2E CIMD Test Client");
+  });
+
+  test("CIMD validation error: invalid JSON document", async ({ request }) => {
+    const invalidJsonClientId = `${WIREMOCK_INTERNAL_URL}/cimd/invalid-json.json`;
+
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: invalidJsonClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state: crypto.randomBytes(16).toString("hex"),
+      code_challenge: crypto.randomBytes(32).toString("base64url"),
+      code_challenge_method: "S256",
+    });
+
+    const response = await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    expect(response.status()).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain("not valid JSON");
+  });
+
+  test("CIMD validation error: mismatched client_id in document", async ({
+    request,
+  }) => {
+    const mismatchedClientId = `${WIREMOCK_INTERNAL_URL}/cimd/mismatched-client-id.json`;
+
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: mismatchedClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state: crypto.randomBytes(16).toString("hex"),
+      code_challenge: crypto.randomBytes(32).toString("base64url"),
+      code_challenge_method: "S256",
+    });
+
+    const response = await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    expect(response.status()).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain("does not match");
+  });
+
+  test("CIMD validation error: 404 document not found", async ({ request }) => {
+    const notFoundClientId = `${WIREMOCK_INTERNAL_URL}/cimd/does-not-exist.json`;
+
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: notFoundClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state: crypto.randomBytes(16).toString("hex"),
+      code_challenge: crypto.randomBytes(32).toString("base64url"),
+      code_challenge_method: "S256",
+    });
+
+    const response = await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    expect(response.status()).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain("HTTP 404");
+  });
+
+  test("CIMD validation error: missing redirect_uris", async ({ request }) => {
+    const missingRedirectUrisClientId = `${WIREMOCK_INTERNAL_URL}/cimd/missing-redirect-uris.json`;
+
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: missingRedirectUrisClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state: crypto.randomBytes(16).toString("hex"),
+      code_challenge: crypto.randomBytes(32).toString("base64url"),
+      code_challenge_method: "S256",
+    });
+
+    const response = await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    expect(response.status()).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain("redirect_uris");
+  });
+
+  test("well-known metadata advertises CIMD support", async ({ request }) => {
+    const response = await request.get(
+      `${API_BASE_URL}/.well-known/oauth-authorization-server`,
+    );
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.client_id_metadata_document_supported).toBe(true);
   });
 });

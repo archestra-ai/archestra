@@ -2,6 +2,7 @@ import {
   type ChatErrorResponse,
   RouteId,
   SupportedProviders,
+  TimeInMs,
   type TokenUsage,
 } from "@shared";
 import {
@@ -16,6 +17,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
@@ -35,11 +37,8 @@ import {
   ChatApiKeyModel,
   ConversationEnabledToolModel,
   ConversationModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
   MessageModel,
   TeamModel,
-  ToolModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -56,7 +55,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { estimateMessagesSize } from "@/utils/message-size";
-import { mapProviderError } from "./errors";
+import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
   type UiMessage,
@@ -154,10 +153,43 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: ErrorResponsesSchema,
       },
     },
-    async (
-      { body: { id: conversationId, messages }, user, organizationId, headers },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const {
+        body: { id: conversationId, messages },
+        user,
+        organizationId,
+        headers,
+      } = request;
+      const chatAbortController = new AbortController();
+
+      // Handle broken pipe gracefully when the client navigates away
+      // The stream continues running but writing to a closed response should not crash
+      reply.raw.on("error", (err: NodeJS.ErrnoException) => {
+        if (
+          err.code === "ERR_STREAM_WRITE_AFTER_END" ||
+          err.message?.includes("write after end")
+        ) {
+          logger.debug(
+            { conversationId },
+            "Chat response stream closed by client",
+          );
+        } else {
+          logger.error({ err, conversationId }, "Chat response stream error");
+        }
+      });
+
+      // When the HTTP connection closes (stop button or navigate away), check if
+      // a stop was explicitly requested via the distributed cache. This works across
+      // pods because the cache is PostgreSQL-backed: the stop endpoint sets the flag
+      // (possibly on a different pod), then the frontend's stop() closes the stream
+      // connection which fires on THIS pod where the stream is running.
+      const removeAbortListeners = attachRequestAbortListeners({
+        request,
+        reply,
+        abortController: chatAbortController,
+        conversationId,
+      });
+
       // Extract and ingest documents to knowledge graph (fire and forget)
       // This runs asynchronously to avoid blocking the chat response
       extractAndIngestDocuments(messages).catch((error) => {
@@ -209,6 +241,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sessionId: conversation.id,
         // Pass agentId as initial delegation chain (will be extended by delegated agents)
         delegationChain: conversation.agentId,
+        abortSignal: chatAbortController.signal,
       });
 
       // Build system prompt from agent's systemPrompt and userPrompt fields
@@ -289,7 +322,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         messages: modelMessages,
         tools: mcpTools,
         stopWhen: stepCountIs(500),
+        abortSignal: chatAbortController.signal,
         onFinish: async ({ usage, finishReason }) => {
+          removeAbortListeners();
           logger.info(
             {
               conversationId,
@@ -346,11 +381,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     "Chat stream error occurred",
                   );
 
-                  // Map provider error to user-friendly ChatErrorResponse
-                  const mappedError: ChatErrorResponse = mapProviderError(
-                    error,
-                    provider,
-                  );
+                  // Use pre-built error from subagent if available (preserves correct provider),
+                  // otherwise map the error with the current provider
+                  const mappedError: ChatErrorResponse =
+                    error instanceof ProviderError
+                      ? error.chatErrorResponse
+                      : mapProviderError(error, provider);
 
                   logger.info(
                     {
@@ -379,6 +415,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                 },
                 onFinish: async ({ messages: finalMessages }) => {
+                  removeAbortListeners();
                   if (!conversationId) return;
 
                   // Get existing messages count to know how many are new
@@ -497,6 +534,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/chat/conversations/:id/stop",
+    {
+      schema: {
+        operationId: RouteId.StopChatStream,
+        description: "Stop a running chat stream for a conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ stopped: z.boolean() })),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      // Set stop flag in distributed cache so any pod can detect it on connection close.
+      // When the frontend subsequently calls stop() to close the streaming connection,
+      // the connection-close handler on the pod running the stream will find this flag
+      // and abort the stream.
+      const cacheKey = `${CacheKey.ChatStop}-${id}` as const;
+      await cacheManager.set(cacheKey, true, TimeInMs.Minute);
+      return reply.send({ stopped: true });
+    },
+  );
+
   fastify.get(
     "/api/chat/conversations",
     {
@@ -600,75 +659,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
             ?.jsonSchema || null,
       }));
-
-      return reply.send(tools);
-    },
-  );
-
-  /**
-   * Get globally available tools with their IDs for the current user.
-   * These are tools from catalogs marked as isGloballyAvailable where the user
-   * has a personal server installed. Returns tool IDs needed for enable/disable.
-   */
-  fastify.get(
-    "/api/chat/global-tools",
-    {
-      schema: {
-        operationId: RouteId.GetChatGlobalTools,
-        description:
-          "Get globally available tools with IDs for the current user",
-        tags: ["Chat"],
-        response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string().uuid(),
-              name: z.string(),
-              description: z.string().nullable(),
-              catalogId: z.string().uuid(),
-            }),
-          ),
-        ),
-      },
-    },
-    async ({ user }, reply) => {
-      // Get all globally available catalogs
-      const globalCatalogs =
-        await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-
-      if (globalCatalogs.length === 0) {
-        return reply.send([]);
-      }
-
-      const tools: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        catalogId: string;
-      }> = [];
-
-      for (const catalog of globalCatalogs) {
-        // Check if user has a personal server installed for this catalog
-        const userServer = await McpServerModel.getUserPersonalServerForCatalog(
-          user.id,
-          catalog.id,
-        );
-
-        if (!userServer) {
-          continue;
-        }
-
-        // Get tools for this catalog with their IDs
-        const catalogTools = await ToolModel.findByCatalogId(catalog.id);
-
-        for (const tool of catalogTools) {
-          tools.push({
-            id: tool.id,
-            name: tool.name,
-            description: tool.description,
-            catalogId: catalog.id,
-          });
-        }
-      }
 
       return reply.send(tools);
     },
@@ -1305,6 +1295,76 @@ export async function generateConversationTitle(
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Listens for HTTP connection close and checks the distributed cache to determine
+ * whether the close was caused by the stop button (abort) or by navigating away (ignore).
+ *
+ * Flow:
+ * 1. Frontend stop button → calls POST /stop (sets cache flag) → then calls stop() (closes connection)
+ * 2. Connection close fires on the pod running the stream → checks cache → flag found → abort
+ * 3. Navigate away → connection close → checks cache → no flag → stream continues in background
+ *
+ * Works across pods because the cache is PostgreSQL-backed.
+ */
+function attachRequestAbortListeners(params: {
+  request: { raw: NodeJS.EventEmitter };
+  reply: { raw: NodeJS.EventEmitter & { writableEnded: boolean } };
+  abortController: AbortController;
+  conversationId: string;
+}): () => void {
+  const { request, reply, abortController, conversationId } = params;
+  let didCleanup = false;
+
+  const onConnectionClose = () => {
+    cleanup();
+    if (reply.raw.writableEnded || abortController.signal.aborted) {
+      return;
+    }
+
+    // Check the distributed cache for a stop flag set by the stop endpoint
+    const cacheKey = `${CacheKey.ChatStop}-${conversationId}` as const;
+    cacheManager
+      .getAndDelete(cacheKey)
+      .then((stopRequested) => {
+        if (stopRequested) {
+          logger.info(
+            { conversationId },
+            "Chat stop requested, aborting stream execution",
+          );
+          abortController.abort();
+        } else {
+          logger.info(
+            { conversationId },
+            "Chat connection closed (navigate away), stream continues in background",
+          );
+        }
+      })
+      .catch((err) => {
+        logger.error(
+          { err, conversationId },
+          "Failed to check chat stop flag, not aborting",
+        );
+      });
+  };
+
+  const cleanup = () => {
+    if (didCleanup) {
+      return;
+    }
+
+    didCleanup = true;
+    request.raw.removeListener("close", onConnectionClose);
+    request.raw.removeListener("aborted", onConnectionClose);
+    reply.raw.removeListener("close", onConnectionClose);
+  };
+
+  request.raw.on("close", onConnectionClose);
+  request.raw.on("aborted", onConnectionClose);
+  reply.raw.on("close", onConnectionClose);
+
+  return cleanup;
+}
 
 /**
  * Validates that a chat API key exists, belongs to the organization,

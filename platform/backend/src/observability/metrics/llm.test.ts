@@ -37,7 +37,7 @@ import {
   reportLLMTokens,
   reportTimeToFirstToken,
   reportTokensPerSecond,
-} from "./llm-metrics";
+} from "./llm";
 
 describe("getObservableFetch", () => {
   let testAgent: Agent;

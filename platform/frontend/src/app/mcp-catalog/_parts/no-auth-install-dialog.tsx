@@ -68,7 +68,6 @@ export function NoAuthInstallDialog({
 
         <div className="py-4">
           <SelectMcpServerCredentialTypeAndTeams
-            selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
             catalogId={catalogItem?.id}
           />

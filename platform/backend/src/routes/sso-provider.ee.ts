@@ -2,7 +2,10 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { auth } from "@/auth/better-auth";
+import config from "@/config";
 import { SSO_PROVIDERS_API_PREFIX } from "@/constants";
+import logger from "@/logging";
+import AccountModel from "@/models/account";
 import SsoProviderModel from "@/models/sso-provider.ee";
 import {
   ApiError,
@@ -52,6 +55,29 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId }, reply) => {
       return reply.send(await SsoProviderModel.findAll(organizationId));
+    },
+  );
+
+  /**
+   * Returns the IdP logout URL for the current user's SSO provider.
+   * Used during sign-out to also terminate the IdP session (RP-Initiated Logout).
+   */
+  fastify.get(
+    `${SSO_PROVIDERS_API_PREFIX}/idp-logout-url`,
+    {
+      schema: {
+        operationId: RouteId.GetSsoProviderIdpLogoutUrl,
+        description:
+          "Get the IdP logout URL for the current user's SSO provider",
+        tags: ["SSO Providers"],
+        response: constructResponseSchema(
+          z.object({ url: z.string().nullable() }),
+        ),
+      },
+    },
+    async ({ user }, reply) => {
+      const url = await getIdpLogoutUrl(user.id);
+      return reply.send({ url });
     },
   );
 
@@ -153,3 +179,68 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default ssoProviderRoutes;
+
+// === Internal helpers ===
+
+export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
+  // Find the user's SSO account (non-credential provider)
+  const accounts = await AccountModel.getAllByUserId(userId);
+  const ssoAccount = accounts.find((a) => a.providerId !== "credential");
+  if (!ssoAccount) {
+    return null;
+  }
+
+  // Find the SSO provider configuration
+  const ssoProvider = await SsoProviderModel.findByProviderId(
+    ssoAccount.providerId,
+  );
+  if (!ssoProvider?.oidcConfig?.discoveryEndpoint) {
+    return null;
+  }
+
+  // Fetch the OIDC discovery document to get the end_session_endpoint
+  let endSessionEndpoint: string | undefined;
+  try {
+    const response = await fetch(ssoProvider.oidcConfig.discoveryEndpoint, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      logger.warn(
+        {
+          providerId: ssoAccount.providerId,
+          status: response.status,
+        },
+        "Failed to fetch OIDC discovery document for IdP logout",
+      );
+      return null;
+    }
+    const discoveryDoc = (await response.json()) as Record<string, unknown>;
+    endSessionEndpoint = discoveryDoc.end_session_endpoint as
+      | string
+      | undefined;
+  } catch (error) {
+    logger.warn(
+      { err: error, providerId: ssoAccount.providerId },
+      "Error fetching OIDC discovery document for IdP logout",
+    );
+    return null;
+  }
+
+  if (!endSessionEndpoint) {
+    return null;
+  }
+
+  // Construct the logout URL with id_token_hint, client_id, and post_logout_redirect_uri
+  const logoutUrl = new URL(endSessionEndpoint);
+  if (ssoAccount.idToken) {
+    logoutUrl.searchParams.set("id_token_hint", ssoAccount.idToken);
+  }
+  if (ssoProvider.oidcConfig.clientId) {
+    logoutUrl.searchParams.set("client_id", ssoProvider.oidcConfig.clientId);
+  }
+  logoutUrl.searchParams.set(
+    "post_logout_redirect_uri",
+    `${config.frontendBaseUrl}/auth/sign-in`,
+  );
+  return logoutUrl.toString();
+}

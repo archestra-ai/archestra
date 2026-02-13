@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_tool_calls" DROP COLUMN "external_identity";

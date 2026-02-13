@@ -3,6 +3,7 @@ import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { TeamTokenModel, UserTokenModel } from "@/models";
+import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
 vi.mock("@/config", async (importOriginal) => {
@@ -15,9 +16,19 @@ vi.mock("@/config", async (importOriginal) => {
   };
 });
 
-const { validateMCPGatewayToken, validateOAuthToken } = await import(
-  "./mcp-gateway.utils"
-);
+const mockValidateJwt = vi.fn<() => Promise<JwksValidationResult | null>>();
+
+vi.mock("@/services/jwks-validator", () => ({
+  jwksValidator: {
+    validateJwt: (...args: unknown[]) => mockValidateJwt(...(args as [])),
+  },
+}));
+
+const {
+  validateMCPGatewayToken,
+  validateOAuthToken,
+  validateExternalIdpToken,
+} = await import("./mcp-gateway.utils");
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -475,5 +486,239 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
       expect(result?.userId).toBe(user.id);
     });
+  });
+});
+
+describe("validateExternalIdpToken", () => {
+  const FAKE_JWT = "eyJhbGciOiJSUzI1NiJ9.fake.jwt";
+
+  test("returns null when profile has no identity provider", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result).toBeNull();
+  });
+
+  test("returns null when JWT has no email claim", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: null,
+      name: "Test User",
+      rawClaims: { sub: "user-123" },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result).toBeNull();
+  });
+
+  test("returns null when email does not match any Archestra user", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: "nonexistent@example.com",
+      name: "Unknown User",
+      rawClaims: { sub: "user-123", email: "nonexistent@example.com" },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result).toBeNull();
+  });
+
+  test("returns null when user is not a member of the gateway's organization", async ({
+    makeOrganization,
+    makeUser,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    // user exists but is NOT a member of org
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: user.email,
+      name: user.name,
+      rawClaims: { sub: "user-123", email: user.email },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result).toBeNull();
+  });
+
+  test("returns null when user has no shared teams with profile", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const otherUser = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    await makeMember(otherUser.id, org.id, { role: "member" });
+
+    // user is in team1
+    const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+    await makeTeamMember(team1.id, user.id);
+
+    // agent is in team2 (user is NOT)
+    const team2 = await makeTeam(org.id, otherUser.id, { name: "Team 2" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      teams: [team2.id],
+    });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    // Link agent to identity provider
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agent.id, { identityProviderId: idp.id });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: user.email,
+      name: user.name,
+      rawClaims: { sub: "user-123", email: user.email },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result).toBeNull();
+  });
+
+  test("grants access when user has profile:admin permission", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+      teams: [], // no teams assigned
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "admin-sub",
+      email: adminUser.email,
+      name: adminUser.name,
+      rawClaims: { sub: "admin-sub", email: adminUser.email },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result).not.toBeNull();
+    expect(result?.isUserToken).toBe(true);
+    expect(result?.userId).toBe(adminUser.id);
+    expect(result?.isExternalIdp).toBe(true);
+    expect(result?.isOrganizationToken).toBe(false);
+    expect(result?.organizationId).toBe(org.id);
+    expect(result?.rawToken).toBe(FAKE_JWT);
+  });
+
+  test("grants access when user shares a team with the profile", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const team = await makeTeam(org.id, user.id, { name: "Shared Team" });
+    await makeTeamMember(team.id, user.id);
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+      teams: [team.id],
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-sub",
+      email: user.email,
+      name: user.name,
+      rawClaims: { sub: "user-sub", email: user.email },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result).not.toBeNull();
+    expect(result?.isUserToken).toBe(true);
+    expect(result?.userId).toBe(user.id);
+    expect(result?.isExternalIdp).toBe(true);
+    expect(result?.isOrganizationToken).toBe(false);
+    expect(result?.organizationId).toBe(org.id);
+    expect(result?.teamId).toBeNull();
   });
 });

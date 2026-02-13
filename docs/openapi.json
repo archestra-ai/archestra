@@ -79304,37 +79304,6 @@
                               "external_idp"
                             ]
                           },
-                          "externalIdentity": {
-                            "nullable": true,
-                            "type": "object",
-                            "properties": {
-                              "idpId": {
-                                "type": "string"
-                              },
-                              "idpName": {
-                                "type": "string"
-                              },
-                              "sub": {
-                                "type": "string"
-                              },
-                              "email": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "name": {
-                                "nullable": true,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "idpId",
-                              "idpName",
-                              "sub",
-                              "email",
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -79707,37 +79676,6 @@
                         "team_token",
                         "external_idp"
                       ]
-                    },
-                    "externalIdentity": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "idpId": {
-                          "type": "string"
-                        },
-                        "idpName": {
-                          "type": "string"
-                        },
-                        "sub": {
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "idpId",
-                        "idpName",
-                        "sub",
-                        "email",
-                        "name"
-                      ],
-                      "additionalProperties": false
                     },
                     "createdAt": {
                       "type": "string",

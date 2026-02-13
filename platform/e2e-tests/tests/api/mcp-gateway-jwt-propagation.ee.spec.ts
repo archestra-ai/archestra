@@ -168,7 +168,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       expect(serverInfo.user.sub).toBeTruthy();
       expect(serverInfo.user.email).toBe(KC_TEST_USER.email);
 
-      // STEP 11: Verify audit log contains external identity
+      // STEP 11: Verify audit log links the Archestra user
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const logsResponse = await makeApiRequest({
@@ -184,8 +184,8 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
           log.authMethod === "external_idp",
       );
       expect(externalIdpLog).toBeDefined();
-      expect(externalIdpLog.externalIdentity).toBeDefined();
-      expect(externalIdpLog.externalIdentity.email).toBe(KC_TEST_USER.email);
+      expect(externalIdpLog.userName).toBeTruthy();
+      expect(externalIdpLog.userId).toBeTruthy();
     } finally {
       // Cleanup in reverse order
       if (profileId) {

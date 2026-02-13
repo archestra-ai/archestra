@@ -6,13 +6,9 @@
  * 2. Create MCP Gateway profile linked to the IdP
  * 3. Obtain JWT from Keycloak (direct grant)
  * 4. Authenticate to MCP Gateway using the JWT
- * 5. Verify tool calls succeed and external identity appears in audit logs
+ * 5. Verify tool calls succeed and the Archestra user is linked in audit logs
  */
-import {
-  API_BASE_URL,
-  KC_TEST_USER,
-  MCP_GATEWAY_URL_SUFFIX,
-} from "../../consts";
+import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX } from "../../consts";
 import { getKeycloakJwt } from "../../utils";
 import { expect, test } from "./fixtures";
 import {
@@ -117,11 +113,9 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       );
       expect(externalIdpLog).toBeDefined();
 
-      // Verify external identity is stored
-      expect(externalIdpLog.externalIdentity).toBeDefined();
-      expect(externalIdpLog.externalIdentity.sub).toBeTruthy();
-      expect(externalIdpLog.externalIdentity.email).toBe(KC_TEST_USER.email);
-      expect(externalIdpLog.externalIdentity.idpName).toBe(providerName);
+      // Verify user is linked (external IdP users are matched to Archestra users)
+      expect(externalIdpLog.userName).toBeTruthy();
+      expect(externalIdpLog.userId).toBeTruthy();
     } finally {
       // Cleanup
       if (profileId) {

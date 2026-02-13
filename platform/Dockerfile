@@ -169,15 +169,6 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
 
-# Install ngrok for optional tunneling (used with ARCHESTRA_NGROK_AUTH_TOKEN)
-ARG TARGETARCH
-RUN NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${TARGETARCH}.tgz" && \
-    wget -qO /tmp/ngrok.tgz "${NGROK_URL}" && \
-    tar -xzf /tmp/ngrok.tgz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/ngrok && \
-    ngrok version && \
-    rm -f /tmp/ngrok.tgz
-
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
 RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main && \
@@ -371,13 +362,17 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Quickstart mode always uses embedded KinD cluster
     CLUSTER_NAME="archestra-mcp"
     KUBECONFIG_PATH="/app/data/.kubeconfig"
+    # Pin a known-good node image to avoid compatibility issues with newer K8s versions.
+    # Must match a version supported by the KinD binary version compiled in the builder stage.
+    # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
+    KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
 
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-        if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
+        if ! kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s; then
             echo ""
             echo "=== KinD cluster creation failed ==="
             echo ""
@@ -561,8 +556,33 @@ if [ -n "$ARCHESTRA_ANALYTICS" ]; then
 fi
 
 # Configure ngrok tunnel if auth token is provided
+# ngrok is downloaded at runtime (not baked into the image) to avoid shipping
+# its Go stdlib CVEs in the Docker image. It's only needed when tunneling is enabled.
+# Pin to specific version with SHA256 verification for reproducibility and security.
 if [ -n "$ARCHESTRA_NGROK_AUTH_TOKEN" ]; then
-    echo "ngrok auth token detected - enabling tunnel to port 3000"
+    echo "ngrok auth token detected - downloading ngrok and enabling tunnel to port 3000"
+    NGROK_VERSION="3.36.1"
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "x86_64" ]; then
+        NGROK_ARCH="amd64"
+        NGROK_SHA256="4fe9d21be38fe8d4360b692543a2cc7345fc291b54a82ea99e7d33e46cadb765"
+    elif [ "$ARCH" = "aarch64" ]; then
+        NGROK_ARCH="arm64"
+        NGROK_SHA256="d04cc4650896e4f324e624247669f7b0d45ba28a19535fc3615d11c7b726a97e"
+    else
+        echo "ERROR: Unsupported architecture for ngrok: $ARCH"
+        exit 1
+    fi
+    NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v${NGROK_VERSION}-linux-${NGROK_ARCH}.tgz"
+    if ! wget -qO /tmp/ngrok.tgz "${NGROK_URL}"; then
+        echo "ERROR: Failed to download ngrok from ${NGROK_URL}"
+        exit 1
+    fi
+    echo "${NGROK_SHA256}  /tmp/ngrok.tgz" | sha256sum -c - || { echo "ERROR: ngrok checksum mismatch"; rm -f /tmp/ngrok.tgz; exit 1; }
+    tar -xzf /tmp/ngrok.tgz -C /usr/local/bin && \
+        chmod +x /usr/local/bin/ngrok && \
+        rm -f /tmp/ngrok.tgz
+    echo "ngrok $(ngrok version) installed"
     ngrok config add-authtoken "$ARCHESTRA_NGROK_AUTH_TOKEN"
 
     # Build ngrok command with optional static domain

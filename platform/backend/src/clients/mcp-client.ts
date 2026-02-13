@@ -28,7 +28,6 @@ import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
-  ExternalIdentity,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
 } from "@/types";
@@ -79,8 +78,6 @@ export type TokenAuthContext = {
   userId?: string;
   /** True if authenticated via external IdP JWKS */
   isExternalIdp?: boolean;
-  /** External identity info for audit logging (set when isExternalIdp is true) */
-  externalIdentity?: ExternalIdentity;
   /** Raw JWT token for propagation to underlying MCP servers (set when isExternalIdp is true) */
   rawToken?: string;
 };
@@ -215,7 +212,6 @@ class McpClient {
       ? {
           userId: tokenAuth.userId,
           authMethod: deriveAuthMethod(tokenAuth),
-          externalIdentity: tokenAuth.externalIdentity ?? null,
         }
       : undefined;
 
@@ -251,14 +247,16 @@ class McpClient {
     // Build connection cache key using the resolved target server ID.
     // When conversationId is provided, each (agent, conversation) gets its own connection
     // to enable per-session browser context isolation with streamable-http transport.
-    // When authenticated via external IdP, each user (sub) gets their own connection
+    // When authenticated via external IdP, each user gets their own connection
     // since the JWT is propagated to the underlying MCP server per-user.
-    const externalSub = tokenAuth?.externalIdentity?.sub;
+    const externalIdpUserId = tokenAuth?.isExternalIdp
+      ? tokenAuth.userId
+      : undefined;
     let connectionKey = options?.conversationId
       ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
       : `${catalogItem.id}:${targetMcpServerId}`;
-    if (externalSub) {
-      connectionKey = `${connectionKey}:ext:${externalSub}`;
+    if (externalIdpUserId) {
+      connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
     }
 
     const executeToolCall = async (
@@ -902,7 +900,7 @@ class McpClient {
       return { targetMcpServerId: allServers[0].id };
     }
 
-    // Priority 5: External IdP users have no team membership; use first available server
+    // Priority 5: Fallback for external IdP users if earlier team-based resolution didn't match
     if (tokenAuth.isExternalIdp && allServers.length > 0) {
       logger.info(
         {
@@ -1019,6 +1017,10 @@ class McpClient {
         const localHeaders: Record<string, string> = {};
         if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        } else if (secrets.access_token) {
+          localHeaders.Authorization = `Bearer ${secrets.access_token}`;
+        } else if (secrets.raw_access_token) {
+          localHeaders.Authorization = String(secrets.raw_access_token);
         }
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
@@ -1181,7 +1183,6 @@ class McpClient {
     authInfo?: {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
-      externalIdentity?: ExternalIdentity | null;
     },
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
@@ -1215,7 +1216,6 @@ class McpClient {
     authInfo?: {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
-      externalIdentity?: ExternalIdentity | null;
     },
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
@@ -1364,7 +1364,6 @@ class McpClient {
     authInfo?: {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
-      externalIdentity?: ExternalIdentity | null;
     },
   ): Promise<void> {
     // Skip high-frequency browser tool logging to prevent DB bloat
@@ -1382,7 +1381,6 @@ class McpClient {
         toolResult,
         userId: authInfo?.userId ?? null,
         authMethod: authInfo?.authMethod ?? null,
-        externalIdentity: authInfo?.externalIdentity ?? null,
       });
 
       const logData: {

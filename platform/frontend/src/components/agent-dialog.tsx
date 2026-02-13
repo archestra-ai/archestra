@@ -395,7 +395,9 @@ export function AgentDialog({
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
-  const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
+  const { data: currentDelegations = [] } = useAgentDelegations(
+    agentType !== "llm_proxy" ? agent?.id : undefined,
+  );
   const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
   const { data: identityProviders = [] } = useIdentityProviders();

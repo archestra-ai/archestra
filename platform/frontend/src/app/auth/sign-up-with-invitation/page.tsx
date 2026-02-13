@@ -30,13 +30,14 @@ function SignUpWithInvitationContent() {
   }, [invitationId, invitationData, router]);
 
   // Handle auto-accept after sign-up
+  // biome-ignore lint/correctness/useExhaustiveDependencies: acceptMutation object changes reference on every render. Using the stable mutateAsync function reference prevents unnecessary re-executions.
   useEffect(() => {
     // Only process if we've done initial check and now have a new session
     if (session && invitationId && !hasProcessed) {
       setHasProcessed(true);
       acceptMutation.mutateAsync(invitationId);
     }
-  }, [session, invitationId, hasProcessed, acceptMutation]);
+  }, [session, invitationId, hasProcessed, acceptMutation.mutateAsync]);
 
   // Prefill email field (but keep it editable for form validation)
   useEffect(() => {

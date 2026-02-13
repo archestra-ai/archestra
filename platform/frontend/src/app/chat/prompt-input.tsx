@@ -140,6 +140,7 @@ const PromptInputContent = ({
   const isRestored = useRef(false);
 
   // Restore draft on mount or conversation change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: controller.textInput is a new object every render (recreated in useMemo when textInput state changes), so using it as a dependency causes the effect to fire on every keystroke, clearing the input. Use the stable setInput function reference instead.
   useEffect(() => {
     isRestored.current = false;
     const savedDraft = localStorage.getItem(storageKey);
@@ -154,7 +155,7 @@ const PromptInputContent = ({
       isRestored.current = true;
     }, 0);
     return () => clearTimeout(timeout);
-  }, [storageKey, controller.textInput]);
+  }, [storageKey, controller.textInput.setInput]);
 
   // Save draft on change
   useEffect(() => {

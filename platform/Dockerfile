@@ -31,7 +31,7 @@ RUN corepack enable
 # Patch CVE-2026-24842: tar <=7.5.6 has path traversal vulnerability
 # tar is bundled in pnpm's corepack distribution and needs to be patched
 # Patch ALL pnpm versions in corepack cache to ensure comprehensive fix
-RUN corepack prepare pnpm@10.28.2 --activate && \
+RUN corepack prepare pnpm@10.29.3 --activate && \
     TAR_SHA256="87355a4cb10e7e7cdb4326e3e3c89232eaf5266d0792b998a396ddf6c11502bb" && \
     PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
     [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \

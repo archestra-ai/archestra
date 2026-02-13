@@ -126,7 +126,7 @@ export default function MsTeamsPage() {
             POST {"<archestra-url>/api/webhooks/chatops/ms-teams"}
           </code>{" "}
           must be publicly accessible so MS Teams can deliver messages to
-          Archestra. Deploy to a public URL or configure a tunnel.
+          Archestra
         </span>
       </div>
     </div>
@@ -156,7 +156,7 @@ export default function MsTeamsPage() {
             </Link>
           </p>
         </div>
-        {prodFirstStep}
+        {firstStep}
         <SetupStep
           title="Setup MS Teams"
           description="Register a Teams bot application and connect it to Archestra"

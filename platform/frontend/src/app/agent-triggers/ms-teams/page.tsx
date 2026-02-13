@@ -116,11 +116,11 @@ export default function MsTeamsPage() {
   const prodFirstStep = (
     <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
       <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-      <div className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">
+      <div className="flex flex-col gap-1">
+        <span className="font-medium text-sm">
           Archestra's webhook must be reachable from the Internet
         </span>
-        <span className="text-muted-foreground">
+        <span className="text-muted-foreground text-xs">
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             POST {"<archestra-url>/api/webhooks/chatops/ms-teams"}
@@ -156,7 +156,7 @@ export default function MsTeamsPage() {
             </Link>
           </p>
         </div>
-        {firstStep}
+        {prodFirstStep}
         <SetupStep
           title="Setup MS Teams"
           description="Register a Teams bot application and connect it to Archestra"

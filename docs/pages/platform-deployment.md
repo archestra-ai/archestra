@@ -565,7 +565,7 @@ The following environment variables can be used to configure Archestra Platform.
 
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
-  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/docs/platform-single-sign-on) for SSO configuration.
+  - Note: Configure at least one Identity Provider before enabling this option. See [Identity Providers](/docs/platform-identity-providers) for SSO configuration.
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
 

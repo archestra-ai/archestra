@@ -17,20 +17,6 @@ export const MCPGatewayAuthMethodSchema = z.enum([
 export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
 
 /**
- * External identity info when authenticated via external IdP JWKS
- */
-export const ExternalIdentitySchema = z
-  .object({
-    idpId: z.string(),
-    idpName: z.string(),
-    sub: z.string(),
-    email: z.string().nullable(),
-    name: z.string().nullable(),
-  })
-  .nullable();
-export type ExternalIdentity = z.infer<typeof ExternalIdentitySchema>;
-
-/**
  * Select schema for MCP tool calls (includes joined userName from users table)
  * Note: toolResult structure varies by method type:
  * - tools/call: { id, content, isError, error? }
@@ -44,7 +30,6 @@ export const SelectMcpToolCallSchema = createSelectSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
-    externalIdentity: ExternalIdentitySchema.optional(),
   },
 ).extend({
   userName: z.string().nullable(),
@@ -60,7 +45,6 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
-    externalIdentity: ExternalIdentitySchema.optional(),
   },
 );
 

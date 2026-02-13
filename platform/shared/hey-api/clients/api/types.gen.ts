@@ -22072,13 +22072,6 @@ export type GetMcpToolCallsResponses = {
             toolResult: unknown;
             userId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
-            externalIdentity?: {
-                idpId: string;
-                idpName: string;
-                sub: string;
-                email: string | null;
-                name: string | null;
-            } | null;
             createdAt: string;
             userName: string | null;
         }>;
@@ -22185,13 +22178,6 @@ export type GetMcpToolCallResponses = {
         toolResult: unknown;
         userId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp';
-        externalIdentity?: {
-            idpId: string;
-            idpName: string;
-            sub: string;
-            email: string | null;
-            name: string | null;
-        } | null;
         createdAt: string;
         userName: string | null;
     };

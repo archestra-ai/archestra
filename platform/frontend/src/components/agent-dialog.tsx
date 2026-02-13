@@ -395,7 +395,9 @@ export function AgentDialog({
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
-  const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
+  const { data: currentDelegations = [] } = useAgentDelegations(
+    agentType !== "llm_proxy" ? agent?.id : undefined,
+  );
   const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
   const { data: identityProviders = [] } = useIdentityProviders();
@@ -1399,7 +1401,15 @@ export function AgentDialog({
                 <p className="text-sm text-muted-foreground">
                   Optionally select an Identity Provider to validate incoming
                   JWT tokens via JWKS. When configured, MCP clients can
-                  authenticate using JWTs issued by this IdP.
+                  authenticate using JWTs issued by this IdP.{" "}
+                  <a
+                    href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    Learn more
+                  </a>
                 </p>
                 <Select
                   value={identityProviderId ?? "none"}

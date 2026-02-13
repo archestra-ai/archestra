@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.42"
+    "version": "1.0.44"
   },
   "components": {
     "schemas": {
@@ -79565,37 +79565,6 @@
                               "external_idp"
                             ]
                           },
-                          "externalIdentity": {
-                            "nullable": true,
-                            "type": "object",
-                            "properties": {
-                              "idpId": {
-                                "type": "string"
-                              },
-                              "idpName": {
-                                "type": "string"
-                              },
-                              "sub": {
-                                "type": "string"
-                              },
-                              "email": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "name": {
-                                "nullable": true,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "idpId",
-                              "idpName",
-                              "sub",
-                              "email",
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -79968,37 +79937,6 @@
                         "team_token",
                         "external_idp"
                       ]
-                    },
-                    "externalIdentity": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "idpId": {
-                          "type": "string"
-                        },
-                        "idpName": {
-                          "type": "string"
-                        },
-                        "sub": {
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "idpId",
-                        "idpName",
-                        "sub",
-                        "email",
-                        "name"
-                      ],
-                      "additionalProperties": false
                     },
                     "createdAt": {
                       "type": "string",

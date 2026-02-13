@@ -65,11 +65,10 @@ runs:
   using: composite
   steps:
     - name: Install Kind
-      uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+      uses: ./.github/actions/install-kind-cluster
       with:
         config: ${{ inputs.kind-config-path }}
-        cluster_name: ${{ inputs.kind-cluster-name }}
-        install_only: false
+        cluster-name: ${{ inputs.kind-cluster-name }}
 
     - name: Debug Kind cluster
       shell: bash

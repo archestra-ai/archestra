@@ -33,16 +33,13 @@ import {
   TeamModel,
   TeamTokenModel,
   ToolModel,
+  UserModel,
   UserTokenModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
-import {
-  type CommonToolCall,
-  type ExternalIdentity,
-  UuidIdSchema,
-} from "@/types";
+import { type CommonToolCall, UuidIdSchema } from "@/types";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -63,8 +60,6 @@ export interface TokenAuthResult {
   userId?: string;
   /** True if authenticated via external IdP JWKS */
   isExternalIdp?: boolean;
-  /** External identity info for audit logging */
-  externalIdentity?: ExternalIdentity;
   /** Raw JWT token for propagation to underlying MCP servers */
   rawToken?: string;
 }
@@ -134,7 +129,6 @@ export async function createAgentServer(
         toolResult: { tools: toolsList } as any,
         userId: tokenAuth?.userId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
-        externalIdentity: tokenAuth?.externalIdentity ?? null,
       });
       logger.info(
         { agentId, toolsCount: toolsList.length },
@@ -222,7 +216,6 @@ export async function createAgentServer(
               toolResult: response,
               userId: tokenAuth?.userId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
-              externalIdentity: tokenAuth?.externalIdentity ?? null,
             });
           } catch (dbError) {
             logger.info(
@@ -744,19 +737,77 @@ export async function validateExternalIdpToken(
       "validateExternalIdpToken: JWT validated via external IdP JWKS",
     );
 
+    // Match JWT email claim to an Archestra user for access control
+    if (!result.email) {
+      logger.warn(
+        { profileId, sub: result.sub },
+        "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
+      );
+      return null;
+    }
+
+    const user = await UserModel.findByEmail(result.email);
+    if (!user) {
+      logger.warn(
+        { profileId, email: result.email },
+        "validateExternalIdpToken: JWT email does not match any Archestra user",
+      );
+      return null;
+    }
+
+    const member = await MemberModel.getByUserId(user.id, agent.organizationId);
+    if (!member) {
+      logger.warn(
+        { profileId, userId: user.id, email: result.email },
+        "validateExternalIdpToken: user is not a member of the gateway's organization",
+      );
+      return null;
+    }
+
+    // Check if user has profile admin permission (can access all profiles)
+    const isProfileAdmin = await userHasPermission(
+      user.id,
+      agent.organizationId,
+      "profile",
+      "admin",
+    );
+
+    if (isProfileAdmin) {
+      return {
+        tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: agent.organizationId,
+        isUserToken: true,
+        userId: user.id,
+        isExternalIdp: true,
+        rawToken: tokenValue,
+      };
+    }
+
+    // Non-admin: user can access profile if they are a member of any team assigned to the profile
+    const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+    const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+    const hasAccess = userTeamIds.some((teamId) =>
+      profileTeamIds.includes(teamId),
+    );
+
+    if (!hasAccess) {
+      logger.warn(
+        { profileId, userId: user.id, userTeamIds, profileTeamIds },
+        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
+      );
+      return null;
+    }
+
     return {
       tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
       teamId: null,
-      isOrganizationToken: true,
+      isOrganizationToken: false,
       organizationId: agent.organizationId,
+      isUserToken: true,
+      userId: user.id,
       isExternalIdp: true,
-      externalIdentity: {
-        idpId: agent.identityProviderId,
-        idpName: idpProvider.providerId,
-        sub: result.sub,
-        email: result.email,
-        name: result.name,
-      },
       rawToken: tokenValue,
     };
   } catch (error) {

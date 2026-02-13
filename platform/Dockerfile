@@ -558,20 +558,28 @@ fi
 # Configure ngrok tunnel if auth token is provided
 # ngrok is downloaded at runtime (not baked into the image) to avoid shipping
 # its Go stdlib CVEs in the Docker image. It's only needed when tunneling is enabled.
+# Pin to specific version with SHA256 verification for reproducibility and security.
 if [ -n "$ARCHESTRA_NGROK_AUTH_TOKEN" ]; then
     echo "ngrok auth token detected - downloading ngrok and enabling tunnel to port 3000"
+    NGROK_VERSION="3.36.1"
     ARCH=$(uname -m)
     if [ "$ARCH" = "x86_64" ]; then
         NGROK_ARCH="amd64"
+        NGROK_SHA256="4fe9d21be38fe8d4360b692543a2cc7345fc291b54a82ea99e7d33e46cadb765"
     elif [ "$ARCH" = "aarch64" ]; then
         NGROK_ARCH="arm64"
+        NGROK_SHA256="d04cc4650896e4f324e624247669f7b0d45ba28a19535fc3615d11c7b726a97e"
     else
         echo "ERROR: Unsupported architecture for ngrok: $ARCH"
         exit 1
     fi
-    NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${NGROK_ARCH}.tgz"
-    wget -qO /tmp/ngrok.tgz "${NGROK_URL}" && \
-        tar -xzf /tmp/ngrok.tgz -C /usr/local/bin && \
+    NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v${NGROK_VERSION}-linux-${NGROK_ARCH}.tgz"
+    if ! wget -qO /tmp/ngrok.tgz "${NGROK_URL}"; then
+        echo "ERROR: Failed to download ngrok from ${NGROK_URL}"
+        exit 1
+    fi
+    echo "${NGROK_SHA256}  /tmp/ngrok.tgz" | sha256sum -c - || { echo "ERROR: ngrok checksum mismatch"; rm -f /tmp/ngrok.tgz; exit 1; }
+    tar -xzf /tmp/ngrok.tgz -C /usr/local/bin && \
         chmod +x /usr/local/bin/ngrok && \
         rm -f /tmp/ngrok.tgz
     echo "ngrok $(ngrok version) installed"

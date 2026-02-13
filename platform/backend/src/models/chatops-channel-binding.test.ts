@@ -573,7 +573,7 @@ describe("ChatOpsChannelBindingModel", () => {
         {
           organizationId: org.id,
           provider: "ms-teams",
-          workspaceId: "ws-1",
+          workspaceIds: ["ws-1"],
           activeChannelIds: ["ch-1"],
         },
       );
@@ -607,7 +607,7 @@ describe("ChatOpsChannelBindingModel", () => {
         {
           organizationId: org.id,
           provider: "ms-teams",
-          workspaceId: "ws-1",
+          workspaceIds: ["ws-1"],
           activeChannelIds: ["ch-1"],
         },
       );
@@ -652,7 +652,7 @@ describe("ChatOpsChannelBindingModel", () => {
         {
           organizationId: org.id,
           provider: "ms-teams",
-          workspaceId: "ws-1",
+          workspaceIds: ["ws-1"],
           activeChannelIds: ["ch-1", "ch-2"],
         },
       );
@@ -683,7 +683,7 @@ describe("ChatOpsChannelBindingModel", () => {
         {
           organizationId: org.id,
           provider: "ms-teams",
-          workspaceId: "ws-1",
+          workspaceIds: ["ws-1"],
           activeChannelIds: [],
         },
       );

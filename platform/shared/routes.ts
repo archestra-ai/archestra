@@ -322,6 +322,7 @@ export const RouteId = {
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

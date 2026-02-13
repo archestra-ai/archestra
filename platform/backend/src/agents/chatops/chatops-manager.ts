@@ -109,12 +109,14 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     context: unknown;
     workspaceId: string;
+    /** Additional workspace ID variants for the same team (e.g. both aadGroupId and thread ID). */
+    allWorkspaceIds?: string[];
   }): Promise<void> {
     const { provider, context, workspaceId } = params;
 
     // TTL check using distributed (PostgreSQL-backed) cache — shared across pods
     const cacheKey =
-      `${CacheKey.ChannelDiscovery}-${workspaceId}` as AllowedCacheKey;
+      `${CacheKey.ChannelDiscovery}-${provider.providerId}-${workspaceId}` as AllowedCacheKey;
     if (await cacheManager.get(cacheKey)) return;
 
     try {
@@ -137,15 +139,27 @@ export class ChatOpsManager {
         channels,
       });
 
-      // Remove bindings for channels that no longer exist
+      // Remove bindings for channels that no longer exist.
+      // Use all known workspace ID variants (UUID aadGroupId + thread ID) so stale
+      // bindings are cleaned up regardless of which format was used when they were created.
+      const workspaceIds = params.allWorkspaceIds?.length
+        ? params.allWorkspaceIds
+        : [workspaceId];
       const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
         {
           organizationId,
           provider: provider.providerId,
-          workspaceId,
+          workspaceIds,
           activeChannelIds,
         },
       );
+
+      // Clean up duplicate bindings for the same channel caused by different
+      // workspaceId formats (UUID vs thread ID) stored at different times.
+      await ChatOpsChannelBindingModel.deduplicateBindings({
+        provider: provider.providerId,
+        channelIds: activeChannelIds,
+      });
 
       // Set TTL cache only after successful discovery
       await cacheManager.set(cacheKey, true, CHATOPS_CHANNEL_DISCOVERY.TTL_MS);

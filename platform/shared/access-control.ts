@@ -720,6 +720,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatOpsConfigInQuickstart]: {
     organization: ["update"],
   },
+  [RouteId.RefreshChatOpsChannelDiscovery]: {
+    organization: ["update"],
+  },
 };
 
 /**

@@ -547,7 +547,7 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
 
   if (playwrightTools.length === 0) return;
 
-  const toolIds = playwrightTools.map((t) => t.id);
+  const playwrightToolIds = playwrightTools.map((t) => t.id);
 
   // Update all assignments that still use static credentials
   const result = await db
@@ -559,7 +559,7 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
     })
     .where(
       and(
-        inArray(schema.agentToolsTable.toolId, toolIds),
+        inArray(schema.agentToolsTable.toolId, playwrightToolIds),
         eq(schema.agentToolsTable.useDynamicTeamCredential, false),
       ),
     );

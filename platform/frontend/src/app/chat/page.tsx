@@ -21,6 +21,10 @@ import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import {
+  PlaywrightInstallDialog,
+  usePlaywrightSetupRequired,
+} from "@/components/chat/playwright-install-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
@@ -423,6 +427,17 @@ export default function ChatPage() {
     ? (conversation?.agentId ?? conversation?.agent?.id)
     : (initialAgentId ?? undefined);
 
+  const playwrightSetupAgentId = conversationId
+    ? conversation?.agentId
+    : (initialAgentId ?? undefined);
+  const {
+    isLoading: isPlaywrightCheckLoading,
+    isRequired: isPlaywrightSetupRequired,
+  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId);
+  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
+  const isPlaywrightSetupVisible =
+    isPlaywrightSetupRequired || isPlaywrightCheckLoading;
+
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
 
@@ -683,6 +698,7 @@ export default function ChatPage() {
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
+    if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
       if (conversationId) {
         // Set the cache flag first, THEN close the connection so the
@@ -819,6 +835,7 @@ export default function ChatPage() {
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
     (message, e) => {
       e.preventDefault();
+      if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
@@ -892,6 +909,7 @@ export default function ChatPage() {
       );
     },
     [
+      isPlaywrightSetupVisible,
       initialAgentId,
       initialModel,
       initialApiKeyId,
@@ -959,8 +977,12 @@ export default function ChatPage() {
   const activeAgentId = conversation?.agent?.id ?? initialAgentId;
 
   // Show loading spinner while essential data is loading
-  if (isLoadingApiKeyCheck || isLoadingAgents) {
-    return <LoadingSpinner />;
+  if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoadingSpinner />
+      </div>
+    );
   }
 
   // If API key is not configured, show setup message
@@ -1098,10 +1120,15 @@ export default function ChatPage() {
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
-                      variant={isBrowserPanelOpen ? "secondary" : "ghost"}
+                      variant={
+                        isBrowserPanelOpen && !isPlaywrightSetupVisible
+                          ? "secondary"
+                          : "ghost"
+                      }
                       size="sm"
                       onClick={toggleBrowserPanel}
                       className="text-xs"
+                      disabled={isPlaywrightSetupVisible}
                     >
                       <Globe className="h-3 w-3 mr-1" />
                       Browser
@@ -1112,7 +1139,13 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto relative">
+            {isPlaywrightSetupRequired && (
+              <PlaywrightInstallDialog
+                agentId={playwrightSetupAgentId}
+                conversationId={conversationId}
+              />
+            )}
             <ChatMessages
               conversationId={conversationId}
               agentId={currentProfileId || initialAgentId || undefined}
@@ -1144,6 +1177,7 @@ export default function ChatPage() {
                       );
                     }
               }
+              hideArrow={isPlaywrightSetupVisible}
               messages={messages}
               status={status}
               isLoadingConversation={isLoadingConversation}
@@ -1262,6 +1296,7 @@ export default function ChatPage() {
                             | undefined
                         )?.llmApiKeyId as string | null)
                   }
+                  submitDisabled={isPlaywrightSetupVisible}
                 />
                 <div className="text-center">
                   <Version inline />
@@ -1301,7 +1336,11 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isArtifactOpen={isArtifactOpen}
         onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
+        isBrowserOpen={
+          isBrowserPanelOpen &&
+          isBrowserStreamingEnabled &&
+          !isPlaywrightSetupVisible
+        }
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         agentId={browserToolsAgentId}

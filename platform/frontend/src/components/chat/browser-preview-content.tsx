@@ -480,10 +480,17 @@ export function BrowserPreviewContent({
                     onClick={() =>
                       resolvedAgentId && installBrowser(resolvedAgentId)
                     }
-                    disabled={!resolvedAgentId}
+                    disabled={!resolvedAgentId || isInstallingBrowser}
                     className="mt-10"
                   >
-                    Install Browser
+                    {isInstallingBrowser ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Installing
+                      </>
+                    ) : (
+                      "Install Browser"
+                    )}
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     Required only before first usage of the Browser Preview

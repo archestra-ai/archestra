@@ -86,6 +86,8 @@ interface ArchestraPromptInputProps {
   inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to ChatApiKeySelector */
   agentLlmApiKeyId?: string | null;
+  /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
+  submitDisabled?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -110,6 +112,7 @@ const PromptInputContent = ({
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
+  submitDisabled = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -356,7 +359,11 @@ const PromptInputContent = ({
             textareaRef={textareaRef}
             onTranscriptionChange={handleTranscriptionChange}
           />
-          <PromptInputSubmit className="!h-8" status={status} />
+          <PromptInputSubmit
+            className="!h-8"
+            status={status}
+            disabled={submitDisabled}
+          />
         </div>
       </PromptInputFooter>
     </PromptInput>
@@ -384,6 +391,7 @@ const ArchestraPromptInput = ({
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
+  submitDisabled,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -409,6 +417,7 @@ const ArchestraPromptInput = ({
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
+          submitDisabled={submitDisabled}
         />
       </PromptInputProvider>
     </div>

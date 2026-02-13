@@ -473,8 +473,7 @@ class ToolInvocationPolicyModel {
       if (!isContextTrusted) {
         return {
           isAllowed: false,
-          reason:
-            NO_POLICY_UNTRUSTED_REASON,
+          reason: NO_POLICY_UNTRUSTED_REASON,
           toolCallName,
         };
       }

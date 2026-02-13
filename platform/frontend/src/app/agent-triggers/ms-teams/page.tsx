@@ -274,11 +274,11 @@ function ChannelBindingsSection() {
       <div>
         <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Use{" "}
+          Assign agents to Teams channels using the dropdown below, or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             /select-agent
           </code>{" "}
-          command in Teams to connect more Archestra Agents to a Teams channels.
+          in Teams.
         </p>
       </div>
 

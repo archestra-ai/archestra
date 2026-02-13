@@ -1,5 +1,5 @@
 import { RouteId } from "@shared";
-import { TeamsInfo, TurnContext } from "botbuilder";
+import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -19,6 +19,7 @@ import {
 } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
+  type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
   type IncomingChatMessage,
@@ -149,6 +150,35 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
 
               await handleAgentSelection(context, cardMessage);
+              return;
+            }
+
+            // Handle bot installation/update — discover all team channels
+            if (
+              context.activity.type === ActivityTypes.ConversationUpdate ||
+              context.activity.type === ActivityTypes.InstallationUpdate
+            ) {
+              const teamData = context.activity.channelData?.team as
+                | { id?: string; aadGroupId?: string }
+                | undefined;
+              if (teamData?.id) {
+                const workspaceId = teamData.aadGroupId || teamData.id;
+                // Await so discovery completes before the webhook returns,
+                // but catch errors to avoid failing the webhook response.
+                await chatOpsManager
+                  .discoverChannels({ provider, context, workspaceId })
+                  .catch((error) => {
+                    logger.error(
+                      {
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "[ChatOps] Error discovering channels",
+                    );
+                  });
+              }
               return;
             }
 
@@ -301,13 +331,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             if (!binding) {
+              // Discover channels before responding (must await — TurnContext proxy is revoked after callback returns)
+              await awaitDiscovery(provider, context);
               // No binding - show agent selection
               await sendAgentSelectionCard(context, message);
               return;
             }
 
-            // Fire-and-forget: refresh channel/workspace names if changed
-            refreshBindingNames(context, binding, message).catch(() => {});
+            // Refresh names + discover channels in parallel (must await — TurnContext proxy is revoked after callback returns)
+            await Promise.all([
+              refreshBindingNames(context, binding, message).catch(() => {}),
+              awaitDiscovery(provider, context),
+            ]);
 
             // Process message through bound agent
             await chatOpsManager.processMessage({
@@ -992,6 +1027,27 @@ async function refreshBindingNames(
       "[ChatOps] Failed to refresh binding names",
     );
   }
+}
+
+/**
+ * Await channel discovery via the ChatOpsManager.
+ * Must be awaited (not fire-and-forget) because Bot Framework revokes the
+ * TurnContext proxy once the processActivity callback returns.
+ * The TTL cache makes this essentially free on cache hits.
+ */
+async function awaitDiscovery(
+  provider: ChatOpsProvider,
+  context: TurnContext,
+): Promise<void> {
+  const teamData = context.activity.channelData?.team as
+    | { id?: string; aadGroupId?: string }
+    | undefined;
+  if (!teamData?.id) return;
+
+  const workspaceId = teamData.aadGroupId || teamData.id;
+  await chatOpsManager
+    .discoverChannels({ provider, context, workspaceId })
+    .catch(() => {});
 }
 
 /**

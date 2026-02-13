@@ -30,6 +30,8 @@ export const CacheKey = {
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
   ChatStop: "chat-stop",
+  /** Channel discovery TTL per workspace */
+  ChannelDiscovery: "channel-discovery",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

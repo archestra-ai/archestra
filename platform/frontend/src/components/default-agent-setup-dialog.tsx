@@ -202,10 +202,12 @@ function StepSelectAgentInTeams() {
               2
             </span>
             <span className="pt-0.5">
-              Mention the bot (e.g., <strong>@Archestra</strong>) or type{" "}
+              Mention the bot (e.g., <strong>@Archestra</strong>) and send any
+              message to it or use{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
                 /select-agent
-              </code>
+              </code>{" "}
+              command
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">

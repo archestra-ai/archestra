@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, notInArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
@@ -243,6 +243,85 @@ class ChatOpsChannelBindingModel {
       );
 
     return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Batch upsert discovered channels.
+   * Creates bindings with agentId=null for new channels,
+   * updates channelName/workspaceName for existing ones (preserves agentId).
+   */
+  static async ensureChannelsExist(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+    channels: Array<{
+      channelId: string;
+      channelName: string | null;
+      workspaceId: string | null;
+      workspaceName: string | null;
+    }>;
+  }): Promise<void> {
+    if (params.channels.length === 0) return;
+
+    const values = params.channels.map((ch) => ({
+      organizationId: params.organizationId,
+      provider: params.provider,
+      channelId: ch.channelId,
+      workspaceId: ch.workspaceId,
+      channelName: ch.channelName,
+      workspaceName: ch.workspaceName,
+    }));
+
+    await db
+      .insert(schema.chatopsChannelBindingsTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          schema.chatopsChannelBindingsTable.provider,
+          schema.chatopsChannelBindingsTable.channelId,
+          schema.chatopsChannelBindingsTable.workspaceId,
+        ],
+        set: {
+          channelName: sql`excluded.channel_name`,
+          workspaceName: sql`excluded.workspace_name`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  /**
+   * Remove bindings for channels that no longer exist in Teams.
+   * Returns the count of deleted rows.
+   */
+  static async deleteStaleChannels(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+    workspaceId: string;
+    activeChannelIds: string[];
+  }): Promise<number> {
+    if (params.activeChannelIds.length === 0) return 0;
+
+    const deleted = await db
+      .delete(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(
+            schema.chatopsChannelBindingsTable.workspaceId,
+            params.workspaceId,
+          ),
+          notInArray(
+            schema.chatopsChannelBindingsTable.channelId,
+            params.activeChannelIds,
+          ),
+        ),
+      )
+      .returning();
+
+    return deleted.length;
   }
 }
 

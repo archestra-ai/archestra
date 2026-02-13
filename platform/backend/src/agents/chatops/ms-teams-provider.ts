@@ -18,6 +18,7 @@ import {
   CloudAdapter,
   ConfigurationBotFrameworkAuthentication,
   type ConversationReference,
+  TeamsInfo,
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
@@ -29,6 +30,7 @@ import type {
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
@@ -473,6 +475,35 @@ class MSTeamsProvider implements ChatOpsProvider {
       );
       return null;
     }
+  }
+
+  async discoverChannels(
+    context: unknown,
+  ): Promise<DiscoveredChannel[] | null> {
+    if (!(context instanceof TurnContext)) return null;
+
+    const teamData = context.activity.channelData?.team as
+      | { id?: string; aadGroupId?: string }
+      | undefined;
+    if (!teamData?.id) return null;
+
+    const workspaceId = teamData.aadGroupId || teamData.id;
+
+    const [channels, teamDetails] = await Promise.all([
+      TeamsInfo.getTeamChannels(context),
+      TeamsInfo.getTeamDetails(context).catch(() => null),
+    ]);
+
+    if (!channels?.length) return null;
+
+    return channels
+      .filter((ch): ch is typeof ch & { id: string } => !!ch.id)
+      .map((ch) => ({
+        channelId: ch.id,
+        channelName: ch.name ?? "General",
+        workspaceId,
+        workspaceName: teamDetails?.name ?? null,
+      }));
   }
 
   async processActivity(

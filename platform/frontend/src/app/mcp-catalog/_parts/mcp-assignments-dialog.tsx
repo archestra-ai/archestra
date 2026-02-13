@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
 import { Loader2, Search, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -188,6 +188,7 @@ export function McpAssignmentsDialog({
         );
 
         const useDynamicCredential =
+          isPlaywrightCatalogItem(catalogId) ||
           changes.credentialId === DYNAMIC_CREDENTIAL_VALUE;
 
         // Track affected agents for invalidation
@@ -570,7 +571,9 @@ function ProfileAssignmentPill({
   const toolCount = selectedToolIds.size;
   const totalTools = allTools.length;
   const hasNoAssignments = toolCount === 0;
-  const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
+  const isPlaywright = isPlaywrightCatalogItem(catalogId);
+  const showCredentialSelector =
+    !isBuiltin && !isPlaywright && mcpServers.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>

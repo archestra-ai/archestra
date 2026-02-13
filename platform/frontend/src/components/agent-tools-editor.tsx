@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import {
+  type archestraApiTypes,
+  isPlaywrightCatalogItem,
+  parseFullToolName,
+} from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
@@ -260,6 +264,7 @@ const AgentToolsEditorContent = forwardRef<
               ? changes.credentialSourceId
               : undefined,
             useDynamicTeamCredential:
+              isPlaywrightCatalogItem(changes.catalogItem.id) ||
               changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
             skipInvalidation: true,
           });
@@ -438,9 +443,12 @@ function McpServerPill({
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
 
-  // Show credential selector for non-builtin servers that have credentials available
+  // Show credential selector for non-builtin, non-Playwright servers that have credentials available
+  const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
   const showCredentialSelector =
-    catalogItem.serverType !== "builtin" && mcpServers.length > 0;
+    catalogItem.serverType !== "builtin" &&
+    !isPlaywright &&
+    mcpServers.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>

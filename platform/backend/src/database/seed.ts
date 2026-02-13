@@ -7,7 +7,7 @@ import {
   type SupportedProvider,
   testMcpServerCommand,
 } from "@shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { isEqual } from "lodash-es";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
@@ -532,6 +532,47 @@ function getProviderDisplayName(provider: SupportedProvider): string {
   return displayNames[provider];
 }
 
+/**
+ * Migrates existing Playwright tool assignments to use dynamic credentials.
+ * Static credentials break user isolation since multiple users would share
+ * the same browser session. This ensures all Playwright assignments use
+ * useDynamicTeamCredential=true.
+ */
+async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
+  // Find all tool IDs belonging to the Playwright catalog
+  const playwrightTools = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(eq(schema.toolsTable.catalogId, PLAYWRIGHT_MCP_CATALOG_ID));
+
+  if (playwrightTools.length === 0) return;
+
+  const toolIds = playwrightTools.map((t) => t.id);
+
+  // Update all assignments that still use static credentials
+  const result = await db
+    .update(schema.agentToolsTable)
+    .set({
+      useDynamicTeamCredential: true,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+    })
+    .where(
+      and(
+        inArray(schema.agentToolsTable.toolId, toolIds),
+        eq(schema.agentToolsTable.useDynamicTeamCredential, false),
+      ),
+    );
+
+  const count = result.rowCount ?? 0;
+  if (count > 0) {
+    logger.info(
+      { updatedCount: count },
+      "Migrated Playwright tool assignments to dynamic credentials",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
@@ -542,6 +583,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
+  await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();

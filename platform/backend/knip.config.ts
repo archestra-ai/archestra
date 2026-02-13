@@ -9,21 +9,10 @@ const config: KnipConfig = {
     "@shared",
     // Used in logging.ts
     "pino-pretty",
-    // Used as binaries in scripts
-    "@sentry/cli",
-    "tsx",
   ],
   ignoreBinaries: [
     // biome is in root package.json
     "biome",
-    // These are provided by devDependencies and used in scripts
-    "tsdown",
-    "vitest",
-    "knip",
-    "tsc",
-    "drizzle-kit",
-    "tsx",
-    "sentry-cli",
   ],
   rules: {
     // Types/schemas are exported for API documentation and external client generation

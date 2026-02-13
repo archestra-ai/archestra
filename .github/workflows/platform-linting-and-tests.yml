@@ -609,12 +609,7 @@ jobs:
 
       - name: Install Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
-        with:
-          config: .github/kind.yaml
-          cluster_name: archestra-ci-cluster
-          node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
-          install_only: false
+        uses: ./.github/actions/install-kind-cluster
 
       - name: Load Docker image into Kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

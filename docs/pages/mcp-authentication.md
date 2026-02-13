@@ -34,6 +34,32 @@ Endpoint discovery is automatic. The gateway exposes standard well-known endpoin
 
 For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer archestra_<token>`. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
 
+### External IdP JWKS
+
+Identity Providers (IdPs) configured in Archestra can also be used to authenticate external MCP clients. When an IdP is linked to an Archestra MCP Gateway, the gateway validates incoming JWT bearer tokens against the IdP's JWKS (JSON Web Key Set) endpoint and matches the caller to an Archestra user account. The same team-based access control that applies to Bearer tokens and OAuth also applies here — the JWT's email claim must correspond to an Archestra user who has permission to access the gateway.
+
+After authentication, the gateway propagates the original JWT to upstream MCP servers as an `Authorization: Bearer` header. This enables end-to-end identity propagation — upstream servers can validate the same JWT against the IdP's JWKS and extract user identity from the claims without any Archestra-specific integration. See [End-to-End JWKS](#end-to-end-jwks-without-gateway) below for how to build servers that consume these tokens.
+
+#### How It Works
+
+1. Admin configures an OIDC Identity Provider in **Settings > [Identity Providers](/docs/platform-identity-providers)**
+2. Admin creates an MCP Gateway and selects the Identity Provider to use for JWKS Auth
+3. External MCP client obtains a JWT from the IdP (e.g., via client credentials flow or user login)
+4. Client sends requests to the gateway with `Authorization: Bearer <jwt>`
+5. Gateway discovers the JWKS URL from the IdP's OIDC discovery endpoint
+6. Gateway validates the JWT signature, issuer, audience (IdP's client ID), and expiration
+7. Gateway extracts the `email` claim from the JWT and matches it to an Archestra user account
+8. Gateway propagates the original JWT to upstream MCP servers
+
+#### Requirements
+
+- The Identity Provider must be an **OIDC provider** (SAML providers do not support JWKS)
+- The IdP must expose a standard OIDC discovery endpoint (`.well-known/openid-configuration`) with a `jwks_uri`
+- The JWT `iss` claim must match the IdP's issuer URL
+- The JWT `aud` claim must match the IdP's client ID (if configured)
+- The JWT must contain an `email` claim that matches an existing Archestra user
+- The user must have `profile:admin` permission or be a member of at least one team associated with the gateway they are trying to use
+
 ## Upstream Credentials
 
 MCP servers that connect to external services like GitHub, Atlassian, or ServiceNow need their own credentials. Archestra manages this with a two-token model:
@@ -166,3 +192,11 @@ Your server (or its OAuth provider) needs to expose two things:
 Archestra handles everything else: endpoint discovery, client registration, the authorization code flow with PKCE, token storage, and automatic refresh when tokens expire.
 
 Your server receives an `Authorization: Bearer <access_token>` header with each request from the gateway.
+
+### End-to-End JWKS (Without Gateway)
+
+When an MCP Gateway is configured with an [External IdP](#external-idp-jwks), the gateway propagates the caller's JWT to upstream MCP servers. Your MCP server receives the JWT as an `Authorization: Bearer` header and can validate it directly against the IdP's JWKS endpoint — statelessly, without any Archestra-specific integration.
+
+This pattern is useful when your MCP server needs to enforce its own access control based on IdP claims (roles, groups, etc.), or when the server is also deployed outside of Archestra and needs to authenticate users independently.
+
+See [Building Enterprise-Ready MCP Servers with JWKS and Identity Providers](https://archestra.ai/blog/enterprise-mcp-servers-jwks) for a full walkthrough with code examples.

@@ -18,12 +18,12 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 - Limitations and requirements
 -->
 
-![Identity Providers Overview](/docs/automated_screenshots/platform-single-sign-on_sso-providers-overview.png)
+![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.png)
 
 Archestra supports Identity Provider (IdP) configuration for two purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
-2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS
+2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
@@ -36,7 +36,7 @@ Archestra supports Identity Provider (IdP) configuration for two purposes:
 3. Users click the SSO button and authenticate with their identity provider
 4. After successful authentication, users are automatically provisioned and logged in
 
-![Sign-in with SSO](/docs/automated_screenshots/platform-single-sign-on_sign-in-with-sso.png)
+![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.png)
 
 ## Disabling Basic Authentication
 
@@ -200,20 +200,6 @@ Optional configuration:
 - **Scopes**: Additional OAuth scopes (default: `openid`, `email`, `profile`)
 - **PKCE**: Enable if your provider requires it
 
-#### Using Keycloak as an OIDC Provider
-
-[Keycloak](https://www.keycloak.org/) is an open-source identity and access management solution that can be used as an OIDC provider.
-
-1. In Keycloak Admin Console, create a new **Client** with protocol `openid-connect`
-2. Set **Client authentication** to `On`
-3. Add your callback URL to **Valid redirect URIs**: `https://your-domain.com/api/auth/sso/callback/{ProviderId}`
-4. Copy the **Client ID** and **Client Secret** from the Credentials tab
-5. In Archestra, click **Enable** on the Generic OAuth card
-6. Set the **Provider ID** (e.g., `Keycloak`)
-7. Set the **Issuer** to: `https://your-keycloak-domain/realms/{realm-name}`
-8. Enter the Client ID and Client Secret
-9. Click **Create Provider**
-
 ### Generic SAML
 
 Archestra supports SAML 2.0 for enterprise identity providers that don't support OIDC.
@@ -240,20 +226,6 @@ Optional configuration:
 - The NameID format should be set to `emailAddress` in your IdP
 - User attributes (email, firstName, lastName) should be included in the SAML assertion
 - See your IdP's documentation for specific configuration steps
-
-#### Using Keycloak as a SAML Provider
-
-1. In Keycloak Admin Console, create a new **Client** with protocol `saml`
-2. Set the **Client ID** to your SP Entity ID (e.g., `https://your-archestra-domain.com`)
-3. Set **Root URL** to your Archestra domain
-4. Add your ACS URL to **Valid redirect URIs**: `https://your-domain.com/api/auth/sso/saml2/sp/acs/{ProviderId}`
-5. Configure **Client Signature Required** to `Off` (unless you're providing SP signing certificates)
-6. Add protocol mappers for `email`, `firstName`, and `lastName` attributes
-7. Download the IdP metadata from: `https://your-keycloak-domain/realms/{realm-name}/protocol/saml/descriptor`
-8. In Archestra, click **Enable** on the Generic SAML card
-9. Set the **Provider ID** (e.g., `KeycloakSAML`)
-10. Paste the IdP metadata XML into the **IdP Metadata XML** field
-11. Click **Create Provider**
 
 ## Role Mapping
 
@@ -330,73 +302,6 @@ This template:
 2. Sets the parsed array as context using `#with`
 3. Iterates through each role object using `#each`
 4. Checks if any role's `name` property matches
-
-### Provider-Specific Configuration
-
-#### Okta
-
-Okta can send groups in the ID token. Configure a Groups claim:
-
-1. In Okta Admin Console, go to **Security > API > Authorization Servers**
-2. Select your authorization server and go to **Claims**
-3. Add a new claim:
-   - **Name**: `groups`
-   - **Include in token type**: ID Token (Always)
-   - **Value type**: Groups
-   - **Filter**: Configure to match your groups
-
-Example mapping rule:
-
-```handlebars
-{{#includes groups "Archestra-Admins"}}true{{/includes}}
-```
-
-#### Microsoft Entra ID (Azure AD)
-
-Entra ID can include group memberships. Configure group claims:
-
-1. In Azure Portal, go to your App Registration
-2. Navigate to **Token configuration**
-3. Click **Add groups claim**
-4. Select the group types to include
-
-Example mapping rule (using group object IDs):
-
-```handlebars
-{{#includes groups "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}}true{{/includes}}
-```
-
-Or configure group names in Entra ID's optional claims.
-
-#### Keycloak
-
-Keycloak can send groups via a protocol mapper:
-
-1. In Keycloak Admin Console, go to your Client
-2. Navigate to **Client scopes** > your client's dedicated scope
-3. Add a mapper:
-   - **Mapper type**: Group Membership
-   - **Token Claim Name**: `groups`
-   - **Full group path**: Off (recommended for simpler matching)
-   - **Add to ID token**: Yes
-   - **Add to userinfo**: Yes
-
-Example mapping rule:
-
-```handlebars
-{{#includes groups "archestra-admins"}}true{{/includes}}
-```
-
-#### Generic SAML
-
-For SAML providers, ensure your IdP sends group/role attributes in the SAML assertion. Configure attribute mappers to include these in the assertion, then reference them in your Handlebars templates.
-
-The attribute names depend on your IdP's configuration. Common examples:
-
-```handlebars
-{{#includes groups "admins"}}true{{/includes}}
-{{#includes memberOf "CN=Admins,OU=Groups,DC=example,DC=com"}}true{{/includes}}
-```
 
 ### Troubleshooting Role Mapping
 
@@ -530,56 +435,11 @@ After configuring how groups are extracted:
 - A single team can be linked to multiple external groups
 - Multiple teams can share the same external group mapping
 
-### Provider-Specific Configuration
-
-#### Keycloak
-
-Ensure your Keycloak client has a groups mapper:
-
-1. In Keycloak Admin Console, go to your Client
-2. Navigate to **Client scopes** > your client's dedicated scope
-3. Add or configure a **Group Membership** mapper:
-   - **Token Claim Name**: `groups`
-   - **Full group path**: Off (recommended for simpler matching)
-   - **Add to ID token**: Yes
-   - **Add to userinfo**: Yes
-
-Users must be assigned to groups in Keycloak for team sync to work.
-
-**Handlebars Template**: Not required (uses default `groups` claim)
-
-#### Okta
-
-Configure a Groups claim in your authorization server:
-
-1. Go to **Security > API > Authorization Servers**
-2. Select your authorization server and go to **Claims**
-3. Add/edit the `groups` claim to include in the ID token
-
-If your Okta sends roles as objects with a `name` property:
-
-**Handlebars Template**: `{{#each roles}}{{this.name}},{{/each}}`
-
-#### Microsoft Entra ID (Azure AD)
-
-Configure group claims in your App Registration:
-
-1. Go to **Token configuration**
-2. Add a groups claim
-3. Choose whether to include all groups or specific security groups
-4. Note: Group Object IDs are returned by default; configure optional claims for group names
-
-**Handlebars Template**: Not required (uses default `groups` claim)
-
-#### Generic SAML
-
-For SAML providers, ensure group attributes are included in the SAML assertion. The attribute name must match the claim name used by your Handlebars template or one of the default claim names.
-
 ### Example: Development Team Setup
 
-Let's say you have a Keycloak group called `dev-team` and want all members to automatically join the "Development" team in Archestra:
+Let's say you have a group in your IdP called `dev-team` and want all members to automatically join the "Development" team in Archestra:
 
-1. Ensure Keycloak sends the `groups` claim with group names
+1. Ensure your IdP sends the `groups` claim with group names
 2. In Archestra, create a team called "Development"
 3. Click the link icon for the team
 4. Enter `dev-team` as the external group identifier
@@ -627,7 +487,7 @@ Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect the ID token and ve
 When a user authenticates via SSO for the first time:
 
 1. A new user account is created with their email and name from the identity provider
-2. The user's role is determined by role mapping rules (if configured) or defaults to **Member**
+2. The user's role is determined by role mapping rules (if configured) or defaults to the provider's configured default role (or **Member** if not specified)
 3. The user is added to the organization with the determined role
 4. A session is created and the user is logged in
 
@@ -639,44 +499,6 @@ If a user already has an account (created via email/password), SSO authenticatio
 
 - The email addresses match
 - The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, Entra ID, and all SAML providers are trusted by default)
-
-## MCP Gateway JWKS Authentication
-
-Identity Providers can also be used to authenticate external MCP clients connecting to an MCP Gateway. When an IdP is linked to a gateway, the gateway validates incoming JWT bearer tokens against the IdP's JWKS (JSON Web Key Set) endpoint.
-
-### How It Works
-
-1. Admin configures an OIDC Identity Provider in **Settings > Identity Providers**
-2. Admin creates or edits an MCP Gateway and selects the Identity Provider in the **Identity Provider (JWKS Auth)** dropdown
-3. External MCP client obtains a JWT from the IdP (e.g., via client credentials flow or user login)
-4. Client sends requests to the gateway with `Authorization: Bearer <jwt>`
-5. Gateway discovers the JWKS URL from the IdP's OIDC discovery endpoint
-6. Gateway validates the JWT signature, issuer, audience (IdP's client ID), and expiration
-7. Identity information (sub, email, name) is extracted from the JWT claims for audit logging
-
-### Requirements
-
-- The Identity Provider must be an **OIDC provider** (SAML providers do not support JWKS)
-- The IdP must expose a standard OIDC discovery endpoint (`.well-known/openid-configuration`) with a `jwks_uri`
-- The JWT `iss` claim must match the IdP's issuer URL
-- The JWT `aud` claim must match the IdP's client ID (if configured)
-
-### Authentication Priority
-
-When an MCP Gateway has an Identity Provider configured, incoming tokens are validated in this order:
-
-1. **External IdP JWKS** — JWT validated against the IdP's public keys (for non-`archestra_` tokens)
-2. **Archestra team/organization tokens** — Standard `archestra_` prefixed tokens
-3. **Archestra user tokens** — Personal user tokens
-4. **OAuth 2.1 tokens** — Tokens from the OAuth authorization flow
-
-The first successful validation is used. This means existing Archestra tokens continue to work alongside external IdP JWTs.
-
-### Audit Trail
-
-MCP tool calls authenticated via external IdP are logged with the caller's identity (subject, email, name) extracted from the JWT claims. These appear in the MCP Gateway logs with the auth method "External IdP".
-
-See the [MCP Gateway](/docs/platform-mcp-gateway) documentation for more details on gateway authentication.
 
 ## Troubleshooting
 

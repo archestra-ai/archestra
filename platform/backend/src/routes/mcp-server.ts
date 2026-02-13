@@ -446,6 +446,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
+
+        // For local servers, store accessToken as a secret if provided
+        // (e.g., for servers that require JWT auth during tool discovery)
+        if (accessToken) {
+          if (secretId) {
+            // Merge accessToken into existing secret (e.g., when catalog has secret-type env vars)
+            const existingSecret = await secretManager().getSecret(secretId);
+            if (
+              existingSecret?.secret &&
+              typeof existingSecret.secret === "object"
+            ) {
+              await secretManager().updateSecret(secretId, {
+                ...(existingSecret.secret as Record<string, string>),
+                access_token: accessToken,
+              });
+            }
+          } else {
+            const secret = await secretManager().createSecret(
+              { access_token: accessToken },
+              `${serverData.name}-token`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+          }
+        }
       }
 
       // Create the MCP server with optional secret reference

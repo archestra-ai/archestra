@@ -1017,6 +1017,10 @@ class McpClient {
         const localHeaders: Record<string, string> = {};
         if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        } else if (secrets.access_token) {
+          localHeaders.Authorization = `Bearer ${secrets.access_token}`;
+        } else if (secrets.raw_access_token) {
+          localHeaders.Authorization = String(secrets.raw_access_token);
         }
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {

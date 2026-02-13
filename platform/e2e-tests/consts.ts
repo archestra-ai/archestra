@@ -133,3 +133,17 @@ export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
 export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
   ? "http://e2e-tests-mcp-server-jwks:3456"
   : "http://localhost:30082";
+
+/** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
+export const MCP_SERVER_JWKS_DOCKER_IMAGE =
+  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.1";
+
+/**
+ * Keycloak internal URL for use by K8s pods (MCP servers spawned by orchestrator).
+ * In CI: pods and Keycloak are in the same namespace (default), so short service name works.
+ * In local dev: MCP server pods run in archestra-dev namespace, Keycloak in default namespace,
+ * so use FQDN for cross-namespace DNS resolution.
+ */
+export const KEYCLOAK_K8S_INTERNAL_URL = IS_CI
+  ? "http://e2e-tests-keycloak:8080"
+  : "http://e2e-tests-keycloak.default.svc.cluster.local:8080";

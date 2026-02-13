@@ -371,13 +371,17 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Quickstart mode always uses embedded KinD cluster
     CLUSTER_NAME="archestra-mcp"
     KUBECONFIG_PATH="/app/data/.kubeconfig"
+    # Pin a known-good node image to avoid compatibility issues with newer K8s versions.
+    # Must match a version supported by the KinD binary version compiled in the builder stage.
+    # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
+    KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
 
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-        if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
+        if ! kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s; then
             echo ""
             echo "=== KinD cluster creation failed ==="
             echo ""

@@ -23,7 +23,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   dualLlmResult: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
-  ssoProvider: ["create", "read", "update", "delete"],
+  identityProvider: ["create", "read", "update", "delete"],
   member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
@@ -67,7 +67,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
-  ssoProvider: [],
+  identityProvider: [],
   ac: [],
 };
 
@@ -92,7 +92,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
-  ssoProvider: [],
+  identityProvider: [],
   ac: [],
 };
 
@@ -593,11 +593,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
 
   /**
-   * Get public SSO providers route (minimal info for login page)
+   * Get public identity providers route (minimal info for login page)
    * Available to unauthenticated users - only returns providerId, no secrets
    * Note: Auth is skipped in middleware for this route
    */
-  [RouteId.GetPublicSsoProviders]: {},
+  [RouteId.GetPublicIdentityProviders]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -605,25 +605,25 @@ export const requiredEndpointPermissionsMap: Partial<
    */
   [RouteId.GetPublicAppearance]: {},
   /**
-   * Get all SSO providers with full config (admin only)
+   * Get all identity providers with full config (admin only)
    * Returns sensitive data including client secrets
    */
-  [RouteId.GetSsoProviders]: {
-    ssoProvider: ["read"],
+  [RouteId.GetIdentityProviders]: {
+    identityProvider: ["read"],
   },
-  [RouteId.GetSsoProvider]: {
-    ssoProvider: ["read"],
+  [RouteId.GetIdentityProvider]: {
+    identityProvider: ["read"],
   },
-  [RouteId.CreateSsoProvider]: {
-    ssoProvider: ["create"],
+  [RouteId.CreateIdentityProvider]: {
+    identityProvider: ["create"],
   },
-  [RouteId.UpdateSsoProvider]: {
-    ssoProvider: ["update"],
+  [RouteId.UpdateIdentityProvider]: {
+    identityProvider: ["update"],
   },
-  [RouteId.DeleteSsoProvider]: {
-    ssoProvider: ["delete"],
+  [RouteId.DeleteIdentityProvider]: {
+    identityProvider: ["delete"],
   },
-  [RouteId.GetSsoProviderIdpLogoutUrl]: {},
+  [RouteId.GetIdentityProviderIdpLogoutUrl]: {},
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
@@ -792,8 +792,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/llm-api-keys": {
     chatSettings: ["read"],
   },
-  "/settings/sso-providers": {
-    ssoProvider: ["read"],
+  "/settings/identity-providers": {
+    identityProvider: ["read"],
   },
   "/settings/secrets": {
     organization: ["update"],

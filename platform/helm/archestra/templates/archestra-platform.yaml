@@ -116,11 +116,15 @@ spec:
               fi
 
               # Parse host and port from ARCHESTRA_DATABASE_URL
-              # Format: postgresql://user:pass@host:port/database
-              DB_URL="${ARCHESTRA_DATABASE_URL#*@}"  # Remove prefix up to @
+              # Format: postgresql://user:pass@host[:port]/database
+              DB_URL="${ARCHESTRA_DATABASE_URL##*@}"  # Remove prefix up to last @ (handles passwords with @)
               HOST_PORT="${DB_URL%%/*}"               # Remove /database suffix
               HOST="${HOST_PORT%%:*}"                 # Extract host
-              PORT="${HOST_PORT##*:}"                 # Extract port
+              # Extract port, defaulting to 5432 if not specified
+              case "$HOST_PORT" in
+                *:*) PORT="${HOST_PORT##*:}" ;;
+                *)   PORT="5432" ;;
+              esac
 
               echo "Waiting for PostgreSQL at ${HOST}:${PORT}..."
               until nc -z "${HOST}" "${PORT}"; do

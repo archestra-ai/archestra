@@ -72,7 +72,7 @@ interface TestFixtures {
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
   makeChatApiKey: typeof makeChatApiKey;
-  makeSsoProvider: typeof makeSsoProvider;
+  makeIdentityProvider: typeof makeIdentityProvider;
   makeOAuthClient: typeof makeOAuthClient;
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
   makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
@@ -676,10 +676,10 @@ async function makeChatApiKey(
 }
 
 /**
- * Creates a test SSO provider in the database.
+ * Creates a test identity provider in the database.
  * Bypasses Better Auth API for test simplicity.
  */
-async function makeSsoProvider(
+async function makeIdentityProvider(
   organizationId: string,
   overrides: {
     providerId?: string;
@@ -696,7 +696,7 @@ async function makeSsoProvider(
     overrides.providerId ?? `TestProvider-${id.substring(0, 8)}`;
 
   const [provider] = await db
-    .insert(schema.ssoProvidersTable)
+    .insert(schema.identityProvidersTable)
     .values({
       id,
       providerId,
@@ -916,8 +916,8 @@ export const test = baseTest.extend<TestFixtures>({
   makeChatApiKey: async ({}, use) => {
     await use(makeChatApiKey);
   },
-  makeSsoProvider: async ({}, use) => {
-    await use(makeSsoProvider);
+  makeIdentityProvider: async ({}, use) => {
+    await use(makeIdentityProvider);
   },
   makeOAuthClient: async ({}, use) => {
     await use(makeOAuthClient);

@@ -105,7 +105,7 @@ export class Authnz {
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
-      (method === "GET" && url === "/api/sso-providers/public") ||
+      (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === "/api/organization/appearance") ||
       // Incoming email webhooks - Microsoft Graph calls these directly

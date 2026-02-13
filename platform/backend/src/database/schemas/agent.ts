@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import chatApiKeysTable from "./chat-api-key";
+import identityProvidersTable from "./identity-provider";
 
 /**
  * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
@@ -112,6 +113,12 @@ const agentsTable = pgTable(
     /** Model ID for LLM calls */
     llmModel: text("llm_model"),
 
+    /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
+    identityProviderId: text("identity_provider_id").references(
+      () => identityProvidersTable.id,
+      { onDelete: "set null" },
+    ),
+
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -121,6 +128,7 @@ const agentsTable = pgTable(
   (table) => [
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
+    index("agents_identity_provider_id_idx").on(table.identityProviderId),
   ],
 );
 

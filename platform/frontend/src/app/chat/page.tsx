@@ -49,7 +49,6 @@ import {
   fetchConversationEnabledTools,
   useConversation,
   useCreateConversation,
-  useHasPlaywrightMcpTools,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
@@ -423,20 +422,6 @@ export default function ChatPage() {
   const browserToolsAgentId = conversationId
     ? (conversation?.agentId ?? conversation?.agent?.id)
     : (initialAgentId ?? undefined);
-
-  // Check if Playwright MCP is available for browser panel and get install function
-  const {
-    hasPlaywrightMcpTools,
-    isPlaywrightInstalledByCurrentUser,
-    reinstallRequired,
-    installationFailed,
-    playwrightServerId,
-    isInstalling: isInstallingBrowser,
-    isAssigningTools,
-    installBrowser,
-    reinstallBrowser,
-    assignToolsToAgent,
-  } = useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
@@ -1319,31 +1304,7 @@ export default function ChatPage() {
         isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
-        isInstallingBrowser={isInstallingBrowser}
-        hasPlaywrightMcpTools={hasPlaywrightMcpTools}
-        isPlaywrightInstalledByCurrentUser={isPlaywrightInstalledByCurrentUser}
-        isAssigningTools={isAssigningTools}
-        onInstallBrowser={
-          browserToolsAgentId
-            ? () => installBrowser(browserToolsAgentId)
-            : undefined
-        }
-        onAssignToolsToAgent={
-          browserToolsAgentId
-            ? () =>
-                assignToolsToAgent({
-                  agentId: browserToolsAgentId,
-                  conversationId,
-                })
-            : undefined
-        }
-        reinstallRequired={reinstallRequired}
-        installationFailed={installationFailed}
-        onReinstallBrowser={
-          playwrightServerId
-            ? () => reinstallBrowser(playwrightServerId)
-            : undefined
-        }
+        agentId={browserToolsAgentId}
         onCreateConversationWithUrl={handleCreateConversationWithUrl}
         isCreatingConversation={createConversationMutation.isPending}
         initialNavigateUrl={pendingBrowserUrl}

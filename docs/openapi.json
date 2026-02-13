@@ -21413,6 +21413,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "identityProviderId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -21579,6 +21583,7 @@
                           "incomingEmailAllowedDomain",
                           "llmApiKeyId",
                           "llmModel",
+                          "identityProviderId",
                           "createdAt",
                           "updatedAt",
                           "tools",
@@ -21956,6 +21961,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "identityProviderId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -22146,6 +22155,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22312,6 +22325,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "identityProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -22726,6 +22740,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "identityProviderId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -22892,6 +22910,7 @@
                       "incomingEmailAllowedDomain",
                       "llmApiKeyId",
                       "llmModel",
+                      "identityProviderId",
                       "createdAt",
                       "updatedAt",
                       "tools",
@@ -23270,6 +23289,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -23436,6 +23459,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "identityProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -23813,6 +23837,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -23979,6 +24007,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "identityProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -24368,6 +24397,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -24534,6 +24567,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "identityProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -24863,6 +24897,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "identityProviderId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -25060,6 +25098,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -25226,6 +25268,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "identityProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -25868,6 +25911,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "identityProviderId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -26034,6 +26081,7 @@
                         "incomingEmailAllowedDomain",
                         "llmApiKeyId",
                         "llmModel",
+                        "identityProviderId",
                         "createdAt",
                         "updatedAt",
                         "tools",
@@ -26480,6 +26528,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -26646,6 +26698,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "identityProviderId",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -79247,7 +79300,8 @@
                               "oauth",
                               "user_token",
                               "org_token",
-                              "team_token"
+                              "team_token",
+                              "external_idp"
                             ]
                           },
                           "createdAt": {
@@ -79619,7 +79673,8 @@
                         "oauth",
                         "user_token",
                         "org_token",
-                        "team_token"
+                        "team_token",
+                        "external_idp"
                       ]
                     },
                     "createdAt": {
@@ -97916,13 +97971,13 @@
         }
       }
     },
-    "/api/sso-providers/public": {
+    "/api/identity-providers/public": {
       "get": {
-        "operationId": "getPublicSsoProviders",
+        "operationId": "getPublicIdentityProviders",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Get public SSO provider list for login page (no secrets exposed)",
+        "description": "Get public identity provider list for login page (no secrets exposed)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -98163,13 +98218,13 @@
         }
       }
     },
-    "/api/sso-providers": {
+    "/api/identity-providers": {
       "get": {
-        "operationId": "getSsoProviders",
+        "operationId": "getIdentityProviders",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Get all SSO providers with full configuration (admin only)",
+        "description": "Get all identity providers with full configuration (admin only)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -98733,11 +98788,11 @@
         }
       },
       "post": {
-        "operationId": "createSsoProvider",
+        "operationId": "createIdentityProvider",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Create a new SSO provider",
+        "description": "Create a new identity provider",
         "requestBody": {
           "content": {
             "application/json": {
@@ -99622,13 +99677,13 @@
         }
       }
     },
-    "/api/sso-providers/idp-logout-url": {
+    "/api/identity-providers/idp-logout-url": {
       "get": {
-        "operationId": "getSsoProviderIdpLogoutUrl",
+        "operationId": "getIdentityProviderIdpLogoutUrl",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Get the IdP logout URL for the current user's SSO provider",
+        "description": "Get the IdP logout URL for the current user's identity provider",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -99863,13 +99918,13 @@
         }
       }
     },
-    "/api/sso-providers/{id}": {
+    "/api/identity-providers/{id}": {
       "get": {
-        "operationId": "getSsoProvider",
+        "operationId": "getIdentityProvider",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Get SSO provider by ID",
+        "description": "Get identity provider by ID",
         "parameters": [
           {
             "schema": {
@@ -100440,11 +100495,11 @@
         }
       },
       "put": {
-        "operationId": "updateSsoProvider",
+        "operationId": "updateIdentityProvider",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Update SSO provider",
+        "description": "Update identity provider",
         "requestBody": {
           "content": {
             "application/json": {
@@ -101329,11 +101384,11 @@
         }
       },
       "delete": {
-        "operationId": "deleteSsoProvider",
+        "operationId": "deleteIdentityProvider",
         "tags": [
-          "SSO Providers"
+          "Identity Providers"
         ],
-        "description": "Delete SSO provider",
+        "description": "Delete identity provider",
         "parameters": [
           {
             "schema": {

@@ -7,6 +7,7 @@ import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
   editorAuthFile,
+  KEYCLOAK_OIDC,
   memberAuthFile,
   UI_BASE_URL,
   WIREMOCK_BASE_URL,
@@ -23,6 +24,8 @@ export interface TestFixtures {
   deleteAgent: typeof deleteAgent;
   createApiKey: typeof createApiKey;
   deleteApiKey: typeof deleteApiKey;
+  createIdentityProvider: typeof createIdentityProvider;
+  deleteIdentityProvider: typeof deleteIdentityProvider;
   createToolInvocationPolicy: typeof createToolInvocationPolicy;
   deleteToolInvocationPolicy: typeof deleteToolInvocationPolicy;
   createTrustedDataPolicy: typeof createTrustedDataPolicy;
@@ -169,6 +172,52 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
   });
 
 /**
+ * Create an identity provider (SSO provider) via the API with OIDC config pointing to Keycloak.
+ * Returns the created provider's ID.
+ */
+const createIdentityProvider = async (
+  request: APIRequestContext,
+  providerId: string,
+): Promise<string> => {
+  const response = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/identity-providers",
+    data: {
+      providerId,
+      issuer: KEYCLOAK_OIDC.issuer,
+      domain: "jwks-test.example.com",
+      oidcConfig: {
+        issuer: KEYCLOAK_OIDC.issuer,
+        pkce: true,
+        clientId: KEYCLOAK_OIDC.clientId,
+        clientSecret: KEYCLOAK_OIDC.clientSecret,
+        discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
+        jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+      },
+    },
+  });
+
+  const provider = await response.json();
+  return provider.id;
+};
+
+/**
+ * Delete an identity provider (SSO provider) via the API.
+ */
+const deleteIdentityProvider = async (
+  request: APIRequestContext,
+  id: string,
+): Promise<void> => {
+  await makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/identity-providers/${id}`,
+    ignoreStatusCheck: true,
+  });
+};
+
+/**
  * Create a tool invocation policy
  * (authnz is handled by the authenticated session)
  */
@@ -302,6 +351,7 @@ const installMcpServer = async (
     userConfigValues?: Record<string, string>;
     environmentValues?: Record<string, string>;
     accessToken?: string;
+    agentIds?: string[];
   },
 ) =>
   makeApiRequest({
@@ -804,6 +854,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteApiKey: async ({}, use) => {
     await use(deleteApiKey);
+  },
+  createIdentityProvider: async ({}, use) => {
+    await use(createIdentityProvider);
+  },
+  deleteIdentityProvider: async ({}, use) => {
+    await use(deleteIdentityProvider);
   },
   createToolInvocationPolicy: async ({}, use) => {
     await use(createToolInvocationPolicy);

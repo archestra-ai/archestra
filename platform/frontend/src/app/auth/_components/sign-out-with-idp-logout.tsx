@@ -26,7 +26,7 @@ async function performSignOut() {
   // Fetch IdP logout URL while still authenticated
   let idpLogoutUrl: string | null = null;
   try {
-    const { data } = await archestraApiSdk.getSsoProviderIdpLogoutUrl();
+    const { data } = await archestraApiSdk.getIdentityProviderIdpLogoutUrl();
     idpLogoutUrl = data?.url ?? null;
   } catch {
     // Proceed with local sign-out even if IdP URL fetch fails

@@ -8,7 +8,6 @@ import {
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
-import { isEqual } from "lodash-es";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -20,7 +19,6 @@ import {
   DualLlmConfigModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
-  McpServerModel,
   MemberModel,
   OrganizationModel,
   TeamModel,
@@ -267,10 +265,8 @@ async function seedPlaywrightCatalog(): Promise<void> {
     existingCatalog = null;
   }
 
-  const configChanged =
-    !existingCatalog ||
-    !isEqual(existingCatalog.localConfig, playwrightLocalConfig);
-
+  // Only insert on first creation; never overwrite user edits on restart.
+  // Future config changes (e.g., docker image pin updates) should use database migrations.
   await db
     .insert(schema.internalMcpCatalogTable)
     .values({
@@ -282,33 +278,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
       requiresAuth: false,
       localConfig: playwrightLocalConfig,
     })
-    .onConflictDoUpdate({
-      target: schema.internalMcpCatalogTable.id,
-      set: {
-        name: PLAYWRIGHT_MCP_SERVER_NAME,
-        description:
-          "Browser automation for chat - each user gets their own isolated browser session",
-        serverType: "local",
-        requiresAuth: false,
-        localConfig: playwrightLocalConfig,
-      },
-    });
-
-  // If config changed, mark all existing servers for reinstall
-  if (configChanged && existingCatalog) {
-    const servers = await McpServerModel.findByCatalogId(
-      PLAYWRIGHT_MCP_CATALOG_ID,
-    );
-    for (const server of servers) {
-      await McpServerModel.update(server.id, { reinstallRequired: true });
-    }
-    if (servers.length > 0) {
-      logger.info(
-        { serverCount: servers.length },
-        "Marked existing Playwright servers for reinstall after catalog config update",
-      );
-    }
-  }
+    .onConflictDoNothing();
 
   logger.info("Seeded Playwright browser preview catalog");
 }

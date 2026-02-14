@@ -193,10 +193,20 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
 async function seedPlaywrightCatalog(): Promise<void> {
   const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
   const playwrightLocalConfig = {
-    dockerImage: "mcr.microsoft.com/playwright/mcp",
+    // Pinned to v0.0.64 digest because v0.0.67 renamed --no-sandbox to --no-chromium-sandbox
+    // but the image entrypoint still uses --no-sandbox, causing immediate crashes.
+    dockerImage:
+      "mcr.microsoft.com/playwright/mcp@sha256:50fee3932984dbf40fe67be11fe22d0050eca40705cf108099d7a1e0fe6a181c",
     transportType: "streamable-http" as const,
-    // The Docker image ENTRYPOINT is: node cli.js --headless --browser chromium --no-sandbox
-    // K8s args are appended to the ENTRYPOINT (CMD is None), so only specify extra flags here:
+    // Explicit command overrides the image ENTRYPOINT to avoid breakage from upstream image changes.
+    // v0.0.67 broke the entrypoint by renaming --no-sandbox to --no-chromium-sandbox without
+    // updating the Dockerfile. Using explicit command+args makes us resilient to such changes.
+    command: "node",
+    // Full arguments including cli.js entry point and all Chromium/server flags:
+    //   cli.js: the Playwright MCP server entry point
+    //   --headless: run Chromium in headless mode
+    //   --browser chromium: use Chromium browser
+    //   --no-sandbox: required when running as root in containers (renamed to --no-chromium-sandbox in v0.0.67)
     //   --host 0.0.0.0: bind to all interfaces so K8s Service can route traffic to the pod
     //   --port 8080: enable HTTP transport mode (without --port, it runs in stdio mode and exits)
     //   --allowed-hosts *: allow connections from K8s Service DNS (default only allows localhost)
@@ -206,6 +216,11 @@ async function seedPlaywrightCatalog(): Promise<void> {
     // connection and reused by all backend pods so they share the same Playwright browser context.
     // See mcp-client.ts for session ID persistence logic.
     arguments: [
+      "cli.js",
+      "--headless",
+      "--browser",
+      "chromium",
+      "--no-sandbox",
       "--host",
       "0.0.0.0",
       "--port",

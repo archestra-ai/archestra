@@ -20,6 +20,12 @@ const triggers: Trigger[] = [
     description: "Chat with you agents via Microsoft Teams",
   },
   {
+    label: "Slack",
+    href: "/agent-triggers/slack",
+    iconSrc: "/icons/slack.png",
+    description: "Chat with your agents via Slack",
+  },
+  {
     label: "Email",
     href: "/agent-triggers/email",
     icon: Mail,

@@ -22,12 +22,14 @@ import {
   CHATOPS_MESSAGE_RETENTION,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
+import SlackProvider from "./slack-provider";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
  */
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
+  private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   getMSTeamsProvider(): MSTeamsProvider | null {
@@ -40,12 +42,24 @@ export class ChatOpsManager {
     return this.msTeamsProvider;
   }
 
+  getSlackProvider(): SlackProvider | null {
+    if (!this.slackProvider) {
+      this.slackProvider = new SlackProvider();
+      if (!this.slackProvider.isConfigured()) {
+        return null;
+      }
+    }
+    return this.slackProvider;
+  }
+
   getChatOpsProvider(
     providerType: ChatOpsProviderType,
   ): ChatOpsProvider | null {
     switch (providerType) {
       case "ms-teams":
         return this.getMSTeamsProvider();
+      case "slack":
+        return this.getSlackProvider();
     }
   }
 
@@ -183,6 +197,7 @@ export class ChatOpsManager {
 
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.getMSTeamsProvider() },
+      { name: "Slack", provider: this.getSlackProvider() },
     ];
 
     for (const { name, provider } of providers) {
@@ -211,6 +226,10 @@ export class ChatOpsManager {
     if (this.msTeamsProvider) {
       await this.msTeamsProvider.cleanup();
       this.msTeamsProvider = null;
+    }
+    if (this.slackProvider) {
+      await this.slackProvider.cleanup();
+      this.slackProvider = null;
     }
     this.stopCleanupInterval();
   }

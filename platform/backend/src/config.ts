@@ -410,6 +410,12 @@ export default {
           "",
       },
     },
+    slack: {
+      enabled: process.env.ARCHESTRA_CHATOPS_SLACK_ENABLED === "true",
+      botToken: process.env.ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN || "",
+      signingSecret: process.env.ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET || "",
+      appId: process.env.ARCHESTRA_CHATOPS_SLACK_APP_ID || "",
+    },
   },
   knowledgeGraph: {
     provider: parseKnowledgeGraphProvider(),

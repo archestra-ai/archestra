@@ -325,7 +325,7 @@ export function McpServerCard({
             <Info className="mr-2 h-4 w-4" />
             About
           </DropdownMenuItem>
-          {variant === "local" && !isPlaywrightVariant && (
+          {variant === "local" && (
             <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
               <Code className="mr-2 h-4 w-4" />
               Edit K8S Deployment Yaml
@@ -854,37 +854,7 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 flex-grow">
-        {userIsMcpServerAdmin &&
-          !isBuiltinVariant &&
-          !isPlaywrightVariant &&
-          actionButtons}
-        {isPlaywrightVariant && userIsMcpServerAdmin && (
-          <div className="flex gap-1 mb-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 h-8 text-xs"
-                    onClick={() => setIsLogsDialogOpen(true)}
-                    disabled={!isLogsAvailable}
-                  >
-                    <FileText className="h-3 w-3 mr-1" />
-                    Logs
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    {!hasLocalInstallations
-                      ? "Connect first"
-                      : "View container logs"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
+        {userIsMcpServerAdmin && !isBuiltinVariant && actionButtons}
         {isBuiltinVariant
           ? builtinCardContent
           : isPlaywrightVariant

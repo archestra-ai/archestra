@@ -4,6 +4,7 @@ import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createVertex } from "@ai-sdk/google-vertex";
+import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
@@ -83,6 +84,7 @@ const envApiKeyGetters: Record<
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
+  groq: () => config.chat.groq.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
@@ -195,6 +197,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  groq: "llama-3.3-70b-versatile", // Groq's fast model
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
@@ -281,6 +284,20 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createCerebras({
       apiKey,
       baseURL: config.llm.cerebras.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    const client = createGroq({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
     });
     return client(modelName);
   },
@@ -470,6 +487,16 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createCerebras({
         apiKey,
         baseURL: buildProxyBaseUrl("cerebras", agentId),
+        headers,
+      });
+      return client(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      const client = createGroq({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
         headers,
       });
       return client(modelName);

@@ -466,6 +466,10 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
     },
+    groq: {
+      baseUrl:
+        process.env.ARCHESTRA_GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+    },
     mistral: {
       baseUrl:
         process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
@@ -485,6 +489,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
+    },
+    deepseek: {
+      enabled: Boolean(process.env.ARCHESTRA_DEEPSEEK_BASE_URL),
+      baseUrl:
+        process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
     },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
@@ -507,6 +516,9 @@ export default {
     cerebras: {
       apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
     },
+    groq: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
+    },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
     },
@@ -521,6 +533,12 @@ export default {
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_DEEPSEEK_BASE_URL ||
+        "https://api.deepseek.com/v1",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",

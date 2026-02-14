@@ -169,6 +169,37 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
 
+## DeepSeek
+
+[DeepSeek](https://www.deepseek.com/) is an AI company providing powerful reasoning and chat models through an OpenAI-compatible API. DeepSeek models excel at complex reasoning tasks and offer competitive pricing.
+
+### Supported DeepSeek APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### DeepSeek Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/deepseek/{profile-id}`
+- **Authentication**: Pass your DeepSeek API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_DEEPSEEK_BASE_URL`     | No       | DeepSeek API base URL (default: `https://api.deepseek.com`)                    |
+| `ARCHESTRA_CHAT_DEEPSEEK_API_KEY` | No       | Default API key for DeepSeek (can be overridden per conversation/team/org)     |
+
+### Popular Models
+
+- **deepseek-chat** - Fast and efficient chat model
+- **deepseek-reasoner** - Advanced reasoning model for complex problem-solving
+
+### Important Notes
+
+- **OpenAI-compatible API**: DeepSeek's API follows the OpenAI Chat Completions format, making it easy to integrate
+- **API Key format**: Obtain your API key from the [DeepSeek Platform](https://platform.deepseek.com/)
+- **Reasoning capabilities**: DeepSeek Reasoner model provides advanced reasoning and problem-solving capabilities
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.

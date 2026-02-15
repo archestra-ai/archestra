@@ -148,12 +148,13 @@ export function AssignedToolsTable({
     },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<ToolWithAssignmentsData[]>(
-    [],
-  );
   const [updatingRows, setUpdatingRows] = useState<
     Set<{ id: string; field: string }>
   >(new Set());
+
+  const selectedTools = useMemo(() => {
+    return tools.filter((tool) => rowSelection[tool.id]);
+  }, [tools, rowSelection]);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [bulkCallPolicyValue, setBulkCallPolicyValue] = useState<string>("");
   const [bulkResultPolicyValue, setBulkResultPolicyValue] =
@@ -206,7 +207,6 @@ export function AssignedToolsTable({
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setRowSelection({});
-      setSelectedTools([]);
 
       updateUrlParams({
         page: String(newPagination.pageIndex + 1),
@@ -219,14 +219,8 @@ export function AssignedToolsTable({
   const handleRowSelectionChange = useCallback(
     (newRowSelection: RowSelectionState) => {
       setRowSelection(newRowSelection);
-
-      const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => tools[Number(index)])
-        .filter(Boolean);
-
-      setSelectedTools(newSelectedTools);
     },
-    [tools],
+    [],
   );
 
   const handleSearchChange = useCallback(
@@ -237,7 +231,6 @@ export function AssignedToolsTable({
         page: "1", // Reset to first page
       });
       setRowSelection({});
-      setSelectedTools([]);
     },
     [updateUrlParams],
   );
@@ -250,7 +243,6 @@ export function AssignedToolsTable({
         page: "1", // Reset to first page
       });
       setRowSelection({});
-      setSelectedTools([]);
     },
     [updateUrlParams],
   );
@@ -361,7 +353,6 @@ export function AssignedToolsTable({
 
   const clearSelection = useCallback(() => {
     setRowSelection({});
-    setSelectedTools([]);
   }, []);
 
   const isRowFieldUpdating = useCallback(
@@ -943,6 +934,7 @@ export function AssignedToolsTable({
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}
             onRowSelectionChange={handleRowSelectionChange}
+            getRowId={(row) => row.id}
           />
         )}
       </div>

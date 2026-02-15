@@ -95,6 +95,7 @@ export class DynamicInteraction implements InteractionUtils {
   id: string;
   profileId: string;
   externalAgentId: string | null;
+  executionId: string | null;
   type: Interaction["type"];
   provider: SupportedProvider;
   endpoint: string;
@@ -108,6 +109,7 @@ export class DynamicInteraction implements InteractionUtils {
     this.id = interaction.id;
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
+    this.executionId = interaction.executionId;
     this.type = interaction.type;
     this.provider = provider as SupportedProvider;
     this.endpoint = endpoint;

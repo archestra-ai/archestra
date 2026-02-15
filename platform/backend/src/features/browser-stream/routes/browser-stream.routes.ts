@@ -101,10 +101,7 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      const result = await browserStreamFeature.checkAvailability(
-        agentId,
-        request.user.id,
-      );
+      const result = await browserStreamFeature.checkAvailability(agentId);
       return reply.send(result);
     },
   );

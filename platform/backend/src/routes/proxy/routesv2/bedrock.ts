@@ -43,6 +43,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const executionId = utils.executionId.getExecutionId(request.headers);
       const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         { ...request.body, _isStreaming: false },
@@ -53,6 +54,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: undefined,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -89,6 +91,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const executionId = utils.executionId.getExecutionId(request.headers);
       const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         { ...request.body, _isStreaming: false },
@@ -99,6 +102,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -133,6 +137,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const executionId = utils.executionId.getExecutionId(request.headers);
       const userId = (await utils.user.getUser(request.headers))?.userId;
 
       return handleLLMProxy(
@@ -144,6 +149,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: undefined,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -181,6 +187,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const executionId = utils.executionId.getExecutionId(request.headers);
       const userId = (await utils.user.getUser(request.headers))?.userId;
 
       return handleLLMProxy(
@@ -192,6 +199,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -240,6 +248,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const executionId = utils.executionId.getExecutionId(request.headers);
       const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject modelId from URL into request body if not present
@@ -259,6 +268,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -301,6 +311,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const executionId = utils.executionId.getExecutionId(request.headers);
       const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject modelId from URL into request body
@@ -320,6 +331,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );

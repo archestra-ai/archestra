@@ -34,6 +34,7 @@ export interface Context {
   organizationId: string;
   agentId?: string;
   externalAgentId?: string;
+  executionId?: string;
   userId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
@@ -70,7 +71,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
   context: Context,
 ): Promise<FastifyReply> {
-  const { agentId, externalAgentId } = context;
+  const { agentId, externalAgentId, executionId } = context;
   const providerName = provider.provider;
 
   // Extract session info if not already provided in context
@@ -137,6 +138,17 @@ export async function handleLLMProxy<
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
   );
+
+  if (executionId) {
+    const existsInDb = await InteractionModel.existsByExecutionId(executionId);
+    if (!existsInDb) {
+      metrics.agentExecution.reportAgentExecution({
+        executionId,
+        profile: resolvedAgent,
+        externalAgentId,
+      });
+    }
+  }
 
   // Extract API key
   const apiKey = provider.extractApiKey(headers);
@@ -232,18 +244,27 @@ export async function handleLLMProxy<
       });
     }
 
-    // Set SSE headers early if streaming
-    // Use reply.raw.writeHead() to commit headers on the raw stream without
-    // hijacking Fastify's lifecycle. reply.hijack() breaks onResponse hooks
-    // and causes reply.sent to be true immediately, which interferes with
-    // error handling and interaction logging.
+    // Prepare SSE headers for lazy commitment if streaming.
+    // We defer writeHead(200) until the first actual write so that if the
+    // upstream provider call fails before any data is written, the proxy can
+    // return a proper HTTP error status code (e.g. 429) instead of being
+    // stuck with a 200. The AI SDK detects errors via HTTP status codes, so
+    // this is critical for error propagation to clients like the chat UI.
+    let sseHeaders: Record<string, string> | undefined;
     if (requestAdapter.isStreaming()) {
       logger.debug(
-        `[${providerName}Proxy] Setting up streaming response headers`,
+        `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
-      const sseHeaders = streamAdapter.getSSEHeaders();
-      reply.raw.writeHead(200, sseHeaders);
+      sseHeaders = streamAdapter.getSSEHeaders();
     }
+
+    // Helper to commit SSE headers before the first write.
+    // Safe to call multiple times — only writes headers once.
+    const ensureStreamHeaders = () => {
+      if (sseHeaders && !reply.raw.headersSent) {
+        reply.raw.writeHead(200, sseHeaders);
+      }
+    };
 
     // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
     const globalToolPolicy =
@@ -275,6 +296,7 @@ export async function handleLLMProxy<
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
+              ensureStreamHeaders();
               reply.raw.write(
                 streamAdapter.formatTextDeltaSSE(
                   "Analyzing with Dual LLM:\n\n",
@@ -291,6 +313,7 @@ export async function handleLLMProxy<
               const optionsText = progress.options
                 .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                 .join("\n");
+              ensureStreamHeaders();
               reply.raw.write(
                 streamAdapter.formatTextDeltaSSE(
                   `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
@@ -397,11 +420,13 @@ export async function handleLLMProxy<
         toonSkipReason,
         enabledToolNames,
         globalToolPolicy,
+        ensureStreamHeaders,
         externalAgentId,
         context.userId,
         sessionId,
         sessionSource,
         teamIds,
+        executionId,
       );
     } else {
       return handleNonStreaming(
@@ -423,6 +448,7 @@ export async function handleLLMProxy<
         sessionId,
         sessionSource,
         teamIds,
+        executionId,
       );
     }
   } catch (error) {
@@ -460,11 +486,13 @@ async function handleStreaming<
   toonSkipReason: ToonSkipReason | null,
   enabledToolNames: Set<string>,
   globalToolPolicy: "permissive" | "restrictive",
+  ensureStreamHeaders: () => void,
   externalAgentId?: string,
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
   teamIds?: string[],
+  executionId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -510,6 +538,7 @@ async function handleStreaming<
 
       // Stream non-tool-call data immediately
       if (result.sseData) {
+        ensureStreamHeaders();
         reply.raw.write(result.sseData);
       }
 
@@ -571,6 +600,7 @@ async function handleStreaming<
       const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
       // Stream refusal
+      ensureStreamHeaders();
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         reply.raw.write(event);
@@ -590,6 +620,7 @@ async function handleStreaming<
         "Tool calls allowed, streaming them now",
       );
 
+      ensureStreamHeaders();
       const rawEvents = streamAdapter.getRawToolCallEvents();
       for (const event of rawEvents) {
         reply.raw.write(event);
@@ -597,6 +628,7 @@ async function handleStreaming<
     }
 
     // Stream end events
+    ensureStreamHeaders();
     reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
@@ -656,6 +688,7 @@ async function handleStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        executionId,
         userId,
         sessionId,
         sessionSource,
@@ -709,6 +742,7 @@ async function handleNonStreaming<
   sessionId?: string | null,
   sessionSource?: SessionSource,
   teamIds?: string[],
+  executionId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -804,6 +838,7 @@ async function handleNonStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        executionId,
         userId,
         sessionId,
         sessionSource,
@@ -865,6 +900,7 @@ async function handleNonStreaming<
   await InteractionModel.create({
     profileId: agent.id,
     externalAgentId,
+    executionId,
     userId,
     sessionId,
     sessionSource,

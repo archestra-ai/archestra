@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useBrowserStream } from "@/hooks/use-browser-stream";
+import { useConversation, useHasPlaywrightMcpTools } from "@/lib/chat.query";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "../loading";
 
@@ -40,18 +41,8 @@ interface BrowserPreviewContentProps {
   headerActions?: React.ReactNode;
   /** Additional class names for the container */
   className?: string;
-  /** When true, shows "Installing browser" message instead of normal content */
-  isInstallingBrowser?: boolean;
-  /** Whether Playwright MCP tools are available */
-  hasPlaywrightMcp?: boolean;
-  /** Called to install browser (Playwright MCP) */
-  onInstallBrowser?: () => Promise<unknown>;
-  /** Whether the browser requires reinstallation due to config change */
-  reinstallRequired?: boolean;
-  /** Whether the browser installation failed */
-  installationFailed?: boolean;
-  /** Called to reinstall the browser */
-  onReinstallBrowser?: () => Promise<unknown>;
+  /** Fallback agentId for pre-conversation case when conversationId is undefined */
+  agentId?: string;
   /** When true, this is a popup that follows the active conversation */
   isPopup?: boolean;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
@@ -69,18 +60,29 @@ export function BrowserPreviewContent({
   isActive,
   headerActions,
   className,
-  isInstallingBrowser = false,
-  hasPlaywrightMcp = false,
-  onInstallBrowser,
-  reinstallRequired = false,
-  installationFailed = false,
-  onReinstallBrowser,
+  agentId: agentIdProp,
   isPopup = false,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: BrowserPreviewContentProps) {
+  // Resolve agentId: prefer conversation's agentId, fall back to prop
+  const { data: conversation } = useConversation(conversationId);
+  const resolvedAgentId = conversation?.agentId ?? agentIdProp;
+
+  const {
+    hasPlaywrightMcpTools,
+    isPlaywrightInstalledByCurrentUser,
+    reinstallRequired,
+    installationFailed,
+    playwrightServerId,
+    isInstalling: isInstallingBrowser,
+    isAssigningTools,
+    installBrowser,
+    reinstallBrowser,
+    assignToolsToAgent,
+  } = useHasPlaywrightMcpTools(resolvedAgentId, conversationId);
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,7 +106,7 @@ export function BrowserPreviewContent({
     setIsEditingUrl,
   } = useBrowserStream({
     conversationId,
-    isActive,
+    isActive: isActive && hasPlaywrightMcpTools,
     isPopup,
     initialUrl: initialNavigateUrl,
   });
@@ -457,12 +459,28 @@ export function BrowserPreviewContent({
         {!isConnecting && !screenshot && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-4">
-              {!hasPlaywrightMcp && !installationFailed ? (
-                // Not installed - show install button
+              {(isInstallingBrowser || isAssigningTools) &&
+              !hasPlaywrightMcpTools ? (
+                // Installing or assigning in progress - show unified loading
+                <>
+                  <Button disabled className="mt-10">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {isAssigningTools ? "Assigning tools" : "Installing"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {isAssigningTools
+                      ? "Assigning Playwright tools to the agent"
+                      : "Required only before first usage of the Browser Preview"}
+                  </p>
+                </>
+              ) : !isPlaywrightInstalledByCurrentUser && !installationFailed ? (
+                // Not installed at all - show install button
                 <>
                   <Button
-                    onClick={() => onInstallBrowser?.()}
-                    disabled={isInstallingBrowser}
+                    onClick={() =>
+                      resolvedAgentId && installBrowser(resolvedAgentId)
+                    }
+                    disabled={!resolvedAgentId || isInstallingBrowser}
                     className="mt-10"
                   >
                     {isInstallingBrowser ? (
@@ -478,12 +496,37 @@ export function BrowserPreviewContent({
                     Required only before first usage of the Browser Preview
                   </p>
                 </>
+              ) : !hasPlaywrightMcpTools &&
+                !reinstallRequired &&
+                !installationFailed ? (
+                // Installed but tools not assigned to current agent
+                <>
+                  <Button
+                    onClick={() =>
+                      resolvedAgentId &&
+                      assignToolsToAgent({
+                        agentId: resolvedAgentId,
+                        conversationId,
+                      })
+                    }
+                    disabled={!resolvedAgentId}
+                    className="mt-10"
+                  >
+                    Assign tools to agent
+                  </Button>
+                  <p className="text-xs text-muted-foreground max-w-[280px]">
+                    In order to use Browser Preview, Playwright tools need to be
+                    assigned to the agent
+                  </p>
+                </>
               ) : reinstallRequired || installationFailed ? (
                 // Installed but needs reinstall due to config change
                 <>
                   <Button
-                    onClick={() => onReinstallBrowser?.()}
-                    disabled={isInstallingBrowser}
+                    onClick={() =>
+                      playwrightServerId && reinstallBrowser(playwrightServerId)
+                    }
+                    disabled={isInstallingBrowser || !playwrightServerId}
                     className="mt-10"
                   >
                     {isInstallingBrowser ? (

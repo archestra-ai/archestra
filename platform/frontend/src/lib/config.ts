@@ -1,7 +1,9 @@
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
-const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const environment: "development" | "production" =
+  (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
+  "development";
 
 const DEFAULT_BACKEND_URL = "http://localhost:9000";
 
@@ -139,6 +141,7 @@ export default {
     },
   },
   debug: process.env.NODE_ENV !== "production",
+  environment,
   posthog: {
     // Analytics is enabled by default, disabled only when explicitly set to "disabled"
     get enabled() {

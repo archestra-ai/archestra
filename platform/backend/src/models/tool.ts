@@ -646,14 +646,10 @@ class ToolModel {
   }
 
   /**
-   * Get names of all MCP tools assigned to an agent or available via globally available catalogs.
+   * Get names of all MCP tools assigned to an agent.
    * Used to prevent autodiscovery of tools already available via MCP servers.
-   * Includes both:
-   * 1. Tools explicitly assigned via agent_tools junction table
-   * 2. Tools from globally available catalogs (discovered dynamically via findGlobalCatalogTool)
    */
   static async getMcpToolNamesByAgent(agentId: string): Promise<string[]> {
-    // 1. Get tools assigned via agent_tools with mcpServerId
     const assignedMcpTools = await db
       .select({
         name: schema.toolsTable.name,
@@ -670,25 +666,7 @@ class ToolModel {
         ),
       );
 
-    // 2. Get tools from globally available catalogs
-    // These tools are discovered dynamically via findGlobalCatalogTool() and should
-    // not be recreated as proxy tools with null mcp_server_id
-    const globalCatalogTools = await db
-      .select({ name: schema.toolsTable.name })
-      .from(schema.toolsTable)
-      .innerJoin(
-        schema.internalMcpCatalogTable,
-        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
-      )
-      .where(eq(schema.internalMcpCatalogTable.isGloballyAvailable, true));
-
-    // 3. Return combined unique tool names
-    const allToolNames = new Set([
-      ...assignedMcpTools.map((t) => t.name),
-      ...globalCatalogTools.map((t) => t.name),
-    ]);
-
-    return [...allToolNames];
+    return assignedMcpTools.map((t) => t.name);
   }
 
   /**

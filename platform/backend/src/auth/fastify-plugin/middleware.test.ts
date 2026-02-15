@@ -147,7 +147,7 @@ describe("Authnz", () => {
     });
 
     test("should skip auth for GET requests to public SSO providers endpoint only", async () => {
-      const publicSsoProviderUrl = "/api/sso-providers/public";
+      const publicSsoProviderUrl = "/api/identity-providers/public";
 
       const mockRequest = {
         url: publicSsoProviderUrl,
@@ -168,12 +168,12 @@ describe("Authnz", () => {
 
     test("should NOT skip auth for GET requests to full SSO providers endpoint (contains secrets)", async () => {
       const mockRequest = {
-        url: "/api/sso-providers",
+        url: "/api/identity-providers",
         method: "GET",
         headers: {},
         routeOptions: {
           schema: {
-            operationId: "GetSsoProviders",
+            operationId: "GetIdentityProviders",
           },
         },
       } as FastifyRequest;
@@ -194,12 +194,12 @@ describe("Authnz", () => {
 
       for (const method of nonGetMethods) {
         const mockRequest = {
-          url: "/api/sso-providers",
+          url: "/api/identity-providers",
           method,
           headers: {},
           routeOptions: {
             schema: {
-              operationId: "SsoProviderOperation",
+              operationId: "IdentityProviderOperation",
             },
           },
         } as FastifyRequest;
@@ -265,9 +265,9 @@ describe("Authnz", () => {
 
     test("should NOT skip auth for GET requests to individual SSO provider endpoints", async () => {
       const individualProviderUrls = [
-        "/api/sso-providers/some-id",
-        "/api/sso-providers/gB4pGSDirn3hhmRJy3hCVMzRFSOhPtl3",
-        "/api/sso-providers/123",
+        "/api/identity-providers/some-id",
+        "/api/identity-providers/gB4pGSDirn3hhmRJy3hCVMzRFSOhPtl3",
+        "/api/identity-providers/123",
       ];
 
       for (const url of individualProviderUrls) {
@@ -277,7 +277,7 @@ describe("Authnz", () => {
           headers: {},
           routeOptions: {
             schema: {
-              operationId: "GetSsoProvider",
+              operationId: "GetIdentityProvider",
             },
           },
         } as FastifyRequest;

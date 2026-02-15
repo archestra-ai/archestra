@@ -122,11 +122,6 @@ vi.mock("@/lib/chat.query", () => ({
     isLoading: false,
     error: null,
   }),
-  useGlobalChatTools: () => ({
-    data: [],
-    isLoading: false,
-    error: null,
-  }),
 }));
 
 // Mock for useHasPermissions - default to non-admin

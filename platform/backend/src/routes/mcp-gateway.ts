@@ -269,6 +269,8 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
+        ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
       };
 
       return handleMcpPostRequest(

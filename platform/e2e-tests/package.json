@@ -23,8 +23,8 @@
     "dotenv": "^17.2.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0",
-    "@types/node": "^25.1.0",
-    "knip": "^5.81.0"
+    "@playwright/test": "^1.58.1",
+    "@types/node": "^25.2.1",
+    "knip": "^5.83.0"
   }
 }

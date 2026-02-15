@@ -24,11 +24,11 @@ export const E2eTestId = {
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ManageToolsButton: "manage-tools-button",
-  ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
-  SsoRoleMappingDefaultRole: "sso-role-mapping-default-role",
-  SsoRoleMappingRuleRole: "sso-role-mapping-rule-role",
-  SsoRoleMappingRuleTemplate: "sso-role-mapping-rule-template",
-  SsoRoleMappingAddRule: "sso-role-mapping-add-rule",
+  ConfigureIdpTeamSyncButton: "configure-idp-team-sync-button",
+  IdpRoleMappingDefaultRole: "idp-role-mapping-default-role",
+  IdpRoleMappingRuleRole: "idp-role-mapping-rule-role",
+  IdpRoleMappingRuleTemplate: "idp-role-mapping-rule-template",
+  IdpRoleMappingAddRule: "idp-role-mapping-add-rule",
   McpServerError: "mcp-server-error",
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
@@ -160,6 +160,22 @@ export const USER_ID_HEADER = "X-Archestra-User-Id";
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 
 /**
+ * Header name for execution ID.
+ * Clients can pass this header to associate interactions with a specific execution run.
+ */
+export const EXECUTION_ID_HEADER = "X-Archestra-Execution-Id";
+
+/**
+ * Composite meta header with format: external-agent-id/execution-id/session-id.
+ * Provides a convenience way to set all three values at once.
+ * Individual headers take precedence over meta header values.
+ * Any segment can be empty (e.g., "/exec-123/" sets only execution-id).
+ *
+ * Values must not contain "/" since it is used as the segment delimiter.
+ */
+export const META_HEADER = "X-Archestra-Meta";
+
+/**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
  * - Account linking (trustedProviders)
  * - Provider registration
@@ -250,7 +266,24 @@ export const MAX_DOMAIN_LENGTH = 253;
  * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
  */
 export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
-export const PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
+export const PLAYWRIGHT_MCP_SERVER_NAME = "microsoft__playwright-mcp";
+
+/**
+ * Set of all built-in MCP catalog item IDs that are system-managed
+ * and should not be modified or deleted by users.
+ */
+export const BUILT_IN_CATALOG_IDS = new Set([
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+]);
+
+export function isBuiltInCatalogId(id: string): boolean {
+  return BUILT_IN_CATALOG_IDS.has(id);
+}
+
+export function isPlaywrightCatalogItem(id: string): boolean {
+  return id === PLAYWRIGHT_MCP_CATALOG_ID;
+}
 
 /**
  * Default browser viewport dimensions used by Playwright MCP in browser preview feature.

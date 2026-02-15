@@ -1,6 +1,6 @@
 ---
 title: Dynamic Tools
-category: Archestra Platform
+category: LLM Proxy
 subcategory: Security Concepts
 order: 3
 ---

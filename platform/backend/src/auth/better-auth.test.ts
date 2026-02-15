@@ -598,7 +598,7 @@ describe("handleAfterHook", () => {
       makeMember,
       makeTeam,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       // Enable enterprise license
       setEnterpriseLicense(true);
@@ -609,7 +609,7 @@ describe("handleAfterHook", () => {
       const team = await makeTeam(org.id, user.id, { name: "SSO Team" });
 
       // Create SSO provider for this organization
-      await makeSsoProvider(org.id, { providerId: "keycloak-local" });
+      await makeIdentityProvider(org.id, { providerId: "keycloak-local" });
 
       // Create SSO account with idToken containing groups
       const idToken = createMockIdToken({
@@ -653,7 +653,7 @@ describe("handleAfterHook", () => {
       makeMember,
       makeTeam,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       // Disable enterprise license
       setEnterpriseLicense(false);
@@ -664,7 +664,7 @@ describe("handleAfterHook", () => {
       const team = await makeTeam(org.id, user.id, { name: "SSO Team 2" });
 
       // Create SSO provider for this organization
-      await makeSsoProvider(org.id, { providerId: "keycloak-local-2" });
+      await makeIdentityProvider(org.id, { providerId: "keycloak-local-2" });
 
       // Create SSO account with idToken containing groups
       const idToken = createMockIdToken({
@@ -708,7 +708,7 @@ describe("handleAfterHook", () => {
       makeMember,
       makeTeam,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       // Enable enterprise license
       setEnterpriseLicense(true);
@@ -721,7 +721,7 @@ describe("handleAfterHook", () => {
       });
 
       // Create SSO provider for this organization
-      await makeSsoProvider(org.id, { providerId: "keycloak-local-3" });
+      await makeIdentityProvider(org.id, { providerId: "keycloak-local-3" });
 
       // Create SSO account with idToken containing groups (but shouldn't be used for regular sign-in)
       const idToken = createMockIdToken({
@@ -798,7 +798,7 @@ describe("handleAfterHook", () => {
       makeMember,
       makeTeam,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       // Enable enterprise license
       setEnterpriseLicense(true);
@@ -809,7 +809,7 @@ describe("handleAfterHook", () => {
       const team = await makeTeam(org.id, user.id, { name: "Removal Team" });
 
       // Create SSO provider for this organization
-      await makeSsoProvider(org.id, { providerId: "keycloak-local-4" });
+      await makeIdentityProvider(org.id, { providerId: "keycloak-local-4" });
 
       // Create SSO account with idToken containing NEW groups (user was removed from old-group)
       const idToken = createMockIdToken({
@@ -861,7 +861,7 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "role-sync@example.com" });
       const org = await makeOrganization();
@@ -869,7 +869,7 @@ describe("handleAfterHook", () => {
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with role mapping rules that map admins group to admin role
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-role-sync",
         roleMapping: {
           defaultRole: "member",
@@ -917,14 +917,14 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "no-match@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with role mapping rules that don't match
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-no-match",
         roleMapping: {
           defaultRole: "member",
@@ -973,7 +973,7 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "skip-sync@example.com" });
       const org = await makeOrganization();
@@ -981,7 +981,7 @@ describe("handleAfterHook", () => {
       await makeMember(user.id, org.id, { role: "admin" });
 
       // Create SSO provider with skipRoleSync enabled
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-skip-sync",
         roleMapping: {
           defaultRole: "member",
@@ -1030,14 +1030,14 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "regular-signin@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with role mapping
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-regular",
         roleMapping: {
           defaultRole: "member",
@@ -1084,14 +1084,14 @@ describe("handleAfterHook", () => {
       makeUser,
       makeOrganization,
       makeMember,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "no-sso-account-role@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with role mapping
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-no-account",
         roleMapping: {
           defaultRole: "member",
@@ -1131,14 +1131,14 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "no-idtoken@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with role mapping
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-no-idtoken",
         roleMapping: {
           defaultRole: "member",
@@ -1182,14 +1182,14 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "no-mapping@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider WITHOUT role mapping
-      await makeSsoProvider(org.id, { providerId: "keycloak-no-mapping" });
+      await makeIdentityProvider(org.id, { providerId: "keycloak-no-mapping" });
 
       // Create SSO account with idToken
       const idToken = createMockIdToken({
@@ -1227,7 +1227,7 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "demote@example.com" });
       const org = await makeOrganization();
@@ -1235,7 +1235,7 @@ describe("handleAfterHook", () => {
       await makeMember(user.id, org.id, { role: "admin" });
 
       // Create SSO provider with role mapping that demotes non-admins
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-demote",
         roleMapping: {
           defaultRole: "member", // Default to member if no rules match
@@ -1284,7 +1284,7 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "already-correct@example.com" });
       const org = await makeOrganization();
@@ -1294,7 +1294,7 @@ describe("handleAfterHook", () => {
       });
 
       // Create SSO provider that maps admins to admin
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-already-correct",
         roleMapping: {
           defaultRole: "member",
@@ -1344,14 +1344,14 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "strict-mode@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with strictMode enabled
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-strict-mode",
         roleMapping: {
           defaultRole: "member",
@@ -1401,14 +1401,14 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeAccount,
-      makeSsoProvider,
+      makeIdentityProvider,
     }) => {
       const user = await makeUser({ email: "strict-mode-match@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
       // Create SSO provider with strictMode enabled
-      await makeSsoProvider(org.id, {
+      await makeIdentityProvider(org.id, {
         providerId: "keycloak-strict-mode-match",
         roleMapping: {
           defaultRole: "member",

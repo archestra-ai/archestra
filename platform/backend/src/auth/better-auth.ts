@@ -31,7 +31,7 @@ import SessionModel from "@/models/session";
 const { ssoConfig, syncSsoRole, syncSsoTeams } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-      await import("./sso.ee")
+      await import("./idp.ee")
     : {
         ssoConfig: undefined,
         syncSsoRole: () => {},
@@ -180,7 +180,7 @@ export const auth: any = betterAuth({
       teamMember: schema.teamMembersTable,
       twoFactor: schema.twoFactorsTable,
       verification: schema.verificationsTable,
-      ssoProvider: schema.ssoProvidersTable,
+      ssoProvider: schema.identityProvidersTable,
       jwks: schema.jwksTable,
       oauthClient: schema.oauthClientsTable,
       oauthAccessToken: schema.oauthAccessTokensTable,

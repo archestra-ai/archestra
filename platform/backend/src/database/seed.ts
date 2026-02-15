@@ -7,8 +7,7 @@ import {
   type SupportedProvider,
   testMcpServerCommand,
 } from "@shared";
-import { and, eq } from "drizzle-orm";
-import { isEqual } from "lodash-es";
+import { and, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -20,7 +19,6 @@ import {
   DualLlmConfigModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
-  McpServerModel,
   MemberModel,
   OrganizationModel,
   TeamModel,
@@ -191,11 +189,22 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
  * Each user gets their own personal Playwright server instance when they click the Browser button.
  */
 async function seedPlaywrightCatalog(): Promise<void> {
+  const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
   const playwrightLocalConfig = {
-    dockerImage: "mcr.microsoft.com/playwright/mcp",
+    // Pinned to v0.0.64 digest because v0.0.67 renamed --no-sandbox to --no-chromium-sandbox
+    // but the image entrypoint still uses --no-sandbox, causing immediate crashes.
+    dockerImage:
+      "mcr.microsoft.com/playwright/mcp@sha256:50fee3932984dbf40fe67be11fe22d0050eca40705cf108099d7a1e0fe6a181c",
     transportType: "streamable-http" as const,
-    // The Docker image ENTRYPOINT is: node cli.js --headless --browser chromium --no-sandbox
-    // K8s args are appended to the ENTRYPOINT (CMD is None), so only specify extra flags here:
+    // Explicit command overrides the image ENTRYPOINT to avoid breakage from upstream image changes.
+    // v0.0.67 broke the entrypoint by renaming --no-sandbox to --no-chromium-sandbox without
+    // updating the Dockerfile. Using explicit command+args makes us resilient to such changes.
+    command: "node",
+    // Full arguments including cli.js entry point and all Chromium/server flags:
+    //   cli.js: the Playwright MCP server entry point
+    //   --headless: run Chromium in headless mode
+    //   --browser chromium: use Chromium browser
+    //   --no-sandbox: required when running as root in containers (renamed to --no-chromium-sandbox in v0.0.67)
     //   --host 0.0.0.0: bind to all interfaces so K8s Service can route traffic to the pod
     //   --port 8080: enable HTTP transport mode (without --port, it runs in stdio mode and exits)
     //   --allowed-hosts *: allow connections from K8s Service DNS (default only allows localhost)
@@ -205,6 +214,11 @@ async function seedPlaywrightCatalog(): Promise<void> {
     // connection and reused by all backend pods so they share the same Playwright browser context.
     // See mcp-client.ts for session ID persistence logic.
     arguments: [
+      "cli.js",
+      "--headless",
+      "--browser",
+      "chromium",
+      "--no-sandbox",
       "--host",
       "0.0.0.0",
       "--port",
@@ -217,13 +231,42 @@ async function seedPlaywrightCatalog(): Promise<void> {
   };
 
   // Read current catalog config before upsert to detect changes
-  const existingCatalog = await InternalMcpCatalogModel.findById(
+  let existingCatalog = await InternalMcpCatalogModel.findById(
     PLAYWRIGHT_MCP_CATALOG_ID,
   );
-  const configChanged =
-    !existingCatalog ||
-    !isEqual(existingCatalog.localConfig, playwrightLocalConfig);
+  const legacyCatalogByName = await InternalMcpCatalogModel.findByName(
+    LEGACY_PLAYWRIGHT_MCP_SERVER_NAME,
+  );
 
+  // One-time migration: remove legacy playwright catalog installations/resources.
+  // This runs only when the old catalog name is present in the environment.
+  if (
+    existingCatalog?.name === LEGACY_PLAYWRIGHT_MCP_SERVER_NAME ||
+    legacyCatalogByName
+  ) {
+    const catalogIdsToDelete = new Set<string>();
+    if (existingCatalog?.name === LEGACY_PLAYWRIGHT_MCP_SERVER_NAME) {
+      catalogIdsToDelete.add(existingCatalog.id);
+    }
+    if (legacyCatalogByName) {
+      catalogIdsToDelete.add(legacyCatalogByName.id);
+    }
+
+    for (const catalogId of catalogIdsToDelete) {
+      const deleted = await InternalMcpCatalogModel.delete(catalogId);
+      if (deleted) {
+        logger.info(
+          { catalogId, legacyCatalogName: LEGACY_PLAYWRIGHT_MCP_SERVER_NAME },
+          "Removed legacy Playwright catalog and related installations/resources",
+        );
+      }
+    }
+
+    existingCatalog = null;
+  }
+
+  // Only insert on first creation; never overwrite user edits on restart.
+  // Future config changes (e.g., docker image pin updates) should use database migrations.
   await db
     .insert(schema.internalMcpCatalogTable)
     .values({
@@ -233,29 +276,9 @@ async function seedPlaywrightCatalog(): Promise<void> {
         "Browser automation for chat - each user gets their own isolated browser session",
       serverType: "local",
       requiresAuth: false,
-      isGloballyAvailable: true,
       localConfig: playwrightLocalConfig,
     })
-    .onConflictDoUpdate({
-      target: schema.internalMcpCatalogTable.id,
-      set: { localConfig: playwrightLocalConfig },
-    });
-
-  // If config changed, mark all existing servers for reinstall
-  if (configChanged && existingCatalog) {
-    const servers = await McpServerModel.findByCatalogId(
-      PLAYWRIGHT_MCP_CATALOG_ID,
-    );
-    for (const server of servers) {
-      await McpServerModel.update(server.id, { reinstallRequired: true });
-    }
-    if (servers.length > 0) {
-      logger.info(
-        { serverCount: servers.length },
-        "Marked existing Playwright servers for reinstall after catalog config update",
-      );
-    }
-  }
+    .onConflictDoNothing();
 
   logger.info("Seeded Playwright browser preview catalog");
 }
@@ -494,6 +517,47 @@ function getProviderDisplayName(provider: SupportedProvider): string {
   return displayNames[provider];
 }
 
+/**
+ * Migrates existing Playwright tool assignments to use dynamic credentials.
+ * Static credentials break user isolation since multiple users would share
+ * the same browser session. This ensures all Playwright assignments use
+ * useDynamicTeamCredential=true.
+ */
+async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
+  // Find all tool IDs belonging to the Playwright catalog
+  const playwrightTools = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(eq(schema.toolsTable.catalogId, PLAYWRIGHT_MCP_CATALOG_ID));
+
+  if (playwrightTools.length === 0) return;
+
+  const playwrightToolIds = playwrightTools.map((t) => t.id);
+
+  // Update all assignments that still use static credentials
+  const result = await db
+    .update(schema.agentToolsTable)
+    .set({
+      useDynamicTeamCredential: true,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+    })
+    .where(
+      and(
+        inArray(schema.agentToolsTable.toolId, playwrightToolIds),
+        eq(schema.agentToolsTable.useDynamicTeamCredential, false),
+      ),
+    );
+
+  const count = result.rowCount ?? 0;
+  if (count > 0) {
+    logger.info(
+      { updatedCount: count },
+      "Migrated Playwright tool assignments to dynamic credentials",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
@@ -504,6 +568,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
+  await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();

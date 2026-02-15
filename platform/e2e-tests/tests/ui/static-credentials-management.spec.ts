@@ -72,7 +72,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
 
       // Go to MCP Registry page
       await goToPage(page, "/mcp-catalog/registry");
-      await page.waitForLoadState("networkidle");
 
       // Click connect button for the catalog item
       await page

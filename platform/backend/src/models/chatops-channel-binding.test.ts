@@ -396,4 +396,299 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(binding).toBeDefined();
     });
   });
+
+  describe("ensureChannelsExist", () => {
+    test("creates bindings with null agentId for new channels", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "General",
+            workspaceId: "ws-1",
+            workspaceName: "My Team",
+          },
+          {
+            channelId: "ch-2",
+            channelName: "Random",
+            workspaceId: "ws-1",
+            workspaceName: "My Team",
+          },
+        ],
+      });
+
+      const bindings = await ChatOpsChannelBindingModel.findByOrganization(
+        org.id,
+      );
+      expect(bindings).toHaveLength(2);
+      expect(bindings[0].agentId).toBeNull();
+      expect(bindings[1].agentId).toBeNull();
+    });
+
+    test("preserves existing agentId when updating names", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ agentType: "agent" });
+
+      // Create a binding with an agent
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "ch-1",
+        workspaceId: "ws-1",
+        channelName: "Old Name",
+        agentId: agent.id,
+      });
+
+      // Discover the same channel with updated name
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "New Name",
+            workspaceId: "ws-1",
+            workspaceName: "My Team",
+          },
+        ],
+      });
+
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "ms-teams",
+        channelId: "ch-1",
+        workspaceId: "ws-1",
+      });
+      expect(binding?.agentId).toBe(agent.id);
+      expect(binding?.channelName).toBe("New Name");
+    });
+
+    test("updates channelName and workspaceName for existing channels", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "General",
+            workspaceId: "ws-1",
+            workspaceName: "Team A",
+          },
+        ],
+      });
+
+      // Update with new names
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "General Renamed",
+            workspaceId: "ws-1",
+            workspaceName: "Team A Renamed",
+          },
+        ],
+      });
+
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "ms-teams",
+        channelId: "ch-1",
+        workspaceId: "ws-1",
+      });
+      expect(binding?.channelName).toBe("General Renamed");
+      expect(binding?.workspaceName).toBe("Team A Renamed");
+
+      // Verify only one binding exists (upsert, not duplicate)
+      const bindings = await ChatOpsChannelBindingModel.findByOrganization(
+        org.id,
+      );
+      expect(bindings).toHaveLength(1);
+    });
+
+    test("handles empty channels array (no-op)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // Should not throw
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [],
+      });
+
+      const bindings = await ChatOpsChannelBindingModel.findByOrganization(
+        org.id,
+      );
+      expect(bindings).toHaveLength(0);
+    });
+  });
+
+  describe("deleteStaleChannels", () => {
+    test("deletes bindings for channels not in the active list", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // Create 3 channels
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "General",
+            workspaceId: "ws-1",
+            workspaceName: "Team",
+          },
+          {
+            channelId: "ch-2",
+            channelName: "Random",
+            workspaceId: "ws-1",
+            workspaceName: "Team",
+          },
+          {
+            channelId: "ch-3",
+            channelName: "Dev",
+            workspaceId: "ws-1",
+            workspaceName: "Team",
+          },
+        ],
+      });
+
+      // Remove ch-2 and ch-3 (they are no longer active)
+      const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
+        {
+          organizationId: org.id,
+          provider: "ms-teams",
+          workspaceIds: ["ws-1"],
+          activeChannelIds: ["ch-1"],
+        },
+      );
+
+      expect(deletedCount).toBe(2);
+
+      const bindings = await ChatOpsChannelBindingModel.findByOrganization(
+        org.id,
+      );
+      expect(bindings).toHaveLength(1);
+      expect(bindings[0].channelId).toBe("ch-1");
+    });
+
+    test("preserves bindings for channels still in the active list", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ agentType: "agent" });
+
+      // Create a bound channel
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "ch-1",
+        workspaceId: "ws-1",
+        agentId: agent.id,
+      });
+
+      const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
+        {
+          organizationId: org.id,
+          provider: "ms-teams",
+          workspaceIds: ["ws-1"],
+          activeChannelIds: ["ch-1"],
+        },
+      );
+
+      expect(deletedCount).toBe(0);
+
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "ms-teams",
+        channelId: "ch-1",
+        workspaceId: "ws-1",
+      });
+      expect(binding).toBeDefined();
+      expect(binding?.agentId).toBe(agent.id);
+    });
+
+    test("returns correct count of deleted rows", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "General",
+            workspaceId: "ws-1",
+            workspaceName: "Team",
+          },
+          {
+            channelId: "ch-2",
+            channelName: "Random",
+            workspaceId: "ws-1",
+            workspaceName: "Team",
+          },
+        ],
+      });
+
+      // All channels are active — nothing deleted
+      const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
+        {
+          organizationId: org.id,
+          provider: "ms-teams",
+          workspaceIds: ["ws-1"],
+          activeChannelIds: ["ch-1", "ch-2"],
+        },
+      );
+
+      expect(deletedCount).toBe(0);
+    });
+
+    test("handles empty activeChannelIds (returns 0)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channels: [
+          {
+            channelId: "ch-1",
+            channelName: "General",
+            workspaceId: "ws-1",
+            workspaceName: "Team",
+          },
+        ],
+      });
+
+      // Empty activeChannelIds early-returns 0 (safety guard)
+      const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
+        {
+          organizationId: org.id,
+          provider: "ms-teams",
+          workspaceIds: ["ws-1"],
+          activeChannelIds: [],
+        },
+      );
+
+      expect(deletedCount).toBe(0);
+    });
+  });
 });

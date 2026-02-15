@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useGlobalChatTools, useProfileToolsWithIds } from "@/lib/chat.query";
+import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -86,6 +86,8 @@ interface ArchestraPromptInputProps {
   inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to ChatApiKeySelector */
   agentLlmApiKeyId?: string | null;
+  /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
+  submitDisabled?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -110,6 +112,7 @@ const PromptInputContent = ({
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
+  submitDisabled = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -126,7 +129,6 @@ const PromptInputContent = ({
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
-  const { data: globalTools = [] } = useGlobalChatTools();
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
 
   // Check if user can update organization settings (to show settings link in tooltip)
@@ -141,6 +143,7 @@ const PromptInputContent = ({
   const isRestored = useRef(false);
 
   // Restore draft on mount or conversation change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: controller.textInput is a new object every render (recreated in useMemo when textInput state changes), so using it as a dependency causes the effect to fire on every keystroke, clearing the input. Use the stable setInput function reference instead.
   useEffect(() => {
     isRestored.current = false;
     const savedDraft = localStorage.getItem(storageKey);
@@ -177,8 +180,8 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents (including global tools like Playwright)
-  const hasTools = tools.length > 0 || globalTools.length > 0;
+  // Check if there are tools or delegated agents
+  const hasTools = tools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
   const hasContent = hasTools || hasDelegatedAgents;
 
@@ -356,7 +359,11 @@ const PromptInputContent = ({
             textareaRef={textareaRef}
             onTranscriptionChange={handleTranscriptionChange}
           />
-          <PromptInputSubmit className="!h-8" status={status} />
+          <PromptInputSubmit
+            className="!h-8"
+            status={status}
+            disabled={submitDisabled}
+          />
         </div>
       </PromptInputFooter>
     </PromptInput>
@@ -384,6 +391,7 @@ const ArchestraPromptInput = ({
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
+  submitDisabled,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -409,6 +417,7 @@ const ArchestraPromptInput = ({
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
+          submitDisabled={submitDisabled}
         />
       </PromptInputProvider>
     </div>

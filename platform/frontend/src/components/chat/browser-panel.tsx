@@ -14,18 +14,8 @@ interface BrowserPanelProps {
   isOpen: boolean;
   onClose: () => void;
   conversationId: string | undefined;
-  /** When true, shows "Installing browser" message instead of normal content */
-  isInstallingBrowser?: boolean;
-  /** Whether Playwright MCP tools are available */
-  hasPlaywrightMcp?: boolean;
-  /** Called to install browser (Playwright MCP) */
-  onInstallBrowser?: () => Promise<unknown>;
-  /** Whether the browser requires reinstallation due to config change */
-  reinstallRequired?: boolean;
-  /** Whether the browser installation failed */
-  installationFailed?: boolean;
-  /** Called to reinstall the browser */
-  onReinstallBrowser?: () => Promise<unknown>;
+  /** Fallback agentId for pre-conversation case */
+  agentId?: string;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
   onCreateConversationWithUrl?: (url: string) => void;
   /** Whether conversation creation is in progress */
@@ -40,12 +30,7 @@ export function BrowserPanel({
   isOpen,
   onClose,
   conversationId,
-  isInstallingBrowser = false,
-  hasPlaywrightMcp = false,
-  onInstallBrowser,
-  reinstallRequired = false,
-  installationFailed = false,
-  onReinstallBrowser,
+  agentId,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
   initialNavigateUrl,
@@ -76,12 +61,7 @@ export function BrowserPanel({
     <BrowserPreviewContent
       conversationId={conversationId}
       isActive={isOpen}
-      isInstallingBrowser={isInstallingBrowser}
-      hasPlaywrightMcp={hasPlaywrightMcp}
-      onInstallBrowser={onInstallBrowser}
-      reinstallRequired={reinstallRequired}
-      installationFailed={installationFailed}
-      onReinstallBrowser={onReinstallBrowser}
+      agentId={agentId}
       onCreateConversationWithUrl={onCreateConversationWithUrl}
       isCreatingConversation={isCreatingConversation}
       initialNavigateUrl={initialNavigateUrl}

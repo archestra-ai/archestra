@@ -41,7 +41,7 @@ const resourceCategories: Record<string, Resource[]> = {
     "limit",
     "tokenPrice",
     "chatSettings",
-    "ssoProvider",
+    "identityProvider",
   ],
 };
 
@@ -54,7 +54,7 @@ const resourceLabels: Record<Resource, string> = {
   dualLlmConfig: "Dual LLM Configs",
   dualLlmResult: "Dual LLM Results",
   organization: "Organization",
-  ssoProvider: "SSO Providers",
+  identityProvider: "Identity Providers",
   member: "Members",
   invitation: "Invitations",
   internalMcpCatalog: "Internal MCP Catalog",

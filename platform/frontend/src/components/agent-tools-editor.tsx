@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import {
+  type archestraApiTypes,
+  isPlaywrightCatalogItem,
+  parseFullToolName,
+} from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
@@ -149,28 +153,25 @@ const AgentToolsEditorContent = forwardRef<
   }, [assignedToolsData]);
 
   // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
-  // Globally available servers (e.g., playwright-browser) are hidden
   const sortedCatalogItems = useMemo(() => {
-    return [...catalogItems]
-      .filter((c) => !c.isGloballyAvailable)
-      .sort((a, b) => {
-        const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
-        const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
+    return [...catalogItems].sort((a, b) => {
+      const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
+      const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
 
-        // Items with assigned tools come first, sorted by assigned count descending
-        if (aAssigned > 0 && bAssigned === 0) return -1;
-        if (aAssigned === 0 && bAssigned > 0) return 1;
-        if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+      // Items with assigned tools come first, sorted by assigned count descending
+      if (aAssigned > 0 && bAssigned === 0) return -1;
+      if (aAssigned === 0 && bAssigned > 0) return 1;
+      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
 
-        // Among items with same assigned count, sort by total tools available
-        const aCount = toolCountByCatalog.get(a.id) ?? 0;
-        const bCount = toolCountByCatalog.get(b.id) ?? 0;
-        if (aCount > 0 && bCount === 0) return -1;
-        if (aCount === 0 && bCount > 0) return 1;
+      // Among items with same assigned count, sort by total tools available
+      const aCount = toolCountByCatalog.get(a.id) ?? 0;
+      const bCount = toolCountByCatalog.get(b.id) ?? 0;
+      if (aCount > 0 && bCount === 0) return -1;
+      if (aCount === 0 && bCount > 0) return 1;
 
-        // Finally, sort alphabetically by name
-        return a.name.localeCompare(b.name);
-      });
+      // Finally, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
   // Filter by search query
@@ -263,6 +264,7 @@ const AgentToolsEditorContent = forwardRef<
               ? changes.credentialSourceId
               : undefined,
             useDynamicTeamCredential:
+              isPlaywrightCatalogItem(changes.catalogItem.id) ||
               changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
             skipInvalidation: true,
           });
@@ -441,9 +443,12 @@ function McpServerPill({
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
 
-  // Show credential selector for non-builtin servers that have credentials available
+  // Show credential selector for non-builtin, non-Playwright servers that have credentials available
+  const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
   const showCredentialSelector =
-    catalogItem.serverType !== "builtin" && mcpServers.length > 0;
+    catalogItem.serverType !== "builtin" &&
+    !isPlaywright &&
+    mcpServers.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>

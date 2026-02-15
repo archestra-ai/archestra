@@ -1,8 +1,7 @@
 ---
 title: Chat
-category: Archestra Platform
-subcategory: Concepts
-order: -1
+category: Agents
+order: 2
 description: Managing LLM provider API keys for the built-in Chat feature
 lastUpdated: 2025-12-15
 ---

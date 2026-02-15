@@ -7,6 +7,10 @@ import {
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
+  KC_TEST_USER,
+  KEYCLOAK_EXTERNAL_URL,
+  KEYCLOAK_OIDC,
+  KEYCLOAK_REALM,
   MARKETING_TEAM_NAME,
   UI_BASE_URL,
 } from "./consts";
@@ -636,4 +640,131 @@ export async function waitForServerInstallation(
   throw new Error(
     `MCP server installation timed out after ${maxAttempts * 2} seconds`,
   );
+}
+
+// =============================================================================
+// Keycloak SSO/Identity Provider Helpers
+// =============================================================================
+
+/**
+ * Get a JWT access token from Keycloak using the resource owner password
+ * credentials grant (direct access grant).
+ */
+export async function getKeycloakJwt(): Promise<string> {
+  // Use KEYCLOAK_EXTERNAL_URL because this runs from the Playwright test container
+  // (outside K8s), not from the backend. KEYCLOAK_OIDC.tokenEndpoint uses K8s internal
+  // DNS which is not resolvable from the test container.
+  const tokenUrl = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "password",
+      client_id: KEYCLOAK_OIDC.clientId,
+      client_secret: KEYCLOAK_OIDC.clientSecret,
+      username: KC_TEST_USER.username,
+      password: KC_TEST_USER.password,
+      scope: "openid",
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Keycloak token request failed: ${response.status} ${text}`,
+    );
+  }
+
+  const data = (await response.json()) as { access_token: string };
+  return data.access_token;
+}
+
+/**
+ * Perform SSO login via Keycloak in the given page context.
+ * This handles the Keycloak login form and waits for redirect back to Archestra.
+ * Works for both OIDC and SAML flows since Keycloak uses the same login UI.
+ *
+ * @param ssoPage - The Playwright page that has been redirected to Keycloak
+ * @returns true if login succeeded (landed on non-sign-in page), false if it failed
+ */
+export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
+  // Wait for redirect to Keycloak (external URL for browser)
+  // Since we're using a fresh browser context, Keycloak should always show login form
+  await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
+    timeout: 30000,
+  });
+
+  // Wait for Keycloak login form to be ready
+  await ssoPage.waitForLoadState("networkidle");
+
+  // Fill in Keycloak login form
+  const usernameField = ssoPage.getByLabel("Username or email");
+  await usernameField.waitFor({ state: "visible", timeout: 10000 });
+  await usernameField.fill(KC_TEST_USER.username);
+
+  // Password field - use getByRole which works for type="password" inputs
+  const passwordField = ssoPage.getByRole("textbox", { name: "Password" });
+  await passwordField.waitFor({ state: "visible", timeout: 10000 });
+  await passwordField.fill(KC_TEST_USER.password);
+
+  await clickButton({ page: ssoPage, options: { name: "Sign In" } });
+
+  // Wait for redirect back to Archestra (any page under UI_BASE_URL)
+  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 60000 });
+
+  // Wait for page to settle
+  await ssoPage.waitForLoadState("networkidle");
+
+  // Check if we landed on a logged-in page (not sign-in)
+  const finalUrl = ssoPage.url();
+  const loginSucceeded = !finalUrl.includes("/auth/sign-in");
+
+  // If login failed, try to capture any error message for debugging
+  if (!loginSucceeded) {
+    // Check for error toast or message on the sign-in page
+    const errorToast = ssoPage.locator('[role="alert"]').first();
+    const errorText = await errorToast.textContent().catch(() => null);
+    if (errorText && !errorText.includes("Default Admin Credentials Enabled")) {
+      console.log(`SSO login failed with error: ${errorText}`);
+    }
+  }
+
+  return loginSucceeded;
+}
+
+/**
+ * Fetch the IdP metadata from Keycloak dynamically.
+ * This is necessary because Keycloak regenerates certificates on restart,
+ * so we can't use hardcoded certificates in tests.
+ * Also modifies WantAuthnRequestsSigned to "false" to avoid signing complexity.
+ * Uses external URL since this runs from the test (CI host), not from inside K8s.
+ */
+export async function fetchKeycloakSamlMetadata(): Promise<string> {
+  const response = await fetch(
+    `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml/descriptor`,
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch Keycloak SAML metadata: ${response.status}`,
+    );
+  }
+  const metadata = await response.text();
+  // Modify WantAuthnRequestsSigned to "false" to avoid signing complexity in tests
+  return metadata.replace(
+    'WantAuthnRequestsSigned="true"',
+    'WantAuthnRequestsSigned="false"',
+  );
+}
+
+/**
+ * Extract the X509 certificate from the IdP metadata XML.
+ */
+export function extractCertFromMetadata(metadata: string): string {
+  const match = metadata.match(
+    /<ds:X509Certificate>([^<]+)<\/ds:X509Certificate>/,
+  );
+  if (!match) {
+    throw new Error("Could not extract certificate from IdP metadata");
+  }
+  return match[1];
 }

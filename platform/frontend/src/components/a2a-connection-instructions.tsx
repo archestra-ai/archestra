@@ -49,7 +49,7 @@ export function A2AConnectionInstructions({
   const tokens = tokensData?.tokens;
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedChatLink, setCopiedChatLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionUrl, setConnectionUrl] = useState<string>(
@@ -218,7 +218,7 @@ curl -X GET "${agentCardUrl}" \\
   );
 
   const handleCopyCode = useCallback(
-    async (code: string) => {
+    async (code: string, codeId: string) => {
       setIsCopyingCode(true);
       // Fetch real token if available
       let tokenValue = tokenForDisplay;
@@ -241,9 +241,9 @@ curl -X GET "${agentCardUrl}" \\
 
       const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
       await navigator.clipboard.writeText(codeWithRealToken);
-      setCopiedCode(true);
+      setCopiedCode(codeId);
       toast.success("Code copied with token");
-      setTimeout(() => setCopiedCode(false), 2000);
+      setTimeout(() => setCopiedCode(null), 2000);
       setIsCopyingCode(false);
     },
     [
@@ -437,7 +437,7 @@ curl -X GET "${agentCardUrl}" \\
               variant="ghost"
               size="sm"
               className="gap-2"
-              onClick={() => handleCopyCode(curlCode)}
+              onClick={() => handleCopyCode(curlCode, "curl")}
               disabled={isCopyingCode}
             >
               {isCopyingCode ? (
@@ -445,7 +445,7 @@ curl -X GET "${agentCardUrl}" \\
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Copying...</span>
                 </>
-              ) : copiedCode ? (
+              ) : copiedCode === "curl" ? (
                 <>
                   <Check className="h-4 w-4 text-green-500" />
                   <span>Copied!</span>
@@ -497,7 +497,7 @@ curl -X GET "${agentCardUrl}" \\
               variant="ghost"
               size="sm"
               className="gap-2"
-              onClick={() => handleCopyCode(agentCardCurlCode)}
+              onClick={() => handleCopyCode(agentCardCurlCode, "agentCard")}
               disabled={isCopyingCode}
             >
               {isCopyingCode ? (
@@ -505,7 +505,7 @@ curl -X GET "${agentCardUrl}" \\
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Copying...</span>
                 </>
-              ) : copiedCode ? (
+              ) : copiedCode === "agentCard" ? (
                 <>
                   <Check className="h-4 w-4 text-green-500" />
                   <span>Copied!</span>

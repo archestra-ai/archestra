@@ -217,14 +217,17 @@ export function AssignedToolsTable({
   );
 
   const handleRowSelectionChange = useCallback(
-    (newRowSelection: RowSelectionState) => {
-      setRowSelection(newRowSelection);
+    (newRowSelection: RowSelectionState | ((prev: RowSelectionState) => RowSelectionState)) => {
+      setRowSelection((prevSelection) => {
+        const nextSelection = typeof newRowSelection === "function" ? newRowSelection(prevSelection) : newRowSelection;
+        
+        const newSelectedTools = Object.keys(nextSelection)
+          .map((index) => tools[Number(index)])
+          .filter(Boolean);
 
-      const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => tools[Number(index)])
-        .filter(Boolean);
-
-      setSelectedTools(newSelectedTools);
+        setSelectedTools(newSelectedTools);
+        return nextSelection;
+      });
     },
     [tools],
   );
@@ -256,14 +259,20 @@ export function AssignedToolsTable({
   );
 
   const handleSortingChange = useCallback(
-    (newSorting: SortingState) => {
-      setSorting(newSorting);
-      if (newSorting.length > 0) {
-        updateUrlParams({
-          sortBy: newSorting[0].id,
-          sortDirection: newSorting[0].desc ? "desc" : "asc",
-        });
-      }
+    (newSorting: SortingState | ((prev: SortingState) => SortingState)) => {
+      setSorting((prevSorting) => {
+        const nextSorting = typeof newSorting === "function" ? newSorting(prevSorting) : newSorting;
+        
+        if (nextSorting.length > 0) {
+          updateUrlParams({
+            sortBy: nextSorting[0].id,
+            sortDirection: nextSorting[0].desc ? "desc" : "asc",
+          });
+        }
+        return nextSorting;
+      });
+      setRowSelection({});
+      setSelectedTools([]);
     },
     [updateUrlParams],
   );

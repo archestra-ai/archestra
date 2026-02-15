@@ -703,6 +703,7 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["update"],
   },
   [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
+  [RouteId.SendAgentOutgoingEmail]: {}, // Any authenticated user with agent access can send outbound email
 
   // ChatOps Routes (admin-only for management)
   [RouteId.GetChatOpsStatus]: {

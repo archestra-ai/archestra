@@ -239,6 +239,15 @@ const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
 };
 
 /**
+ * Parse outgoing email provider from environment variable
+ */
+const parseOutgoingEmailProvider = (): "gmail_api" | undefined => {
+  const provider =
+    process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_PROVIDER?.toLowerCase();
+  return provider === "gmail_api" ? "gmail_api" : undefined;
+};
+
+/**
  * Parse knowledge graph provider from environment variable
  */
 const parseKnowledgeGraphProvider = ():
@@ -384,6 +393,24 @@ export default {
         webhookUrl:
           process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL ||
           undefined,
+      },
+    },
+    outgoingEmail: {
+      provider: parseOutgoingEmailProvider(),
+      gmail: {
+        clientId:
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_CLIENT_ID || "",
+        clientSecret:
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_CLIENT_SECRET ||
+          "",
+        refreshToken:
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_REFRESH_TOKEN ||
+          "",
+        fromAddress:
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_FROM_ADDRESS || "",
+        replyToAddress:
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_REPLY_TO_ADDRESS ||
+          "",
       },
     },
   },

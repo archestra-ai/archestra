@@ -315,6 +315,7 @@ export const RouteId = {
   RenewIncomingEmailSubscription: "renewIncomingEmailSubscription",
   DeleteIncomingEmailSubscription: "deleteIncomingEmailSubscription",
   GetAgentEmailAddress: "getAgentEmailAddress",
+  SendAgentOutgoingEmail: "sendAgentOutgoingEmail",
 
   // ChatOps Routes
   GetChatOpsStatus: "getChatOpsStatus",

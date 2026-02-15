@@ -217,14 +217,17 @@ export function AssignedToolsTable({
   );
 
   const handleRowSelectionChange = useCallback(
-    (newRowSelection: RowSelectionState) => {
+    (newRowSelection: RowSelectionState | ((prev: RowSelectionState) => RowSelectionState)) => {
       setRowSelection(newRowSelection);
 
-      const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => tools[Number(index)])
-        .filter(Boolean);
-
-      setSelectedTools(newSelectedTools);
+      // Note: We need the tools data to map selection IDs to tool objects.
+      // Since rowSelection now uses IDs, we can filter tools by their presence in the selection state.
+      setRowSelection((currentSelection) => {
+        const selectedIds = typeof newRowSelection === 'function' ? newRowSelection(currentSelection) : newRowSelection;
+        const newSelectedTools = tools.filter((tool) => selectedIds[tool.id]);
+        setSelectedTools(newSelectedTools);
+        return selectedIds;
+      });
     },
     [tools],
   );
@@ -931,6 +934,7 @@ export function AssignedToolsTable({
           <DataTable
             columns={columns}
             data={tools}
+            getRowId={(row) => row.id}
             sorting={sorting}
             onSortingChange={handleSortingChange}
             manualSorting={true}

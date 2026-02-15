@@ -87,6 +87,7 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
   provider: "anthropic",
   apiKey: null,
+  baseUrl: null,
   scope: "personal",
   teamId: null,
   vaultSecretPath: null,
@@ -132,6 +133,7 @@ function ChatSettingsContent() {
         name: selectedApiKey.name,
         provider: selectedApiKey.provider,
         apiKey: PLACEHOLDER_KEY,
+        baseUrl: selectedApiKey.baseUrl ?? null,
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
         // Include vault secret info for BYOS mode
@@ -147,6 +149,7 @@ function ChatSettingsContent() {
       name: values.name,
       provider: values.provider,
       apiKey: values.apiKey ?? undefined,
+      baseUrl: values.baseUrl ?? undefined,
       scope: values.scope,
       teamId:
         values.scope === "team" && values.teamId ? values.teamId : undefined,
@@ -179,6 +182,7 @@ function ChatSettingsContent() {
       data: {
         name: values.name || undefined,
         apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
+        baseUrl: values.baseUrl ?? undefined,
         scope: scopeChanged ? values.scope : undefined,
         teamId:
           scopeChanged || teamIdChanged

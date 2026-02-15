@@ -32,6 +32,8 @@ const chatApiKeysTable = pgTable(
     teamId: text("team_id").references(() => team.id, {
       onDelete: "cascade",
     }),
+    /** Base URL for self-hosted providers like Ollama or vLLM */
+    baseUrl: text("base_url"),
     /** System keys are auto-managed for keyless providers (Vertex AI, vLLM, etc.) */
     isSystem: boolean("is_system").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

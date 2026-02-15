@@ -135,6 +135,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKey: z.string().min(1).optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
             teamId: z.string().optional(),
+            baseUrl: z.string().url("Must be a valid URL").optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -330,6 +331,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKey: z.string().min(1).optional(),
             scope: ChatApiKeyScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
+            baseUrl: z.string().url("Must be a valid URL").optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })

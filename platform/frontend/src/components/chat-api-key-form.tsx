@@ -38,6 +38,7 @@ export type ChatApiKeyFormValues = {
   name: string;
   provider: CreateChatApiKeyBody["provider"];
   apiKey: string | null;
+  baseUrl: string | null;
   scope: NonNullable<CreateChatApiKeyBody["scope"]>;
   teamId: string | null;
   vaultSecretPath: string | null;
@@ -123,7 +124,7 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
-    description: "For self-hosted Ollama, an API key is not required.",
+    description: "For self-hosted Ollama, specify the base URL. Auth is usually not required.",
   },
   zhipuai: {
     name: "Zhipu AI",
@@ -480,7 +481,20 @@ export function ChatApiKeyForm({
         )}
 
         {/* API Key input */}
-        {byosEnabled ? (
+        {provider === "ollama" ? (
+          <div className="space-y-2">
+            <Label htmlFor="chat-api-key-base-url">Base URL</Label>
+            <Input
+              id="chat-api-key-base-url"
+              placeholder="http://localhost:11434"
+              disabled={isPending}
+              {...form.register("baseUrl")}
+            />
+            <p className="text-xs text-muted-foreground">
+              The URL where your Ollama instance is running.
+            </p>
+          </div>
+        ) : byosEnabled ? (
           <Suspense
             fallback={
               <div className="text-sm text-muted-foreground">Loading...</div>

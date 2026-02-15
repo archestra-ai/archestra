@@ -50,6 +50,7 @@ export function A2AConnectionInstructions({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedChatLink, setCopiedChatLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedAgentCardCode, setCopiedAgentCardCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionUrl, setConnectionUrl] = useState<string>(
@@ -218,7 +219,7 @@ curl -X GET "${agentCardUrl}" \\
   );
 
   const handleCopyCode = useCallback(
-    async (code: string) => {
+    async (code: string, isAgentCard = false) => {
       setIsCopyingCode(true);
       // Fetch real token if available
       let tokenValue = tokenForDisplay;
@@ -241,9 +242,16 @@ curl -X GET "${agentCardUrl}" \\
 
       const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
       await navigator.clipboard.writeText(codeWithRealToken);
-      setCopiedCode(true);
+
+      if (isAgentCard) {
+        setCopiedAgentCardCode(true);
+        setTimeout(() => setCopiedAgentCardCode(false), 2000);
+      } else {
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      }
+
       toast.success("Code copied with token");
-      setTimeout(() => setCopiedCode(false), 2000);
       setIsCopyingCode(false);
     },
     [
@@ -497,7 +505,7 @@ curl -X GET "${agentCardUrl}" \\
               variant="ghost"
               size="sm"
               className="gap-2"
-              onClick={() => handleCopyCode(agentCardCurlCode)}
+              onClick={() => handleCopyCode(agentCardCurlCode, true)}
               disabled={isCopyingCode}
             >
               {isCopyingCode ? (
@@ -505,7 +513,7 @@ curl -X GET "${agentCardUrl}" \\
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Copying...</span>
                 </>
-              ) : copiedCode ? (
+              ) : copiedAgentCardCode ? (
                 <>
                   <Check className="h-4 w-4 text-green-500" />
                   <span>Copied!</span>

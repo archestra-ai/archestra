@@ -711,6 +711,11 @@ class VllmResponseAdapter implements LLMResponseAdapter<VllmResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): VllmResponse {
     return this.response;
   }

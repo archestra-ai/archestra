@@ -203,4 +203,65 @@ describe("reportMcpToolCall", () => {
       team: "",
     });
   });
+
+  test("observes request and response size bytes", () => {
+    reportMcpToolCall({
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
+      mcpServerName: "github",
+      toolName: "github__list_repos",
+      durationSeconds: 1.0,
+      isError: false,
+      requestSizeBytes: 256,
+      responseSizeBytes: 4096,
+    });
+
+    const expectedLabels = {
+      agent_id: "agent-1",
+      agent_name: "My Agent",
+      agent_type: "mcp_gateway",
+      mcp_server_name: "github",
+      tool_name: "github__list_repos",
+      status: "success",
+    };
+
+    // duration + request size + response size = 3 histogram observations
+    expect(histogramObserve).toHaveBeenCalledTimes(3);
+    expect(histogramObserve).toHaveBeenCalledWith(expectedLabels, 1.0);
+    expect(histogramObserve).toHaveBeenCalledWith(expectedLabels, 256);
+    expect(histogramObserve).toHaveBeenCalledWith(expectedLabels, 4096);
+  });
+
+  test("skips size observation when values are undefined", () => {
+    reportMcpToolCall({
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
+      mcpServerName: "github",
+      toolName: "github__list_repos",
+      durationSeconds: 1.0,
+      isError: false,
+    });
+
+    // Only duration histogram should be observed
+    expect(histogramObserve).toHaveBeenCalledTimes(1);
+  });
+
+  test("skips size observation when values are zero", () => {
+    reportMcpToolCall({
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
+      mcpServerName: "github",
+      toolName: "github__list_repos",
+      durationSeconds: 1.0,
+      isError: false,
+      requestSizeBytes: 0,
+      responseSizeBytes: 0,
+    });
+
+    // Only duration histogram should be observed
+    expect(histogramObserve).toHaveBeenCalledTimes(1);
+  });
 });

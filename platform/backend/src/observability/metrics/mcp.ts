@@ -13,6 +13,8 @@ import { sanitizeLabelKey } from "./utils";
 
 let mcpToolCallDuration: client.Histogram<string>;
 let mcpToolCallsTotal: client.Counter<string>;
+let mcpRequestSizeBytes: client.Histogram<string>;
+let mcpResponseSizeBytes: client.Histogram<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -26,7 +28,13 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
   const labelKeysChanged =
     JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys);
 
-  if (!labelKeysChanged && mcpToolCallDuration && mcpToolCallsTotal) {
+  if (
+    !labelKeysChanged &&
+    mcpToolCallDuration &&
+    mcpToolCallsTotal &&
+    mcpRequestSizeBytes &&
+    mcpResponseSizeBytes
+  ) {
     return;
   }
 
@@ -39,6 +47,12 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     }
     if (mcpToolCallsTotal) {
       client.register.removeSingleMetric("mcp_tool_calls_total");
+    }
+    if (mcpRequestSizeBytes) {
+      client.register.removeSingleMetric("mcp_request_size_bytes");
+    }
+    if (mcpResponseSizeBytes) {
+      client.register.removeSingleMetric("mcp_response_size_bytes");
     }
   } catch (_error) {
     // Ignore errors if metrics don't exist
@@ -64,6 +78,20 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     name: "mcp_tool_calls_total",
     help: "Total MCP tool calls",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
+  });
+
+  mcpRequestSizeBytes = new client.Histogram({
+    name: "mcp_request_size_bytes",
+    help: "MCP tool call request payload size in bytes",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    buckets: [100, 500, 1000, 5000, 10000, 50000, 100000],
+  });
+
+  mcpResponseSizeBytes = new client.Histogram({
+    name: "mcp_response_size_bytes",
+    help: "MCP tool call response payload size in bytes",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    buckets: [100, 500, 1000, 5000, 10000, 50000, 100000, 500000],
   });
 
   logger.info(
@@ -114,6 +142,8 @@ export function reportMcpToolCall(params: {
   durationSeconds: number;
   isError: boolean;
   agentLabels?: Array<{ key: string; value: string }>;
+  requestSizeBytes?: number;
+  responseSizeBytes?: number;
 }): void {
   if (!mcpToolCallDuration || !mcpToolCallsTotal) {
     logger.warn("MCP metrics not initialized, skipping tool call reporting");
@@ -134,5 +164,11 @@ export function reportMcpToolCall(params: {
   mcpToolCallsTotal.inc(labels);
   if (params.durationSeconds > 0) {
     mcpToolCallDuration.observe(labels, params.durationSeconds);
+  }
+  if (params.requestSizeBytes != null && params.requestSizeBytes > 0) {
+    mcpRequestSizeBytes.observe(labels, params.requestSizeBytes);
+  }
+  if (params.responseSizeBytes != null && params.responseSizeBytes > 0) {
+    mcpResponseSizeBytes.observe(labels, params.responseSizeBytes);
   }
 }

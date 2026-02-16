@@ -503,8 +503,9 @@ async function handleStreaming<
   );
 
   try {
-    // Execute streaming request with tracing
-    const stream = await utils.tracing.startActiveLlmSpan({
+    // Execute streaming request with tracing — the span covers the full streaming
+    // operation (request → all chunks consumed) so we can set response attributes
+    await utils.tracing.startActiveLlmSpan({
       operationName: provider.spanName,
       provider: providerName,
       model: actualModel,
@@ -513,40 +514,63 @@ async function handleStreaming<
       sessionId,
       executionId,
       externalAgentId,
+      serverAddress: provider.getBaseUrl(),
       callback: async (llmSpan) => {
-        const result = await provider.executeStream(client, request);
-        llmSpan.end();
-        return result;
+        const stream = await provider.executeStream(client, request);
+
+        // Process chunks
+        for await (const chunk of stream) {
+          // Track first chunk time
+          if (!firstChunkTime) {
+            firstChunkTime = Date.now();
+            const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+            metrics.llm.reportTimeToFirstToken(
+              providerName,
+              agent,
+              actualModel,
+              ttftSeconds,
+              externalAgentId,
+            );
+          }
+
+          const result = streamAdapter.processChunk(chunk);
+
+          // Stream non-tool-call data immediately
+          if (result.sseData) {
+            ensureStreamHeaders();
+            reply.raw.write(result.sseData);
+          }
+
+          if (result.isFinal) {
+            break;
+          }
+        }
+
+        // Set response attributes on span per OTEL GenAI semconv
+        const { state } = streamAdapter;
+        if (state.model) {
+          llmSpan.setAttribute("gen_ai.response.model", state.model);
+        }
+        if (state.responseId) {
+          llmSpan.setAttribute("gen_ai.response.id", state.responseId);
+        }
+        if (state.usage) {
+          llmSpan.setAttribute(
+            "gen_ai.usage.input_tokens",
+            state.usage.inputTokens,
+          );
+          llmSpan.setAttribute(
+            "gen_ai.usage.output_tokens",
+            state.usage.outputTokens,
+          );
+        }
+        if (state.stopReason) {
+          llmSpan.setAttribute("gen_ai.response.finish_reasons", [
+            state.stopReason,
+          ]);
+        }
       },
     });
-
-    // Process chunks
-    for await (const chunk of stream) {
-      // Track first chunk time
-      if (!firstChunkTime) {
-        firstChunkTime = Date.now();
-        const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
-        metrics.llm.reportTimeToFirstToken(
-          providerName,
-          agent,
-          actualModel,
-          ttftSeconds,
-          externalAgentId,
-        );
-      }
-
-      const result = streamAdapter.processChunk(chunk);
-
-      // Stream non-tool-call data immediately
-      if (result.sseData) {
-        ensureStreamHeaders();
-        reply.raw.write(result.sseData);
-      }
-
-      if (result.isFinal) {
-        break;
-      }
-    }
 
     logger.info("Stream loop completed, processing final events");
 
@@ -753,7 +777,7 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const response = await utils.tracing.startActiveLlmSpan({
+  const { responseAdapter } = await utils.tracing.startActiveLlmSpan({
     operationName: provider.spanName,
     provider: providerName,
     model: actualModel,
@@ -762,15 +786,25 @@ async function handleNonStreaming<
     sessionId,
     executionId,
     externalAgentId,
-    callback: async (llmSpan: { end: () => void }) => {
+    serverAddress: provider.getBaseUrl(),
+    callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
-      llmSpan.end();
-      return result;
+      const adapter = provider.createResponseAdapter(result);
+
+      // Set response attributes on span per OTEL GenAI semconv
+      const usage = adapter.getUsage();
+      llmSpan.setAttribute("gen_ai.response.model", adapter.getModel());
+      llmSpan.setAttribute("gen_ai.response.id", adapter.getId());
+      llmSpan.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens);
+      llmSpan.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens);
+      llmSpan.setAttribute(
+        "gen_ai.response.finish_reasons",
+        adapter.getFinishReasons(),
+      );
+
+      return { response: result, responseAdapter: adapter };
     },
   });
-
-  // Create response adapter
-  const responseAdapter = provider.createResponseAdapter(response);
 
   const toolCalls = responseAdapter.getToolCalls();
   logger.debug(

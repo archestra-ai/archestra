@@ -133,6 +133,9 @@ class MistralResponseAdapter implements LLMResponseAdapter<MistralResponse> {
   getUsage() {
     return this.delegate.getUsage();
   }
+  getFinishReasons() {
+    return this.delegate.getFinishReasons();
+  }
   getOriginalResponse() {
     return this.delegate.getOriginalResponse();
   }

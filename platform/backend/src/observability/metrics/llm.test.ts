@@ -282,9 +282,14 @@ describe("getObservableGenAI", () => {
       response instanceof Error
         ? vi.fn().mockRejectedValue(response)
         : vi.fn().mockResolvedValue(response);
+    const mockGenerateContentStream =
+      response instanceof Error
+        ? vi.fn().mockRejectedValue(response)
+        : vi.fn().mockResolvedValue(response);
     return {
       models: {
         generateContent: mockGenerateContent,
+        generateContentStream: mockGenerateContentStream,
       },
     } as unknown as GoogleGenAI;
   }
@@ -415,6 +420,7 @@ describe("getObservableGenAI", () => {
     const mockGenAI = {
       models: {
         generateContent: mockGenerateContent,
+        generateContentStream: vi.fn(),
       },
     } as unknown as GoogleGenAI;
 
@@ -439,6 +445,7 @@ describe("getObservableGenAI", () => {
     const mockGenAI = {
       models: {
         generateContent: mockGenerateContent,
+        generateContentStream: vi.fn(),
       },
     } as unknown as GoogleGenAI;
 
@@ -450,6 +457,108 @@ describe("getObservableGenAI", () => {
     ).rejects.toThrow("Gemini API failed");
 
     expect(mockGenerateContent).toHaveBeenCalled();
+  });
+
+  test("records duration on successful Gemini streaming request", async () => {
+    const mockStream = async function* () {
+      yield { text: "chunk1" };
+      yield { text: "chunk2" };
+    };
+
+    const mockGenerateContentStream = vi.fn().mockResolvedValue(mockStream());
+
+    const mockGenAI = {
+      models: {
+        generateContent: vi.fn(),
+        generateContentStream: mockGenerateContentStream,
+      },
+    } as unknown as GoogleGenAI;
+
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+
+    const params = {
+      model: "gemini-2.5-pro",
+      contents: [{ text: "test" }],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
+    await instrumentedGenAI.models.generateContentStream(params as any);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "gemini",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        model: "gemini-2.5-pro",
+        status_code: "200",
+      },
+      expect.any(Number),
+    );
+  });
+
+  test("records duration with error status on Gemini streaming error", async () => {
+    const errorWithStatus = new Error("Rate limited");
+    Object.assign(errorWithStatus, { status: 429 });
+
+    const mockGenAI = {
+      models: {
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn().mockRejectedValue(errorWithStatus),
+      },
+    } as unknown as GoogleGenAI;
+
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+
+    await expect(
+      // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
+      instrumentedGenAI.models.generateContentStream({} as any),
+    ).rejects.toThrow("Rate limited");
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "gemini",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        model: "unknown",
+        status_code: "429",
+      },
+      expect.any(Number),
+    );
+  });
+
+  test("returns original stream from generateContentStream", async () => {
+    const chunks = [{ text: "a" }, { text: "b" }, { text: "c" }];
+    async function* mockStream() {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    }
+
+    const mockGenerateContentStream = vi.fn().mockResolvedValue(mockStream());
+
+    const mockGenAI = {
+      models: {
+        generateContent: vi.fn(),
+        generateContentStream: mockGenerateContentStream,
+      },
+    } as unknown as GoogleGenAI;
+
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
+
+    const result = await instrumentedGenAI.models.generateContentStream(
+      // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
+      {} as any,
+    );
+
+    const received: unknown[] = [];
+    for await (const chunk of result) {
+      received.push(chunk);
+    }
+
+    expect(received).toEqual(chunks);
   });
 });
 

@@ -1,4 +1,4 @@
-import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
+import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import type { Agent, AgentType, GenAiOperationName } from "@/types";
@@ -20,6 +20,10 @@ export enum RouteCategory {
  * The operationName is provided by each LLM adapter's `getSpanName()` method,
  * which returns a `GenAiOperationName` value.
  *
+ * Lifecycle: The span is automatically ended in a finally block. The callback
+ * should NOT call `span.end()`. On success, span status is set to OK. On error,
+ * span status is set to ERROR with `error.type` attribute.
+ *
  * @param params.operationName - The GenAI operation name (e.g., "chat", "generate_content")
  * @param params.provider - The LLM provider (openai, gemini, anthropic, etc.)
  * @param params.model - The LLM model being used
@@ -28,6 +32,7 @@ export enum RouteCategory {
  * @param params.sessionId - Conversation/session ID (optional)
  * @param params.executionId - Execution ID for tracking agent executions (optional)
  * @param params.externalAgentId - External agent ID from X-Archestra-Agent-Id header (optional)
+ * @param params.serverAddress - The server address (base URL) of the LLM provider (optional)
  * @param params.callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
@@ -40,6 +45,7 @@ export async function startActiveLlmSpan<T>(params: {
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
+  serverAddress?: string;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const spanName = `${params.operationName} ${params.model}`;
@@ -58,6 +64,7 @@ export async function startActiveLlmSpan<T>(params: {
   return tracer.startActiveSpan(
     spanName,
     {
+      kind: SpanKind.CLIENT,
       attributes: {
         "route.category": RouteCategory.LLM_PROXY,
         "gen_ai.operation.name": params.operationName,
@@ -102,12 +109,32 @@ export async function startActiveLlmSpan<T>(params: {
           params.externalAgentId,
         );
       }
+      if (params.serverAddress) {
+        span.setAttribute("server.address", params.serverAddress);
+      }
 
       logger.debug(
         { spanName },
         "[tracing] startActiveLlmSpan: executing callback",
       );
-      return await params.callback(span);
+
+      try {
+        const result = await params.callback(span);
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+        span.setAttribute(
+          "error.type",
+          error instanceof Error ? error.constructor.name : "Error",
+        );
+        throw error;
+      } finally {
+        span.end();
+      }
     },
   );
 }
@@ -124,6 +151,7 @@ export async function startActiveLlmSpan<T>(params: {
  * @param params.agent - The agent/profile executing the tool call
  * @param params.sessionId - Conversation/session ID (optional)
  * @param params.agentType - The agent type (optional)
+ * @param params.toolCallId - The unique ID for this tool call (optional)
  * @param params.callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
@@ -133,6 +161,7 @@ export async function startActiveMcpSpan<T>(params: {
   agent: { id: string; name: string; labels?: Agent["labels"] };
   sessionId?: string | null;
   agentType?: AgentType;
+  toolCallId?: string;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
@@ -145,6 +174,7 @@ export async function startActiveMcpSpan<T>(params: {
         "gen_ai.operation.name": "execute_tool",
         "mcp.server.name": params.mcpServerName,
         "gen_ai.tool.name": params.toolName,
+        "gen_ai.tool.type": "function",
         "gen_ai.agent.id": params.agent.id,
         "gen_ai.agent.name": params.agent.name,
       },
@@ -162,6 +192,9 @@ export async function startActiveMcpSpan<T>(params: {
       if (params.agentType) {
         span.setAttribute("archestra.agent.type", params.agentType);
       }
+      if (params.toolCallId) {
+        span.setAttribute("gen_ai.tool.call.id", params.toolCallId);
+      }
 
       try {
         const result = await params.callback(span);
@@ -172,6 +205,10 @@ export async function startActiveMcpSpan<T>(params: {
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : "Unknown error",
         });
+        span.setAttribute(
+          "error.type",
+          error instanceof Error ? error.constructor.name : "Error",
+        );
         throw error;
       } finally {
         span.end();

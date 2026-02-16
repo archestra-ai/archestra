@@ -711,6 +711,11 @@ class OllamaResponseAdapter implements LLMResponseAdapter<OllamaResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): OllamaResponse {
     return this.response;
   }

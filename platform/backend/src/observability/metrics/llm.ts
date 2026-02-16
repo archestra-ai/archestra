@@ -56,6 +56,7 @@ let llmBlockedToolCounter: client.Counter<string>;
 let llmCostTotal: client.Counter<string>;
 let llmTimeToFirstToken: client.Histogram<string>;
 let llmTokensPerSecond: client.Histogram<string>;
+let llmTokenUsage: client.Histogram<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -78,7 +79,8 @@ export function initializeMetrics(labelKeys: string[]): void {
     llmBlockedToolCounter &&
     llmCostTotal &&
     llmTimeToFirstToken &&
-    llmTokensPerSecond
+    llmTokensPerSecond &&
+    llmTokenUsage
   ) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
@@ -107,6 +109,9 @@ export function initializeMetrics(labelKeys: string[]): void {
     }
     if (llmTokensPerSecond) {
       client.register.removeSingleMetric("llm_tokens_per_second");
+    }
+    if (llmTokenUsage) {
+      client.register.removeSingleMetric("llm_token_usage");
     }
   } catch (_error) {
     // Ignore errors if metrics don't exist
@@ -165,6 +170,13 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     // Buckets for tokens/sec throughput - typical range 10-200 tokens/sec
     buckets: [5, 10, 25, 50, 75, 100, 150, 200, 300],
+  });
+
+  llmTokenUsage = new client.Histogram({
+    name: "llm_token_usage",
+    help: "Token usage distribution per request (input + output combined)",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    buckets: [4, 16, 64, 256, 1024, 4096, 16384, 65536],
   });
 
   logger.info(
@@ -250,6 +262,14 @@ export function reportLLMTokens(
         externalAgentId,
       ),
       usage.output,
+    );
+  }
+
+  const totalTokens = (usage.input ?? 0) + (usage.output ?? 0);
+  if (totalTokens > 0 && llmTokenUsage) {
+    llmTokenUsage.observe(
+      buildMetricLabels(profile, { provider }, model, externalAgentId),
+      totalTokens,
     );
   }
 }
@@ -487,28 +507,21 @@ export function getObservableGenAI(
   externalAgentId?: string,
 ) {
   const originalGenerateContent = genAI.models.generateContent;
+  const originalGenerateContentStream = genAI.models.generateContentStream;
   const provider: SupportedProvider = "gemini";
+
   genAI.models.generateContent = async (...args) => {
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
       return originalGenerateContent.apply(genAI.models, args);
     }
 
-    // Extract model from args - first arg should contain model info
-    let model: string | undefined;
-    try {
-      if (args[0] && typeof args[0] === "object" && "model" in args[0]) {
-        model = args[0].model as string;
-      }
-    } catch (_error) {
-      // Ignore extraction errors
-    }
-
+    const model = extractGeminiModel(args[0]);
     const startTime = Date.now();
 
     try {
       const result = await originalGenerateContent.apply(genAI.models, args);
-      const duration = Math.round((Date.now() - startTime) / 1000);
+      const duration = (Date.now() - startTime) / 1000;
 
       // Assuming 200 status code. Gemini doesn't expose HTTP status, but unlike fetch, throws on 4xx & 5xx.
       llmRequestDuration.observe(
@@ -536,26 +549,83 @@ export function getObservableGenAI(
 
       return result;
     } catch (error) {
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      const statusCode =
-        error instanceof Error &&
-        "status" in error &&
-        typeof error.status === "number"
-          ? error.status.toString()
-          : "0";
+      observeGeminiError(error, startTime, profile, model, externalAgentId);
+      throw error;
+    }
+  };
+
+  genAI.models.generateContentStream = async (...args) => {
+    if (!llmRequestDuration) {
+      logger.warn("LLM metrics not initialized, skipping duration tracking");
+      return originalGenerateContentStream.apply(genAI.models, args);
+    }
+
+    const model = extractGeminiModel(args[0]);
+    const startTime = Date.now();
+
+    try {
+      const result = await originalGenerateContentStream.apply(
+        genAI.models,
+        args,
+      );
+      // Record duration when the stream connection is established (before consuming chunks).
+      // This is consistent with how getObservableFetch records duration for other providers'
+      // streaming requests — fetch() resolves on response headers, not stream completion.
+      const duration = (Date.now() - startTime) / 1000;
 
       llmRequestDuration.observe(
         buildMetricLabels(
           profile,
-          { provider, status_code: statusCode },
+          { provider, status_code: "200" },
           model,
           externalAgentId,
         ),
         duration,
       );
 
+      return result;
+    } catch (error) {
+      observeGeminiError(error, startTime, profile, model, externalAgentId);
       throw error;
     }
   };
+
   return genAI;
+}
+
+function extractGeminiModel(arg: unknown): string | undefined {
+  try {
+    if (arg && typeof arg === "object" && "model" in arg) {
+      return arg.model as string;
+    }
+  } catch (_error) {
+    // Ignore extraction errors
+  }
+  return undefined;
+}
+
+function observeGeminiError(
+  error: unknown,
+  startTime: number,
+  profile: Agent,
+  model: string | undefined,
+  externalAgentId: string | undefined,
+): void {
+  const duration = (Date.now() - startTime) / 1000;
+  const statusCode =
+    error instanceof Error &&
+    "status" in error &&
+    typeof error.status === "number"
+      ? error.status.toString()
+      : "0";
+
+  llmRequestDuration.observe(
+    buildMetricLabels(
+      profile,
+      { provider: "gemini", status_code: statusCode },
+      model,
+      externalAgentId,
+    ),
+    duration,
+  );
 }

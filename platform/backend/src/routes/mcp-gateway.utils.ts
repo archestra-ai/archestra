@@ -172,6 +172,7 @@ export async function createAgentServer(
             mcpServerName,
             agent,
             agentType: agent.agentType,
+            toolCallId: `archestra-${Date.now()}`,
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
@@ -194,6 +195,10 @@ export async function createAgentServer(
             durationSeconds,
             isError: false,
             agentLabels: agent.labels,
+            requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+            responseSizeBytes: response.content
+              ? JSON.stringify(response.content).length
+              : undefined,
           });
 
           logger.info(
@@ -257,6 +262,7 @@ export async function createAgentServer(
           mcpServerName,
           agent,
           agentType: agent.agentType,
+          toolCallId,
           callback: async (span) => {
             const r = await mcpClient.executeToolCall(
               toolCall,
@@ -278,6 +284,10 @@ export async function createAgentServer(
           durationSeconds,
           isError: result.isError ?? false,
           agentLabels: agent.labels,
+          requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+          responseSizeBytes: result.content
+            ? JSON.stringify(result.content).length
+            : undefined,
         });
 
         const contentLength = estimateToolResultContentLength(result.content);
@@ -314,6 +324,7 @@ export async function createAgentServer(
           durationSeconds,
           isError: true,
           agentLabels: agent.labels,
+          requestSizeBytes: args ? JSON.stringify(args).length : undefined,
         });
 
         if (typeof error === "object" && error !== null && "code" in error) {

@@ -591,6 +591,11 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     return this.response;
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.stopReason;
+    return reason ? [reason] : [];
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,

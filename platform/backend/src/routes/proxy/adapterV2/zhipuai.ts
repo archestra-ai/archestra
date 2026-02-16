@@ -535,6 +535,11 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
     return { inputTokens: input, outputTokens: output };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): ZhipuaiResponse {
     return this.response;
   }

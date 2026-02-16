@@ -559,6 +559,11 @@ class AnthropicResponseAdapter
     return this.response;
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.stop_reason;
+    return reason ? [reason] : [];
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,

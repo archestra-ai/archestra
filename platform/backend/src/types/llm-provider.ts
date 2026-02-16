@@ -196,6 +196,9 @@ export interface LLMResponseAdapter<TResponse> {
   /** Get original response */
   getOriginalResponse(): TResponse;
 
+  /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
+  getFinishReasons(): string[];
+
   // ---------------------------------------------------------------------------
   // Build Responses
   // ---------------------------------------------------------------------------

@@ -503,6 +503,11 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
     return this.response;
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.candidates?.[0]?.finishReason;
+    return reason ? [reason] : [];
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,

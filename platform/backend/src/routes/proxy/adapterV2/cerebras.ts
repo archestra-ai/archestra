@@ -668,6 +668,11 @@ class CerebrasResponseAdapter implements LLMResponseAdapter<CerebrasResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): CerebrasResponse {
     return this.response;
   }

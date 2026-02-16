@@ -31,13 +31,9 @@ The endpoint `http://localhost:9000/health` returns basic service status:
 
 The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metrics including:
 
-### HTTP Metrics
+### Generative AI Metrics
 
-- `http_request_duration_seconds_count` - Total HTTP requests by method, route, and status
-- `http_request_duration_seconds_bucket` - Request duration histogram buckets
-- `http_request_summary_seconds` - Request duration summary with quantiles
-
-### LLM Metrics
+#### LLM Metrics
 
 - `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, and status code
 - `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, and type (input/output)
@@ -48,19 +44,27 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 > **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`.
 
-### MCP Metrics
+#### MCP Metrics
 
 - `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
 - `mcp_tool_call_duration_seconds` - MCP tool call execution duration by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status
 
-### Process Metrics
+### Archestra Application Metrics
+
+#### HTTP Metrics
+
+- `http_request_duration_seconds_count` - Total HTTP requests by method, route, and status
+- `http_request_duration_seconds_bucket` - Request duration histogram buckets
+- `http_request_summary_seconds` - Request duration summary with quantiles
+
+#### Process Metrics
 
 - `process_cpu_user_seconds_total` - CPU time in user mode
 - `process_cpu_system_seconds_total` - CPU time in system mode
 - `process_resident_memory_bytes` - Physical memory usage
 - `process_start_time_seconds` - Process start timestamp
 
-### Node.js Runtime Metrics
+#### Node.js Runtime Metrics
 
 - `nodejs_eventloop_lag_seconds` - Event loop lag (latency indicator)
 - `nodejs_heap_size_used_bytes` - V8 heap memory usage
@@ -125,15 +129,16 @@ Trace attributes follow the [OTEL GenAI Semantic Conventions](https://openteleme
 
 ### LLM Request Spans
 
-Each LLM API call includes detailed attributes for filtering and analysis:
+Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound call to an external LLM API) and includes detailed attributes for filtering and analysis:
 
-**Span Attributes:**
+**Request Attributes:**
 
 - `route.category=llm-proxy` - All LLM proxy requests
 - `gen_ai.operation.name` - The operation type (`chat`, `generate_content`)
 - `gen_ai.provider.name` - Provider name (`openai`, `anthropic`, `gemini`, etc.)
 - `gen_ai.request.model` - Model name (e.g., `gpt-4`, `claude-3-5-sonnet-20241022`)
 - `gen_ai.request.streaming` - Whether the request was streaming (`true`/`false`)
+- `server.address` - Base URL of the LLM provider API
 - `gen_ai.agent.id` - Internal Archestra agent ID
 - `gen_ai.agent.name` - Internal Archestra agent name
 - `gen_ai.conversation.id` - Session ID for grouping related LLM calls (from [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header)
@@ -141,6 +146,18 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
+
+**Response Attributes:**
+
+- `gen_ai.response.model` - The model that actually generated the response (may differ from request model)
+- `gen_ai.response.id` - Provider-assigned response ID
+- `gen_ai.usage.input_tokens` - Number of input tokens consumed
+- `gen_ai.usage.output_tokens` - Number of output tokens generated
+- `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
+
+**Error Attributes:**
+
+- `error.type` - The error class name when an exception occurs during the LLM call
 
 **Span Names:**
 
@@ -158,6 +175,8 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `route.category=mcp-gateway` - All MCP Gateway tool calls
 - `gen_ai.operation.name=execute_tool` - Operation type
 - `gen_ai.tool.name` - The full tool name (e.g., `github__list_repos`)
+- `gen_ai.tool.type=function` - Tool type (all MCP tools are function-type)
+- `gen_ai.tool.call.id` - Unique identifier for this tool call invocation
 - `mcp.server.name` - The MCP server handling the tool call (e.g., `github`, `slack`)
 - `gen_ai.agent.id` - Internal Archestra agent ID
 - `gen_ai.agent.name` - Internal Archestra agent name
@@ -165,6 +184,7 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `archestra.agent.type` - Agent type
 - `archestra.label.<key>` - Custom agent labels
 - `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution.
+- `error.type` - The error class name when an exception occurs during tool execution
 
 **Span Names:**
 
@@ -181,9 +201,13 @@ Labels are key-value pairs that can be configured when creating or updating agen
 - **Metrics** - As additional label dimensions on all LLM and MCP metrics. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
 - **Traces** - As `archestra.label.<key>` span attributes. Use them to filter traces.
 
-## Grafana Dashboard
+## Grafana Dashboards
 
-We've prepared a Grafana dashboard with charts visualizing the "four golden signals", LLM token usage and traces. To download the dashboard template, head [here](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/platform.json)
+We provide three Grafana dashboards for monitoring your Archestra platform:
+
+- **[GenAI Observability](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/genai-observability.json)** — LLM request metrics, token usage, cost analysis, latency, and traces
+- **[MCP Monitoring](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/mcp-monitoring.json)** — MCP tool call metrics, error rates, duration, and traces
+- **[Application Metrics](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/application-metrics.json)** — HTTP traffic, Node.js runtime health, and resource usage for monitoring your Archestra deployment
 
 ## Setting Up Prometheus
 

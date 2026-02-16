@@ -34,6 +34,7 @@ import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -89,6 +90,8 @@ interface ArchestraPromptInputProps {
   agentLlmApiKeyId?: string | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
+  /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
+  isPlaywrightSetupVisible: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -114,6 +117,7 @@ const PromptInputContent = ({
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
+  isPlaywrightSetupVisible = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -244,13 +248,21 @@ const PromptInputContent = ({
         {(attachment) => <PromptInputAttachment data={attachment} />}
       </PromptInputAttachments>
       <PromptInputBody>
-        <PromptInputTextarea
-          placeholder="Type a message..."
-          ref={textareaRef}
-          className="px-4"
-          disableEnterSubmit={status !== "ready" && status !== "error"}
-          data-testid={E2eTestId.ChatPromptTextarea}
-        />
+        {isPlaywrightSetupVisible && conversationId ? (
+          <PlaywrightInstallInline
+            agentId={agentId}
+            conversationId={conversationId}
+          />
+        ) : (
+          <PromptInputTextarea
+            placeholder="Type a message..."
+            ref={textareaRef}
+            className="px-4"
+            disabled={submitDisabled}
+            disableEnterSubmit={status !== "ready" && status !== "error"}
+            data-testid={E2eTestId.ChatPromptTextarea}
+          />
+        )}
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
@@ -393,6 +405,7 @@ const ArchestraPromptInput = ({
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
+  isPlaywrightSetupVisible,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -419,6 +432,7 @@ const ArchestraPromptInput = ({
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
+          isPlaywrightSetupVisible={isPlaywrightSetupVisible}
         />
       </PromptInputProvider>
     </div>

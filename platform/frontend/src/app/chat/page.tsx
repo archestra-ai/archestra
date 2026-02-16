@@ -1,9 +1,8 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-
+import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Edit, FileText, Globe, Plus } from "lucide-react";
-
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -82,6 +81,7 @@ const LocalStorageKeys = {
 } as const;
 
 export default function ChatPage() {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -283,11 +283,18 @@ export default function ChatPage() {
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL and reset initial state when navigating to base /chat
+  // Use a ref for the comparison so the effect only fires when the URL changes,
+  // not when conversationId is set programmatically by selectConversation().
+  // Without this, router.push() + setConversationId() creates a race: the effect
+  // re-runs before the URL catches up and resets conversationId back to undefined.
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+
   useEffect(() => {
     // Normalize null to undefined for consistent comparison
     const conversationParam =
       searchParams.get(CONVERSATION_QUERY_PARAM) ?? undefined;
-    if (conversationParam !== conversationId) {
+    if (conversationParam !== conversationIdRef.current) {
       setConversationId(conversationParam);
 
       // Reset initial state when navigating to /chat without a conversation
@@ -303,7 +310,7 @@ export default function ChatPage() {
         textareaRef.current?.focus();
       });
     }
-  }, [searchParams, conversationId]);
+  }, [searchParams]);
 
   // Get user_prompt from URL for auto-sending
   const initialUserPrompt = useMemo(() => {
@@ -894,6 +901,18 @@ export default function ChatPage() {
                       pendingActions,
                     );
 
+                    // Pre-populate the query cache so useConversationEnabledTools
+                    // immediately sees the correct state when conversationId is set.
+                    // Without this, the hook would briefly see default data (with
+                    // Playwright tools still enabled) causing flickering.
+                    queryClient.setQueryData(
+                      ["conversation", newConversation.id, "enabled-tools"],
+                      {
+                        hasCustomSelection: true,
+                        enabledToolIds: newEnabledToolIds,
+                      },
+                    );
+
                     // Update the enabled tools
                     updateEnabledToolsMutation.mutate({
                       conversationId: newConversation.id,
@@ -922,6 +941,7 @@ export default function ChatPage() {
       createConversationMutation,
       updateEnabledToolsMutation,
       selectConversation,
+      queryClient,
     ],
   );
 
@@ -1145,7 +1165,7 @@ export default function ChatPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto relative">
-            {isPlaywrightSetupRequired && (
+            {isPlaywrightSetupRequired && !conversationId && (
               <PlaywrightInstallDialog
                 agentId={playwrightSetupAgentId}
                 conversationId={conversationId}
@@ -1302,6 +1322,7 @@ export default function ChatPage() {
                         )?.llmApiKeyId as string | null)
                   }
                   submitDisabled={isPlaywrightSetupVisible}
+                  isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                 />
                 <div className="text-center">
                   <Version inline />

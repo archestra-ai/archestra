@@ -630,16 +630,14 @@ export function AgentDialog({
       const key = availableApiKeys.find((k) => k.id === keyId);
       if (!key) return;
 
-      // If current model already matches the key's provider, keep it
-      if (currentLlmProvider === key.provider) return;
-
-      // Auto-select model: prefer bestModelId, fall back to first model from provider
+      // Auto-select model: always prefer bestModelId, fall back to first model when switching providers
       const bestModelId = (key as Record<string, unknown>).bestModelId as
         | string
         | null;
       if (bestModelId) {
         setLlmModel(bestModelId);
-      } else {
+      } else if (currentLlmProvider !== key.provider) {
+        // Only fall back to first model when switching providers (no bestModelId available)
         const providerModels =
           modelsByProvider[key.provider as SupportedProvider];
         if (providerModels?.length) {

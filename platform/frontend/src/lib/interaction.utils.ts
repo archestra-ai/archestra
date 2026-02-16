@@ -9,6 +9,7 @@ import type {
   Interaction,
   InteractionUtils,
 } from "./llmProviders/common";
+import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
@@ -130,6 +131,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new BedrockConverseInteraction(interaction);
     } else if (type === "zhipuai:chatCompletions") {
       return new ZhipuaiChatCompletionInteraction(interaction);
+    } else if (type === "deepseek:chatCompletions") {
+      return new DeepSeekChatCompletionInteraction(interaction);
     } else if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);
     } else if (type === "mistral:chatCompletions") {

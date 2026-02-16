@@ -285,3 +285,9 @@ Existing provider implementations for reference:
 Use [PROVIDER_SMOKE_TEST.md](https://github.com/archestra-ai/archestra/blob/main/platform/PROVIDER_SMOKE_TEST.md) during development to verify basic functionality. This is a quick, non-exhaustive list.
 
 Note, that Archestra Chat uses streaming for all LLM interactions. To test non-streaming responses, use an external client like n8n Chat node.
+
+## Groq Draft Bootstrap
+
+For issue #1856 tracking and implementation handoff, see the draft bootstrap note:
+
+- [Groq Provider Bootstrap (Draft)](/docs/platform-groq-provider-bootstrap)

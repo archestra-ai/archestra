@@ -45,6 +45,7 @@ import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
+import { conversationStorageKeys } from "@/lib/chat-utils";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -141,7 +142,7 @@ const PromptInputContent = ({
   });
 
   const storageKey = conversationId
-    ? `archestra_chat_draft_${conversationId}`
+    ? conversationStorageKeys(conversationId).draft
     : `archestra_chat_draft_new_${agentId}`;
 
   const isRestored = useRef(false);

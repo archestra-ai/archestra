@@ -162,6 +162,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = request;
       const chatAbortController = new AbortController();
 
+      // Flag to prevent duplicate message persistence if both onError and onFinish fire
+      let messagesPersisted = false;
+
       // Handle broken pipe gracefully when the client navigates away
       // The stream continues running but writing to a closed response should not crash
       reply.raw.on("error", (err: NodeJS.ErrnoException) => {
@@ -376,10 +379,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               result.toUIMessageStream({
                 originalMessages: messages as UIMessage[],
                 onError: (error) => {
-                  logger.error(
-                    { error, conversationId, agentId: conversation.agentId },
-                    "Chat stream error occurred",
-                  );
+                  // Use an async IIFE to handle async operations within the sync onError handler
+                  (async () => {
+                    logger.error(
+                      { error, conversationId, agentId: conversation.agentId },
+                      "Chat stream error occurred",
+                    );
+
+                    // Persist messages despite error so they have a valid ID for editing
+                    // Only persist if not already persisted by onFinish
+                    if (!messagesPersisted && conversationId) {
+                      try {
+                        await persistNewMessages(
+                          conversationId,
+                          messages,
+                          "onError",
+                        );
+                        messagesPersisted = true;
+                      } catch (persistError) {
+                        // Log persistence error but don't prevent the error response
+                        logger.error(
+                          { persistError, conversationId },
+                          "Failed to persist messages during error handling",
+                        );
+                      }
+                    }
+                  })().catch((err) => {
+                    // Log any errors from the async IIFE but don't crash
+                    logger.error(
+                      { err },
+                      "Unexpected error in onError async handler",
+                    );
+                  });
 
                   // Use pre-built error from subagent if available (preserves correct provider),
                   // otherwise map the error with the current provider
@@ -416,65 +447,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 },
                 onFinish: async ({ messages: finalMessages }) => {
                   removeAbortListeners();
-                  if (!conversationId) return;
 
-                  // Get existing messages count to know how many are new
-                  const existingMessages =
-                    await MessageModel.findByConversation(conversationId);
-                  const existingCount = existingMessages.length;
-
-                  // Only save new messages (avoid re-saving existing ones)
-                  const newMessages = finalMessages.slice(existingCount);
-
-                  if (newMessages.length > 0) {
-                    // Check if last message has empty parts and strip it if so
-                    let messagesToSave = newMessages;
-                    if (
-                      newMessages.length > 0 &&
-                      newMessages[newMessages.length - 1].parts.length === 0
-                    ) {
-                      messagesToSave = newMessages.slice(0, -1);
-                    }
-
-                    if (messagesToSave.length > 0) {
-                      let messagesToStore = messagesToSave as UiMessage[];
-
-                      if (config.features.browserStreamingEnabled) {
-                        // Strip base64 images and large browser tool results before storing
-                        const beforeSize = estimateMessagesSize(messagesToSave);
-                        messagesToStore = stripImagesFromMessages(
-                          messagesToSave as UiMessage[],
-                        );
-                        const afterSize = estimateMessagesSize(messagesToStore);
-
-                        logger.info(
-                          {
-                            messageCount: messagesToSave.length,
-                            beforeSizeKB: Math.round(beforeSize.length / 1024),
-                            afterSizeKB: Math.round(afterSize.length / 1024),
-                            savedKB: Math.round(
-                              (beforeSize.length - afterSize.length) / 1024,
-                            ),
-                            sizeEstimateReliable:
-                              !beforeSize.isEstimated && !afterSize.isEstimated,
-                          },
-                          "[Chat] Stripped messages before saving to DB",
-                        );
-                      }
-
-                      // Append only new messages with timestamps
-                      const now = Date.now();
-                      const messageData = messagesToStore.map((msg, index) => ({
+                  // Only persist if not already persisted by onError
+                  if (!messagesPersisted && conversationId) {
+                    try {
+                      await persistNewMessages(
                         conversationId,
-                        role: msg.role ?? "assistant",
-                        content: msg, // Store entire UIMessage (with images stripped)
-                        createdAt: new Date(now + index), // Preserve order
-                      }));
-
-                      await MessageModel.bulkCreate(messageData);
-
-                      logger.info(
-                        `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
+                        finalMessages,
+                        "onFinish",
+                      );
+                      messagesPersisted = true;
+                    } catch (error) {
+                      logger.error(
+                        { error, conversationId },
+                        "Failed to persist messages during onFinish",
                       );
                     }
                   }
@@ -1295,6 +1281,96 @@ export async function generateConversationTitle(
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Persists new messages to the database for a conversation.
+ * Strips images if browser streaming is enabled and handles empty message parts.
+ *
+ * @param conversationId - The conversation ID to persist messages for
+ * @param messages - All messages (existing + new) to determine which ones to save
+ * @param context - Context for logging (e.g., "onFinish", "onError")
+ * @returns Promise<number> - Number of messages persisted
+ */
+async function persistNewMessages(
+  conversationId: string,
+  messages: unknown[],
+  context: string,
+): Promise<number> {
+  try {
+    // Get existing messages count to know how many are new
+    const existingMessages =
+      await MessageModel.findByConversation(conversationId);
+    const existingCount = existingMessages.length;
+
+    // Use input messages to find new messages
+    const uiMessages = messages as UiMessage[];
+    const newMessages = uiMessages.slice(existingCount);
+
+    if (newMessages.length === 0) {
+      return 0;
+    }
+
+    // Check if last message has empty parts and strip it if so
+    let messagesToSave = newMessages;
+    if (newMessages[newMessages.length - 1].parts?.length === 0) {
+      messagesToSave = newMessages.slice(0, -1);
+    }
+
+    if (messagesToSave.length === 0) {
+      return 0;
+    }
+
+    let messagesToStore = messagesToSave as UiMessage[];
+
+    if (config.features.browserStreamingEnabled) {
+      // Strip base64 images and large browser tool results before storing
+      if (context === "onFinish") {
+        // Log size reduction only for onFinish (where we have complete messages)
+        const beforeSize = estimateMessagesSize(messagesToSave);
+        messagesToStore = stripImagesFromMessages(messagesToSave);
+        const afterSize = estimateMessagesSize(messagesToStore);
+
+        logger.info(
+          {
+            messageCount: messagesToSave.length,
+            beforeSizeKB: Math.round(beforeSize.length / 1024),
+            afterSizeKB: Math.round(afterSize.length / 1024),
+            savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
+            sizeEstimateReliable:
+              !beforeSize.isEstimated && !afterSize.isEstimated,
+          },
+          "[Chat] Stripped messages before saving to DB",
+        );
+      } else {
+        // For onError, just strip without detailed logging
+        messagesToStore = stripImagesFromMessages(messagesToStore);
+      }
+    }
+
+    // Append only new messages with timestamps
+    const now = Date.now();
+    const messageData = messagesToStore.map((msg, index) => ({
+      conversationId,
+      role: msg.role ?? "assistant",
+      content: msg,
+      createdAt: new Date(now + index),
+    }));
+
+    await MessageModel.bulkCreate(messageData);
+
+    logger.info(
+      `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
+    );
+
+    return messagesToSave.length;
+  } catch (error) {
+    logger.error(
+      { error, conversationId, context },
+      `Failed to persist messages during ${context}`,
+    );
+    throw error;
+  }
+}
 
 /**
  * Listens for HTTP connection close and checks the distributed cache to determine

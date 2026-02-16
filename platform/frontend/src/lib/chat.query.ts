@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
+import { conversationStorageKeys } from "./chat-utils";
 import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
@@ -188,6 +189,14 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+
+      // Clean up localStorage keys associated with this conversation
+      if (typeof window !== "undefined") {
+        const keys = conversationStorageKeys(deletedId);
+        localStorage.removeItem(keys.artifactOpen);
+        localStorage.removeItem(keys.draft);
+      }
+
       toast.success("Conversation deleted");
     },
   });

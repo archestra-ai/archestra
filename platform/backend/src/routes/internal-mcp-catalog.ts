@@ -1,4 +1,4 @@
-import { isBuiltInCatalogId, RouteId } from "@shared";
+import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -285,8 +285,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body }, reply) => {
-      if (isBuiltInCatalogId(id)) {
+      if (isBuiltInCatalogId(id) && !isPlaywrightCatalogItem(id)) {
         throw new ApiError(403, "Built-in catalog items cannot be modified");
+      }
+
+      // Prevent renaming the Playwright catalog item
+      if (isPlaywrightCatalogItem(id) && body.name !== undefined) {
+        delete body.name;
       }
 
       const {

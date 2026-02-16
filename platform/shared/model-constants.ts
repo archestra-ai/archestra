@@ -9,6 +9,7 @@ export const SupportedProvidersSchema = z.enum([
   "anthropic",
   "bedrock",
   "cohere",
+  "deepseek",
   "cerebras",
   "mistral",
   "vllm",
@@ -22,6 +23,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "anthropic:messages",
   "bedrock:converse",
   "cohere:chat",
+  "deepseek:chatCompletions",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
   "vllm:chatCompletions",
@@ -45,6 +47,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   mistral: "Mistral AI",
   vllm: "vLLM",
   ollama: "Ollama",
+  deepseek: "DeepSeek",
   zhipuai: "Zhipu AI",
 };
 
@@ -97,6 +100,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   vllm: {
     fastest: ["llama3.2", "phi"],
     best: ["llama3.1", "mixtral"],
+  },
+  deepseek: {
+    fastest: ["deepseek-chat"],
+    best: ["deepseek-reasoner", "deepseek-chat"],
   },
   zhipuai: {
     fastest: ["glm-4-flash", "glm-flash"],

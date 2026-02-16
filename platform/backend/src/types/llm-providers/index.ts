@@ -7,4 +7,5 @@ export { default as Mistral } from "./mistral";
 export { default as Ollama } from "./ollama";
 export { default as OpenAi } from "./openai";
 export { default as Vllm } from "./vllm";
+export { default as Deepseek } from "./deepseek";
 export { default as Zhipuai } from "./zhipuai";

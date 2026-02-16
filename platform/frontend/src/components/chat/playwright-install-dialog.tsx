@@ -297,7 +297,7 @@ function PlaywrightInstallContent({
             isInline ? "text-sm" : "text-md",
           )}
         >
-          <Globe className={cn("size-5", isInline ? "size-4" : "size-5")} />
+          <Globe className={cn(isInline ? "size-4" : "size-5")} />
           Browser Setup Required
         </CardTitle>
         <CardDescription className={isInline ? "text-xs" : "text-sm"}>

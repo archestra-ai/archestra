@@ -486,6 +486,11 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    grok: {
+      baseUrl:
+        process.env.ARCHESTRA_GROK_BASE_URL ||
+        "https://api.x.ai/v1",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -521,6 +526,9 @@ export default {
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+    },
+    grok: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROK_API_KEY || "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",

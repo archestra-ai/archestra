@@ -425,6 +425,59 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Grok API
+ */
+async function fetchGrokModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.grok.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Grok models",
+    );
+    throw new Error(`Failed to fetch Grok models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+      active: boolean;
+    }>;
+  };
+
+  // Filter to active chat-compatible models
+  // Exclude whisper (speech-to-text) and other non-chat models
+  const excludePatterns = ["whisper", "distil-whisper", "playai", "tts"];
+
+  const models = data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      const hasExcludedPattern = excludePatterns.some((pattern) =>
+        id.includes(pattern),
+      );
+      return !hasExcludedPattern && model.active !== false;
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "grok" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+
+  return models;
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -736,6 +789,7 @@ async function getProviderApiKey({
     openai: () => config.chat.openai.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
+    grok: () => config.chat.grok?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
   };
 
@@ -757,6 +811,7 @@ const modelFetchers: Record<
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
+  grok: fetchGrokModels,
 };
 
 // Register all model fetchers with the sync service
@@ -845,6 +900,10 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "zhipuai") {
+      if (apiKey) {
+        models = await modelFetchers[provider](apiKey);
+      }
+    } else if (provider === "grok") {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

@@ -8,7 +8,7 @@ import {
   OpenAIErrorTypes,
 } from "@shared";
 import { describe, expect, it } from "@/test";
-import { mapProviderError } from "./errors";
+import { mapProviderError, ProviderError } from "./errors";
 
 // =============================================================================
 // OpenAI Error Tests
@@ -1208,5 +1208,111 @@ describe("mapProviderError - Provider preservation", () => {
     const result = mapProviderError(error, "gemini");
 
     expect(result.originalError?.provider).toBe("gemini");
+  });
+});
+
+// =============================================================================
+// ProviderError Tests
+// =============================================================================
+
+describe("ProviderError", () => {
+  it("should construct with a ChatErrorResponse and expose it", () => {
+    const chatError = mapProviderError(
+      {
+        statusCode: 401,
+        responseBody: JSON.stringify({
+          error: { type: "authentication_error", message: "Invalid API key" },
+        }),
+      },
+      "anthropic",
+    );
+
+    const providerError = new ProviderError(chatError);
+
+    expect(providerError).toBeInstanceOf(Error);
+    expect(providerError).toBeInstanceOf(ProviderError);
+    expect(providerError.name).toBe("ProviderError");
+    expect(providerError.message).toBe("Invalid API key");
+    expect(providerError.chatErrorResponse).toBe(chatError);
+    expect(providerError.chatErrorResponse.code).toBe(
+      ChatErrorCode.Authentication,
+    );
+    expect(providerError.chatErrorResponse.originalError?.provider).toBe(
+      "anthropic",
+    );
+  });
+
+  it("should use ChatErrorResponse.message when originalError is missing", () => {
+    const chatError = {
+      code: ChatErrorCode.Unknown,
+      message: ChatErrorMessages[ChatErrorCode.Unknown],
+      isRetryable: false,
+    };
+
+    const providerError = new ProviderError(chatError);
+
+    expect(providerError.message).toBe(
+      ChatErrorMessages[ChatErrorCode.Unknown],
+    );
+  });
+
+  it("should preserve correct provider through mapProviderError round-trip", () => {
+    // Simulate an Anthropic billing error
+    const anthropicError = {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          type: AnthropicErrorTypes.INVALID_REQUEST,
+          message: "Your credit balance is too low",
+        },
+      }),
+    };
+
+    // Map with correct provider (anthropic) — as the A2A executor would
+    const mapped = mapProviderError(anthropicError, "anthropic");
+    const providerError = new ProviderError(mapped);
+
+    // The ProviderError preserves the correct provider
+    expect(providerError.chatErrorResponse.originalError?.provider).toBe(
+      "anthropic",
+    );
+    expect(providerError.chatErrorResponse.code).toBe(
+      ChatErrorCode.InvalidRequest,
+    );
+    expect(providerError.chatErrorResponse.originalError?.message).toContain(
+      "credit balance",
+    );
+  });
+
+  it("should preserve anthropic provider even when parent would use gemini", () => {
+    // This is the key scenario: subagent uses anthropic, parent uses gemini
+    // The A2A executor creates the ProviderError with "anthropic"
+    const subagentError = {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          type: AnthropicErrorTypes.INVALID_REQUEST,
+          message: "Your credit balance is too low to access the Anthropic API",
+        },
+      }),
+    };
+
+    // A2A executor maps with correct provider
+    const mappedWithCorrectProvider = mapProviderError(
+      subagentError,
+      "anthropic",
+    );
+    const providerError = new ProviderError(mappedWithCorrectProvider);
+
+    // Parent chat route receives ProviderError and uses it directly
+    // instead of re-mapping with "gemini"
+    const errorForFrontend = providerError.chatErrorResponse;
+
+    expect(errorForFrontend.originalError?.provider).toBe("anthropic");
+    expect(errorForFrontend.originalError?.message).toContain("Anthropic API");
+
+    // Compare: if we had incorrectly re-mapped with gemini
+    const wrongMapping = mapProviderError(subagentError, "gemini");
+    expect(wrongMapping.originalError?.provider).toBe("gemini"); // Wrong provider!
   });
 });

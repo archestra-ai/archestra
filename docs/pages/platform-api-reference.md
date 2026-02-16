@@ -20,7 +20,7 @@ To authenticate with the Archestra Platform API, you'll need an API key:
 Include the API key in your requests using the `Authorization` header:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_API_KEY" \
+curl -H "Authorization: YOUR_API_KEY" \
   http://localhost:9000/api/agents
 ```
 

@@ -5,6 +5,7 @@ import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
 import type * as originalConfigModule from "@/config";
+import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 vi.mock("@/config", async (importOriginal) => {
@@ -158,6 +159,8 @@ describe("websocket browser-stream screenshot handling", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    // Mock Playwright tools as assigned so browser stream tests can proceed
+    vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
   });
 
   test("sends an error when screenshot data is missing", async ({

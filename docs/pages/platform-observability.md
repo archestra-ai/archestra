@@ -48,6 +48,11 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 > **Note:** The `agent_id` label contains the external agent ID passed via the `X-Archestra-Agent-Id` header. This allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. Use `profile_id` and `profile_name` for the internal Archestra profile identifier.
 
+### MCP Metrics
+
+- `mcp_tool_calls_total` - Total MCP tool calls by profile_name, mcp_server_name, tool_name, and status (success/error)
+- `mcp_tool_call_duration_seconds` - MCP tool call execution duration by profile_name, mcp_server_name, tool_name, and status
+
 ### Process Metrics
 
 - `process_cpu_user_seconds_total` - CPU time in user mode
@@ -137,6 +142,24 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 - `gemini.generateContent` - Gemini content generation calls
 
 These dedicated spans show the exact duration of external LLM API calls, separate from your application's processing time.
+
+### MCP Tool Call Spans
+
+Each MCP tool call executed through the MCP Gateway produces a dedicated span:
+
+**Span Attributes:**
+
+- `route.category=mcp-gateway` - All MCP Gateway tool calls
+- `mcp.server_name` - The MCP server handling the tool call (e.g., `github`, `slack`)
+- `mcp.tool_name` - The full tool name (e.g., `github__list_repos`)
+- `profile.id` - The ID of the profile executing the tool call
+- `profile.name` - The name of the profile executing the tool call
+- `profile.<label_key>` - Custom profile labels
+- `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution.
+
+**Span Names:**
+
+- `mcp.<server_name>.<tool_name>` - e.g., `mcp.github.github__list_repos`
 
 ### Custom Profile Labels
 
@@ -264,4 +287,36 @@ Here are some PromQL queries for Grafana charts to get you started:
 
   ```promql
   sum(rate(llm_tokens_per_second_sum[5m])) by (provider, model) / sum(rate(llm_tokens_per_second_count[5m])) by (provider, model)
+  ```
+
+### MCP Metrics
+
+- Tool calls per second by MCP server:
+
+  ```promql
+  sum(rate(mcp_tool_calls_total[5m])) by (mcp_server_name)
+  ```
+
+- Tool call error rate by MCP server:
+
+  ```promql
+  sum(rate(mcp_tool_calls_total{status="error"}[5m])) by (mcp_server_name) / sum(rate(mcp_tool_calls_total[5m])) by (mcp_server_name)
+  ```
+
+- Tool call duration p95 by MCP server:
+
+  ```promql
+  histogram_quantile(0.95, sum(rate(mcp_tool_call_duration_seconds_bucket[5m])) by (mcp_server_name, le))
+  ```
+
+- Tool calls per second by tool name:
+
+  ```promql
+  sum(rate(mcp_tool_calls_total[5m])) by (tool_name)
+  ```
+
+- Average tool call duration by profile:
+
+  ```promql
+  sum(rate(mcp_tool_call_duration_seconds_sum[5m])) by (profile_name) / sum(rate(mcp_tool_call_duration_seconds_count[5m])) by (profile_name)
   ```

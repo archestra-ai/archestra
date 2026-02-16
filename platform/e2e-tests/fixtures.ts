@@ -71,7 +71,9 @@ export const test = base.extend<TestFixtures>({
       // This is needed because some tests call extractCookieHeaders before navigating
       if (page.url() === "about:blank") {
         await page.goto(`${UI_BASE_URL}/`);
-        await page.waitForLoadState("networkidle");
+        // Use "domcontentloaded" instead of "networkidle" to avoid timeouts
+        // caused by persistent WebSocket connections keeping the network busy
+        await page.waitForLoadState("domcontentloaded");
       }
       const cookies = await page.context().cookies();
       return cookies

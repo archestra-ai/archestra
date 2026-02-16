@@ -16,12 +16,8 @@ interface RightSidePanelProps {
   isBrowserOpen: boolean;
   onBrowserClose: () => void;
   conversationId: string | undefined;
-  /** When true, shows "Installing browser" message in browser panel */
-  isInstallingBrowser?: boolean;
-  /** Whether Playwright MCP tools are available */
-  hasPlaywrightMcp?: boolean;
-  /** Called to install browser (Playwright MCP) */
-  onInstallBrowser?: () => Promise<unknown>;
+  /** Fallback agentId for pre-conversation case */
+  agentId?: string;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
   onCreateConversationWithUrl?: (url: string) => void;
   /** Whether conversation creation is in progress */
@@ -39,9 +35,7 @@ export function RightSidePanel({
   isBrowserOpen,
   onBrowserClose,
   conversationId,
-  isInstallingBrowser = false,
-  hasPlaywrightMcp = false,
-  onInstallBrowser,
+  agentId,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
   initialNavigateUrl,
@@ -185,9 +179,7 @@ export function RightSidePanel({
             isOpen={isBrowserOpen}
             onClose={onBrowserClose}
             conversationId={conversationId}
-            isInstallingBrowser={isInstallingBrowser}
-            hasPlaywrightMcp={hasPlaywrightMcp}
-            onInstallBrowser={onInstallBrowser}
+            agentId={agentId}
             onCreateConversationWithUrl={onCreateConversationWithUrl}
             isCreatingConversation={isCreatingConversation}
             initialNavigateUrl={initialNavigateUrl}

@@ -72,6 +72,8 @@ export const RouteId = {
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
   HandleOAuthCallback: "handleOAuthCallback",
+  GetOAuthClientInfo: "getOAuthClientInfo",
+  SubmitOAuthConsent: "submitOAuthConsent",
 
   // Team Routes
   GetTeams: "getTeams",
@@ -201,10 +203,10 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  StopChatStream: "stopChatStream",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
-  GetChatGlobalTools: "getChatGlobalTools",
   CreateChatConversation: "createChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
@@ -264,13 +266,14 @@ export const RouteId = {
   // Appearance Routes (public/unauthenticated)
   GetPublicAppearance: "getPublicAppearance",
 
-  // SSO Provider Routes
-  GetPublicSsoProviders: "getPublicSsoProviders",
-  GetSsoProviders: "getSsoProviders",
-  GetSsoProvider: "getSsoProvider",
-  CreateSsoProvider: "createSsoProvider",
-  UpdateSsoProvider: "updateSsoProvider",
-  DeleteSsoProvider: "deleteSsoProvider",
+  // Identity Provider Routes
+  GetPublicIdentityProviders: "getPublicIdentityProviders",
+  GetIdentityProviders: "getIdentityProviders",
+  GetIdentityProvider: "getIdentityProvider",
+  CreateIdentityProvider: "createIdentityProvider",
+  UpdateIdentityProvider: "updateIdentityProvider",
+  DeleteIdentityProvider: "deleteIdentityProvider",
+  GetIdentityProviderIdpLogoutUrl: "getIdentityProviderIdpLogoutUrl",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
@@ -322,6 +325,9 @@ export const RouteId = {
   GetChatOpsStatus: "getChatOpsStatus",
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",
+  UpdateChatOpsBinding: "updateChatOpsBinding",
+  UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

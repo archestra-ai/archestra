@@ -1,14 +1,25 @@
 import { policyConfigSubagent } from "@/agents/subagents";
+import { resolveProviderApiKey } from "@/clients/llm-client";
 import logger from "@/logging";
-import { secretManager } from "@/secrets-manager";
-import ChatApiKeyModel from "./chat-api-key";
+import { ApiKeyModelModel } from "@/models";
+import {
+  type SupportedChatProvider,
+  SupportedChatProviderSchema,
+} from "@/types";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
 type PolicyConfig = {
-  allowUsageWhenUntrustedDataIsPresent: boolean;
-  toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+  toolInvocationAction:
+    | "allow_when_context_is_untrusted"
+    | "block_when_context_is_untrusted"
+    | "block_always";
+  trustedDataAction:
+    | "mark_as_trusted"
+    | "mark_as_untrusted"
+    | "sanitize_with_dual_llm"
+    | "block_always";
   reasoning: string;
 };
 
@@ -32,65 +43,20 @@ interface BulkAutoPolicyResult {
  */
 export class ToolAutoPolicyService {
   /**
-   * Check if auto-policy service is available for an organization
-   * Requires Anthropic API key to be configured (org-wide scope)
+   * Check if auto-policy service is available for an organization.
+   * Requires at least one LLM API key to be configured via the UI.
    */
-  async isAvailable(organizationId: string): Promise<boolean> {
+  async isAvailable(organizationId: string, userId?: string): Promise<boolean> {
     logger.debug(
-      { organizationId },
+      { organizationId, userId },
       "isAvailable: checking auto-policy availability",
     );
 
-    const chatApiKey = await ChatApiKeyModel.findByScope(
-      organizationId,
-      "anthropic",
-      "org_wide",
-    );
+    const result = await this.resolveProviderAndKey(organizationId, userId);
+    const available = result !== null;
 
-    if (!chatApiKey?.secretId) {
-      logger.debug(
-        { organizationId },
-        "isAvailable: no org-wide Anthropic API key configured",
-      );
-      return false;
-    }
-
-    const secret = await secretManager().getSecret(chatApiKey.secretId);
-    const available = !!secret?.secret?.apiKey;
     logger.debug({ organizationId, available }, "isAvailable: result");
     return available;
-  }
-
-  /**
-   * Get Anthropic API key for an organization from org-wide chat API key
-   */
-  private async getAnthropicApiKey(
-    organizationId: string,
-  ): Promise<string | null> {
-    logger.debug({ organizationId }, "getAnthropicApiKey: fetching API key");
-
-    const chatApiKey = await ChatApiKeyModel.findByScope(
-      organizationId,
-      "anthropic",
-      "org_wide",
-    );
-
-    if (!chatApiKey?.secretId) {
-      logger.debug(
-        { organizationId },
-        "getAnthropicApiKey: no org-wide Anthropic chat API key configured",
-      );
-      return null;
-    }
-
-    const secret = await secretManager().getSecret(chatApiKey.secretId);
-    if (!secret?.secret?.apiKey) {
-      logger.debug({ organizationId }, "getAnthropicApiKey: secret not found");
-      return null;
-    }
-
-    logger.debug({ organizationId }, "getAnthropicApiKey: API key retrieved");
-    return secret.secret.apiKey as string;
   }
 
   /**
@@ -99,13 +65,16 @@ export class ToolAutoPolicyService {
   private async analyzeTool(
     tool: Parameters<typeof policyConfigSubagent.analyze>[0]["tool"],
     mcpServerName: string | null,
-    anthropicApiKey: string,
+    provider: SupportedChatProvider,
+    apiKey: string,
+    modelName: string,
     organizationId: string,
   ): Promise<PolicyConfig> {
     logger.info(
       {
         toolName: tool.name,
         mcpServerName,
+        provider,
         subagent: "PolicyConfigSubagent",
       },
       "analyzeTool: delegating to PolicyConfigSubagent",
@@ -116,7 +85,9 @@ export class ToolAutoPolicyService {
       const result = await policyConfigSubagent.analyze({
         tool,
         mcpServerName,
-        anthropicApiKey,
+        provider,
+        apiKey,
+        modelName,
         organizationId,
       });
 
@@ -150,23 +121,23 @@ export class ToolAutoPolicyService {
   async configurePoliciesForTool(
     toolId: string,
     organizationId: string,
+    userId?: string,
   ): Promise<AutoPolicyResult> {
     logger.info(
-      { toolId, organizationId },
+      { toolId, organizationId, userId },
       "configurePoliciesForTool: starting",
     );
 
-    // Check if API key is available
-    const anthropicApiKey = await this.getAnthropicApiKey(organizationId);
-    if (!anthropicApiKey) {
+    // Resolve provider and API key
+    const resolved = await this.resolveProviderAndKey(organizationId, userId);
+    if (!resolved) {
       logger.warn(
         { toolId, organizationId },
         "configurePoliciesForTool: no API key",
       );
       return {
         success: false,
-        error:
-          "Organization-wide Anthropic API key not configured in LLM API Keys settings",
+        error: "LLM API key not configured in LLM API Keys settings",
       };
     }
 
@@ -195,30 +166,22 @@ export class ToolAutoPolicyService {
       const policyConfig = await this.analyzeTool(
         tool,
         mcpServerName,
-        anthropicApiKey,
+        resolved.provider,
+        resolved.apiKey,
+        resolved.modelName,
         organizationId,
       );
 
       // Create/upsert call policy (tool invocation policy)
-      const callPolicyAction = policyConfig.allowUsageWhenUntrustedDataIsPresent
-        ? "allow_when_context_is_untrusted"
-        : "block_always";
       await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
         [toolId],
-        callPolicyAction,
+        policyConfig.toolInvocationAction,
       );
 
       // Create/upsert result policy (trusted data policy)
-      const resultPolicyActionMap = {
-        trusted: "mark_as_trusted",
-        untrusted: "block_always",
-        sanitize_with_dual_llm: "sanitize_with_dual_llm",
-      } as const;
-      const resultPolicyAction =
-        resultPolicyActionMap[policyConfig.toolResultTreatment];
       await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
         [toolId],
-        resultPolicyAction,
+        policyConfig.trustedDataAction,
       );
 
       // Update tool with timestamps and reasoning for tracking
@@ -263,6 +226,7 @@ export class ToolAutoPolicyService {
   async configurePoliciesForToolWithTimeout(
     toolId: string,
     organizationId: string,
+    userId?: string,
   ): Promise<AutoPolicyResult & { timedOut?: boolean }> {
     const db = (await import("@/database")).default;
     const schema = await import("@/database/schemas");
@@ -297,10 +261,12 @@ export class ToolAutoPolicyService {
 
       // Race between auto-configure and timeout
       const result = await Promise.race([
-        this.configurePoliciesForTool(toolId, organizationId).then((res) => ({
-          ...res,
-          timedOut: false,
-        })),
+        this.configurePoliciesForTool(toolId, organizationId, userId).then(
+          (res) => ({
+            ...res,
+            timedOut: false,
+          }),
+        ),
         timeoutPromise,
       ]);
 
@@ -384,6 +350,7 @@ export class ToolAutoPolicyService {
   async configurePoliciesForTools(
     toolIds: string[],
     organizationId: string,
+    userId?: string,
   ): Promise<BulkAutoPolicyResult> {
     logger.info(
       { organizationId, count: toolIds.length },
@@ -391,7 +358,7 @@ export class ToolAutoPolicyService {
     );
 
     // Check if API key is available
-    const available = await this.isAvailable(organizationId);
+    const available = await this.isAvailable(organizationId, userId);
     if (!available) {
       logger.warn(
         { organizationId },
@@ -402,8 +369,7 @@ export class ToolAutoPolicyService {
         results: toolIds.map((id) => ({
           toolId: id,
           success: false,
-          error:
-            "Organization-wide Anthropic API key not configured in LLM API Keys settings",
+          error: "LLM API key not configured in LLM API Keys settings",
         })),
       };
     }
@@ -418,6 +384,7 @@ export class ToolAutoPolicyService {
         const result = await this.configurePoliciesForToolWithTimeout(
           toolId,
           organizationId,
+          userId,
         );
         return {
           toolId,
@@ -445,6 +412,39 @@ export class ToolAutoPolicyService {
       success: allSuccess,
       results,
     };
+  }
+
+  /**
+   * Resolve provider, API key, and best model for auto-policy operations.
+   * Uses resolveSmartDefaultProvider to find a DB-configured key,
+   * then ApiKeyModelModel.getBestModel to determine the model.
+   */
+  private async resolveProviderAndKey(
+    organizationId: string,
+    userId?: string,
+  ): Promise<{
+    provider: SupportedChatProvider;
+    apiKey: string;
+    modelName: string;
+  } | null> {
+    const providers = SupportedChatProviderSchema.options;
+
+    for (const provider of providers) {
+      const { apiKey, chatApiKeyId } = await resolveProviderApiKey({
+        organizationId,
+        userId,
+        provider,
+      });
+
+      if (!apiKey || !chatApiKeyId) continue;
+
+      const bestModel = await ApiKeyModelModel.getBestModel(chatApiKeyId);
+      if (!bestModel) continue;
+
+      return { provider, apiKey, modelName: bestModel.modelId };
+    }
+
+    return null;
   }
 }
 

@@ -1,8 +1,7 @@
 ---
 title: Costs & Limits
-category: Archestra Platform
-subcategory: Concepts
-order: 8
+category: LLM Proxy
+order: 2
 ---
 
 Monitor and control AI model expenses with real-time tracking, spending limits, and automatic optimizations.

@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useBackendConnectivity } from "./backend-connectivity";
+import {
+  calculateEstimatedTotalAttempts,
+  useBackendConnectivity,
+} from "./backend-connectivity";
 
 describe("useBackendConnectivity", () => {
   beforeEach(() => {
@@ -465,5 +468,42 @@ describe("useBackendConnectivity", () => {
     });
 
     expect(result.current.status).toBe("connected");
+  });
+
+  it("should return estimatedTotalAttempts based on backoff schedule", () => {
+    const checkHealthFn = vi.fn().mockResolvedValue(false);
+    const { result } = renderHook(() =>
+      useBackendConnectivity({
+        checkHealthFn,
+        timeoutMs: 60000,
+        initialDelayMs: 1000,
+        maxDelayMs: 30000,
+        autoStart: false,
+      }),
+    );
+
+    // With defaults (60s timeout, 1s initial, 30s max):
+    // delays: 1s, 2s, 4s, 8s, 16s, 30s = 61s cumulative → 7 attempts total
+    expect(result.current.estimatedTotalAttempts).toBe(7);
+  });
+});
+
+describe("calculateEstimatedTotalAttempts", () => {
+  it("should calculate correctly with default values", () => {
+    // 60s timeout, 1s initial, 30s max
+    // Delays: 1s(1), 2s(3), 4s(7), 8s(15), 16s(31), 30s(61) → 7 attempts
+    expect(calculateEstimatedTotalAttempts(60000, 1000, 30000)).toBe(7);
+  });
+
+  it("should calculate correctly with small timeout", () => {
+    // 3s timeout, 500ms initial, 1s max
+    // Delays: 500ms(0.5), 1s(1.5), 1s(2.5), 1s(3.5) → 5 attempts
+    expect(calculateEstimatedTotalAttempts(3000, 500, 1000)).toBe(5);
+  });
+
+  it("should handle case where single delay exceeds timeout", () => {
+    // 500ms timeout, 1s initial, 30s max
+    // Delays: 1s(1) → 2 attempts
+    expect(calculateEstimatedTotalAttempts(500, 1000, 30000)).toBe(2);
   });
 });

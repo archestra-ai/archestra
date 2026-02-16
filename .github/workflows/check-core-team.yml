@@ -1,0 +1,47 @@
+# Reusable workflow to check if a GitHub user is a core team member.
+name: Check Core Team Membership
+
+on:
+  workflow_call:
+    inputs:
+      username:
+        description: "GitHub username to check"
+        required: true
+        type: string
+    outputs:
+      is_core_team_member:
+        description: "Whether the user is a core team member"
+        value: ${{ jobs.check.outputs.is_core_team_member }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    outputs:
+      is_core_team_member: ${{ steps.check.outputs.is_core_team_member }}
+    steps:
+      - name: Check if author is core team member
+        id: check
+        env:
+          USERNAME: ${{ inputs.username }}
+        run: |
+          # Maintain this list when team members join or leave
+          CORE_TEAM=(
+            "brojd"
+            "iskhakov"
+            "joeyorlando"
+            "Konstantinov-Innokentii"
+            "Matvey-Kuk"
+          )
+
+          for member in "${CORE_TEAM[@]}"; do
+            if [[ "$USERNAME" == "$member" ]]; then
+              echo "Core team member: $USERNAME"
+              echo "is_core_team_member=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          echo "External contributor: $USERNAME"
+          echo "is_core_team_member=false" >> "$GITHUB_OUTPUT"

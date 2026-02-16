@@ -41,7 +41,7 @@ vi.mock("prom-client", () => ({
 }));
 
 // Import after mock to ensure mock is applied
-import { initializeMetrics } from "@/llm-metrics";
+import { metrics } from "@/observability";
 import anthropicProxyRoutesV2 from "./routesv2/anthropic";
 import geminiProxyRoutesV2 from "./routesv2/gemini";
 import openAiProxyRoutesV2 from "./routesv2/openai";
@@ -65,7 +65,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
     testAgent = await makeAgent({ name: "Test Metrics Agent" });
 
     // Initialize metrics
-    initializeMetrics([]);
+    metrics.llm.initializeMetrics([]);
   });
 
   afterEach(async () => {

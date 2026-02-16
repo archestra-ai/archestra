@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -822,7 +822,11 @@ function createCohereClient(
   const baseUrl = options.baseUrl || config.llm.cohere.baseUrl;
   // Only wrap fetch with metrics when agent context is available
   const observableFetch = options.agent
-    ? getObservableFetch("cohere", options.agent, options.externalAgentId)
+    ? metrics.llm.getObservableFetch(
+        "cohere",
+        options.agent,
+        options.externalAgentId,
+      )
     : fetch;
 
   return {

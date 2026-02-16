@@ -1,7 +1,7 @@
 ---
 title: MS Teams
-category: Archestra Platform
-order: 8
+category: Agents
+order: 5
 description: Connect Archestra agents to Microsoft Teams channels
 lastUpdated: 2026-02-05
 ---

@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { authClient } from "./clients/auth/auth-client";
 import { handleApiError } from "./utils";
 
@@ -133,12 +134,8 @@ export function useDeleteMcpServer() {
     onSuccess: async (_, variables) => {
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate tools queries since MCP server deletion cascades to tools
-      queryClient.invalidateQueries({ queryKey: ["tools"] });
-      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      // Invalidate all chat MCP tools (tools are now unavailable)
-      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
+      invalidateToolAssignmentQueries(queryClient);
       toast.success(`Successfully uninstalled ${variables.name}`);
     },
     onError: (error, variables) => {

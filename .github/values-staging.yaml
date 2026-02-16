@@ -25,7 +25,6 @@ archestra:
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
     ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
-    ARCHESTRA_OLLAMA_BASE_URL: "http://open-webui-ollama.open-webui.svc.cluster.local:11434"
 
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:

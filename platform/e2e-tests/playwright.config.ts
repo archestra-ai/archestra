@@ -12,8 +12,9 @@ const projectNames = {
   chromium: "chromium",
   firefox: "firefox",
   webkit: "webkit",
-  sso: "sso",
+  identityProviders: "identity-providers",
   api: "api",
+  vaultK8s: "vault-k8s",
 };
 
 /**
@@ -26,8 +27,9 @@ const testPatterns = {
   teamsSetup: /auth\.teams\.setup\.ts/,
   // Special test files that need isolated execution
   credentialsWithVault: /credentials-with-vault\.ee\.spec\.ts/,
-  // NOTE: File was renamed to .ee.spec.ts in commit f10027e (move SSO logic to .ee files)
-  ssoProviders: /sso-providers\.ee\.spec\.ts/,
+  identityProviders: /identity-providers\.ee\.spec\.ts/,
+  // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
+  vaultK8s: /vault-k8s-startup\.spec\.ts/,
 };
 
 /**
@@ -36,7 +38,8 @@ const testPatterns = {
  */
 const browserTestIgnore = [
   testPatterns.credentialsWithVault,
-  testPatterns.ssoProviders,
+  testPatterns.identityProviders,
+  testPatterns.vaultK8s,
 ];
 
 /**
@@ -47,7 +50,7 @@ const browserTestIgnore = [
  * to distribute test files across shards without pulling in entire project chains.
  *
  * The setup-teams project is the final setup step that all tests depend on.
- * Previously, we had inter-test dependencies (chromium → credentials-with-vault → sso → api)
+ * Previously, we had inter-test dependencies (chromium → credentials-with-vault → identity-providers → api)
  * which caused each shard to run the same tests.
  */
 const dependencies = {
@@ -158,20 +161,32 @@ export default defineConfig({
       dependencies: dependencies.testProjects,
       grep: /@webkit/,
     },
-    // SSO tests - manipulate shared backend state, authenticate fresh each test
+    // Identity provider tests - manipulate shared backend state, authenticate fresh each test
     {
-      name: projectNames.sso,
+      name: projectNames.identityProviders,
       testDir: "./tests/ui",
-      testMatch: testPatterns.ssoProviders,
+      testMatch: testPatterns.identityProviders,
       use: {
         ...devices["Desktop Chrome"],
-        // No storageState - SSO tests authenticate fresh via ensureAdminAuthenticated()
+        // No storageState - identity provider tests authenticate fresh via ensureAdminAuthenticated()
       },
       dependencies: dependencies.testProjects,
     },
     // API integration tests
     {
       name: projectNames.api,
+      testDir: "./tests/api",
+      testIgnore: [testPatterns.vaultK8s],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    // Vault K8s startup test — validates platform starts with DB URL from Vault via K8s auth
+    {
+      name: projectNames.vaultK8s,
+      testMatch: testPatterns.vaultK8s,
       testDir: "./tests/api",
       use: {
         ...devices["Desktop Chrome"],

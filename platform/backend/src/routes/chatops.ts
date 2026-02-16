@@ -1,5 +1,5 @@
 import { RouteId } from "@shared";
-import { TeamsInfo, TurnContext } from "botbuilder";
+import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -8,7 +8,8 @@ import {
   CHATOPS_RATE_LIMIT,
 } from "@/agents/chatops/constants";
 import { isRateLimited } from "@/agents/utils";
-import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -18,11 +19,15 @@ import {
 } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
+  type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
   type IncomingChatMessage,
 } from "@/types/chatops";
-import { ChatOpsChannelBindingResponseSchema } from "@/types/chatops-channel-binding";
+import {
+  ChatOpsChannelBindingResponseSchema,
+  UpdateChatOpsChannelBindingSchema,
+} from "@/types/chatops-channel-binding";
 
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -148,6 +153,53 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
+            // Handle bot installation/update — discover all team channels
+            if (
+              context.activity.type === ActivityTypes.ConversationUpdate ||
+              context.activity.type === ActivityTypes.InstallationUpdate
+            ) {
+              const teamData = context.activity.channelData?.team as
+                | { id?: string; aadGroupId?: string }
+                | undefined;
+              if (teamData?.id) {
+                let aadGroupId = teamData.aadGroupId;
+                if (!aadGroupId) {
+                  try {
+                    const details = await TeamsInfo.getTeamDetails(context);
+                    aadGroupId = details?.aadGroupId ?? undefined;
+                  } catch {
+                    // Non-fatal
+                  }
+                }
+                const workspaceId = aadGroupId || teamData.id;
+                const allWorkspaceIds = collectWorkspaceIds({
+                  id: teamData.id,
+                  aadGroupId,
+                });
+                // Await so discovery completes before the webhook returns,
+                // but catch errors to avoid failing the webhook response.
+                await chatOpsManager
+                  .discoverChannels({
+                    provider,
+                    context,
+                    workspaceId,
+                    allWorkspaceIds,
+                  })
+                  .catch((error) => {
+                    logger.error(
+                      {
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "[ChatOps] Error discovering channels",
+                    );
+                  });
+              }
+              return;
+            }
+
             // Parse the activity into our message format
             const message = await provider.parseWebhookNotification(
               context.activity,
@@ -157,6 +209,20 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!message) {
               // Not a processable message (e.g., system event)
               return;
+            }
+
+            // Resolve workspaceId to proper UUID (aadGroupId) for team channels.
+            // Bot Framework may provide team.id (thread format) instead of aadGroupId.
+            // TeamsInfo.getTeamDetails() uses RSC permissions — no Azure AD app permissions needed.
+            if (message.workspaceId && !isValidUUID(message.workspaceId)) {
+              try {
+                const teamDetails = await TeamsInfo.getTeamDetails(context);
+                if (teamDetails?.aadGroupId) {
+                  message.workspaceId = teamDetails.aadGroupId;
+                }
+              } catch {
+                // Non-fatal — group chats don't have team details
+              }
             }
 
             // Resolve sender email and verify they are a registered Archestra user
@@ -296,11 +362,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               workspaceId: message.workspaceId,
             });
 
-            if (!binding) {
-              // No binding - show agent selection
+            if (!binding || !binding.agentId) {
+              // No binding, or discovered channel without agent assigned — show agent selection
+              await awaitDiscovery(provider, context);
               await sendAgentSelectionCard(context, message);
               return;
             }
+
+            // Refresh names + discover channels in parallel (must await — TurnContext proxy is revoked after callback returns)
+            await Promise.all([
+              refreshBindingNames(context, binding, message).catch(() => {}),
+              awaitDiscovery(provider, context),
+            ]);
 
             // Process message through bound agent
             await chatOpsManager.processMessage({
@@ -345,6 +418,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 id: z.string(),
                 displayName: z.string(),
                 configured: z.boolean(),
+                credentials: z
+                  .object({
+                    appId: z.string(),
+                    appSecret: z.string(),
+                    tenantId: z.string(),
+                  })
+                  .optional(),
               }),
             ),
           }),
@@ -422,6 +502,127 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success: true });
     },
   );
+
+  /**
+   * Update a channel binding's agent assignment
+   */
+  fastify.patch(
+    "/api/chatops/bindings/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateChatOpsBinding,
+        description: "Update a chatops channel binding",
+        tags: ["ChatOps"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        body: UpdateChatOpsChannelBindingSchema,
+        response: constructResponseSchema(ChatOpsChannelBindingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const existing = await ChatOpsChannelBindingModel.findByIdAndOrganization(
+        id,
+        request.organizationId,
+      );
+
+      if (!existing) {
+        throw new ApiError(404, "Binding not found");
+      }
+
+      const updated = await ChatOpsChannelBindingModel.update(id, request.body);
+
+      if (!updated) {
+        throw new ApiError(500, "Failed to update binding");
+      }
+
+      return reply.send({
+        ...updated,
+        createdAt: updated.createdAt.toISOString(),
+        updatedAt: updated.updatedAt.toISOString(),
+      });
+    },
+  );
+
+  /**
+   * Update MS Teams chatops config in quickstart mode.
+   * Mutates in-memory config and reinitializes the chatops manager.
+   */
+  fastify.put(
+    "/api/chatops/config/ms-teams",
+    {
+      schema: {
+        operationId: RouteId.UpdateChatOpsConfigInQuickstart,
+        description:
+          "Update MS Teams chatops configuration (quickstart mode only)",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          appId: z.string().min(1).max(256).optional(),
+          appSecret: z.string().min(1).max(512).optional(),
+          tenantId: z.string().min(1).max(256).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (config.production && !config.isQuickstart) {
+        throw new ApiError(
+          403,
+          "Only available in quickstart or local development mode. Forbidden in production.",
+        );
+      }
+
+      const { enabled, appId, appSecret, tenantId } = request.body;
+
+      if (enabled !== undefined) {
+        config.chatops.msTeams.enabled = enabled;
+      }
+      if (appId !== undefined) {
+        config.chatops.msTeams.appId = appId;
+        config.chatops.msTeams.graph.clientId = appId;
+      }
+      if (appSecret !== undefined) {
+        config.chatops.msTeams.appSecret = appSecret;
+        config.chatops.msTeams.graph.clientSecret = appSecret;
+      }
+      if (tenantId !== undefined) {
+        config.chatops.msTeams.tenantId = tenantId;
+        config.chatops.msTeams.graph.tenantId = tenantId;
+      }
+
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+  /**
+   * Refresh channel discovery cache for a provider.
+   * Invalidates the TTL cache so channels are re-discovered on the next bot interaction.
+   */
+  fastify.post(
+    "/api/chatops/channel-discovery/refresh",
+    {
+      schema: {
+        operationId: RouteId.RefreshChatOpsChannelDiscovery,
+        description: "Refresh channel discovery cache for a chatops provider",
+        tags: ["ChatOps"],
+        body: z.object({
+          provider: ChatOpsProviderTypeSchema,
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { provider } = request.body;
+      const prefix =
+        `${CacheKey.ChannelDiscovery}-${provider}` as AllowedCacheKey;
+      await cacheManager.deleteByPrefix(prefix);
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default chatopsRoutes;
@@ -449,18 +650,31 @@ function getProviderInfo(providerType: ChatOpsProviderType): {
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
+  credentials?: { appId: string; appSecret: string; tenantId: string };
 } {
   switch (providerType) {
     case "ms-teams": {
       const provider = chatOpsManager.getMSTeamsProvider();
+      const { appId, appSecret, tenantId } = config.chatops.msTeams;
       return {
         id: "ms-teams",
         displayName: "Microsoft Teams",
         configured: provider?.isConfigured() ?? false,
+        credentials: {
+          appId: maskValue(appId),
+          appSecret: appSecret ? "••••••••" : "",
+          tenantId: maskValue(tenantId),
+        },
       };
     }
     // When adding new providers, TypeScript will error here until handled
   }
+}
+
+function maskValue(value: string): string {
+  if (!value) return "";
+  if (value.length <= 3) return "•".repeat(value.length);
+  return value.slice(0, 3) + "•".repeat(Math.min(value.length - 3, 8));
 }
 
 /**
@@ -659,13 +873,28 @@ async function handleAgentSelection(
     "[ChatOps] handleAgentSelection: about to upsert binding",
   );
 
+  // Resolve human-readable channel/workspace names (best-effort)
+  const resolvedNames = await resolveTeamsNames(
+    context,
+    channelId || message.channelId,
+  );
+
   // Create or update the binding
-  await ChatOpsChannelBindingModel.upsertByChannel({
+  const binding = await ChatOpsChannelBindingModel.upsertByChannel({
     organizationId,
     provider: "ms-teams",
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
+    channelName: resolvedNames.channelName,
+    workspaceName: resolvedNames.workspaceName,
     agentId,
+  });
+
+  // Clean up duplicate bindings for the same channel with different workspaceId formats
+  await ChatOpsChannelBindingModel.deleteDuplicateBindings({
+    provider: "ms-teams",
+    channelId: channelId || message.channelId,
+    canonicalBindingId: binding.id,
   });
 
   logger.debug("[ChatOps] handleAgentSelection: binding upserted");
@@ -694,6 +923,7 @@ async function handleAgentSelection(
         threadId: message.threadId,
         senderId: message.senderId,
         senderName: message.senderName,
+        senderEmail: message.senderEmail,
         text: originalMessageText,
         rawText: originalMessageText,
         timestamp: message.timestamp,
@@ -782,9 +1012,10 @@ async function resolveAndVerifySender(
 
   const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
-    logger.warn(
+    logger.warn("[ChatOps] Sender is not a registered Archestra user");
+    logger.debug(
       { senderEmail: message.senderEmail },
-      "[ChatOps] Sender is not a registered Archestra user",
+      "[ChatOps] Unregistered sender email",
     );
     await context.sendActivity(
       `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
@@ -793,6 +1024,109 @@ async function resolveAndVerifySender(
   }
 
   return true;
+}
+
+/**
+ * Resolve human-readable channel and workspace names via TeamsInfo.
+ * Returns undefined for names that cannot be resolved — callers treat these as best-effort.
+ */
+async function resolveTeamsNames(
+  context: TurnContext,
+  targetChannelId: string,
+): Promise<{ channelName?: string; workspaceName?: string }> {
+  let channelName: string | undefined;
+  let workspaceName: string | undefined;
+
+  try {
+    const teamDetails = await TeamsInfo.getTeamDetails(context);
+    workspaceName = teamDetails?.name ?? undefined;
+  } catch {
+    /* non-fatal */
+  }
+
+  try {
+    const channels = await TeamsInfo.getTeamChannels(context);
+    const matched = channels?.find((c) => c.id === targetChannelId);
+    channelName = matched?.name ?? undefined;
+  } catch {
+    /* non-fatal */
+  }
+
+  return { channelName, workspaceName };
+}
+
+/**
+ * Refresh channel/workspace display names on a binding if they have changed.
+ * Called fire-and-forget on every incoming message so names stay up-to-date.
+ */
+async function refreshBindingNames(
+  context: TurnContext,
+  binding: {
+    id: string;
+    channelId: string;
+    channelName: string | null;
+    workspaceName: string | null;
+  },
+  message: IncomingChatMessage,
+): Promise<void> {
+  try {
+    const resolved = await resolveTeamsNames(context, message.channelId);
+
+    const namesDiffer =
+      (resolved.channelName !== undefined &&
+        resolved.channelName !== binding.channelName) ||
+      (resolved.workspaceName !== undefined &&
+        resolved.workspaceName !== binding.workspaceName);
+
+    if (namesDiffer) {
+      await ChatOpsChannelBindingModel.updateNames(binding.id, {
+        channelName: resolved.channelName,
+        workspaceName: resolved.workspaceName,
+      });
+    }
+  } catch (error) {
+    logger.debug(
+      { error: error instanceof Error ? error.message : String(error) },
+      "[ChatOps] Failed to refresh binding names",
+    );
+  }
+}
+
+/**
+ * Await channel discovery via the ChatOpsManager.
+ * Must be awaited (not fire-and-forget) because Bot Framework revokes the
+ * TurnContext proxy once the processActivity callback returns.
+ * The TTL cache makes this essentially free on cache hits.
+ */
+async function awaitDiscovery(
+  provider: ChatOpsProvider,
+  context: TurnContext,
+): Promise<void> {
+  const teamData = context.activity.channelData?.team as
+    | { id?: string; aadGroupId?: string }
+    | undefined;
+  if (!teamData?.id) return;
+
+  // Resolve aadGroupId (UUID) via TeamsInfo if not present in channelData.
+  // This ensures stale cleanup covers bindings stored with either ID format.
+  let aadGroupId = teamData.aadGroupId;
+  if (!aadGroupId) {
+    try {
+      const details = await TeamsInfo.getTeamDetails(context);
+      aadGroupId = details?.aadGroupId ?? undefined;
+    } catch {
+      // Non-fatal — group chats don't have team details
+    }
+  }
+
+  const workspaceId = aadGroupId || teamData.id;
+  const allWorkspaceIds = collectWorkspaceIds({
+    id: teamData.id,
+    aadGroupId,
+  });
+  await chatOpsManager
+    .discoverChannels({ provider, context, workspaceId, allWorkspaceIds })
+    .catch(() => {});
 }
 
 /**
@@ -813,4 +1147,26 @@ function getSecurityErrorMessage(error: string): string {
   }
   // Fallback for other errors
   return error;
+}
+
+/**
+ * Collect all known workspace ID variants for a team.
+ * Teams can be identified by either an aadGroupId (UUID) or a thread-format ID.
+ * Bindings may have been created with either format, so we need both for stale cleanup.
+ */
+function collectWorkspaceIds(teamData: {
+  id?: string;
+  aadGroupId?: string;
+}): string[] {
+  const ids = new Set<string>();
+  if (teamData.id) ids.add(teamData.id);
+  if (teamData.aadGroupId) ids.add(teamData.aadGroupId);
+  return [...ids];
+}
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value);
 }

@@ -515,7 +515,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Smart visibility: Shows first 10 conversations by default with "Show N more" toggle for better UX when many conversations exist
 - Full-width chat interface: Chat page uses entire width without separate conversation sidebar
 - Tool execution: Routes through MCP Gateway, includes response modifiers and logging
-- No manual configuration: Deprecated `ARCHESTRA_CHAT_MCP_SERVER_URL` and `ARCHESTRA_CHAT_MCP_SERVER_HEADERS`
 - Required env var: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` (used by LLM Proxy for Anthropic calls)
 
 **Archestra MCP Server**:

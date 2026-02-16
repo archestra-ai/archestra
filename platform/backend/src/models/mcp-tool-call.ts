@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   gte,
   ilike,
   inArray,
@@ -116,8 +117,15 @@ class McpToolCallModel {
 
     const [data, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.mcpToolCallsTable),
+          userName: schema.usersTable.name,
+        })
         .from(schema.mcpToolCallsTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+        )
         .where(whereClause)
         .orderBy(orderByClause)
         .limit(pagination.limit)
@@ -162,8 +170,15 @@ class McpToolCallModel {
     isMcpServerAdmin?: boolean,
   ): Promise<McpToolCall | null> {
     const [mcpToolCall] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.mcpToolCallsTable),
+        userName: schema.usersTable.name,
+      })
       .from(schema.mcpToolCallsTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+      )
       .where(eq(schema.mcpToolCallsTable.id, id));
 
     if (!mcpToolCall) {
@@ -248,8 +263,15 @@ class McpToolCallModel {
 
     const [data, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.mcpToolCallsTable),
+          userName: schema.usersTable.name,
+        })
         .from(schema.mcpToolCallsTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+        )
         .where(whereCondition)
         .orderBy(orderByClause)
         .limit(pagination.limit)

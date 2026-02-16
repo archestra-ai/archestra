@@ -1,4 +1,8 @@
-import { DEFAULT_LLM_PROXY_NAME, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
+import {
+  DEFAULT_LLM_PROXY_NAME,
+  DEFAULT_MCP_GATEWAY_NAME,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@shared";
 import {
   and,
   asc,
@@ -967,6 +971,25 @@ class AgentModel {
       .delete(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  /** Check if an agent has any Playwright tools assigned via agent_tools. */
+  static async hasPlaywrightToolsAssigned(agentId: string): Promise<boolean> {
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.toolsTable.catalogId, PLAYWRIGHT_MCP_CATALOG_ID),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 }
 

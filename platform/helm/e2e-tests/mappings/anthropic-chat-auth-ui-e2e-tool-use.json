@@ -1,0 +1,21 @@
+{
+  "scenarioName": "auth-ui-e2e",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "tool_result_received",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/anthropic/v1/messages",
+    "bodyPatterns": [
+      { "contains": "auth-calltime-ui-e2e" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache"
+    },
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_auth_ui_test\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-5-sonnet-20241022\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":50,\"output_tokens\":0}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_auth_ui_01\",\"name\":\"auth-ui-e2e__test_ui_auth_tool\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":20}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  }
+}

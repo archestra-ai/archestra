@@ -61,6 +61,7 @@ const LocalConfigSelectSchema = z.object({
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.number().optional(),
   httpPath: z.string().optional(),
+  nodePort: z.number().optional(),
 });
 
 export const SelectInternalMcpCatalogSchema = createSelectSchema(

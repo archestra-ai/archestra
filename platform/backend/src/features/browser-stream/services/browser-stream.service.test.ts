@@ -1,8 +1,29 @@
-import * as chatMcpClient from "@/clients/chat-mcp-client";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import { BrowserStreamService } from "./browser-stream.service";
 import { Ok } from "./browser-stream.state.types";
 import { browserStateManager } from "./browser-stream.state-manager";
+
+/**
+ * Helper to mock the private executeTool method on BrowserStreamService.
+ * Since executeTool now calls mcpClient.executeToolCall directly (bypassing
+ * the MCP Gateway), tests need to mock it at the service level.
+ */
+function mockExecuteTool(
+  service: BrowserStreamService,
+  handler: (params: {
+    toolName: string;
+    args: Record<string, unknown>;
+  }) => Promise<{ content: unknown; isError: boolean }>,
+) {
+  return vi
+    .spyOn(
+      service as unknown as {
+        executeTool: typeof handler;
+      },
+      "executeTool",
+    )
+    .mockImplementation(handler);
+}
 
 describe("BrowserStreamService URL handling", () => {
   beforeEach(() => {
@@ -46,25 +67,20 @@ describe("BrowserStreamService URL handling", () => {
       .spyOn(browserService, "getCurrentUrl")
       .mockResolvedValue("https://correct-page.example.com/path");
 
-    // Mock getChatMcpClient to return a mock client for screenshot
-    const mockClient = {
-      callTool: vi.fn().mockResolvedValue({
-        isError: false,
-        content: [
-          {
-            type: "image",
-            data: "base64screenshotdata",
-            mimeType: "image/png",
-          },
-          // Screenshot response has no URL or wrong URL - doesn't matter
-          // because we use getCurrentUrl instead
-          { type: "text", text: "Screenshot captured" },
-        ],
-      }),
-    };
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue(
-      mockClient as never,
-    );
+    // Mock executeTool for screenshot
+    mockExecuteTool(browserService, async () => ({
+      isError: false,
+      content: [
+        {
+          type: "image",
+          data: "base64screenshotdata",
+          mimeType: "image/png",
+        },
+        // Screenshot response has no URL or wrong URL - doesn't matter
+        // because we use getCurrentUrl instead
+        { type: "text", text: "Screenshot captured" },
+      ],
+    }));
 
     // Call takeScreenshot
     const result = await browserService.takeScreenshot(
@@ -122,22 +138,17 @@ describe("BrowserStreamService URL handling", () => {
     // Mock getCurrentUrl to return undefined (failed to get URL)
     vi.spyOn(browserService, "getCurrentUrl").mockResolvedValue(undefined);
 
-    // Mock getChatMcpClient
-    const mockClient = {
-      callTool: vi.fn().mockResolvedValue({
-        isError: false,
-        content: [
-          {
-            type: "image",
-            data: "base64screenshotdata",
-            mimeType: "image/png",
-          },
-        ],
-      }),
-    };
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue(
-      mockClient as never,
-    );
+    // Mock executeTool for screenshot
+    mockExecuteTool(browserService, async () => ({
+      isError: false,
+      content: [
+        {
+          type: "image",
+          data: "base64screenshotdata",
+          mimeType: "image/png",
+        },
+      ],
+    }));
 
     // Call takeScreenshot
     const result = await browserService.takeScreenshot(
@@ -185,15 +196,11 @@ describe("BrowserStreamService URL handling", () => {
 
     const getCurrentUrlSpy = vi.spyOn(browserService, "getCurrentUrl");
 
-    const mockClient = {
-      callTool: vi.fn().mockResolvedValue({
-        isError: false,
-        content: [{ type: "text", text: "No image content" }],
-      }),
-    };
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue(
-      mockClient as never,
-    );
+    // Mock executeTool for screenshot - no image content
+    mockExecuteTool(browserService, async () => ({
+      isError: false,
+      content: [{ type: "text", text: "No image content" }],
+    }));
 
     const result = await browserService.takeScreenshot(
       agentId,
@@ -222,7 +229,7 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockResolvedValue({
+    const executeToolSpy = mockExecuteTool(browserService, async () => ({
       isError: false,
       content: [
         {
@@ -243,11 +250,7 @@ describe("BrowserStreamService URL handling", () => {
           ]),
         },
       ],
-    });
-
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
+    }));
 
     const conversationId = "test-conversation";
     const result = await browserService.getCurrentUrl(
@@ -256,10 +259,12 @@ describe("BrowserStreamService URL handling", () => {
       userContext,
     );
 
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "list" },
-    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "list" },
+      }),
+    );
     expect(result).toBe("https://current.example.com");
   });
 
@@ -280,7 +285,7 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockResolvedValue({
+    const executeToolSpy = mockExecuteTool(browserService, async () => ({
       isError: false,
       content: [
         {
@@ -301,11 +306,7 @@ describe("BrowserStreamService URL handling", () => {
           ]),
         },
       ],
-    });
-
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
+    }));
 
     const result = await browserService.getCurrentUrl(
       agentId,
@@ -313,10 +314,12 @@ describe("BrowserStreamService URL handling", () => {
       userContext,
     );
 
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "list" },
-    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "list" },
+      }),
+    );
     expect(result).toBe("https://numeric-current.example.com");
   });
 
@@ -337,7 +340,7 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockResolvedValue({
+    const executeToolSpy = mockExecuteTool(browserService, async () => ({
       isError: false,
       content: [
         {
@@ -359,11 +362,7 @@ describe("BrowserStreamService URL handling", () => {
           }),
         },
       ],
-    });
-
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
+    }));
 
     const result = await browserService.getCurrentUrl(
       agentId,
@@ -371,10 +370,12 @@ describe("BrowserStreamService URL handling", () => {
       userContext,
     );
 
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "list" },
-    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "list" },
+      }),
+    );
     expect(result).toBe("https://current-index.example.com");
   });
 
@@ -395,7 +396,7 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockResolvedValue({
+    const executeToolSpy = mockExecuteTool(browserService, async () => ({
       isError: false,
       content: [
         {
@@ -405,11 +406,7 @@ describe("BrowserStreamService URL handling", () => {
           ]),
         },
       ],
-    });
-
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
+    }));
 
     const first = await browserService.getCurrentUrl(
       agentId,
@@ -425,10 +422,14 @@ describe("BrowserStreamService URL handling", () => {
     expect(first).toBe("https://example.com");
     expect(second).toBe("https://example.com");
     // Each call should fetch fresh data, no caching
-    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(executeToolSpy).toHaveBeenCalledTimes(2);
   });
 
   test("selectOrCreateTab selects existing tab when stored tabIndex exists", async () => {
+    const updateUrlSpy = vi
+      .spyOn(browserStateManager, "updateUrl")
+      .mockResolvedValue();
+
     const browserService = new BrowserStreamService();
     const agentId = "test-agent";
     const conversationId = "test-conversation";
@@ -452,8 +453,8 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockImplementation(async (request) => {
-      if (request.arguments?.action === "list") {
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
         return {
           isError: false,
           content: [
@@ -471,10 +472,6 @@ describe("BrowserStreamService URL handling", () => {
       return { isError: false, content: [] };
     });
 
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
-
     const result = await browserService.selectOrCreateTab(
       agentId,
       conversationId,
@@ -483,10 +480,18 @@ describe("BrowserStreamService URL handling", () => {
 
     expect(result).toEqual({ success: true, tabIndex: 2 });
     // Should have selected the existing tab
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "select", index: 2 },
-    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "select", index: 2 },
+      }),
+    );
+    expect(updateUrlSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext.userId,
+      conversationId,
+      "https://stored.example.com",
+    );
   });
 
   test("selectOrCreateTab creates new tab when no stored tabIndex", async () => {
@@ -512,8 +517,8 @@ describe("BrowserStreamService URL handling", () => {
     ).mockResolvedValue("browser_tabs");
 
     let listCallCount = 0;
-    const callTool = vi.fn().mockImplementation(async (request) => {
-      if (request.arguments?.action === "list") {
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
         listCallCount++;
         // After "new" action, return updated list with new tab
         const tabs =
@@ -531,10 +536,6 @@ describe("BrowserStreamService URL handling", () => {
       return { isError: false, content: [] };
     });
 
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
-
     const result = await browserService.selectOrCreateTab(
       agentId,
       conversationId,
@@ -543,10 +544,12 @@ describe("BrowserStreamService URL handling", () => {
 
     expect(result).toEqual({ success: true, tabIndex: 1 });
     // Should have created a new tab
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "new" },
-    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "new" },
+      }),
+    );
   });
 
   test("selectOrCreateTab creates new tab and navigates to stored URL", async () => {
@@ -563,7 +566,9 @@ describe("BrowserStreamService URL handling", () => {
     vi.spyOn(browserStateManager, "get").mockResolvedValue({
       url: "https://stored.example.com",
     });
-    vi.spyOn(browserStateManager, "set").mockResolvedValue(Ok(undefined));
+    const setStateSpy = vi
+      .spyOn(browserStateManager, "set")
+      .mockResolvedValue(Ok(undefined));
 
     // Mock findTabsTool and findNavigateTool
     vi.spyOn(
@@ -581,8 +586,8 @@ describe("BrowserStreamService URL handling", () => {
     ).mockResolvedValue("browser_navigate");
 
     let listCallCount = 0;
-    const callTool = vi.fn().mockImplementation(async (request) => {
-      if (request.arguments?.action === "list") {
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
         listCallCount++;
         const tabs =
           listCallCount === 1
@@ -599,10 +604,6 @@ describe("BrowserStreamService URL handling", () => {
       return { isError: false, content: [] };
     });
 
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
-
     const result = await browserService.selectOrCreateTab(
       agentId,
       conversationId,
@@ -611,10 +612,89 @@ describe("BrowserStreamService URL handling", () => {
 
     expect(result).toEqual({ success: true, tabIndex: 1 });
     // Should have navigated to stored URL
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_navigate",
-      arguments: { url: "https://stored.example.com" },
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_navigate",
+        args: { url: "https://stored.example.com" },
+      }),
+    );
+    expect(setStateSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext.userId,
+      conversationId,
+      expect.objectContaining({
+        url: "https://stored.example.com",
+        tabIndex: 1,
+      }),
+    );
+  });
+
+  test("selectOrCreateTab restores stored URL when existing tab is blank", async () => {
+    const browserService = new BrowserStreamService();
+    const agentId = "test-agent";
+    const conversationId = "test-conversation";
+    const userContext = {
+      userId: "test-user",
+      organizationId: "test-org",
+      userIsProfileAdmin: false,
+    };
+
+    vi.spyOn(browserStateManager, "get").mockResolvedValue({
+      url: "https://stored.example.com",
+      tabIndex: 0,
     });
+    const updateUrlSpy = vi
+      .spyOn(browserStateManager, "updateUrl")
+      .mockResolvedValue();
+
+    vi.spyOn(
+      browserService as unknown as {
+        findTabsTool: () => Promise<string | null>;
+      },
+      "findTabsTool",
+    ).mockResolvedValue("browser_tabs");
+
+    vi.spyOn(
+      browserService as unknown as {
+        findNavigateTool: () => Promise<string | null>;
+      },
+      "findNavigateTool",
+    ).mockResolvedValue("browser_navigate");
+
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
+        return {
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify([{ index: 0, url: "about:blank" }]),
+            },
+          ],
+        };
+      }
+      return { isError: false, content: [] };
+    });
+
+    const result = await browserService.selectOrCreateTab(
+      agentId,
+      conversationId,
+      userContext,
+    );
+
+    expect(result).toEqual({ success: true, tabIndex: 0 });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_navigate",
+        args: { url: "https://stored.example.com" },
+      }),
+    );
+    expect(updateUrlSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext.userId,
+      conversationId,
+      "https://stored.example.com",
+    );
   });
 
   test("selectOrCreateTab deduplicates concurrent calls", async () => {
@@ -632,6 +712,7 @@ describe("BrowserStreamService URL handling", () => {
       url: "https://stored.example.com",
       tabIndex: 1,
     });
+    vi.spyOn(browserStateManager, "updateUrl").mockResolvedValue();
 
     // Mock findTabsTool
     vi.spyOn(
@@ -641,8 +722,8 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockImplementation(async (request) => {
-      if (request.arguments?.action === "list") {
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
         return {
           isError: false,
           content: [
@@ -659,10 +740,6 @@ describe("BrowserStreamService URL handling", () => {
       return { isError: false, content: [] };
     });
 
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
-
     const [firstResult, secondResult] = await Promise.all([
       browserService.selectOrCreateTab(agentId, conversationId, userContext),
       browserService.selectOrCreateTab(agentId, conversationId, userContext),
@@ -672,8 +749,8 @@ describe("BrowserStreamService URL handling", () => {
     expect(secondResult).toEqual({ success: true, tabIndex: 1 });
 
     // Should only have called select once (deduplication)
-    const selectCalls = callTool.mock.calls.filter(
-      (call) => call[0].arguments?.action === "select",
+    const selectCalls = executeToolSpy.mock.calls.filter(
+      (call) => call[0].args?.action === "select",
     );
     expect(selectCalls).toHaveLength(1);
   });
@@ -700,8 +777,8 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
-    const callTool = vi.fn().mockImplementation(async (request) => {
-      if (request.arguments?.action === "list") {
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
         return {
           isError: false,
           content: [
@@ -718,10 +795,6 @@ describe("BrowserStreamService URL handling", () => {
       return { isError: false, content: [] };
     });
 
-    vi.spyOn(chatMcpClient, "getChatMcpClient").mockResolvedValue({
-      callTool,
-    } as never);
-
     const result = await browserService.selectOrCreateTab(
       agentId,
       conversationId,
@@ -730,14 +803,18 @@ describe("BrowserStreamService URL handling", () => {
 
     expect(result).toEqual({ success: true, tabIndex: 1 });
     // Should have selected the blank tab, NOT created a new one
-    expect(callTool).toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "select", index: 1 },
-    });
-    expect(callTool).not.toHaveBeenCalledWith({
-      name: "browser_tabs",
-      arguments: { action: "new" },
-    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "select", index: 1 },
+      }),
+    );
+    expect(executeToolSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_tabs",
+        args: { action: "new" },
+      }),
+    );
   });
 
   test("syncUrlFromNavigateToolCall extracts URL from goto call", async () => {
@@ -768,6 +845,8 @@ describe("BrowserStreamService URL handling", () => {
     });
 
     expect(updateUrlSpy).toHaveBeenCalledWith(
+      "test-agent",
+      "test-user",
       conversationId,
       "https://navigated.example.com",
     );
@@ -801,6 +880,8 @@ describe("BrowserStreamService URL handling", () => {
     });
 
     expect(updateUrlSpy).toHaveBeenCalledWith(
+      "test-agent",
+      "test-user",
       conversationId,
       "https://page-url.example.com",
     );

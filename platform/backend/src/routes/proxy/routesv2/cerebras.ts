@@ -116,7 +116,8 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
         request.headers,
@@ -126,6 +127,7 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: undefined,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -162,7 +164,8 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
         request.headers,
@@ -172,6 +175,7 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );

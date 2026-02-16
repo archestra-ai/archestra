@@ -26,7 +26,7 @@ export const resources = [
   "dualLlmConfig",
   "dualLlmResult",
   "organization",
-  "ssoProvider",
+  "identityProvider",
   "member",
   "invitation",
   "internalMcpCatalog",

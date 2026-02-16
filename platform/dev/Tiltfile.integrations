@@ -101,7 +101,6 @@ helm_resource(
     '--set', 'vault.enabled=true',
     '--set', 'vault.service.type=ClusterIP',
     '--set', 'vault.k8sAuth.enabled=true',
-    '--set', 'vault.k8sAuth.kvVersion=2',
     '--set', 'wiremock.enabled=false',
     '--set', 'keycloak.enabled=false',
   ],
@@ -110,6 +109,7 @@ helm_resource(
   auto_init=False,
   resource_deps=[],
 )
+
 
 # Archestra running in K8s (for testing Vault K8s auth, etc.)
 # Start with: tilt trigger archestra-k8s
@@ -129,6 +129,7 @@ if os.name != 'nt':
       'frontend',
       'shared',
       'docker-banner.sh',
+      'prev-static-assets',
     ],
     ignore=[
       '**/node_modules',

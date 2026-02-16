@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { useMcpToolCall } from "@/lib/mcp-tool-call.query";
+import { formatAuthMethod, useMcpToolCall } from "@/lib/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
 
 export function McpToolCallDetailPage({
@@ -148,7 +148,9 @@ function McpToolCallDetail({
                   <div className="text-sm text-muted-foreground mb-2">
                     Tool Name
                   </div>
-                  <div className="font-medium font-mono">{toolCall.name}</div>
+                  <div className="font-medium font-mono">
+                    {parseFullToolName(toolCall.name).toolName || toolCall.name}
+                  </div>
                 </div>
               )}
               <div>
@@ -159,6 +161,22 @@ function McpToolCallDetail({
                   {formatDate({ date: mcpToolCall.createdAt })}
                 </div>
               </div>
+              {mcpToolCall.userName && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">User</div>
+                  <div className="font-medium">{mcpToolCall.userName}</div>
+                </div>
+              )}
+              {mcpToolCall.authMethod && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Auth Method
+                  </div>
+                  <Badge variant="secondary">
+                    {formatAuthMethod(mcpToolCall.authMethod)}
+                  </Badge>
+                </div>
+              )}
             </div>
           </div>
         </div>

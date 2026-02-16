@@ -281,19 +281,6 @@ class InternalMcpCatalogModel {
     return catalogItem || null;
   }
 
-  /**
-   * Get all catalogs marked as globally available.
-   * These catalogs' tools are automatically included for all agents in chat.
-   */
-  static async getGloballyAvailableCatalogs(): Promise<InternalMcpCatalog[]> {
-    const catalogItems = await db
-      .select()
-      .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.isGloballyAvailable, true));
-
-    return catalogItems;
-  }
-
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,

@@ -1,0 +1,67 @@
+# Automatically triage new PRs from external contributors using Claude.
+# Checks for low-quality PRs, ensures they reference an issue, and applies labels.
+# Uses an API key (not user-scoped OAuth token) since bot-initiated workflows
+# with OAuth tokens risk account bans per Anthropic's policy.
+#
+# Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
+name: Claude PR Triage
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] safe: checks out base repo (not PR code), Claude restricted to GitHub MCP tools only (no bash/file editing)
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  check-author:
+    uses: ./.github/workflows/check-core-team.yml
+    with:
+      username: ${{ github.event.pull_request.user.login }}
+
+  triage-pr:
+    needs: check-author
+    if: |
+      needs.check-author.outputs.is_core_team_member != 'true' &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.TRIAGE_SHERIFF_APP_ID }}
+          private-key: ${{ secrets.TRIAGE_SHERIFF_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Triage PR with Claude
+        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        with:
+          # Uses the /triage-pr custom command defined in .claude/commands/triage-pr.md
+          prompt: "/triage-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
+
+          # Use an API key, NOT an OAuth token, for bot-initiated workflows.
+          # Max subscriptions are single-user and OAuth tokens in automated workflows
+          # risk account bans (https://github.com/anthropics/claude-code-action/issues/641).
+          # Anthropic recommends API keys for multi-user repos:
+          # https://github.com/anthropics/claude-code-action/issues/4#issuecomment-3046770474
+          anthropic_api_key: ${{ secrets.CLAUDE_ISSUE_TRIAGE_ANTHROPIC_API_KEY }}
+
+          # Use the GitHub App token so comments appear as "Archestra Triage Sheriff"
+          github_token: ${{ steps.app-token.outputs.token }}
+
+          # Allow triage for PRs from any user
+          allowed_non_write_users: "*"
+
+          # Restrict to GitHub MCP tools only - no file editing or bash
+          claude_args: |
+            --allowedTools "mcp__github__get_pull_request,mcp__github__list_pull_requests,mcp__github__search_issues,mcp__github__create_pull_request_review,mcp__github__add_issue_comment,mcp__github__update_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files"

@@ -193,6 +193,17 @@ data:
                 "claim.name": "groups",
                 "userinfo.token.claim": "true"
               }
+            },
+            {
+              "name": "audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "archestra-oidc",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
             }
           ]
         },

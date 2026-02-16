@@ -45,6 +45,9 @@ export const LocalConfigSchema = z
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
     httpPath: z.string().optional(),
+    // Fixed Kubernetes NodePort for local dev (avoids dynamic port assignment).
+    // Only used when serviceType=NodePort (local dev, not in-cluster).
+    nodePort: z.number().optional(),
     // Kubernetes service account role for MCP server pods that need K8s API access
     // If not specified, uses the default service account (no K8s permissions)
     // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:
@@ -105,11 +108,11 @@ export const StatisticsTimeFrameSchema = z.union([
 export type StatisticsTimeFrame = z.infer<typeof StatisticsTimeFrameSchema>;
 
 /**
- * SSO Provider Schemas
+ * Identity Provider Schemas
  * NOTE: better-auth doesn't export zod schemas for these types, so to make
  * form generation + request validation easier, we're defining them here.
  */
-export const SsoProviderOidcConfigSchema = z
+export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
     pkce: z.boolean(),
@@ -143,7 +146,7 @@ export const SsoProviderOidcConfigSchema = z
     "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22",
   );
 
-export const SsoProviderSamlConfigSchema = z
+export const IdentityProviderSamlConfigSchema = z
   .object({
     issuer: z.string(),
     entryPoint: z.string(),
@@ -210,21 +213,21 @@ export const SsoProviderSamlConfigSchema = z
 
 /**
  * Role Mapping Configuration Schema
- * Supports Handlebars expressions for mapping SSO attributes to Archestra roles
+ * Supports Handlebars expressions for mapping IdP attributes to Archestra roles
  */
-export const SsoRoleMappingRuleSchema = z.object({
+export const IdpRoleMappingRuleSchema = z.object({
   /** Handlebars expression to evaluate against userInfo/token claims */
   expression: z.string().min(1, "Expression is required"),
   /** Archestra role to assign when expression evaluates to true */
   role: z.string().min(1, "Role is required"),
 });
 
-export const SsoRoleMappingConfigSchema = z.object({
+export const IdpRoleMappingConfigSchema = z.object({
   /**
    * Ordered list of role mapping rules.
    * First matching rule wins. If no rules match, defaultRole is used.
    */
-  rules: z.array(SsoRoleMappingRuleSchema).optional(),
+  rules: z.array(IdpRoleMappingRuleSchema).optional(),
   /**
    * Default role when no mapping rules match.
    * If not specified, falls back to organization default (usually "member")
@@ -244,8 +247,8 @@ export const SsoRoleMappingConfigSchema = z.object({
   skipRoleSync: z.boolean().optional(),
 });
 
-export type SsoRoleMappingRule = z.infer<typeof SsoRoleMappingRuleSchema>;
-export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
+export type IdpRoleMappingRule = z.infer<typeof IdpRoleMappingRuleSchema>;
+export type IdpRoleMappingConfig = z.infer<typeof IdpRoleMappingConfigSchema>;
 
 /**
  * Team Sync Configuration Schema
@@ -254,7 +257,7 @@ export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
  *
  * This allows flexibility in how groups are extracted from different IdP token formats.
  */
-export const SsoTeamSyncConfigSchema = z.object({
+export const IdpTeamSyncConfigSchema = z.object({
   /**
    * Handlebars expression to extract group identifiers from ID token claims.
    * The expression should evaluate to an array of strings (group identifiers).
@@ -275,19 +278,19 @@ export const SsoTeamSyncConfigSchema = z.object({
   enabled: z.boolean().optional(),
 });
 
-export type SsoTeamSyncConfig = z.infer<typeof SsoTeamSyncConfigSchema>;
+export type IdpTeamSyncConfig = z.infer<typeof IdpTeamSyncConfigSchema>;
 
 // Form schemas for UI
-export const SsoProviderFormSchema = z
+export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
     domain: z.string().min(1, "Domain is required"),
     providerType: z.enum(["oidc", "saml"]),
-    oidcConfig: SsoProviderOidcConfigSchema.optional(),
-    samlConfig: SsoProviderSamlConfigSchema.optional(),
-    roleMapping: SsoRoleMappingConfigSchema.optional(),
-    teamSyncConfig: SsoTeamSyncConfigSchema.optional(),
+    oidcConfig: IdentityProviderOidcConfigSchema.optional(),
+    samlConfig: IdentityProviderSamlConfigSchema.optional(),
+    roleMapping: IdpRoleMappingConfigSchema.optional(),
+    teamSyncConfig: IdpTeamSyncConfigSchema.optional(),
   })
   .refine(
     (data) => {
@@ -305,6 +308,12 @@ export const SsoProviderFormSchema = z
     },
   );
 
-export type SsoProviderOidcConfig = z.infer<typeof SsoProviderOidcConfigSchema>;
-export type SsoProviderSamlConfig = z.infer<typeof SsoProviderSamlConfigSchema>;
-export type SsoProviderFormValues = z.infer<typeof SsoProviderFormSchema>;
+export type IdentityProviderOidcConfig = z.infer<
+  typeof IdentityProviderOidcConfigSchema
+>;
+export type IdentityProviderSamlConfig = z.infer<
+  typeof IdentityProviderSamlConfigSchema
+>;
+export type IdentityProviderFormValues = z.infer<
+  typeof IdentityProviderFormSchema
+>;

@@ -81,6 +81,8 @@ export type McpServerCardProps = {
   autoOpenAssignmentsDialog?: boolean;
   /** Called when the auto-opened assignments dialog is closed */
   onAssignmentsDialogClose?: () => void;
+  /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
+  isBuiltInPlaywright?: boolean;
 };
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
@@ -104,8 +106,10 @@ export function McpServerCard({
   onCancelInstallation,
   autoOpenAssignmentsDialog,
   onAssignmentsDialogClose,
+  isBuiltInPlaywright = false,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
+  const isPlaywrightVariant = isBuiltInPlaywright;
 
   // For builtin servers, fetch tools by catalog ID
   // For regular MCP servers, fetch by server ID
@@ -327,10 +331,12 @@ export function McpServerCard({
               Edit K8S Deployment Yaml
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={onDelete} className="text-destructive">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </DropdownMenuItem>
+          {!isPlaywrightVariant && (
+            <DropdownMenuItem onClick={onDelete} className="text-destructive">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -656,6 +662,97 @@ export function McpServerCard({
     </>
   );
 
+  const playwrightCardContent = (
+    <>
+      <WithPermissions
+        permissions={{ tool: ["update"], profile: ["update"] }}
+        noPermissionHandle="hide"
+      >
+        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {localServersInstalled}
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {toolsAssigned}
+          </div>
+        </div>
+      </WithPermissions>
+      {errorBanner}
+      {/* Show reinstall button only when NOT installing */}
+      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
+        <PermissionButton
+          permissions={{ mcpServer: ["update"] }}
+          onClick={onReinstall}
+          size="sm"
+          variant="default"
+          className="w-full"
+        >
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Reinstall Required
+        </PermissionButton>
+      )}
+      {/* Spacer + Connect/Uninstall button pinned to bottom */}
+      <div className="mt-auto pt-2">
+        {!isInstalling && isCurrentUserAuthenticated && installedServer && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              setUninstallingServer({
+                id: installedServer.id,
+                name: installedServer.name,
+              });
+            }}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Uninstall
+          </Button>
+        )}
+        {!isInstalling && !isCurrentUserAuthenticated && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full">
+                  <PermissionButton
+                    permissions={{ mcpServer: ["create"] }}
+                    onClick={onInstallLocalServer}
+                    disabled={!isLocalMcpEnabled}
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    Connect
+                  </PermissionButton>
+                </div>
+              </TooltipTrigger>
+              {!isLocalMcpEnabled && (
+                <TooltipContent side="bottom">
+                  <p>{LOCAL_MCP_DISABLED_MESSAGE}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        {/* Show progress bar during installation or reinstallation */}
+        {isInstalling && (
+          <InstallationProgress
+            status={
+              installationStatus === "pending" ||
+              installationStatus === "discovering-tools"
+                ? installationStatus
+                : "pending"
+            }
+            serverId={installedServer?.id}
+            serverName={installedServer?.name}
+          />
+        )}
+      </div>
+    </>
+  );
+
   const builtinCardContent = (
     <>
       <WithPermissions
@@ -724,7 +821,7 @@ export function McpServerCard({
               {item.name}
             </div>
             <div className="flex items-center gap-2">
-              {isBuiltinVariant && (
+              {(isBuiltinVariant || isPlaywrightVariant) && (
                 <Badge
                   variant="secondary"
                   className="text-xs bg-purple-600 text-white"
@@ -760,9 +857,11 @@ export function McpServerCard({
         {userIsMcpServerAdmin && !isBuiltinVariant && actionButtons}
         {isBuiltinVariant
           ? builtinCardContent
-          : isRemoteVariant
-            ? remoteCardContent
-            : localCardContent}
+          : isPlaywrightVariant
+            ? playwrightCardContent
+            : isRemoteVariant
+              ? remoteCardContent
+              : localCardContent}
       </CardContent>
       {dialogs}
     </Card>

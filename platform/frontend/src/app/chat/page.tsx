@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 
-import { Bot, Edit, FileText, Globe, Plus, Wrench } from "lucide-react";
+import { Bot, Edit, FileText, Globe, Plus } from "lucide-react";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -21,6 +21,10 @@ import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import {
+  PlaywrightInstallDialog,
+  usePlaywrightSetupRequired,
+} from "@/components/chat/playwright-install-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
@@ -49,7 +53,7 @@ import {
   fetchConversationEnabledTools,
   useConversation,
   useCreateConversation,
-  useHasPlaywrightMcpTools,
+  useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
@@ -72,7 +76,6 @@ import ArchestraPromptInput from "./prompt-input";
 const CONVERSATION_QUERY_PARAM = "conversation";
 
 const LocalStorageKeys = {
-  hideToolCalls: "archestra-chat-hide-tool-calls",
   artifactOpen: "archestra-chat-artifact-open",
   browserOpen: "archestra-chat-browser-open",
   selectedChatModel: "archestra-chat-selected-chat-model",
@@ -92,20 +95,12 @@ export default function ChatPage() {
     document.body.classList.add("hide-version");
     return () => document.body.classList.remove("hide-version");
   }, []);
-  const [hideToolCalls, setHideToolCalls] = useState(() => {
-    // Initialize from localStorage
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(LocalStorageKeys.hideToolCalls) === "true";
-    }
-    return false;
-  });
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
-  const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
@@ -432,46 +427,19 @@ export default function ChatPage() {
     ? (conversation?.agentId ?? conversation?.agent?.id)
     : (initialAgentId ?? undefined);
 
-  // Check if Playwright MCP is available for browser panel and get install function
+  const playwrightSetupAgentId = conversationId
+    ? conversation?.agentId
+    : (initialAgentId ?? undefined);
   const {
-    hasPlaywrightMcp,
-    isInstalling: isInstallingBrowser,
-    installBrowser,
-  } = useHasPlaywrightMcpTools(browserToolsAgentId);
+    isLoading: isPlaywrightCheckLoading,
+    isRequired: isPlaywrightSetupRequired,
+  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId);
+  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
+  const isPlaywrightSetupVisible =
+    isPlaywrightSetupRequired || isPlaywrightCheckLoading;
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
-
-  // Clear MCP Gateway sessions when opening a NEW conversation
-  useEffect(() => {
-    // Only clear sessions if this is a newly created conversation
-    if (
-      currentProfileId &&
-      conversationId &&
-      newlyCreatedConversationRef.current === conversationId
-    ) {
-      // Clear sessions for this agent to ensure fresh MCP state
-      fetch("/v1/mcp/sessions", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${currentProfileId}`,
-        },
-      })
-        .then(async () => {
-          // Clear the ref after clearing sessions
-          newlyCreatedConversationRef.current = undefined;
-        })
-        .catch((error) => {
-          console.error("[Chat] Failed to clear MCP sessions:", {
-            conversationId,
-            agentId: currentProfileId,
-            error,
-          });
-          // Clear the ref even on error to avoid retry loops
-          newlyCreatedConversationRef.current = undefined;
-        });
-    }
-  }, [conversationId, currentProfileId]);
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
@@ -479,12 +447,8 @@ export default function ChatPage() {
   // Update enabled tools mutation (for applying pending actions)
   const updateEnabledToolsMutation = useUpdateConversationEnabledTools();
 
-  // Persist hide tool calls preference
-  const toggleHideToolCalls = useCallback(() => {
-    const newValue = !hideToolCalls;
-    setHideToolCalls(newValue);
-    localStorage.setItem(LocalStorageKeys.hideToolCalls, String(newValue));
-  }, [hideToolCalls]);
+  // Stop chat stream mutation (signals backend to abort subagents)
+  const stopChatStreamMutation = useStopChatStream();
 
   // Persist artifact panel state
   const toggleArtifactPanel = useCallback(() => {
@@ -734,19 +698,24 @@ export default function ChatPage() {
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
+    if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
-      stop?.();
+      if (conversationId) {
+        // Set the cache flag first, THEN close the connection so the
+        // connection-close handler on the backend finds the flag.
+        stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+          stop?.();
+        });
+      } else {
+        stop?.();
+      }
+      return;
     }
 
     const hasText = message.text?.trim();
     const hasFiles = message.files && message.files.length > 0;
 
-    if (
-      !sendMessage ||
-      (!hasText && !hasFiles) ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
+    if (!sendMessage || (!hasText && !hasFiles)) {
       return;
     }
 
@@ -818,7 +787,6 @@ export default function ChatPage() {
         {
           onSuccess: (newConversation) => {
             if (newConversation) {
-              newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
               // URL navigation will happen via useBrowserStream after conversation connects
             }
@@ -867,6 +835,7 @@ export default function ChatPage() {
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
     (message, e) => {
       e.preventDefault();
+      if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
@@ -933,7 +902,6 @@ export default function ChatPage() {
                 clearPendingActions();
               }
 
-              newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
             }
           },
@@ -941,6 +909,7 @@ export default function ChatPage() {
       );
     },
     [
+      isPlaywrightSetupVisible,
       initialAgentId,
       initialModel,
       initialApiKeyId,
@@ -988,7 +957,6 @@ export default function ChatPage() {
       {
         onSuccess: (newConversation) => {
           if (newConversation) {
-            newlyCreatedConversationRef.current = newConversation.id;
             selectConversation(newConversation.id);
           }
         },
@@ -1009,8 +977,12 @@ export default function ChatPage() {
   const activeAgentId = conversation?.agent?.id ?? initialAgentId;
 
   // Show loading spinner while essential data is loading
-  if (isLoadingApiKeyCheck || isLoadingAgents) {
-    return <LoadingSpinner />;
+  if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoadingSpinner />
+      </div>
+    );
   }
 
   // If API key is not configured, show setup message
@@ -1135,17 +1107,6 @@ export default function ChatPage() {
               </div>
               {/* Right side - show/hide controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-muted-foreground">Show:</span>
-                <Button
-                  variant={!hideToolCalls ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={toggleHideToolCalls}
-                  className="text-xs"
-                >
-                  <Wrench className="h-3 w-3 mr-1" />
-                  Tool calls
-                </Button>
-                <div className="w-px h-4 bg-border" />
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1159,10 +1120,15 @@ export default function ChatPage() {
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
-                      variant={isBrowserPanelOpen ? "secondary" : "ghost"}
+                      variant={
+                        isBrowserPanelOpen && !isPlaywrightSetupVisible
+                          ? "secondary"
+                          : "ghost"
+                      }
                       size="sm"
                       onClick={toggleBrowserPanel}
                       className="text-xs"
+                      disabled={isPlaywrightSetupVisible}
                     >
                       <Globe className="h-3 w-3 mr-1" />
                       Browser
@@ -1173,7 +1139,13 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto relative">
+            {isPlaywrightSetupRequired && (
+              <PlaywrightInstallDialog
+                agentId={playwrightSetupAgentId}
+                conversationId={conversationId}
+              />
+            )}
             <ChatMessages
               conversationId={conversationId}
               agentId={currentProfileId || initialAgentId || undefined}
@@ -1205,8 +1177,8 @@ export default function ChatPage() {
                       );
                     }
               }
+              hideArrow={isPlaywrightSetupVisible}
               messages={messages}
-              hideToolCalls={hideToolCalls}
               status={status}
               isLoadingConversation={isLoadingConversation}
               onMessagesUpdate={setMessages}
@@ -1324,6 +1296,7 @@ export default function ChatPage() {
                             | undefined
                         )?.llmApiKeyId as string | null)
                   }
+                  submitDisabled={isPlaywrightSetupVisible}
                 />
                 <div className="text-center">
                   <Version inline />
@@ -1363,12 +1336,14 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isArtifactOpen={isArtifactOpen}
         onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
+        isBrowserOpen={
+          isBrowserPanelOpen &&
+          isBrowserStreamingEnabled &&
+          !isPlaywrightSetupVisible
+        }
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
-        isInstallingBrowser={isInstallingBrowser}
-        hasPlaywrightMcp={hasPlaywrightMcp}
-        onInstallBrowser={installBrowser}
+        agentId={browserToolsAgentId}
         onCreateConversationWithUrl={handleCreateConversationWithUrl}
         isCreatingConversation={createConversationMutation.isPending}
         initialNavigateUrl={pendingBrowserUrl}

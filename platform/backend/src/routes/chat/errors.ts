@@ -17,6 +17,22 @@ import { APICallError, RetryError } from "ai";
 import logger from "@/logging";
 
 // =============================================================================
+// ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
+// =============================================================================
+
+export class ProviderError extends Error {
+  public readonly chatErrorResponse: ChatErrorResponse;
+
+  constructor(chatErrorResponse: ChatErrorResponse) {
+    super(
+      chatErrorResponse.originalError?.message || chatErrorResponse.message,
+    );
+    this.name = "ProviderError";
+    this.chatErrorResponse = chatErrorResponse;
+  }
+}
+
+// =============================================================================
 // Safe Serialization
 // =============================================================================
 

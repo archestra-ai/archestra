@@ -43,7 +43,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         { ...request.body, _isStreaming: false },
         request.headers,
@@ -53,6 +54,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: undefined,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -89,7 +91,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         { ...request.body, _isStreaming: false },
         request.headers,
@@ -99,6 +102,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -133,7 +137,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       return handleLLMProxy(
         { ...request.body, _isStreaming: true },
@@ -144,6 +149,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: undefined,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -181,7 +187,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       return handleLLMProxy(
         { ...request.body, _isStreaming: true },
@@ -192,6 +199,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -240,7 +248,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject modelId from URL into request body if not present
       const bodyWithModel = {
@@ -259,6 +268,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );
@@ -301,7 +311,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const executionId = utils.executionId.getExecutionId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject modelId from URL into request body
       const bodyWithModel = {
@@ -320,6 +331,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          executionId,
           userId,
         },
       );

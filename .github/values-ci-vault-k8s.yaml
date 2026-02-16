@@ -1,0 +1,83 @@
+# CI-specific values for the Archestra Helm chart — Vault K8s auth scenario
+# This file is used during e2e testing in GitHub Actions to validate that the
+# platform starts and runs migrations when the database URL is sourced from
+# Vault via the vault-secrets init container (vault env injector).
+
+archestra:
+  # Image will be set via --set during deployment
+  # image: archestra/platform:ci-test
+
+  # Single replica is sufficient for this test
+  replicaCount: 1
+
+  # Environment variables for Vault K8s e2e testing
+  env:
+    ENABLE_E2E_TEST_ENDPOINTS: "true"
+    ARCHESTRA_ANALYTICS: disabled
+    # Dummy LLM proxy base URLs (not tested in this scenario)
+    ARCHESTRA_OPENAI_BASE_URL: "http://localhost:8080/openai/v1"
+    ARCHESTRA_ANTHROPIC_BASE_URL: "http://localhost:8080/anthropic"
+    ARCHESTRA_GEMINI_BASE_URL: "http://localhost:8080/gemini"
+    ARCHESTRA_COHERE_BASE_URL: "http://localhost:8080/cohere"
+    ARCHESTRA_CEREBRAS_BASE_URL: "http://localhost:8080/cerebras/v1"
+    ARCHESTRA_VLLM_BASE_URL: "http://localhost:8080/vllm/v1"
+    ARCHESTRA_OLLAMA_BASE_URL: "http://localhost:8080/ollama/v1"
+    ARCHESTRA_ZHIPUAI_BASE_URL: "http://localhost:8080/zhipuai/v4"
+    ARCHESTRA_MISTRAL_BASE_URL: "http://localhost:8080/mistral/v1"
+    # Dummy chat API keys (not tested in this scenario)
+    ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
+    ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
+    ARCHESTRA_CHAT_GEMINI_API_KEY: test-key
+    ARCHESTRA_CHAT_COHERE_API_KEY: test-key
+    ARCHESTRA_CHAT_CEREBRAS_API_KEY: test-key
+    ARCHESTRA_CHAT_VLLM_API_KEY: test-key
+    ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
+    ARCHESTRA_CHAT_ZHIPUAI_API_KEY: test-key
+    ARCHESTRA_CHAT_MISTRAL_API_KEY: test-key
+    ARCHESTRA_METRICS_SECRET: "foo-bar"
+    ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
+    ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
+    # Vault K8s auth configuration — secrets manager uses Vault for runtime secret lookups
+    ARCHESTRA_SECRETS_MANAGER: "READONLY_VAULT"
+    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "K8S"
+    ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: "archestra"
+    ARCHESTRA_HASHICORP_VAULT_KV_VERSION: "1"
+
+  # Vault-secrets init container — fetches secrets from Vault and writes them to /vault/secrets/env
+  # The main container sources this file on startup to load secrets as environment variables
+  initContainers:
+    vaultSecrets:
+      enabled: true
+      secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: kv/archestra/config
+          key: dburl
+        - envVar: TEST_VALUE
+          path: kv/archestra/config
+          key: dummy_var
+
+  # Use NodePort service type to expose services on fixed ports
+  service:
+    type: NodePort
+    nodePorts:
+      backend: 30000
+      metrics: 30050
+      frontend: 30300
+
+# PostgreSQL configuration for CI
+# Vault only provides the connection URL — the DB itself is still deployed via subchart
+postgresql:
+  external_database_url: "from_vault"
+  enabled: true
+  auth:
+    database: archestra_dev
+    username: archestra
+    password: vault_e2e_custom_pw
+  primary:
+    service:
+      type: NodePort
+      nodePorts:
+        postgresql: 30432

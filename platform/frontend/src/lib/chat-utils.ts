@@ -1,6 +1,18 @@
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
 /**
+ * Generates localStorage keys scoped to a specific conversation.
+ * Use this everywhere conversation-specific keys are read/written/removed
+ * so that key formats stay in sync (especially for cleanup on deletion).
+ */
+export function conversationStorageKeys(conversationId: string) {
+  return {
+    artifactOpen: `archestra-chat-artifact-open-${conversationId}`,
+    draft: `archestra_chat_draft_${conversationId}`,
+  };
+}
+
+/**
  * Extracts a display title for a conversation.
  * Priority: explicit title > first user message > default session name
  */

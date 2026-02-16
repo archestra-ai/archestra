@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { API_BASE_URL, UI_BASE_URL } from "../../consts";
 import { expect, test } from "./fixtures";
 
 // Valid v4 UUIDs for testing (these won't exist in the database)
@@ -138,6 +140,115 @@ test.describe("Chat Messages Access Control", () => {
       expect([401, 403]).toContain(response.status());
     } finally {
       await unauthenticatedContext.dispose();
+    }
+  });
+});
+
+test.describe("Chat message persistence on provider error", () => {
+  // Increase timeout - this test involves streaming and async persistence
+  test.setTimeout(60_000);
+
+  test("persists user messages when provider returns error, allowing edit", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // 1. Create an agent for the conversation
+    const agentResponse = await createAgent(request, "Chat Error Test Agent");
+    const agent = await agentResponse.json();
+
+    try {
+      // 2. Create a conversation with the Anthropic provider
+      const convResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/chat/conversations",
+        data: {
+          agentId: agent.id,
+          title: "Error Persistence Test",
+          selectedModel: "claude-3-5-sonnet-20241022",
+          selectedProvider: "anthropic",
+        },
+      });
+      const conversation = await convResponse.json();
+
+      // 3. Send a chat message that triggers a provider error via WireMock
+      // The message text contains "chat-error-persistence-test" which matches
+      // the WireMock stub that returns a 500 error
+      const tempMessageId = randomUUID();
+      const messageText = `Hello chat-error-persistence-test ${tempMessageId}`;
+
+      const chatResponse = await request.post(`${API_BASE_URL}/api/chat`, {
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+        data: {
+          id: conversation.id,
+          messages: [
+            {
+              id: tempMessageId,
+              role: "user",
+              parts: [{ type: "text", text: messageText }],
+            },
+          ],
+        },
+      });
+
+      // The streaming response has status 200 (stream started) but contains error data
+      expect(chatResponse.status()).toBe(200);
+
+      // Consume the stream body to ensure the response is fully processed
+      await chatResponse.text();
+
+      // 4. Wait for the async message persistence (fire-and-forget in onError handler)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // 5. Verify the user message was persisted to the database
+      const getConvResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+      });
+      const updatedConversation = await getConvResponse.json();
+
+      expect(updatedConversation.messages.length).toBeGreaterThan(0);
+
+      const userMessage = updatedConversation.messages.find(
+        (m: { role: string }) => m.role === "user",
+      );
+      expect(userMessage).toBeDefined();
+      expect(userMessage.id).toBeDefined();
+
+      // Verify the message content matches what was sent
+      // The API returns messages with parts flattened at the top level (not nested under content)
+      expect(userMessage.parts[0].text).toBe(messageText);
+
+      // 6. Verify the message can be edited via PATCH (this was the original bug -
+      // without persistence, the message only had a temp client-side ID and PATCH returned 404)
+      const editResponse = await makeApiRequest({
+        request,
+        method: "patch",
+        urlSuffix: `/api/chat/messages/${userMessage.id}`,
+        data: {
+          partIndex: 0,
+          text: "Edited message after provider error",
+        },
+      });
+      expect(editResponse.ok()).toBe(true);
+
+      // 7. Verify the edit was applied
+      const editedConversation = await editResponse.json();
+      const editedMessage = editedConversation.messages.find(
+        (m: { id: string }) => m.id === userMessage.id,
+      );
+      expect(editedMessage.parts[0].text).toBe(
+        "Edited message after provider error",
+      );
+    } finally {
+      // Cleanup
+      await deleteAgent(request, agent.id);
     }
   });
 });

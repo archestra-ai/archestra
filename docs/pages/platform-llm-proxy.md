@@ -73,13 +73,13 @@ graph TB
 
 Archestra supports the following custom headers on LLM Proxy requests. All headers are optional.
 
-| Header | Description | Example Value |
-|--------|-------------|---------------|
-| `X-Archestra-Agent-Id` | Client-provided identifier for the calling agent or application. Stored with each interaction, displayed in LLM Proxy Logs (filterable), and included in Prometheus metrics as the `external_agent_id` label. Useful when multiple applications share the same LLM Proxy. | `my-chatbot-prod` |
-| `X-Archestra-User-Id` | Associates the request with a specific Archestra user (by their UUID). Automatically included when using the built-in Archestra Chat. | `123e4567-e89b-12d3-a456-426614174000` |
-| `X-Archestra-Session-Id` | Groups related LLM requests into a session. Displayed in the LLM Proxy Logs UI and included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`. | `session-abc-123` |
-| `X-Archestra-Execution-Id` | Associates the request with a specific execution run. Used for the `agent_executions_total` Prometheus metric which counts unique executions. See [Observability](/docs/platform-observability). | `exec-run-456` |
-| `X-Archestra-Meta` | Composite header combining agent ID, execution ID, and session ID in one value. Format: `<agent-id>/<execution-id>/<session-id>`. Any segment can be empty. Individual headers take precedence over meta header values. Values must not contain `/`. | `my-agent/exec-123/session-456` |
+| Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `X-Archestra-Agent-Id`     | Client-provided identifier for the calling agent or application. Stored with each interaction and included in Prometheus metrics as the `external_agent_id` label. Useful when multiple applications share the same LLM Proxy.                       | `my-chatbot-prod`                      |
+| `X-Archestra-User-Id`      | Associates the request with a specific Archestra user. Automatically included when using the built-in Archestra Chat.                                                                                                                                | `123e4567-e89b-12d3-a456-426614174000` |
+| `X-Archestra-Session-Id`   | Groups related LLM requests into a session - included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`.                                                                                           | `session-abc-123`                      |
+| `X-Archestra-Execution-Id` | Associates the request with a specific execution run. Used for the `agent_executions_total` Prometheus metric which counts unique executions. See [Observability](/docs/platform-observability).                                                     | `exec-run-456`                         |
+| `X-Archestra-Meta`         | Composite header combining agent ID, execution ID, and session ID in one value. Format: `<agent-id>/<execution-id>/<session-id>`. Any segment can be empty. Individual headers take precedence over meta header values. Values must not contain `/`. | `my-agent/exec-123/session-456`        |
 
 ### Usage
 

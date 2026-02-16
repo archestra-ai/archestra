@@ -486,6 +486,11 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    perplexity: {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_BASE_URL ||
+        "https://api.perplexity.ai",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -521,6 +526,9 @@ export default {
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+    },
+    perplexity: {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",

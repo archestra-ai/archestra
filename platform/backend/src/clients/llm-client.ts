@@ -64,6 +64,9 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
   if (lowerModel.includes("glm") || lowerModel.includes("chatglm")) {
     return "zhipuai";
   }
+  if (lowerModel.includes("perplexity") || lowerModel.includes("llama") || lowerModel.includes("mixtral") || lowerModel.includes("gemma")) {
+    return "perplexity";
+  }
 
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
@@ -88,6 +91,7 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
 };
 
 /**
@@ -145,6 +149,7 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.perplexityApiKey ??
       secret?.secret?.cohereApiKey ??
       secret?.secret?.bedrockApiKey;
     if (secretValue) {
@@ -199,6 +204,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
+  perplexity: "sonar", // Perplexity's fast versatile model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
 };
@@ -342,6 +348,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure ARCHESTRA_CHAT_PERPLEXITY_API_KEY.",
+      );
+    }
+    // Perplexity uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
     });
     return client(modelName);
   },
@@ -515,6 +536,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("zhipuai", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      // Perplexity is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
         headers,
       });
       return client.chat(modelName);

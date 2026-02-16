@@ -184,6 +184,10 @@ export const RouteId = {
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
+  // Proxy Routes - Perplexity
+  PerplexityChatCompletionsWithDefaultAgent:
+    "perplexityChatCompletionsWithDefaultAgent",
+  PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
 
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",

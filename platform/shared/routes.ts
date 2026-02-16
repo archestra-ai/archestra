@@ -184,6 +184,10 @@ export const RouteId = {
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
+  // Proxy Routes - OpenRouter
+  OpenRouterChatCompletionsWithDefaultAgent:
+    "openrouterChatCompletionsWithDefaultAgent",
+  OpenRouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
 
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",

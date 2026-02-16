@@ -13,6 +13,7 @@ import {
   OpenAi,
   Vllm,
   Zhipuai,
+  OpenRouter,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
@@ -158,6 +159,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["openrouter:chatCompletions"]),
+    request: OpenRouter.API.ChatCompletionRequestSchema,
+    processedRequest:
+      OpenRouter.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: OpenRouter.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

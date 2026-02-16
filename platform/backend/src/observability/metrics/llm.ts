@@ -17,6 +17,7 @@ import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapterV2/coher
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemini";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
+import { getUsageTokens as getOpenRouterUsage } from "@/routes/proxy/adapterV2/openrouter";
 import type { Agent } from "@/types";
 import { sanitizeLabelKey } from "./utils";
 
@@ -39,6 +40,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   anthropic: getAnthropicUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
+  openrouter: getOpenRouterUsage,
   gemini: null,
   bedrock: null,
 };

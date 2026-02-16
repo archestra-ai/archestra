@@ -39,19 +39,19 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 ### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, profile_id, profile_name, and status code
-- `llm_tokens_total` - Token consumption by provider, model, agent_id, profile_id, profile_name, and type (input/output)
-- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, profile_id, and profile_name. Requires token pricing to be configured in Archestra.
-- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, profile_id, and profile_name
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, profile_id, profile_name, and model. Helps developers choose models with lower initial response latency.
-- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, profile_id, profile_name, and model. Allows comparing model response speeds for latency-sensitive applications.
+- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, and status code
+- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, and type (input/output)
+- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, and external_agent_id. Requires token pricing to be configured in Archestra.
+- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and external_agent_id
+- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Helps developers choose models with lower initial response latency.
+- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Allows comparing model response speeds for latency-sensitive applications.
 
-> **Note:** The `agent_id` label contains the external agent ID passed via the `X-Archestra-Agent-Id` header. This allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. Use `profile_id` and `profile_name` for the internal Archestra profile identifier.
+> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the `X-Archestra-Agent-Id` header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`.
 
 ### MCP Metrics
 
-- `mcp_tool_calls_total` - Total MCP tool calls by profile_name, mcp_server_name, tool_name, and status (success/error)
-- `mcp_tool_call_duration_seconds` - MCP tool call execution duration by profile_name, mcp_server_name, tool_name, and status
+- `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
+- `mcp_tool_call_duration_seconds` - MCP tool call execution duration by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status
 
 ### Process Metrics
 
@@ -121,6 +121,8 @@ The platform automatically traces:
 - **HTTP requests** - All API requests with method, route, and status code
 - **LLM API calls** - External calls to OpenAI, Anthropic, and Gemini with dedicated spans showing exact response time
 
+Trace attributes follow the [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/) where applicable.
+
 ### LLM Request Spans
 
 Each LLM API call includes detailed attributes for filtering and analysis:
@@ -128,20 +130,23 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 **Span Attributes:**
 
 - `route.category=llm-proxy` - All LLM proxy requests
-- `llm.provider` - Provider name (`openai`, `anthropic`, `gemini`)
-- `llm.model` - Model name (e.g., `gpt-4`, `claude-3-5-sonnet-20241022`)
-- `llm.stream` - Whether the request was streaming (`true`/`false`)
-- `profile.id` - The ID of the profile handling the request
-- `profile.name` - The name of the profile handling the request
-- `profile.<label_key>` - Custom profile labels (e.g., `environment=production`, `team=data-science`)
+- `gen_ai.operation.name` - The operation type (`chat`, `generate_content`)
+- `gen_ai.provider.name` - Provider name (`openai`, `anthropic`, `gemini`, etc.)
+- `gen_ai.request.model` - Model name (e.g., `gpt-4`, `claude-3-5-sonnet-20241022`)
+- `gen_ai.request.streaming` - Whether the request was streaming (`true`/`false`)
+- `gen_ai.agent.id` - Internal Archestra agent ID
+- `gen_ai.agent.name` - Internal Archestra agent name
+- `gen_ai.conversation.id` - Session ID for grouping related LLM calls (from `X-Archestra-Session-Id` header)
+- `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
+- `archestra.execution.id` - Execution ID (from `X-Archestra-Execution-Id` header)
+- `archestra.external_agent_id` - Client-provided agent ID (from `X-Archestra-Agent-Id` header)
+- `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
 
 **Span Names:**
 
-- `openai.chat.completions` - OpenAI chat completion calls
-- `anthropic.messages` - Anthropic message calls
-- `gemini.generateContent` - Gemini content generation calls
-
-These dedicated spans show the exact duration of external LLM API calls, separate from your application's processing time.
+Span names follow the GenAI semconv format `{operation} {model}`:
+- `chat gpt-4o-mini` - OpenAI, Anthropic, Cohere, and other chat-based providers
+- `generate_content gemini-2.0-flash` - Gemini content generation calls
 
 ### MCP Tool Call Spans
 
@@ -150,23 +155,30 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 **Span Attributes:**
 
 - `route.category=mcp-gateway` - All MCP Gateway tool calls
-- `mcp.server_name` - The MCP server handling the tool call (e.g., `github`, `slack`)
-- `mcp.tool_name` - The full tool name (e.g., `github__list_repos`)
-- `profile.id` - The ID of the profile executing the tool call
-- `profile.name` - The name of the profile executing the tool call
-- `profile.<label_key>` - Custom profile labels
+- `gen_ai.operation.name=execute_tool` - Operation type
+- `gen_ai.tool.name` - The full tool name (e.g., `github__list_repos`)
+- `mcp.server.name` - The MCP server handling the tool call (e.g., `github`, `slack`)
+- `gen_ai.agent.id` - Internal Archestra agent ID
+- `gen_ai.agent.name` - Internal Archestra agent name
+- `gen_ai.conversation.id` - Session ID (when available)
+- `archestra.agent.type` - Agent type
+- `archestra.label.<key>` - Custom agent labels
 - `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution.
 
 **Span Names:**
 
-- `mcp.<server_name>.<tool_name>` - e.g., `mcp.github.github__list_repos`
+- `execute_tool {tool_name}` - e.g., `execute_tool github__list_repos`
 
-### Custom Profile Labels
+### Session Tracking
 
-Labels are key-value pairs that can be configured when creating or updating profiles through the Archestra Platform UI. Use them, for example, to logically group profiles by environment or application type. Once added, labels automatically appear in:
+The platform supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the `X-Archestra-Session-Id` header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session in Grafana.
 
-- **Metrics** - As additional label dimensions on `llm_request_duration_seconds` and `llm_tokens_total`. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
-- **Traces** - As span attributes. Use them to filter traces.
+### Custom Agent Labels
+
+Labels are key-value pairs that can be configured when creating or updating agents through the Archestra Platform UI. Use them, for example, to logically group agents by environment or application type. Once added, labels automatically appear in:
+
+- **Metrics** - As additional label dimensions on all LLM and MCP metrics. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
+- **Traces** - As `archestra.label.<key>` span attributes. Use them to filter traces.
 
 ## Grafana Dashboard
 
@@ -217,10 +229,10 @@ Here are some PromQL queries for Grafana charts to get you started:
 
 ### LLM Metrics
 
-- LLM requests per second by profile and provider:
+- LLM requests per second by agent and provider:
 
   ```promql
-  sum(rate(llm_request_duration_seconds_count[5m])) by (profile_name, provider)
+  sum(rate(llm_request_duration_seconds_count[5m])) by (agent_name, provider)
   ```
 
 - LLM error rate by provider:
@@ -229,34 +241,34 @@ Here are some PromQL queries for Grafana charts to get you started:
   sum(rate(llm_request_duration_seconds_count{status_code!="200"}[5m])) by (provider) / sum(rate(llm_request_duration_seconds_count[5m])) by (provider) * 100
   ```
 
-- LLM token usage rate (tokens/sec) by profile name:
+- LLM token usage rate (tokens/sec) by agent name:
 
   ```promql
-  sum(rate(llm_tokens_total[5m])) by (provider, profile_name, type)
+  sum(rate(llm_tokens_total[5m])) by (provider, agent_name, type)
   ```
 
-- Total tokens by profile name:
+- Total tokens by agent name:
 
   ```promql
-  sum(rate(llm_tokens_total[5m])) by (profile_name, type)
+  sum(rate(llm_tokens_total[5m])) by (agent_name, type)
   ```
 
-- Request duration by profile name and provider:
+- Request duration by agent name and provider:
 
   ```promql
-  histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (profile_name, provider, le))
+  histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (agent_name, provider, le))
   ```
 
-- Error rate by profile:
+- Error rate by agent:
 
   ```promql
-  sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (profile_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (profile_name)
+  sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (agent_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (agent_name)
   ```
 
-- Cost rate by profile and provider (USD/min):
+- Cost rate by agent and provider (USD/min):
 
   ```promql
-  sum(rate(llm_cost_total[5m])) by (profile_name, provider) * 60
+  sum(rate(llm_cost_total[5m])) by (agent_name, provider) * 60
   ```
 
 - Total accumulated cost by model:
@@ -315,8 +327,8 @@ Here are some PromQL queries for Grafana charts to get you started:
   sum(rate(mcp_tool_calls_total[5m])) by (tool_name)
   ```
 
-- Average tool call duration by profile:
+- Average tool call duration by agent:
 
   ```promql
-  sum(rate(mcp_tool_call_duration_seconds_sum[5m])) by (profile_name) / sum(rate(mcp_tool_call_duration_seconds_count[5m])) by (profile_name)
+  sum(rate(mcp_tool_call_duration_seconds_sum[5m])) by (agent_name) / sum(rate(mcp_tool_call_duration_seconds_count[5m])) by (agent_name)
   ```

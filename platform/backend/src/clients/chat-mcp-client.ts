@@ -705,6 +705,7 @@ export async function getChatMcpTools({
 
                 reportToolMetrics({
                   toolName: mcpTool.name,
+                  agentId,
                   agentName,
                   startTime: toolStartTime,
                   isError: archestraResponse.isError ?? false,
@@ -758,6 +759,7 @@ export async function getChatMcpTools({
             } catch (error) {
               reportToolMetrics({
                 toolName: mcpTool.name,
+                agentId,
                 agentName,
                 startTime: toolStartTime,
                 isError: true,
@@ -856,6 +858,7 @@ export async function getChatMcpTools({
 
                 reportToolMetrics({
                   toolName: agentTool.name,
+                  agentId,
                   agentName,
                   startTime: agentToolStartTime,
                   isError: response.isError ?? false,
@@ -886,6 +889,7 @@ export async function getChatMcpTools({
               } catch (error) {
                 reportToolMetrics({
                   toolName: agentTool.name,
+                  agentId,
                   agentName,
                   startTime: agentToolStartTime,
                   isError: true,
@@ -1043,12 +1047,19 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     );
     reportToolMetrics({
       toolName,
+      agentId,
       agentName,
       startTime,
       isError: result.isError ?? false,
     });
   } catch (error) {
-    reportToolMetrics({ toolName, agentName, startTime, isError: true });
+    reportToolMetrics({
+      toolName,
+      agentId,
+      agentName,
+      startTime,
+      isError: true,
+    });
     throw error;
   }
   throwIfAborted(abortSignal);
@@ -1203,13 +1214,17 @@ function isAbortLikeError(error: unknown): boolean {
 
 function reportToolMetrics(params: {
   toolName: string;
+  agentId: string;
   agentName: string;
+  agentType?: string;
   startTime: number;
   isError: boolean;
 }): void {
   const { serverName } = parseFullToolName(params.toolName);
   metrics.mcp.reportMcpToolCall({
-    profileName: params.agentName,
+    agentId: params.agentId,
+    agentName: params.agentName,
+    agentType: params.agentType ?? "",
     mcpServerName: serverName ?? "unknown",
     toolName: params.toolName,
     durationSeconds: (Date.now() - params.startTime) / 1000,

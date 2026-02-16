@@ -1141,7 +1141,7 @@ export const vllmAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "vllm.chat.completions";
+    return "chat";
   },
 
   createClient(

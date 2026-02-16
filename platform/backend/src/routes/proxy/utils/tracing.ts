@@ -13,29 +13,39 @@ export enum RouteCategory {
 }
 
 /**
- * Starts an active LLM span with consistent attributes across all LLM proxy routes.
- * This is a wrapper around tracer.startActiveSpan that encapsulates tracer creation
- * and adds standardized LLM-specific attributes.
+ * Starts an active LLM span with GenAI semantic convention attributes.
  *
- * @param spanName - The name of the span (e.g., "openai.chat.completions")
- * @param provider - The LLM provider (openai, gemini, or anthropic)
- * @param llmModel - The LLM model being used
- * @param stream - Whether this is a streaming request
- * @param agent - The agent/profile object (optional, if provided will add both agent.* and profile.* attributes)
- *                Note: agent.* attributes are deprecated in favor of profile.* attributes
- * @param callback - The callback function to execute within the span context
+ * @param params.operationName - The GenAI operation name (e.g., "chat", "generate_content")
+ * @param params.provider - The LLM provider (openai, gemini, anthropic, etc.)
+ * @param params.model - The LLM model being used
+ * @param params.stream - Whether this is a streaming request
+ * @param params.agent - The agent/profile object (optional)
+ * @param params.sessionId - Conversation/session ID (optional)
+ * @param params.executionId - Execution ID for tracking agent executions (optional)
+ * @param params.externalAgentId - External agent ID from X-Archestra-Agent-Id header (optional)
+ * @param params.callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
-export async function startActiveLlmSpan<T>(
-  spanName: string,
-  provider: SupportedProvider,
-  llmModel: string,
-  stream: boolean,
-  agent: Agent | undefined,
-  callback: (span: Span) => Promise<T>,
-): Promise<T> {
+export async function startActiveLlmSpan<T>(params: {
+  operationName: string;
+  provider: SupportedProvider;
+  model: string;
+  stream: boolean;
+  agent?: Agent;
+  sessionId?: string | null;
+  executionId?: string;
+  externalAgentId?: string;
+  callback: (span: Span) => Promise<T>;
+}): Promise<T> {
+  const spanName = `${params.operationName} ${params.model}`;
   logger.debug(
-    { spanName, provider, llmModel, stream, agentId: agent?.id },
+    {
+      spanName,
+      provider: params.provider,
+      model: params.model,
+      stream: params.stream,
+      agentId: params.agent?.id,
+    },
     "[tracing] startActiveLlmSpan: creating span",
   );
   const tracer = trace.getTracer("archestra");
@@ -45,83 +55,103 @@ export async function startActiveLlmSpan<T>(
     {
       attributes: {
         "route.category": RouteCategory.LLM_PROXY,
-        "llm.provider": provider,
-        "llm.model": llmModel,
-        "llm.stream": stream,
+        "gen_ai.operation.name": params.operationName,
+        "gen_ai.provider.name": params.provider,
+        "gen_ai.request.model": params.model,
+        "gen_ai.request.streaming": params.stream,
       },
     },
     async (span) => {
-      // Set agent/profile attributes if agent is provided
-      // NOTE: profile.* attributes are the preferred attributes going forward.
-      // agent.* attributes are deprecated and will be removed in a future release.
-      // Both are emitted during the transition period to allow dashboards/traces to migrate.
-      if (agent) {
+      if (params.agent) {
         logger.debug(
           {
-            agentId: agent.id,
-            agentName: agent.name,
-            labelCount: agent.labels?.length || 0,
+            agentId: params.agent.id,
+            agentName: params.agent.name,
+            labelCount: params.agent.labels?.length || 0,
           },
           "[tracing] startActiveLlmSpan: setting agent attributes",
         );
-        span.setAttribute("agent.id", agent.id);
-        span.setAttribute("agent.name", agent.name);
-        span.setAttribute("profile.id", agent.id);
-        span.setAttribute("profile.name", agent.name);
+        span.setAttribute("gen_ai.agent.id", params.agent.id);
+        span.setAttribute("gen_ai.agent.name", params.agent.name);
 
-        // Add all labels as attributes with both agent.<key>=<value> and profile.<key>=<value> format
-        if (agent.labels && agent.labels.length > 0) {
-          for (const label of agent.labels) {
-            span.setAttribute(`agent.${label.key}`, label.value);
-            span.setAttribute(`profile.${label.key}`, label.value);
+        if (params.agent.agentType) {
+          span.setAttribute("archestra.agent.type", params.agent.agentType);
+        }
+
+        if (params.agent.labels && params.agent.labels.length > 0) {
+          for (const label of params.agent.labels) {
+            span.setAttribute(`archestra.label.${label.key}`, label.value);
           }
         }
+      }
+
+      if (params.sessionId) {
+        span.setAttribute("gen_ai.conversation.id", params.sessionId);
+      }
+      if (params.executionId) {
+        span.setAttribute("archestra.execution.id", params.executionId);
+      }
+      if (params.externalAgentId) {
+        span.setAttribute(
+          "archestra.external_agent_id",
+          params.externalAgentId,
+        );
       }
 
       logger.debug(
         { spanName },
         "[tracing] startActiveLlmSpan: executing callback",
       );
-      return await callback(span);
+      return await params.callback(span);
     },
   );
 }
 
 /**
- * Starts an active MCP span for tool call execution.
- * Creates an OpenTelemetry span with MCP-specific attributes for tracing tool calls
- * through the MCP Gateway.
+ * Starts an active MCP span for tool call execution with GenAI semantic convention attributes.
  *
- * @param toolName - The name of the tool being called
- * @param mcpServerName - The MCP server handling the tool call
- * @param agent - The agent/profile executing the tool call
- * @param callback - The callback function to execute within the span context
+ * @param params.toolName - The name of the tool being called
+ * @param params.mcpServerName - The MCP server handling the tool call
+ * @param params.agent - The agent/profile executing the tool call
+ * @param params.sessionId - Conversation/session ID (optional)
+ * @param params.agentType - The agent type (optional)
+ * @param params.callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
 export async function startActiveMcpSpan<T>(params: {
   toolName: string;
   mcpServerName: string;
   agent: { id: string; name: string; labels?: Agent["labels"] };
+  sessionId?: string | null;
+  agentType?: string;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
 
   return tracer.startActiveSpan(
-    `mcp.${params.mcpServerName}.${params.toolName}`,
+    `execute_tool ${params.toolName}`,
     {
       attributes: {
         "route.category": RouteCategory.MCP_GATEWAY,
-        "mcp.server_name": params.mcpServerName,
-        "mcp.tool_name": params.toolName,
-        "profile.id": params.agent.id,
-        "profile.name": params.agent.name,
+        "gen_ai.operation.name": "execute_tool",
+        "mcp.server.name": params.mcpServerName,
+        "gen_ai.tool.name": params.toolName,
+        "gen_ai.agent.id": params.agent.id,
+        "gen_ai.agent.name": params.agent.name,
       },
     },
     async (span) => {
       if (params.agent.labels && params.agent.labels.length > 0) {
         for (const label of params.agent.labels) {
-          span.setAttribute(`profile.${label.key}`, label.value);
+          span.setAttribute(`archestra.label.${label.key}`, label.value);
         }
+      }
+
+      if (params.sessionId) {
+        span.setAttribute("gen_ai.conversation.id", params.sessionId);
+      }
+      if (params.agentType) {
+        span.setAttribute("archestra.agent.type", params.agentType);
       }
 
       try {

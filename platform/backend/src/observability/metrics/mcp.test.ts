@@ -74,7 +74,9 @@ describe("reportMcpToolCall", () => {
 
   test("reports successful tool call with duration", () => {
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 1.5,
@@ -82,7 +84,9 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
+      agent_id: "agent-1",
+      agent_name: "My Agent",
+      agent_type: "mcp_gateway",
       mcp_server_name: "github",
       tool_name: "github__list_repos",
       status: "success",
@@ -90,7 +94,9 @@ describe("reportMcpToolCall", () => {
 
     expect(histogramObserve).toHaveBeenCalledWith(
       {
-        profile_name: "My Profile",
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
         mcp_server_name: "github",
         tool_name: "github__list_repos",
         status: "success",
@@ -101,7 +107,9 @@ describe("reportMcpToolCall", () => {
 
   test("reports failed tool call", () => {
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "slack",
       toolName: "slack__send_message",
       durationSeconds: 0.3,
@@ -109,7 +117,9 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
+      agent_id: "agent-1",
+      agent_name: "My Agent",
+      agent_type: "mcp_gateway",
       mcp_server_name: "slack",
       tool_name: "slack__send_message",
       status: "error",
@@ -117,7 +127,9 @@ describe("reportMcpToolCall", () => {
 
     expect(histogramObserve).toHaveBeenCalledWith(
       {
-        profile_name: "My Profile",
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
         mcp_server_name: "slack",
         tool_name: "slack__send_message",
         status: "error",
@@ -128,7 +140,9 @@ describe("reportMcpToolCall", () => {
 
   test("skips duration observation for zero duration", () => {
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 0,
@@ -139,20 +153,24 @@ describe("reportMcpToolCall", () => {
     expect(histogramObserve).not.toHaveBeenCalled();
   });
 
-  test("includes profile labels in metrics", () => {
+  test("includes agent labels in metrics", () => {
     initializeMcpMetrics(["environment"]);
 
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 2.0,
       isError: false,
-      profileLabels: [{ key: "environment", value: "production" }],
+      agentLabels: [{ key: "environment", value: "production" }],
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
+      agent_id: "agent-1",
+      agent_name: "My Agent",
+      agent_type: "mcp_gateway",
       mcp_server_name: "github",
       tool_name: "github__list_repos",
       status: "success",
@@ -160,20 +178,24 @@ describe("reportMcpToolCall", () => {
     });
   });
 
-  test("sets empty string for missing profile labels", () => {
+  test("sets empty string for missing agent labels", () => {
     initializeMcpMetrics(["environment", "team"]);
 
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 1.0,
       isError: false,
-      profileLabels: [{ key: "environment", value: "staging" }],
+      agentLabels: [{ key: "environment", value: "staging" }],
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
+      agent_id: "agent-1",
+      agent_name: "My Agent",
+      agent_type: "mcp_gateway",
       mcp_server_name: "github",
       tool_name: "github__list_repos",
       status: "success",

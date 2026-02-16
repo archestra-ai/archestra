@@ -113,8 +113,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "openai",
           type: "input",
           model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         12,
       );
@@ -124,8 +124,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "openai",
           type: "output",
           model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         10,
       );
@@ -135,8 +135,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         expect.objectContaining({
           provider: "openai",
           model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         expect.any(Number),
       );
@@ -174,8 +174,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         expect.objectContaining({
           provider: "openai",
           model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         expect.any(Number),
       );
@@ -213,8 +213,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "openai",
           type: "input",
           model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         82,
       );
@@ -224,8 +224,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "openai",
           type: "output",
           model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         17,
       );
@@ -273,8 +273,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "anthropic",
           type: "input",
           model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         12,
       );
@@ -284,8 +284,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "anthropic",
           type: "output",
           model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         10,
       );
@@ -295,8 +295,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         expect.objectContaining({
           provider: "anthropic",
           model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         expect.any(Number),
       );
@@ -335,8 +335,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         expect.objectContaining({
           provider: "anthropic",
           model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         expect.any(Number),
       );
@@ -385,8 +385,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "gemini",
           type: "input",
           model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         12,
       );
@@ -396,8 +396,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           provider: "gemini",
           type: "output",
           model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         10,
       );
@@ -407,8 +407,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         expect.objectContaining({
           provider: "gemini",
           model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         expect.any(Number),
       );
@@ -448,8 +448,8 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         expect.objectContaining({
           provider: "gemini",
           model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          agent_id: testAgent.id,
+          agent_name: testAgent.name,
         }),
         expect.any(Number),
       );

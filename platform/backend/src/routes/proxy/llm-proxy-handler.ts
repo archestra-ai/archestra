@@ -506,18 +506,21 @@ async function handleStreaming<
 
   try {
     // Execute streaming request with tracing
-    const stream = await utils.tracing.startActiveLlmSpan(
-      provider.getSpanName(true),
-      providerName,
-      actualModel,
-      true,
+    const stream = await utils.tracing.startActiveLlmSpan({
+      operationName: provider.getSpanName(true),
+      provider: providerName,
+      model: actualModel,
+      stream: true,
       agent,
-      async (llmSpan) => {
+      sessionId,
+      executionId,
+      externalAgentId,
+      callback: async (llmSpan) => {
         const result = await provider.executeStream(client, request);
         llmSpan.end();
         return result;
       },
-    );
+    });
 
     // Process chunks
     for await (const chunk of stream) {
@@ -752,18 +755,21 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const response = await utils.tracing.startActiveLlmSpan(
-    provider.getSpanName(false),
-    providerName,
-    actualModel,
-    false,
+  const response = await utils.tracing.startActiveLlmSpan({
+    operationName: provider.getSpanName(false),
+    provider: providerName,
+    model: actualModel,
+    stream: false,
     agent,
-    async (llmSpan: { end: () => void }) => {
+    sessionId,
+    executionId,
+    externalAgentId,
+    callback: async (llmSpan: { end: () => void }) => {
       const result = await provider.execute(client, request);
       llmSpan.end();
       return result;
     },
-  );
+  });
 
   // Create response adapter
   const responseAdapter = provider.createResponseAdapter(response);

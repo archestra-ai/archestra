@@ -1261,7 +1261,7 @@ export const geminiAdapterFactory: LLMProvider<
   },
 
   getSpanName(_streaming?: boolean): string {
-    return "gemini.generateContent";
+    return "generate_content";
   },
 
   createClient(

@@ -71,6 +71,7 @@ export interface TokenAuthResult {
 type AgentInfo = {
   name: string;
   id: string;
+  agentType?: string;
   labels?: Array<{ key: string; value: string }>;
 };
 
@@ -170,6 +171,7 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            agentType: agent.agentType,
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
@@ -184,12 +186,14 @@ export async function createAgentServer(
 
           const durationSeconds = (Date.now() - startTime) / 1000;
           metrics.mcp.reportMcpToolCall({
-            profileName: agent.name,
+            agentId: agent.id,
+            agentName: agent.name,
+            agentType: agent.agentType ?? "",
             mcpServerName,
             toolName: name,
             durationSeconds,
             isError: false,
-            profileLabels: agent.labels,
+            agentLabels: agent.labels,
           });
 
           logger.info(
@@ -252,6 +256,7 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          agentType: agent.agentType,
           callback: async (span) => {
             const r = await mcpClient.executeToolCall(
               toolCall,
@@ -265,12 +270,14 @@ export async function createAgentServer(
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
-          profileName: agent.name,
+          agentId: agent.id,
+          agentName: agent.name,
+          agentType: agent.agentType ?? "",
           mcpServerName,
           toolName: name,
           durationSeconds,
           isError: result.isError ?? false,
-          profileLabels: agent.labels,
+          agentLabels: agent.labels,
         });
 
         const contentLength = estimateToolResultContentLength(result.content);
@@ -299,12 +306,14 @@ export async function createAgentServer(
       } catch (error) {
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
-          profileName: agent.name,
+          agentId: agent.id,
+          agentName: agent.name,
+          agentType: agent.agentType ?? "",
           mcpServerName,
           toolName: name,
           durationSeconds,
           isError: true,
-          profileLabels: agent.labels,
+          agentLabels: agent.labels,
         });
 
         if (typeof error === "object" && error !== null && "code" in error) {

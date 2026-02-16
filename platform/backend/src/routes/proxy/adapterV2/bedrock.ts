@@ -1278,8 +1278,8 @@ export const bedrockAdapterFactory: LLMProvider<
     return config.llm.bedrock.baseUrl || undefined;
   },
 
-  getSpanName(streaming: boolean): string {
-    return streaming ? "bedrock.converse.stream" : "bedrock.converse";
+  getSpanName(_streaming: boolean): string {
+    return "chat";
   },
 
   createClient(

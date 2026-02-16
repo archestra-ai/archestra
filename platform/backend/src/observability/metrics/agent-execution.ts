@@ -37,7 +37,12 @@ export function initializeAgentExecutionMetrics(labelKeys: string[]): void {
     // Ignore errors if metric doesn't exist
   }
 
-  const baseLabelNames = ["agent_id", "profile_id", "profile_name"];
+  const baseLabelNames = [
+    "external_agent_id",
+    "agent_id",
+    "agent_name",
+    "agent_type",
+  ];
 
   agentExecutionsTotal = new client.Counter({
     name: "agent_executions_total",
@@ -67,9 +72,10 @@ export function reportAgentExecution(params: {
   }
 
   const labels: Record<string, string> = {
-    agent_id: params.externalAgentId ?? "",
-    profile_id: params.profile.id,
-    profile_name: params.profile.name,
+    external_agent_id: params.externalAgentId ?? "",
+    agent_id: params.profile.id,
+    agent_name: params.profile.name,
+    agent_type: params.profile.agentType ?? "",
   };
 
   for (const labelKey of currentLabelKeys) {

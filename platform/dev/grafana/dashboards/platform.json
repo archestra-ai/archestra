@@ -150,10 +150,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"input\"}[$__rate_interval]))",
+          "expr": "sum by (agent_name) (rate(llm_tokens_total{type=\"input\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{profile_name}} (input)",
+          "legendFormat": "{{agent_name}} (input)",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -163,10 +163,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"output\"}[$__rate_interval]))",
+          "expr": "sum by (agent_name) (rate(llm_tokens_total{type=\"output\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{profile_name}} (output)",
+          "legendFormat": "{{agent_name}} (output)",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -396,7 +396,7 @@
           "expr": "rate(llm_blocked_tools_total[$__rate_interval])",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{profile_name}}",
+          "legendFormat": "{{agent_name}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -944,7 +944,7 @@
           "instant": false,
           "limit": 100,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"llm-proxy\"} | select(span.llm.provider, span.llm.model, span.profile.name)",
+          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"llm-proxy\"} | select(span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.agent.name)",
           "queryType": "traceql",
           "range": true,
           "refId": "A",
@@ -1495,7 +1495,7 @@
           "instant": false,
           "limit": 100,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"mcp-gateway\"} | select(span.mcp.server_name, span.mcp.tool_name, span.profile.name)",
+          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"mcp-gateway\"} | select(span.mcp.server.name, span.gen_ai.tool.name, span.gen_ai.agent.name)",
           "queryType": "traceql",
           "range": true,
           "refId": "A",
@@ -1571,10 +1571,10 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "round(sum by (agent_id) (sum_over_time(increase(agent_executions_total{agent_id!=\"\"}[5m])[$__range:5m])))",
+          "expr": "round(sum by (external_agent_id) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[5m])[$__range:5m])))",
           "hide": false,
           "instant": true,
-          "legendFormat": "{{agent_id}}",
+          "legendFormat": "{{external_agent_id}}",
           "queryType": "instant",
           "range": false,
           "refId": "A"
@@ -1670,10 +1670,10 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_id) (sum_over_time(increase(llm_cost_total{agent_id!=\"\"}[5m])[$__range:5m]))",
+          "expr": "sum by (external_agent_id) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[5m])[$__range:5m]))",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{agent_id}}",
+          "legendFormat": "{{external_agent_id}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1769,10 +1769,10 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_id) (sum_over_time(increase(llm_cost_total{agent_id!=\"\"}[5m])[$__range:5m])) + round(sum by (agent_id) (sum_over_time(increase(agent_executions_total{agent_id!=\"\"}[5m])[$__range:5m]))) * 1",
+          "expr": "sum by (external_agent_id) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[5m])[$__range:5m])) + round(sum by (external_agent_id) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[5m])[$__range:5m]))) * 1",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{agent_id}}",
+          "legendFormat": "{{external_agent_id}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -1782,12 +1782,313 @@
       "type": "timeseries"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 87
+      },
+      "id": 50,
+      "panels": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "$traces_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "footer": {
+                  "reducers": []
+                },
+                "inspect": false
+              },
+              "links": [],
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Duration"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ns"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Span ID"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "View trace",
+                        "url": "/explore?left={\"datasource\":\"${traces_datasource}\",\"queries\":[{\"refId\":\"A\",\"query\":\"${__data.fields.traceIdHidden}\",\"queryType\":\"traceql\"}]}"
+                      },
+                      {
+                        "title": "View logs",
+                        "url": "/explore?left={\"datasource\":\"${logs_datasource}\",\"queries\":[{\"refId\":\"A\",\"expr\":\"{service_name=\\\"Archestra Platform API\\\"} | trace_id = \\\"${__data.fields.traceIdHidden}\\\"\",\"queryType\":\"range\"}]}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "traceIdHidden"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 88
+          },
+          "id": 51,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Start time"
+              }
+            ]
+          },
+          "pluginVersion": "12.2.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "tempo",
+                "uid": "$traces_datasource"
+              },
+              "filters": [],
+              "hide": false,
+              "instant": false,
+              "limit": 100,
+              "metricsQueryType": "range",
+              "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id != \"\"} | select(span.gen_ai.agent.name, span.gen_ai.conversation.id, span.gen_ai.operation.name, span.gen_ai.provider.name, span.gen_ai.request.model)",
+              "queryType": "traceql",
+              "range": true,
+              "refId": "A",
+              "serviceMapUseNativeHistograms": false,
+              "tableType": "spans"
+            }
+          ],
+          "title": "Recent Session Activity",
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "$traces_datasource"
+          },
+          "description": "Enter a Session ID in the dashboard variable above to see all traces for that session.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "footer": {
+                  "reducers": []
+                },
+                "inspect": false
+              },
+              "links": [],
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Duration"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ns"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Span ID"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "View trace",
+                        "url": "/explore?left={\"datasource\":\"${traces_datasource}\",\"queries\":[{\"refId\":\"A\",\"query\":\"${__data.fields.traceIdHidden}\",\"queryType\":\"traceql\"}]}"
+                      },
+                      {
+                        "title": "View logs",
+                        "url": "/explore?left={\"datasource\":\"${logs_datasource}\",\"queries\":[{\"refId\":\"A\",\"expr\":\"{service_name=\\\"Archestra Platform API\\\"} | trace_id = \\\"${__data.fields.traceIdHidden}\\\"\",\"queryType\":\"range\"}]}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "traceIdHidden"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
+          "id": 52,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Start time"
+              }
+            ]
+          },
+          "pluginVersion": "12.2.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "tempo",
+                "uid": "$traces_datasource"
+              },
+              "filters": [],
+              "hide": false,
+              "instant": false,
+              "limit": 100,
+              "metricsQueryType": "range",
+              "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id = \"$session_id\"}",
+              "queryType": "traceql",
+              "range": true,
+              "refId": "A",
+              "serviceMapUseNativeHistograms": false,
+              "tableType": "spans"
+            }
+          ],
+          "title": "Session Drilldown",
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "$logs_datasource"
+          },
+          "description": "Logs correlated with the selected session ID.",
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 108
+          },
+          "id": 53,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": false
+          },
+          "pluginVersion": "12.2.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "$logs_datasource"
+              },
+              "expr": "{service_name=\"Archestra Platform API\"} | json | gen_ai_conversation_id = \"$session_id\"",
+              "queryType": "range",
+              "refId": "A"
+            }
+          ],
+          "title": "Session Logs",
+          "type": "logs"
+        }
+      ],
+      "title": "Agent Sessions",
+      "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 88
       },
       "id": 22,
       "panels": [],
@@ -2398,6 +2699,18 @@
         "query": "loki",
         "refresh": 1,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "description": "Enter a session/conversation ID to drill down into all LLM and tool call activity for that session",
+        "label": "Session ID",
+        "name": "session_id",
+        "options": [],
+        "query": "",
+        "type": "textbox"
       }
     ]
   },

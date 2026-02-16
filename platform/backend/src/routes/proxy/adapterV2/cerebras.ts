@@ -1088,7 +1088,7 @@ export const cerebrasAdapterFactory: LLMProvider<
   },
 
   getSpanName(_streaming: boolean): string {
-    return "cerebras.chat.completions";
+    return "chat";
   },
 
   createClient(

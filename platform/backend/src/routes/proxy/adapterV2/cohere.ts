@@ -990,6 +990,6 @@ export const cohereAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "cohere.chat";
+    return "chat";
   },
 };

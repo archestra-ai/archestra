@@ -1130,7 +1130,7 @@ export const anthropicAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "anthropic.messages";
+    return "chat";
   },
 
   createClient(

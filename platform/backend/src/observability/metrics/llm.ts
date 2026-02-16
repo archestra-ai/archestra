@@ -113,14 +113,16 @@ export function initializeMetrics(labelKeys: string[]): void {
   }
 
   // Create new metrics with updated label names
-  // agent_id: External agent ID from X-Archestra-Agent-Id header (client-provided identifier)
-  // profile_id/profile_name: Internal Archestra profile ID and name
+  // external_agent_id: External agent ID from X-Archestra-Agent-Id header (client-provided identifier)
+  // agent_id/agent_name: Internal Archestra agent ID and name
+  // agent_type: The agent type (mcp_gateway, llm_proxy, profile, agent)
   const baseLabelNames = [
     "provider",
     "model",
+    "external_agent_id",
     "agent_id",
-    "profile_id",
-    "profile_name",
+    "agent_name",
+    "agent_type",
   ];
 
   llmRequestDuration = new client.Histogram({
@@ -185,12 +187,13 @@ function buildMetricLabels(
   model?: string,
   externalAgentId?: string,
 ): Record<string, string> {
-  // agent_id: External agent ID from X-Archestra-Agent-Id header (or empty if not provided)
-  // profile_id/profile_name: Internal Archestra profile ID and name
+  // external_agent_id: External agent ID from X-Archestra-Agent-Id header (or empty if not provided)
+  // agent_id/agent_name: Internal Archestra agent ID and name
   const labels: Record<string, string> = {
-    agent_id: externalAgentId ?? "",
-    profile_id: profile.id,
-    profile_name: profile.name,
+    external_agent_id: externalAgentId ?? "",
+    agent_id: profile.id,
+    agent_name: profile.name,
+    agent_type: profile.agentType ?? "",
     model: model ?? "unknown",
     ...additionalLabels,
   };

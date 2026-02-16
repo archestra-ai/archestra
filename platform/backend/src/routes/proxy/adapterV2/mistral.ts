@@ -220,7 +220,7 @@ export const mistralAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "mistral.chat.completions";
+    return "chat";
   },
 
   createClient(

@@ -985,7 +985,7 @@ export const zhipuaiAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "zhipuai.chat.completions";
+    return "chat";
   },
 
   createClient(

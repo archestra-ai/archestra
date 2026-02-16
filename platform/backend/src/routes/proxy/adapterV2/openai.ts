@@ -1161,7 +1161,7 @@ export const openaiAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "openai.chat.completions";
+    return "chat";
   },
 
   createClient(

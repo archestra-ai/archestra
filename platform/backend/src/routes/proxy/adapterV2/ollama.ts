@@ -1141,7 +1141,7 @@ export const ollamaAdapterFactory: LLMProvider<
   },
 
   getSpanName(): string {
-    return "ollama.chat.completions";
+    return "chat";
   },
 
   createClient(

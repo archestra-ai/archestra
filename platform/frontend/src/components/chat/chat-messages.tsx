@@ -439,7 +439,7 @@ export function ChatMessages({
       resize={instantResize ? "instant" : "smooth"}
     >
       <ConversationContent>
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
@@ -807,15 +807,17 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <Message from="assistant">
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-              />
-            </Message>
+            <div className="absolute bottom-[-10] left-0">
+              <Message from="assistant">
+                <Image
+                  src={"/logo.png"}
+                  alt="Loading logo"
+                  width={30}
+                  height={30}
+                  className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                />
+              </Message>
+            </div>
           )}
         </div>
       </ConversationContent>

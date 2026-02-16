@@ -26,6 +26,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1087,7 +1088,7 @@ export const cerebrasAdapterFactory: LLMProvider<
     return config.llm.cerebras.baseUrl;
   },
 
-  getSpanName(_streaming: boolean): string {
+  getSpanName(_streaming: boolean): GenAiOperationName {
     return "chat";
   },
 

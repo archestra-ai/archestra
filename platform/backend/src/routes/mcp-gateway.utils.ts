@@ -39,7 +39,7 @@ import {
 import { metrics } from "@/observability";
 import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
-import { type CommonToolCall, UuidIdSchema } from "@/types";
+import { type AgentType, type CommonToolCall, UuidIdSchema } from "@/types";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -71,7 +71,7 @@ export interface TokenAuthResult {
 type AgentInfo = {
   name: string;
   id: string;
-  agentType?: string;
+  agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
 };
 

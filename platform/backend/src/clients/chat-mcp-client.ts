@@ -25,6 +25,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { metrics } from "@/observability";
+import type { AgentType } from "@/types";
 
 /**
  * MCP Gateway base URL (internal)
@@ -1216,7 +1217,7 @@ function reportToolMetrics(params: {
   toolName: string;
   agentId: string;
   agentName: string;
-  agentType?: string;
+  agentType?: AgentType;
   startTime: number;
   isError: boolean;
 }): void {
@@ -1224,7 +1225,7 @@ function reportToolMetrics(params: {
   metrics.mcp.reportMcpToolCall({
     agentId: params.agentId,
     agentName: params.agentName,
-    agentType: params.agentType ?? "",
+    agentType: params.agentType,
     mcpServerName: serverName ?? "unknown",
     toolName: params.toolName,
     durationSeconds: (Date.now() - params.startTime) / 1000,

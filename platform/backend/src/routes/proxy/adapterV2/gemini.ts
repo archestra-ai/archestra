@@ -25,6 +25,7 @@ import type {
   CommonToolResult,
   CreateClientOptions,
   Gemini,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1260,7 +1261,7 @@ export const geminiAdapterFactory: LLMProvider<
     return config.llm.gemini.baseUrl;
   },
 
-  getSpanName(_streaming?: boolean): string {
+  getSpanName(_streaming?: boolean): GenAiOperationName {
     return "generate_content";
   },
 

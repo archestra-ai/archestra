@@ -8,6 +8,7 @@
 
 import client from "prom-client";
 import logger from "@/logging";
+import type { AgentType } from "@/types";
 import { sanitizeLabelKey } from "./utils";
 
 let mcpToolCallDuration: client.Histogram<string>;
@@ -76,7 +77,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
 function buildMetricLabels(params: {
   agentId: string;
   agentName: string;
-  agentType: string;
+  agentType?: AgentType;
   mcpServerName: string;
   toolName: string;
   status: "success" | "error";
@@ -85,7 +86,7 @@ function buildMetricLabels(params: {
   const labels: Record<string, string> = {
     agent_id: params.agentId,
     agent_name: params.agentName,
-    agent_type: params.agentType,
+    agent_type: params.agentType ?? "",
     mcp_server_name: params.mcpServerName,
     tool_name: params.toolName,
     status: params.status,
@@ -107,7 +108,7 @@ function buildMetricLabels(params: {
 export function reportMcpToolCall(params: {
   agentId: string;
   agentName: string;
-  agentType: string;
+  agentType?: AgentType;
   mcpServerName: string;
   toolName: string;
   durationSeconds: number;

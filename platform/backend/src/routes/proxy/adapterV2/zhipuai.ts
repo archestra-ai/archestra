@@ -14,6 +14,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -984,7 +985,7 @@ export const zhipuaiAdapterFactory: LLMProvider<
     return config.llm.zhipuai.baseUrl;
   },
 
-  getSpanName(): string {
+  getSpanName(): GenAiOperationName {
     return "chat";
   },
 

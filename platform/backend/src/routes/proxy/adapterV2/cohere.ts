@@ -14,6 +14,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -989,7 +990,7 @@ export const cohereAdapterFactory: LLMProvider<
     return config.llm.cohere.baseUrl;
   },
 
-  getSpanName(): string {
+  getSpanName(): GenAiOperationName {
     return "chat";
   },
 };

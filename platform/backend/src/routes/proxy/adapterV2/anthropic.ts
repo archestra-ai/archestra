@@ -14,6 +14,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1129,7 +1130,7 @@ export const anthropicAdapterFactory: LLMProvider<
     return config.llm.anthropic.baseUrl;
   },
 
-  getSpanName(): string {
+  getSpanName(): GenAiOperationName {
     return "chat";
   },
 

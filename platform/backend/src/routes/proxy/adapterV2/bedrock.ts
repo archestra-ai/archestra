@@ -15,6 +15,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1278,7 +1279,7 @@ export const bedrockAdapterFactory: LLMProvider<
     return config.llm.bedrock.baseUrl || undefined;
   },
 
-  getSpanName(_streaming: boolean): string {
+  getSpanName(_streaming: boolean): GenAiOperationName {
     return "chat";
   },
 

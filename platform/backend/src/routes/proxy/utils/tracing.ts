@@ -1,7 +1,7 @@
 import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
-import type { Agent } from "@/types";
+import type { Agent, AgentType, GenAiOperationName } from "@/types";
 
 /**
  * Route categories for tracing
@@ -13,7 +13,12 @@ export enum RouteCategory {
 }
 
 /**
- * Starts an active LLM span with GenAI semantic convention attributes.
+ * Starts an active LLM span with attributes following the OTEL GenAI Semantic Conventions.
+ * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/
+ *
+ * Span name format: `{operationName} {model}` (e.g., "chat gpt-4o-mini").
+ * The operationName is provided by each LLM adapter's `getSpanName()` method,
+ * which returns a `GenAiOperationName` value.
  *
  * @param params.operationName - The GenAI operation name (e.g., "chat", "generate_content")
  * @param params.provider - The LLM provider (openai, gemini, anthropic, etc.)
@@ -27,7 +32,7 @@ export enum RouteCategory {
  * @returns The result of the callback function
  */
 export async function startActiveLlmSpan<T>(params: {
-  operationName: string;
+  operationName: GenAiOperationName;
   provider: SupportedProvider;
   model: string;
   stream: boolean;
@@ -108,7 +113,11 @@ export async function startActiveLlmSpan<T>(params: {
 }
 
 /**
- * Starts an active MCP span for tool call execution with GenAI semantic convention attributes.
+ * Starts an active MCP span for tool call execution with attributes following
+ * the OTEL GenAI Semantic Conventions.
+ * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/
+ *
+ * Span name format: `execute_tool {toolName}`.
  *
  * @param params.toolName - The name of the tool being called
  * @param params.mcpServerName - The MCP server handling the tool call
@@ -123,7 +132,7 @@ export async function startActiveMcpSpan<T>(params: {
   mcpServerName: string;
   agent: { id: string; name: string; labels?: Agent["labels"] };
   sessionId?: string | null;
-  agentType?: string;
+  agentType?: AgentType;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");

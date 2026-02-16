@@ -23,6 +23,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1140,7 +1141,7 @@ export const ollamaAdapterFactory: LLMProvider<
     return config.llm.ollama.baseUrl;
   },
 
-  getSpanName(): string {
+  getSpanName(): GenAiOperationName {
     return "chat";
   },
 

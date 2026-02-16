@@ -5,7 +5,7 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
-import type { FastifyReply } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import logger from "@/logging";
@@ -28,17 +28,7 @@ import {
   type ToonSkipReason,
 } from "@/types";
 import * as utils from "./utils";
-import type { SessionSource } from "./utils/session-id";
-
-export interface Context {
-  organizationId: string;
-  agentId?: string;
-  externalAgentId?: string;
-  executionId?: string;
-  userId?: string;
-  sessionId?: string | null;
-  sessionSource?: SessionSource;
-}
+import type { SessionSource } from "./utils/headers/session-id";
 
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
@@ -66,28 +56,36 @@ export async function handleLLMProxy<
   THeaders,
 >(
   body: TRequest,
-  headers: THeaders,
+  request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
-  context: Context,
 ): Promise<FastifyReply> {
-  const { agentId, externalAgentId, executionId } = context;
+  const headers = request.headers as unknown as THeaders;
+  const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
 
-  // Extract session info if not already provided in context
-  const sessionInfo =
-    context.sessionId !== undefined
-      ? { sessionId: context.sessionId, sessionSource: context.sessionSource }
-      : utils.sessionId.extractSessionInfo(
-          headers as Record<string, string | string[] | undefined>,
-          body as
-            | {
-                metadata?: { user_id?: string | null };
-                user?: string | null;
-              }
-            | undefined,
-        );
-  const { sessionId, sessionSource } = sessionInfo;
+  // Extract header-based context
+  const headersForExtraction = headers as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const externalAgentId =
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+  const executionId =
+    utils.headers.executionId.getExecutionId(headersForExtraction);
+  const userId = (await utils.headers.userId.getUser(headersForExtraction))
+    ?.userId;
+
+  const { sessionId, sessionSource } =
+    utils.headers.sessionId.extractSessionInfo(
+      headersForExtraction,
+      body as
+        | {
+            metadata?: { user_id?: string | null };
+            user?: string | null;
+          }
+        | undefined,
+    );
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
@@ -422,7 +420,7 @@ export async function handleLLMProxy<
         globalToolPolicy,
         ensureStreamHeaders,
         externalAgentId,
-        context.userId,
+        userId,
         sessionId,
         sessionSource,
         teamIds,
@@ -444,7 +442,7 @@ export async function handleLLMProxy<
         enabledToolNames,
         globalToolPolicy,
         externalAgentId,
-        context.userId,
+        userId,
         sessionId,
         sessionSource,
         teamIds,

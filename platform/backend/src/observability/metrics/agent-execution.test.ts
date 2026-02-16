@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { AgentType } from "@/types";
 
 const counterInc = vi.fn();
 const registerRemoveSingleMetric = vi.fn();
@@ -28,7 +29,7 @@ import {
 const makeProfile = (overrides?: {
   id?: string;
   name?: string;
-  agentType?: string;
+  agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
 }) =>
   ({

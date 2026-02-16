@@ -588,7 +588,6 @@ export function useHasPlaywrightMcpTools(
           queryKey: ["conversation", conversationId, "enabled-tools"],
         });
       }
-      toast.success("Playwright tools assigned to agent");
     },
     onError: (error: Error) => {
       handleApiError({ error });

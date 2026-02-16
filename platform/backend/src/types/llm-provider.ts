@@ -368,8 +368,8 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Get base URL for the provider (from config), undefined means use SDK default */
   getBaseUrl(): string | undefined;
 
-  /** Get the GenAI operation name for tracing (e.g., "chat", "generate_content"). The span name is constructed as `{operationName} {model}` by startActiveLlmSpan. */
-  getSpanName(streaming: boolean): GenAiOperationName;
+  /** GenAI operation name for tracing (e.g., "chat", "generate_content"). The span name is constructed as `{operationName} {model}` by startActiveLlmSpan. */
+  readonly spanName: GenAiOperationName;
 
   /**
    * Create provider client with observability.

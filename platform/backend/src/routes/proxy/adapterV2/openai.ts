@@ -17,7 +17,6 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
-  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1161,9 +1160,7 @@ export const openaiAdapterFactory: LLMProvider<
     return config.llm.openai.baseUrl;
   },
 
-  getSpanName(): GenAiOperationName {
-    return "chat";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

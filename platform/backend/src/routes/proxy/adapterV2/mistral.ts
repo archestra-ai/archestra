@@ -19,7 +19,6 @@ import config from "@/config";
 import { metrics } from "@/observability";
 import type {
   CreateClientOptions,
-  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -220,9 +219,7 @@ export const mistralAdapterFactory: LLMProvider<
     return config.llm.mistral.baseUrl;
   },
 
-  getSpanName(): GenAiOperationName {
-    return "chat";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

@@ -505,7 +505,7 @@ async function handleStreaming<
   try {
     // Execute streaming request with tracing
     const stream = await utils.tracing.startActiveLlmSpan({
-      operationName: provider.getSpanName(true),
+      operationName: provider.spanName,
       provider: providerName,
       model: actualModel,
       stream: true,
@@ -754,7 +754,7 @@ async function handleNonStreaming<
 
   // Execute request with tracing
   const response = await utils.tracing.startActiveLlmSpan({
-    operationName: provider.getSpanName(false),
+    operationName: provider.spanName,
     provider: providerName,
     model: actualModel,
     stream: false,

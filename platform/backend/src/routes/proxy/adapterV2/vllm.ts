@@ -23,7 +23,6 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
-  GenAiOperationName,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -1141,9 +1140,7 @@ export const vllmAdapterFactory: LLMProvider<
     return config.llm.vllm.baseUrl;
   },
 
-  getSpanName(): GenAiOperationName {
-    return "chat";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

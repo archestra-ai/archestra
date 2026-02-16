@@ -46,7 +46,7 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 - `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Helps developers choose models with lower initial response latency.
 - `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Allows comparing model response speeds for latency-sensitive applications.
 
-> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the `X-Archestra-Agent-Id` header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`.
+> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`.
 
 ### MCP Metrics
 
@@ -136,10 +136,10 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 - `gen_ai.request.streaming` - Whether the request was streaming (`true`/`false`)
 - `gen_ai.agent.id` - Internal Archestra agent ID
 - `gen_ai.agent.name` - Internal Archestra agent name
-- `gen_ai.conversation.id` - Session ID for grouping related LLM calls (from `X-Archestra-Session-Id` header)
+- `gen_ai.conversation.id` - Session ID for grouping related LLM calls (from [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
-- `archestra.execution.id` - Execution ID (from `X-Archestra-Execution-Id` header)
-- `archestra.external_agent_id` - Client-provided agent ID (from `X-Archestra-Agent-Id` header)
+- `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
+- `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
 
 **Span Names:**
@@ -171,7 +171,7 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 
 ### Session Tracking
 
-The platform supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the `X-Archestra-Session-Id` header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session in Grafana.
+The platform supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session in Grafana.
 
 ### Custom Agent Labels
 

@@ -156,7 +156,7 @@ export default function SlackPage() {
         {firstStep}
         <SetupStep
           title="Setup Slack"
-          description="Create a Slack App and connect it to Archestra"
+          description="Create a Slack App from manifest and connect it to Archestra"
           done={!!slack?.configured}
           ctaLabel="Setup Slack"
           onAction={() => setSlackSetupOpen(true)}

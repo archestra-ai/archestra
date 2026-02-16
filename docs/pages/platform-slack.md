@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 6
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-02-14
+lastUpdated: 2026-02-16
 ---
 
 <!--
@@ -21,26 +21,54 @@ Archestra can connect directly to Slack channels. When users mention the bot in 
 
 ### Create Slack App
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
-2. Under **OAuth & Permissions**, add these **Bot Token Scopes**:
-   - `app_mentions:read`
-   - `channels:history`
-   - `channels:read`
-   - `chat:write`
-   - `groups:history`
-   - `groups:read`
-   - `im:history`
-   - `im:read`
-   - `users:read`
-   - `users:read.email`
-3. Under **Event Subscriptions**, enable events and set **Request URL** to `https://your-archestra-domain/api/webhooks/chatops/slack`
-4. Subscribe to these **bot events**:
-   - `app_mention`
-   - `message.channels`
-   - `message.groups`
-   - `message.im`
-5. Under **Interactivity & Shortcuts**, enable interactivity and set **Request URL** to `https://your-archestra-domain/api/webhooks/chatops/slack/interactive`
-6. **Install to Workspace** and copy the **Bot User OAuth Token**
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**
+2. Select your workspace, then choose **YAML** and paste the manifest below
+3. Click **Create**
+4. Go to **Basic Information** → **Display Information** and upload an app icon ([download Archestra logo](/docs/color.png))
+5. Go to **Install App** → **Install to Workspace** and authorize
+6. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
+
+#### App Manifest
+
+The manifest pre-configures all required scopes, event subscriptions, and interactivity settings. Replace the two URLs with your Archestra domain.
+
+```yaml
+display_information:
+  name: "Archestra"
+  description: "Archestra AI Agent"
+features:
+  bot_user:
+    display_name: "Archestra"
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - chat:write
+      - groups:history
+      - groups:read
+      - im:history
+      - users:read
+      - users:read.email
+settings:
+  event_subscriptions:
+    request_url: "https://your-archestra-domain/api/webhooks/chatops/slack"
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+  interactivity:
+    is_enabled: true
+    request_url: "https://your-archestra-domain/api/webhooks/chatops/slack/interactive"
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+
+> The setup wizard in Archestra generates this manifest with your webhook URLs pre-filled. Go to **Agent Triggers** → **Slack** → **Setup Slack** to use it.
 
 ### Configure Archestra
 

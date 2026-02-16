@@ -42,7 +42,8 @@ export function SlackSetupDialog({
 
   const hasBotToken = Boolean(sharedBotToken || creds?.botToken);
   const hasSigningSecret = Boolean(sharedSigningSecret || creds?.signingSecret);
-  const canSave = hasBotToken && hasSigningSecret;
+  const hasAppId = Boolean(sharedAppId || creds?.appId);
+  const canSave = hasBotToken && hasSigningSecret && hasAppId;
 
   const handleOpenChange = (value: boolean) => {
     onOpenChange(value);
@@ -62,83 +63,57 @@ export function SlackSetupDialog({
 
   const steps = React.useMemo(() => {
     const slides: React.ReactNode[] = [
-      // Step 1: Create Slack App
-      <StepSlide
-        key="create-app"
-        title="Create a Slack App"
+      // Step 1: Create Slack App from manifest
+      <StepManifest
+        key="manifest"
         stepNumber={1}
-        instructions={[
-          <>
-            Go to{" "}
-            <StepLink href="https://api.slack.com/apps">
-              api.slack.com/apps
-            </StepLink>{" "}
-            and click <strong>Create New App</strong>
-          </>,
-          <>
-            Choose <strong>From scratch</strong>, enter an app name (e.g.,
-            "Archestra"), and select your workspace
-          </>,
-          <>
-            Click <strong>Create App</strong>
-          </>,
-        ]}
-      />,
-      // Step 2: Configure Scopes
-      <StepSlide
-        key="scopes"
-        title="Configure Bot Scopes"
-        stepNumber={2}
-        instructions={[
-          <>
-            In the left sidebar, go to <strong>OAuth &amp; Permissions</strong>
-          </>,
-          <>
-            Scroll to <strong>Scopes</strong> &rarr;{" "}
-            <strong>Bot Token Scopes</strong>
-          </>,
-          <>
-            Add the following scopes: <strong>app_mentions:read</strong>,{" "}
-            <strong>channels:history</strong>, <strong>channels:read</strong>,{" "}
-            <strong>chat:write</strong>, <strong>groups:history</strong>,{" "}
-            <strong>groups:read</strong>, <strong>im:history</strong>,{" "}
-            <strong>users:read</strong>, <strong>users:read.email</strong>
-          </>,
-        ]}
-      />,
-      // Step 3: Event Subscriptions
-      <StepEventSubscriptions
-        key="events"
-        stepNumber={3}
         webhookUrl={webhookUrl}
         interactiveUrl={interactiveUrl}
         ngrokDomain={ngrokDomain}
+        appId={sharedAppId}
+        signingSecret={sharedSigningSecret}
+        onAppIdChange={setSharedAppId}
+        onSigningSecretChange={setSharedSigningSecret}
       />,
-      // Step 4: Install App
-      <StepSlide
+      // Step 2: Install App to Workspace
+      <StepInstall
         key="install"
-        title="Install App to Workspace"
-        stepNumber={4}
+        stepNumber={2}
+        botToken={sharedBotToken}
+        onBotTokenChange={setSharedBotToken}
+      />,
+      // Step 3: Customize App Appearance
+      <StepSlide
+        key="appearance"
+        title="Customize App Appearance"
+        stepNumber={3}
         instructions={[
           <>
-            Go to <strong>Install App</strong> in the left sidebar
+            Go to <strong>Basic Information</strong> &rarr;{" "}
+            <strong>Display Information</strong>
           </>,
           <>
-            Click <strong>Install to Workspace</strong> and authorize
+            Upload an app icon (
+            <a
+              href="/logo-slack.png"
+              download="archestra-logo.png"
+              className="text-primary underline hover:no-underline"
+            >
+              download Archestra logo
+            </a>
+            )
           </>,
-          <>
-            Copy the <strong>Bot User OAuth Token</strong> (starts with{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-xs">xoxb-</code>)
-          </>,
+          <>Optionally set a background color and short description</>,
         ]}
       />,
     ];
 
-    // Step 5: Connect to Archestra (last step)
+    // Step 4: Connect to Archestra (last step)
     if (isLocalEnvOrQuickstart) {
       slides.push(
         <StepConfigForm
           key="connect"
+          stepNumber={4}
           botToken={sharedBotToken}
           signingSecret={sharedSigningSecret}
           appId={sharedAppId}
@@ -261,16 +236,14 @@ function StepSlide({
   );
 }
 
-function StepEventSubscriptions({
+function StepInstall({
   stepNumber,
-  webhookUrl,
-  interactiveUrl,
-  ngrokDomain,
+  botToken,
+  onBotTokenChange,
 }: {
   stepNumber: number;
-  webhookUrl: string;
-  interactiveUrl: string;
-  ngrokDomain: string;
+  botToken: string;
+  onBotTokenChange: (v: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-4 py-2">
@@ -278,7 +251,7 @@ function StepEventSubscriptions({
         <Badge variant="outline" className="font-mono text-xs">
           Step {stepNumber}
         </Badge>
-        <h3 className="text-lg font-semibold">Event Subscriptions</h3>
+        <h3 className="text-lg font-semibold">Install App to Workspace</h3>
       </div>
       <ol className="space-y-3">
         <li className="flex gap-3 text-sm leading-relaxed">
@@ -286,55 +259,36 @@ function StepEventSubscriptions({
             1
           </span>
           <span className="pt-0.5">
-            Go to <strong>Event Subscriptions</strong> in the left sidebar and
-            toggle <strong>Enable Events</strong> to ON
+            Go to <strong>Install App</strong> in the left sidebar
           </span>
         </li>
         <li className="flex gap-3 text-sm leading-relaxed">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
             2
           </span>
-          <span className="pt-0.5 flex-1">
-            Set <strong>Request URL</strong> to:
-            <span className="mt-1 flex items-center gap-1">
-              <code className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                {webhookUrl}
-              </code>
-              {ngrokDomain && (
-                <span className="shrink-0">
-                  <CopyButton text={webhookUrl} />
-                </span>
-              )}
-            </span>
+          <span className="pt-0.5">
+            Click{" "}
+            <strong>
+              Install to <i>Your Workspace</i>
+            </strong>{" "}
+            and authorize the requested permissions
           </span>
         </li>
         <li className="flex gap-3 text-sm leading-relaxed">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
             3
           </span>
-          <span className="pt-0.5">
-            Under <strong>Subscribe to bot events</strong>, add:{" "}
-            <strong>app_mention</strong>, <strong>message.channels</strong>,{" "}
-            <strong>message.groups</strong>, <strong>message.im</strong>
-          </span>
-        </li>
-        <li className="flex gap-3 text-sm leading-relaxed">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-            4
-          </span>
           <span className="pt-0.5 flex-1">
-            Go to <strong>Interactivity &amp; Shortcuts</strong>, toggle ON, and
-            set <strong>Request URL</strong> to:
-            <span className="mt-1 flex items-center gap-1">
-              <code className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                {interactiveUrl}
-              </code>
-              {ngrokDomain && (
-                <span className="shrink-0">
-                  <CopyButton text={interactiveUrl} />
-                </span>
-              )}
-            </span>
+            Copy the <strong>Bot User OAuth Token</strong> (starts with{" "}
+            <code className="bg-muted px-1 py-0.5 rounded text-xs">xoxb-</code>)
+            and paste it here
+            <Input
+              type="password"
+              value={botToken}
+              onChange={(e) => onBotTokenChange(e.target.value)}
+              placeholder="Paste your Bot User OAuth Token"
+              className="h-7 text-xs mt-1.5"
+            />
           </span>
         </li>
       </ol>
@@ -342,7 +296,188 @@ function StepEventSubscriptions({
   );
 }
 
+function buildSlackManifest(params: {
+  appName: string;
+  webhookUrl: string;
+  interactiveUrl: string;
+}): string {
+  const { appName, webhookUrl, interactiveUrl } = params;
+  return `display_information:
+  name: "${appName}"
+  description: "Archestra AI Agent"
+features:
+  bot_user:
+    display_name: "${appName}"
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - chat:write
+      - groups:history
+      - groups:read
+      - im:history
+      - users:read
+      - users:read.email
+settings:
+  event_subscriptions:
+    request_url: "${webhookUrl}"
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+  interactivity:
+    is_enabled: true
+    request_url: "${interactiveUrl}"
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false`;
+}
+
+function StepManifest({
+  stepNumber,
+  webhookUrl,
+  interactiveUrl,
+  ngrokDomain,
+  appId,
+  signingSecret,
+  onAppIdChange,
+  onSigningSecretChange,
+}: {
+  stepNumber: number;
+  webhookUrl: string;
+  interactiveUrl: string;
+  ngrokDomain: string;
+  appId: string;
+  signingSecret: string;
+  onAppIdChange: (v: string) => void;
+  onSigningSecretChange: (v: string) => void;
+}) {
+  const [appName, setAppName] = useState("Archestra");
+
+  const manifest = buildSlackManifest({ appName, webhookUrl, interactiveUrl });
+
+  return (
+    <div
+      className="grid flex-1 gap-6"
+      style={{ gridTemplateColumns: "6fr 4fr" }}
+    >
+      <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 overflow-x-auto">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">
+            App Manifest (YAML)
+          </span>
+          <CopyButton text={manifest} />
+        </div>
+        <pre className="flex-1 overflow-auto rounded bg-muted p-3 text-xs font-mono leading-relaxed min-h-0">
+          {manifest}
+        </pre>
+      </div>
+
+      <div className="flex flex-col gap-4 py-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="font-mono text-xs">
+            Step {stepNumber}
+          </Badge>
+          <h3 className="text-lg font-semibold">Create Slack App</h3>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="manifest-app-name">App Name</Label>
+          <Input
+            id="manifest-app-name"
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            placeholder="Archestra"
+          />
+          <p className="text-xs text-muted-foreground">
+            The name will be injected into the manifest automatically.
+          </p>
+        </div>
+
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5">
+              Go to{" "}
+              <StepLink href="https://api.slack.com/apps">
+                api.slack.com/apps
+              </StepLink>{" "}
+              and click <strong>Create New App</strong>
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5">
+              Choose <strong>From a manifest</strong> and select your workspace
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5">
+              Select <strong>YAML</strong>, paste the manifest from the left,
+              and click <strong>Create</strong>
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              4
+            </span>
+            <span className="pt-0.5 flex-1">
+              From <strong>Basic Information &rarr; App Credentials</strong>,
+              copy the <strong>App ID</strong> and paste it here
+              <Input
+                value={appId}
+                onChange={(e) => onAppIdChange(e.target.value)}
+                placeholder="Paste your App ID"
+                className="h-7 text-xs mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              5
+            </span>
+            <span className="pt-0.5 flex-1">
+              From <strong>Basic Information &rarr; App Credentials</strong>,
+              copy the <strong>Signing Secret</strong> and paste it here
+              <Input
+                type="password"
+                value={signingSecret}
+                onChange={(e) => onSigningSecretChange(e.target.value)}
+                placeholder="Paste your Signing Secret"
+                className="h-7 text-xs mt-1.5"
+              />
+            </span>
+          </li>
+        </ol>
+
+        {!ngrokDomain && (
+          <span className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">
+            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              The manifest uses placeholder URLs. After creating the app, update
+              the Event Subscriptions and Interactivity URLs with your actual
+              Archestra URL.
+            </span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StepConfigForm({
+  stepNumber,
   botToken,
   signingSecret,
   appId,
@@ -351,6 +486,7 @@ function StepConfigForm({
   onAppIdChange,
   creds,
 }: {
+  stepNumber: number;
   botToken: string;
   signingSecret: string;
   appId: string;
@@ -396,12 +532,7 @@ function StepConfigForm({
         </div>
 
         <div className="space-y-2 mb-8">
-          <Label htmlFor="setup-app-id">
-            App ID{" "}
-            <span className="text-muted-foreground font-normal">
-              (optional)
-            </span>
-          </Label>
+          <Label htmlFor="setup-app-id">App ID</Label>
           <Input
             id="setup-app-id"
             value={appId}
@@ -424,7 +555,7 @@ function StepConfigForm({
       <div className="flex flex-col gap-4 py-2">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-xs">
-            Step 5
+            Step {stepNumber}
           </Badge>
           <h3 className="text-lg font-semibold">Connect to Archestra</h3>
         </div>
@@ -455,8 +586,7 @@ function StepConfigForm({
               3
             </span>
             <span className="pt-0.5">
-              <strong>App ID</strong> — from Basic Information (optional, used
-              to filter bot messages)
+              <strong>App ID</strong> — from Basic Information
             </span>
           </li>
         </ol>
@@ -560,7 +690,7 @@ function StepEnvVarsInfo({
       <div className="flex flex-col gap-4 py-2">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-xs">
-            Step 5
+            Step 4
           </Badge>
           <h3 className="text-lg font-semibold">Configure Archestra</h3>
         </div>

@@ -35,6 +35,7 @@ import {
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
+import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -829,6 +830,7 @@ export function AgentDialog({
   }, [onOpenChange]);
 
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
+  const [slackSetupOpen, setSlackSetupOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1198,9 +1200,15 @@ export function AgentDialog({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setMsTeamsSetupOpen(true)}
+                          onClick={() => {
+                            if (provider.id === "slack") {
+                              setSlackSetupOpen(true);
+                            } else {
+                              setMsTeamsSetupOpen(true);
+                            }
+                          }}
                         >
-                          Setup MS Teams
+                          Setup {provider.displayName}
                         </Button>
                       )}
                     </div>
@@ -1209,6 +1217,10 @@ export function AgentDialog({
                 <MsTeamsSetupDialog
                   open={msTeamsSetupOpen}
                   onOpenChange={setMsTeamsSetupOpen}
+                />
+                <SlackSetupDialog
+                  open={slackSetupOpen}
+                  onOpenChange={setSlackSetupOpen}
                 />
 
                 {/* Email */}

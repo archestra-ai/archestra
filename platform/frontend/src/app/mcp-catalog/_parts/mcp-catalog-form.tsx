@@ -41,12 +41,14 @@ interface McpCatalogFormProps {
   onSubmit: (values: McpCatalogFormValues) => void;
   serverType?: "remote" | "local";
   footer?: React.ReactNode;
+  nameDisabled?: boolean;
 }
 
 export function McpCatalogForm({
   mode,
   initialValues,
   onSubmit,
+  nameDisabled,
   serverType = "remote",
   footer,
 }: McpCatalogFormProps) {
@@ -152,8 +154,9 @@ export function McpCatalogForm({
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Changes to Name, Server URL, or Authentication will require
-              reinstalling the server for the changes to take effect.
+              Changes to {nameDisabled ? "" : "Name, "}Server URL or
+              Authentication will require reinstalling the server for the
+              changes to take effect.
             </AlertDescription>
           </Alert>
         )}
@@ -168,7 +171,11 @@ export function McpCatalogForm({
                   Name <span className="text-destructive">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g., GitHub MCP Server" {...field} />
+                  <Input
+                    placeholder="e.g., GitHub MCP Server"
+                    {...field}
+                    disabled={nameDisabled}
+                  />
                 </FormControl>
                 <FormDescription>Display name for this server</FormDescription>
                 <FormMessage />

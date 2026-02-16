@@ -30,7 +30,7 @@ export function EditPolicyDialog({
       agentId: profileId,
     },
     pagination: {
-      limit: 1,
+      limit: 50,
     },
   });
 

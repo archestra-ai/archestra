@@ -1,0 +1,25 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/anthropic/v1/messages",
+    "bodyPatterns": [
+      {
+        "contains": "chat-error-persistence-test"
+      }
+    ]
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "type": "error",
+      "error": {
+        "type": "internal_server_error",
+        "message": "Mocked provider error for e2e persistence test"
+      }
+    }
+  }
+}

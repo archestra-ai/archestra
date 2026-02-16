@@ -34,9 +34,9 @@ export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
-export { default as outgoingEmailRoutes } from "./outgoing-email";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
+export { default as outgoingEmailRoutes } from "./outgoing-email";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 // Proxy routes
 export const anthropicProxyRoutes = anthropicProxyRoutesV2;

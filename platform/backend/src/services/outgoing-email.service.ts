@@ -85,7 +85,8 @@ async function getGmailAccessToken(): Promise<string> {
     return cachedToken.accessToken;
   }
 
-  const { clientId, clientSecret, refreshToken } = getOutgoingEmailConfig().gmail;
+  const { clientId, clientSecret, refreshToken } =
+    getOutgoingEmailConfig().gmail;
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: {

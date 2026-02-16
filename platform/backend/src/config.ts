@@ -401,11 +401,9 @@ export default {
         clientId:
           process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_CLIENT_ID || "",
         clientSecret:
-          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_CLIENT_SECRET ||
-          "",
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_CLIENT_SECRET || "",
         refreshToken:
-          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_REFRESH_TOKEN ||
-          "",
+          process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_REFRESH_TOKEN || "",
         fromAddress:
           process.env.ARCHESTRA_AGENTS_OUTGOING_EMAIL_GMAIL_FROM_ADDRESS || "",
         replyToAddress:

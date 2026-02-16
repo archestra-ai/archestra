@@ -145,6 +145,7 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 **Span Names:**
 
 Span names follow the GenAI semconv format `{operation} {model}`:
+
 - `chat gpt-4o-mini` - OpenAI, Anthropic, Cohere, and other chat-based providers
 - `generate_content gemini-2.0-flash` - Gemini content generation calls
 
@@ -171,7 +172,7 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 
 ### Session Tracking
 
-The platform supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session in Grafana.
+The platform supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session.
 
 ### Custom Agent Labels
 

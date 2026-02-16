@@ -131,6 +131,18 @@ function LogDetail({
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">
+                  Execution ID
+                </div>
+                <div className="font-medium font-mono">
+                  {dynamicInteraction.executionId || (
+                    <span className="text-muted-foreground font-normal">
+                      Not set
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
                   Provider + Model
                 </div>
                 <div className="font-medium">

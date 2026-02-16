@@ -65,10 +65,14 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
       await fastify.register(enterpriseLicenseMiddleware);
 
       // Add test routes for SSO providers
-      fastify.get("/api/sso-providers", async () => ({ success: true }));
-      fastify.get("/api/sso-providers/public", async () => ({ providers: [] }));
-      fastify.post("/api/sso-providers", async () => ({ created: true }));
-      fastify.get("/api/sso-providers/:id", async () => ({ provider: {} }));
+      fastify.get("/api/identity-providers", async () => ({ success: true }));
+      fastify.get("/api/identity-providers/public", async () => ({
+        providers: [],
+      }));
+      fastify.post("/api/identity-providers", async () => ({ created: true }));
+      fastify.get("/api/identity-providers/:id", async () => ({
+        provider: {},
+      }));
 
       // Add a non-SSO route to verify it's not blocked
       fastify.get("/api/profiles", async () => ({ profiles: [] }));
@@ -76,10 +80,10 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
       await fastify.ready();
     });
 
-    it("should return 403 for GET /api/sso-providers", async () => {
+    it("should return 403 for GET /api/identity-providers", async () => {
       const response = await fastify.inject({
         method: "GET",
-        url: "/api/sso-providers",
+        url: "/api/identity-providers",
       });
 
       expect(response.statusCode).toBe(403);
@@ -92,29 +96,29 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
       });
     });
 
-    it("should return 403 for GET /api/sso-providers/public", async () => {
+    it("should return 403 for GET /api/identity-providers/public", async () => {
       const response = await fastify.inject({
         method: "GET",
-        url: "/api/sso-providers/public",
+        url: "/api/identity-providers/public",
       });
 
       expect(response.statusCode).toBe(403);
     });
 
-    it("should return 403 for POST /api/sso-providers", async () => {
+    it("should return 403 for POST /api/identity-providers", async () => {
       const response = await fastify.inject({
         method: "POST",
-        url: "/api/sso-providers",
+        url: "/api/identity-providers",
         payload: {},
       });
 
       expect(response.statusCode).toBe(403);
     });
 
-    it("should return 403 for GET /api/sso-providers/:id", async () => {
+    it("should return 403 for GET /api/identity-providers/:id", async () => {
       const response = await fastify.inject({
         method: "GET",
-        url: "/api/sso-providers/some-id",
+        url: "/api/identity-providers/some-id",
       });
 
       expect(response.statusCode).toBe(403);
@@ -138,37 +142,39 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
       fastify = createTestFastify();
       await fastify.register(enterpriseLicenseMiddleware);
 
-      fastify.get("/api/sso-providers", async () => ({ success: true }));
-      fastify.get("/api/sso-providers/public", async () => ({ providers: [] }));
-      fastify.post("/api/sso-providers", async () => ({ created: true }));
+      fastify.get("/api/identity-providers", async () => ({ success: true }));
+      fastify.get("/api/identity-providers/public", async () => ({
+        providers: [],
+      }));
+      fastify.post("/api/identity-providers", async () => ({ created: true }));
 
       await fastify.ready();
     });
 
-    it("should allow GET /api/sso-providers", async () => {
+    it("should allow GET /api/identity-providers", async () => {
       const response = await fastify.inject({
         method: "GET",
-        url: "/api/sso-providers",
+        url: "/api/identity-providers",
       });
 
       expect(response.statusCode).toBe(200);
       expect(JSON.parse(response.payload)).toEqual({ success: true });
     });
 
-    it("should allow GET /api/sso-providers/public", async () => {
+    it("should allow GET /api/identity-providers/public", async () => {
       const response = await fastify.inject({
         method: "GET",
-        url: "/api/sso-providers/public",
+        url: "/api/identity-providers/public",
       });
 
       expect(response.statusCode).toBe(200);
       expect(JSON.parse(response.payload)).toEqual({ providers: [] });
     });
 
-    it("should allow POST /api/sso-providers", async () => {
+    it("should allow POST /api/identity-providers", async () => {
       const response = await fastify.inject({
         method: "POST",
-        url: "/api/sso-providers",
+        url: "/api/identity-providers",
         payload: {},
       });
 
@@ -315,9 +321,9 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
 
 describe("isEnterpriseOnlyRoute", () => {
   it("should return true for SSO provider routes", () => {
-    expect(isEnterpriseOnlyRoute("/api/sso-providers")).toBe(true);
-    expect(isEnterpriseOnlyRoute("/api/sso-providers/public")).toBe(true);
-    expect(isEnterpriseOnlyRoute("/api/sso-providers/some-id")).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/identity-providers")).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/identity-providers/public")).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/identity-providers/some-id")).toBe(true);
   });
 
   it("should return true for team external groups routes", () => {

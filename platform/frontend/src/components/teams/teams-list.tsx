@@ -258,7 +258,7 @@ export function TeamsList() {
                             permissions={{ team: ["update"] }}
                             variant="outline"
                             size="sm"
-                            data-testid={`${E2eTestId.ConfigureSsoTeamSyncButton}-${team.id}`}
+                            data-testid={`${E2eTestId.ConfigureIdpTeamSyncButton}-${team.id}`}
                             onClick={() => {
                               setSelectedTeam(team);
                               setExternalGroupsDialogOpen(true);

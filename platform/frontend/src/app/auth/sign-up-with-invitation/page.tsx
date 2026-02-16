@@ -30,6 +30,7 @@ function SignUpWithInvitationContent() {
   }, [invitationId, invitationData, router]);
 
   // Handle auto-accept after sign-up
+  // biome-ignore lint/correctness/useExhaustiveDependencies: acceptMutation object changes reference on every render. Using the stable mutateAsync function reference prevents unnecessary re-executions.
   useEffect(() => {
     // Only process if we've done initial check and now have a new session
     if (session && invitationId && !hasProcessed) {

@@ -13,9 +13,9 @@ import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
-import { getObservableGenAI } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -1275,7 +1275,11 @@ export const geminiAdapterFactory: LLMProvider<
 
     // Wrap with observability for request duration metrics
     if (options?.agent) {
-      return getObservableGenAI(client, options.agent, options.externalAgentId);
+      return metrics.llm.getObservableGenAI(
+        client,
+        options.agent,
+        options.externalAgentId,
+      );
     }
     return client;
   },

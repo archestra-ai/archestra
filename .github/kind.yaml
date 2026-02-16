@@ -20,6 +20,9 @@ nodes:
       - containerPort: 30081 # Keycloak
         hostPort: 30081
         protocol: TCP
+      - containerPort: 30082 # MCP Server JWKS
+        hostPort: 30082
+        protocol: TCP
       - containerPort: 30200 # Vault
         hostPort: 8200
         protocol: TCP

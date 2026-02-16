@@ -1,0 +1,74 @@
+{{- if .Values.mcpServerJwks.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mcp-server-jwks
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: mcp-server-jwks
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.mcpServerJwks.service.type }}
+  ports:
+    - port: {{ .Values.mcpServerJwks.service.port }}
+      targetPort: 3456
+      {{- if and (eq .Values.mcpServerJwks.service.type "NodePort") .Values.mcpServerJwks.service.nodePort }}
+      nodePort: {{ .Values.mcpServerJwks.service.nodePort }}
+      {{- end }}
+      name: http
+  selector:
+    app.kubernetes.io/name: mcp-server-jwks
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mcp-server-jwks
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: mcp-server-jwks
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-server-jwks
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-server-jwks
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: mcp-server-jwks
+          image: "{{ .Values.mcpServerJwks.image.repository }}:{{ .Values.mcpServerJwks.image.tag }}"
+          imagePullPolicy: {{ .Values.mcpServerJwks.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            # JWKS URL uses K8s internal DNS to fetch keys from Keycloak
+            - name: JWKS_URL
+              value: "http://{{ .Release.Name }}-keycloak:8080/realms/{{ .Values.keycloak.realm.name | default "archestra" }}/protocol/openid-connect/certs"
+            # JWT issuer must match the `iss` claim in tokens (external URL)
+            - name: JWT_ISSUER
+              value: "http://localhost:{{ .Values.keycloak.service.nodePort | default 30081 }}/realms/{{ .Values.keycloak.realm.name | default "archestra" }}"
+            # Audience must match what the Keycloak client issues
+            - name: JWT_AUDIENCE
+              value: {{ .Values.mcpServerJwks.jwtAudience | quote }}
+            - name: MCP_SERVER_URL
+              value: "http://localhost:{{ .Values.mcpServerJwks.service.nodePort | default 30082 }}"
+            - name: KEYCLOAK_ISSUER_URL
+              value: "http://localhost:{{ .Values.keycloak.service.nodePort | default 30081 }}/realms/{{ .Values.keycloak.realm.name | default "archestra" }}"
+          ports:
+            - containerPort: 3456
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3456
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.mcpServerJwks.resources | nindent 12 }}
+{{- end }}

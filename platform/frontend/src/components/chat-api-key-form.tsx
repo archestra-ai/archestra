@@ -57,6 +57,7 @@ const PROVIDER_CONFIG: Record<
     enabled: boolean;
     consoleUrl: string;
     consoleName: string;
+    description?: string;
   }
 > = {
   anthropic: {
@@ -122,6 +123,7 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
+    description: "For self-hosted Ollama, an API key is not required.",
   },
   zhipuai: {
     name: "Zhipu AI",
@@ -496,6 +498,11 @@ export function ChatApiKeyForm({
                 </span>
               )}
             </Label>
+            {providerConfig.description && (
+              <p className="text-xs text-muted-foreground">
+                {providerConfig.description}
+              </p>
+            )}
             <div className="relative">
               <Input
                 id="chat-api-key-value"

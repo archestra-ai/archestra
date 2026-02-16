@@ -171,6 +171,8 @@ export function getCachedPlatformNodeSelector():
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
  */
 export default class K8sDeployment {
+  private static readonly MAX_K8S_LABEL_LENGTH = 63;
+  private static readonly HTTP_SERVICE_SUFFIX = "-service";
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
   private k8sAppsApi: k8s.AppsV1Api;
@@ -456,7 +458,7 @@ export default class K8sDeployment {
    * Delete the Kubernetes Service for this MCP server (used by HTTP-based servers)
    */
   async deleteK8sService(): Promise<void> {
-    const serviceName = `${this.deploymentName}-service`;
+    const serviceName = this.constructHttpServiceName();
 
     try {
       await this.k8sApi.deleteNamespacedService({
@@ -1124,6 +1126,14 @@ export default class K8sDeployment {
   }
 
   /**
+   * Resolve the HTTP endpoint URL for streamable-http servers.
+   * Called by the manager after lazy-loading a deployment on a different replica.
+   */
+  async resolveHttpEndpoint(): Promise<void> {
+    await this.ensureHttpServerConfigured();
+  }
+
+  /**
    * Ensure HTTP server configuration (Service and URL) is set up
    */
   private async ensureHttpServerConfigured(): Promise<void> {
@@ -1135,19 +1145,23 @@ export default class K8sDeployment {
     const catalogItem = await this.getCatalogItem();
     const httpPort = catalogItem?.localConfig?.httpPort || 8080;
     const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+    const configuredNodePort = catalogItem?.localConfig?.nodePort;
 
-    // Ensure Service exists
-    await this.createServiceForHttpServer(httpPort);
+    // Ensure Service exists (pass fixed nodePort if configured)
+    await this.createServiceForHttpServer(httpPort, configuredNodePort);
 
     // Resolve HTTP Endpoint URL
     let baseUrl: string;
     if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
       // In-cluster: use service DNS name
-      const serviceName = `${this.deploymentName}-service`;
+      const serviceName = this.constructHttpServiceName();
       baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
+    } else if (configuredNodePort) {
+      // Local dev with fixed nodePort: use it directly (no need to read from service)
+      baseUrl = `http://${config.orchestrator.kubernetes.k8sNodeHost || "localhost"}:${configuredNodePort}`;
     } else {
       // Local dev: get NodePort from service
-      const serviceName = `${this.deploymentName}-service`;
+      const serviceName = this.constructHttpServiceName();
       try {
         const service = await this.k8sApi.readNamespacedService({
           name: serviceName,
@@ -1159,7 +1173,7 @@ export default class K8sDeployment {
           throw new Error(`Service ${serviceName} has no NodePort assigned`);
         }
 
-        baseUrl = `http://localhost:${nodePort}`;
+        baseUrl = `http://${config.orchestrator.kubernetes.k8sNodeHost || "localhost"}:${nodePort}`;
       } catch (error) {
         logger.error(
           { err: error },
@@ -1658,8 +1672,11 @@ export default class K8sDeployment {
   /**
    * Create a K8s Service for HTTP-based MCP servers
    */
-  private async createServiceForHttpServer(httpPort: number): Promise<void> {
-    const serviceName = `${this.deploymentName}-service`;
+  private async createServiceForHttpServer(
+    httpPort: number,
+    nodePort?: number,
+  ): Promise<void> {
+    const serviceName = this.constructHttpServiceName();
 
     try {
       // Check if service already exists
@@ -1702,6 +1719,8 @@ export default class K8sDeployment {
               protocol: "TCP",
               port: httpPort,
               targetPort: httpPort as unknown as k8s.IntOrString,
+              // Use fixed nodePort if configured (local dev only, ignored for ClusterIP)
+              ...(nodePort && serviceType === "NodePort" ? { nodePort } : {}),
             },
           ],
           type: serviceType,
@@ -1723,6 +1742,21 @@ export default class K8sDeployment {
       );
       throw error;
     }
+  }
+
+  private constructHttpServiceName(): string {
+    const maxBaseLength =
+      K8sDeployment.MAX_K8S_LABEL_LENGTH -
+      K8sDeployment.HTTP_SERVICE_SUFFIX.length;
+
+    const base = this.deploymentName
+      .replace(/\./g, "-")
+      .slice(0, maxBaseLength)
+      .replace(/^[^a-z0-9]+/, "")
+      .replace(/[^a-z0-9-]+$/g, "");
+
+    const normalizedBase = base.length > 0 ? base : "mcp-server";
+    return `${normalizedBase}${K8sDeployment.HTTP_SERVICE_SUFFIX}`;
   }
 
   /**
@@ -2128,6 +2162,35 @@ export default class K8sDeployment {
   async getRunningPodName(): Promise<string | undefined> {
     const pod = await this.findPodForDeployment();
     return pod?.metadata?.name;
+  }
+
+  /**
+   * Get an HTTP endpoint URL pinned to the currently running pod.
+   * Useful for sticky session resumption in multi-replica streamable-http deployments.
+   */
+  async getRunningPodHttpEndpoint(): Promise<
+    { endpointUrl: string; podName: string } | undefined
+  > {
+    const needsHttp = await this.needsHttpPort();
+    if (!needsHttp) {
+      return undefined;
+    }
+
+    const pod = await this.findPodForDeployment();
+    const podIp = pod?.status?.podIP;
+    const podName = pod?.metadata?.name;
+    if (!podIp || !podName) {
+      return undefined;
+    }
+
+    const catalogItem = await this.getCatalogItem();
+    const httpPort = catalogItem?.localConfig?.httpPort || 8080;
+    const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+
+    return {
+      endpointUrl: `http://${podIp}:${httpPort}${httpPath}`,
+      podName,
+    };
   }
 
   /**

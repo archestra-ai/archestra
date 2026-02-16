@@ -31,6 +31,11 @@ const interactionsTable = pgTable(
      */
     externalAgentId: varchar("external_agent_id"),
     /**
+     * Optional execution ID passed via X-Archestra-Execution-Id header.
+     * This allows clients to associate interactions with a specific execution run.
+     */
+    executionId: varchar("execution_id"),
+    /**
      * Optional user ID passed via X-Archestra-User-Id header.
      * This allows clients to associate interactions with a specific Archestra user.
      * Particularly useful for identifying which user was using the Archestra Chat.
@@ -76,6 +81,9 @@ const interactionsTable = pgTable(
     profileIdIdx: index("interactions_agent_id_idx").on(table.profileId),
     externalAgentIdIdx: index("interactions_external_agent_id_idx").on(
       table.externalAgentId,
+    ),
+    executionIdIdx: index("interactions_execution_id_idx").on(
+      table.executionId,
     ),
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
     sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),

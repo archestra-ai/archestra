@@ -281,7 +281,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.AutoConfigureAgentToolPolicies,
         description:
-          "Automatically configure security policies for tools using Anthropic LLM analysis",
+          "Automatically configure security policies for tools using LLM analysis",
         tags: ["Agent Tools"],
         body: z.object({
           toolIds: z.array(z.string().uuid()).min(1),
@@ -295,10 +295,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 success: z.boolean(),
                 config: z
                   .object({
-                    toolResultTreatment: z.enum([
-                      "trusted",
+                    toolInvocationAction: z.enum([
+                      "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
+                      "block_always",
+                    ]),
+                    trustedDataAction: z.enum([
+                      "mark_as_trusted",
+                      "mark_as_untrusted",
                       "sanitize_with_dual_llm",
-                      "untrusted",
+                      "block_always",
                     ]),
                     reasoning: z.string(),
                   })
@@ -319,7 +325,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Check if service is available for this organization
-      const available = await toolAutoPolicyService.isAvailable(organizationId);
+      const available = await toolAutoPolicyService.isAvailable(
+        organizationId,
+        user.id,
+      );
       if (!available) {
         logger.warn(
           { organizationId, userId: user.id },
@@ -327,13 +336,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         throw new ApiError(
           503,
-          "Auto-policy requires an organization-wide Anthropic API key to be configured in LLM API Keys settings",
+          "Auto-policy requires an LLM API key to be configured in LLM API Keys settings",
         );
       }
 
       const result = await toolAutoPolicyService.configurePoliciesForTools(
         toolIds,
         organizationId,
+        user.id,
       );
 
       logger.info(

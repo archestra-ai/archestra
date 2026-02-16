@@ -170,6 +170,7 @@ describe("ChatOpsManager security validation", () => {
       sendReply: overrides.sendReply ?? (async () => "reply-id"),
       getThreadHistory: async () => [],
       getUserEmail: overrides.getUserEmail ?? (async () => null),
+      discoverChannels: async () => null,
     };
   }
 

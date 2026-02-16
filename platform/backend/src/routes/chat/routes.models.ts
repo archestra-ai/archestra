@@ -1,4 +1,8 @@
-import { RouteId, type SupportedProvider } from "@shared";
+import {
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  RouteId,
+  type SupportedProvider,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -974,19 +978,24 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fetch secret values and sync models for each API key
       const syncPromises = apiKeys.map(async (apiKey) => {
-        if (!apiKey.secretId) {
-          return;
+        let secretValue: string | null = null;
+
+        if (apiKey.secretId) {
+          secretValue = (await getSecretValueForLlmProviderApiKey(
+            apiKey.secretId,
+          )) as string | null;
         }
 
-        const secretValue = await getSecretValueForLlmProviderApiKey(
-          apiKey.secretId,
-        );
-
-        if (!secretValue) {
-          logger.warn(
-            { apiKeyId: apiKey.id, provider: apiKey.provider },
-            "No secret value for API key, skipping sync",
-          );
+        if (
+          !secretValue &&
+          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKey.provider)
+        ) {
+          if (apiKey.secretId) {
+            logger.warn(
+              { apiKeyId: apiKey.id, provider: apiKey.provider },
+              "No secret value for API key, skipping sync",
+            );
+          }
           return;
         }
 
@@ -994,7 +1003,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await modelSyncService.syncModelsForApiKey(
             apiKey.id,
             apiKey.provider,
-            secretValue as string,
+            secretValue ?? "",
           );
         } catch (error) {
           logger.error(

@@ -1,16 +1,14 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { policyConfigSubagent } from "@/agents/subagents";
+import { resolveProviderApiKey } from "@/clients/llm-client";
 import db, { schema } from "@/database";
-import { secretManager } from "@/secrets-manager";
+import { ApiKeyModelModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ToolAutoPolicyService } from "./agent-tool-auto-policy";
 
-// Only mock external dependencies that make network calls
-vi.mock("@/secrets-manager", () => ({
-  secretManager: vi.fn(() => ({
-    getSecret: vi.fn(),
-  })),
+vi.mock("@/clients/llm-client", () => ({
+  resolveProviderApiKey: vi.fn(),
 }));
 
 vi.mock("@/agents/subagents", () => ({
@@ -19,16 +17,58 @@ vi.mock("@/agents/subagents", () => ({
   },
 }));
 
+const NO_KEY = {
+  apiKey: undefined,
+  source: "environment",
+  chatApiKeyId: undefined,
+};
+
+const MOCK_MODEL = {
+  id: "model-1",
+  externalId: "anthropic/claude-3-5-sonnet",
+  modelId: "claude-3-5-sonnet-20241022",
+  provider: "anthropic" as const,
+  description: null,
+  contextLength: null,
+  inputModalities: null,
+  outputModalities: null,
+  supportsToolCalling: null,
+  promptPricePerToken: null,
+  completionPricePerToken: null,
+  lastSyncedAt: new Date(),
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+/**
+ * Helper: mock resolveProviderApiKey to return a key for a specific provider
+ * and NO_KEY for all others.
+ */
+function mockProviderKey(
+  provider: string,
+  apiKey: string,
+  chatApiKeyId: string,
+) {
+  vi.mocked(resolveProviderApiKey).mockImplementation(async (params) => {
+    if (params.provider === provider) {
+      return { apiKey, source: "org_wide", chatApiKeyId };
+    }
+    return NO_KEY;
+  });
+}
+
 describe("ToolAutoPolicyService", () => {
   let service: ToolAutoPolicyService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     service = new ToolAutoPolicyService();
+    // Default: no provider has a key
+    vi.mocked(resolveProviderApiKey).mockResolvedValue(NO_KEY);
   });
 
   describe("isAvailable", () => {
-    test("returns false when no chat API key configured", async ({
+    test("returns false when no API key configured", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -38,66 +78,31 @@ describe("ToolAutoPolicyService", () => {
       expect(result).toBe(false);
     });
 
-    test("returns true when org-wide Anthropic API key exists", async ({
+    test("returns true when a provider key exists", async ({
       makeOrganization,
-      makeSecret,
-      makeChatApiKey,
     }) => {
       const org = await makeOrganization();
 
-      // Create a secret
-      const secret = await makeSecret({
-        name: "Anthropic API Key",
-        secret: { apiKey: "sk-ant-test-key" },
-      });
-
-      // Create the chat API key record
-      await makeChatApiKey(org.id, secret.id, {
-        name: "Anthropic Key",
-        provider: "anthropic",
-        scope: "org_wide",
-      });
-
-      // Mock the secret manager to return the API key
-      vi.mocked(secretManager).mockReturnValue({
-        getSecret: vi.fn().mockResolvedValue({
-          secret: { apiKey: "sk-ant-test-key" },
-        }),
-      } as unknown as ReturnType<typeof secretManager>);
+      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
+      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
 
       const result = await service.isAvailable(org.id);
 
       expect(result).toBe(true);
     });
 
-    test("returns false when secret not found", async ({
-      makeOrganization,
-      makeSecret,
-      makeChatApiKey,
-    }) => {
+    test("passes userId when provided", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      // Create a secret
-      const secret = await makeSecret({
-        name: "Anthropic API Key",
-        secret: { apiKey: "sk-ant-test-key" },
-      });
+      await service.isAvailable(org.id, "user-123");
 
-      // Create the chat API key record
-      await makeChatApiKey(org.id, secret.id, {
-        name: "Anthropic Key",
-        provider: "anthropic",
-        scope: "org_wide",
-      });
-
-      // Mock the secret manager to return null (secret not found)
-      vi.mocked(secretManager).mockReturnValue({
-        getSecret: vi.fn().mockResolvedValue(null),
-      } as unknown as ReturnType<typeof secretManager>);
-
-      const result = await service.isAvailable(org.id);
-
-      expect(result).toBe(false);
+      // Should have been called with userId for at least the first provider
+      expect(resolveProviderApiKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: org.id,
+          userId: "user-123",
+        }),
+      );
     });
   });
 
@@ -113,35 +118,14 @@ describe("ToolAutoPolicyService", () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain(
-        "Organization-wide Anthropic API key not configured",
-      );
+      expect(result.error).toContain("LLM API key not configured");
     });
 
-    test("returns error when tool not found", async ({
-      makeOrganization,
-      makeSecret,
-      makeChatApiKey,
-    }) => {
+    test("returns error when tool not found", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      // Set up API key
-      const secret = await makeSecret({
-        name: "Anthropic API Key",
-        secret: { apiKey: "sk-ant-test-key" },
-      });
-
-      await makeChatApiKey(org.id, secret.id, {
-        name: "Anthropic Key",
-        provider: "anthropic",
-        scope: "org_wide",
-      });
-
-      vi.mocked(secretManager).mockReturnValue({
-        getSecret: vi.fn().mockResolvedValue({
-          secret: { apiKey: "sk-ant-test-key" },
-        }),
-      } as unknown as ReturnType<typeof secretManager>);
+      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
+      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
 
       const result = await service.configurePoliciesForTool(
         "nonexistent-tool",
@@ -154,30 +138,13 @@ describe("ToolAutoPolicyService", () => {
 
     test("successfully configures policies for a tool", async ({
       makeOrganization,
-      makeSecret,
-      makeChatApiKey,
       makeMcpServer,
       makeTool,
     }) => {
       const org = await makeOrganization();
 
-      // Set up API key
-      const secret = await makeSecret({
-        name: "Anthropic API Key",
-        secret: { apiKey: "sk-ant-test-key" },
-      });
-
-      await makeChatApiKey(org.id, secret.id, {
-        name: "Anthropic Key",
-        provider: "anthropic",
-        scope: "org_wide",
-      });
-
-      vi.mocked(secretManager).mockReturnValue({
-        getSecret: vi.fn().mockResolvedValue({
-          secret: { apiKey: "sk-ant-test-key" },
-        }),
-      } as unknown as ReturnType<typeof secretManager>);
+      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
+      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
 
       // Create MCP server and tool
       const mcpServer = await makeMcpServer({ name: "test-server" });
@@ -185,8 +152,8 @@ describe("ToolAutoPolicyService", () => {
 
       // Mock the subagent analysis
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        allowUsageWhenUntrustedDataIsPresent: true,
-        toolResultTreatment: "trusted",
+        toolInvocationAction: "allow_when_context_is_untrusted",
+        trustedDataAction: "mark_as_trusted",
         reasoning: "This tool is safe",
       });
 
@@ -194,10 +161,19 @@ describe("ToolAutoPolicyService", () => {
 
       expect(result.success).toBe(true);
       expect(result.config).toEqual({
-        allowUsageWhenUntrustedDataIsPresent: true,
-        toolResultTreatment: "trusted",
+        toolInvocationAction: "allow_when_context_is_untrusted",
+        trustedDataAction: "mark_as_trusted",
         reasoning: "This tool is safe",
       });
+
+      // Verify subagent was called with provider/apiKey/modelName
+      expect(policyConfigSubagent.analyze).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "anthropic",
+          apiKey: "sk-ant-test-key",
+          modelName: "claude-3-5-sonnet-20241022",
+        }),
+      );
 
       // Verify policies were created in the database
       const invocationPolicies = await db
@@ -219,38 +195,27 @@ describe("ToolAutoPolicyService", () => {
 
     test("maps blocking policy config to correct actions", async ({
       makeOrganization,
-      makeSecret,
-      makeChatApiKey,
       makeMcpServer,
       makeTool,
     }) => {
       const org = await makeOrganization();
 
-      // Set up API key
-      const secret = await makeSecret({
-        name: "Anthropic API Key",
-        secret: { apiKey: "sk-ant-test-key" },
+      mockProviderKey("openai", "sk-openai-test-key", "key-456");
+      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue({
+        ...MOCK_MODEL,
+        id: "model-2",
+        externalId: "openai/gpt-4o",
+        modelId: "gpt-4o",
+        provider: "openai",
       });
-
-      await makeChatApiKey(org.id, secret.id, {
-        name: "Anthropic Key",
-        provider: "anthropic",
-        scope: "org_wide",
-      });
-
-      vi.mocked(secretManager).mockReturnValue({
-        getSecret: vi.fn().mockResolvedValue({
-          secret: { apiKey: "sk-ant-test-key" },
-        }),
-      } as unknown as ReturnType<typeof secretManager>);
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ mcpServerId: mcpServer.id });
 
       // Mock blocking policy response
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        allowUsageWhenUntrustedDataIsPresent: false,
-        toolResultTreatment: "untrusted",
+        toolInvocationAction: "block_always",
+        trustedDataAction: "block_always",
         reasoning: "This tool is risky",
       });
 
@@ -272,37 +237,20 @@ describe("ToolAutoPolicyService", () => {
 
     test("handles sanitize_with_dual_llm result treatment", async ({
       makeOrganization,
-      makeSecret,
-      makeChatApiKey,
       makeMcpServer,
       makeTool,
     }) => {
       const org = await makeOrganization();
 
-      // Set up API key
-      const secret = await makeSecret({
-        name: "Anthropic API Key",
-        secret: { apiKey: "sk-ant-test-key" },
-      });
-
-      await makeChatApiKey(org.id, secret.id, {
-        name: "Anthropic Key",
-        provider: "anthropic",
-        scope: "org_wide",
-      });
-
-      vi.mocked(secretManager).mockReturnValue({
-        getSecret: vi.fn().mockResolvedValue({
-          secret: { apiKey: "sk-ant-test-key" },
-        }),
-      } as unknown as ReturnType<typeof secretManager>);
+      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
+      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ mcpServerId: mcpServer.id });
 
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        allowUsageWhenUntrustedDataIsPresent: true,
-        toolResultTreatment: "sanitize_with_dual_llm",
+        toolInvocationAction: "allow_when_context_is_untrusted",
+        trustedDataAction: "sanitize_with_dual_llm",
         reasoning: "This tool needs sanitization",
       });
 
@@ -313,6 +261,42 @@ describe("ToolAutoPolicyService", () => {
         .from(schema.trustedDataPoliciesTable)
         .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
       expect(trustedDataPolicies[0].action).toBe("sanitize_with_dual_llm");
+    });
+
+    test("handles block_when_context_is_untrusted invocation action", async ({
+      makeOrganization,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+
+      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
+      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+
+      const mcpServer = await makeMcpServer({ name: "test-server" });
+      const tool = await makeTool({ mcpServerId: mcpServer.id });
+
+      vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
+        toolInvocationAction: "block_when_context_is_untrusted",
+        trustedDataAction: "mark_as_untrusted",
+        reasoning: "External API that could leak data",
+      });
+
+      await service.configurePoliciesForTool(tool.id, org.id);
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(invocationPolicies[0].action).toBe(
+        "block_when_context_is_untrusted",
+      );
+
+      const trustedDataPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trustedDataPolicies[0].action).toBe("mark_as_untrusted");
     });
   });
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
@@ -6,14 +7,10 @@ import {
   TimeInMs,
 } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
-import { getChatMcpClient } from "@/clients/chat-mcp-client";
+import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
+import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import {
-  ConversationModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
-  ToolModel,
-} from "@/models";
+import { BrowserTabStateModel, ToolModel } from "@/models";
 import { ApiError } from "@/types";
 import {
   shouldLogBrowserStreamScreenshots,
@@ -128,17 +125,70 @@ export class BrowserStreamService {
   >();
 
   /**
+   * Execute a Playwright MCP tool directly via mcpClient, bypassing the MCP Gateway.
+   * This ensures the browser stream uses the same Playwright session (same connection key)
+   * as the chat agent, so the preview shows the same page the agent sees.
+   */
+  private async executeTool(params: {
+    toolName: string;
+    args: Record<string, unknown>;
+    agentId: string;
+    conversationId: string;
+    userContext: BrowserUserContext;
+  }): Promise<{
+    content: unknown;
+    isError: boolean;
+  }> {
+    const { toolName, args, agentId, conversationId, userContext } = params;
+
+    const mcpGwToken = await selectMCPGatewayToken(
+      agentId,
+      userContext.userId,
+      userContext.organizationId,
+      userContext.userIsProfileAdmin,
+    );
+
+    const tokenAuth = mcpGwToken
+      ? {
+          tokenId: mcpGwToken.tokenId,
+          teamId: mcpGwToken.teamId,
+          isOrganizationToken: mcpGwToken.isOrganizationToken,
+          organizationId: userContext.organizationId,
+          userId: userContext.userId,
+        }
+      : undefined;
+
+    const toolCall = {
+      id: randomUUID(),
+      name: toolName,
+      arguments: args,
+    };
+
+    const result = await mcpClient.executeToolCall(
+      toolCall,
+      agentId,
+      tokenAuth,
+      {
+        conversationId,
+      },
+    );
+
+    return {
+      content: Array.isArray(result.content)
+        ? result.content
+        : [{ type: "text", text: JSON.stringify(result.content) }],
+      isError: !!result.isError,
+    };
+  }
+
+  /**
    * Get tools for an agent with caching to reduce database queries.
    * Tools are cached for 30 seconds with LRU eviction.
-   * When userId is provided, also includes tools from globally available catalogs.
    */
   private async getToolsForAgent(
     agentId: string,
-    userId?: string,
   ): Promise<{ name: string; catalogId: string | null }[]> {
-    // Include userId in cache key when provided
-    const cacheKey = userId ? `${agentId}:${userId}` : agentId;
-    const cached = toolsCache.get(cacheKey);
+    const cached = toolsCache.get(agentId);
     if (cached) {
       return cached;
     }
@@ -149,65 +199,16 @@ export class BrowserStreamService {
       catalogId: t.catalogId,
     }));
 
-    // If userId is provided, also include global catalog tools
-    if (userId) {
-      const globalTools = await this.getGlobalCatalogToolsForUser(userId);
-      for (const tool of globalTools) {
-        // Avoid duplicates
-        if (!toolData.some((t) => t.name === tool.name)) {
-          toolData.push(tool);
-        }
-      }
-    }
-
-    toolsCache.set(cacheKey, toolData);
+    toolsCache.set(agentId, toolData);
 
     return toolData;
-  }
-
-  /**
-   * Get tools from globally available catalogs for a user.
-   * These are catalogs marked as `isGloballyAvailable` where the user has a personal server.
-   * Uses batch loading to avoid N+1 queries.
-   */
-  private async getGlobalCatalogToolsForUser(
-    userId: string,
-  ): Promise<{ name: string; catalogId: string }[]> {
-    const globalCatalogs =
-      await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-
-    if (globalCatalogs.length === 0) {
-      return [];
-    }
-
-    const catalogIds = globalCatalogs.map((c) => c.id);
-
-    // Batch load: get all user's personal servers for these catalogs
-    const userServersByCatalog =
-      await McpServerModel.getUserPersonalServersForCatalogs(
-        userId,
-        catalogIds,
-      );
-
-    // Filter to catalogs where user has a personal server
-    const catalogsWithUserServer = catalogIds.filter((id) =>
-      userServersByCatalog.has(id),
-    );
-
-    if (catalogsWithUserServer.length === 0) {
-      return [];
-    }
-
-    // Batch load: get all tools for these catalogs
-    return ToolModel.getToolNamesByCatalogIds(catalogsWithUserServer);
   }
 
   private async findToolName(
     agentId: string,
     matches: (toolName: string) => boolean,
-    userId?: string,
   ): Promise<string | null> {
-    const tools = await this.getToolsForAgent(agentId, userId);
+    const tools = await this.getToolsForAgent(agentId);
 
     // Only consider tools from the builtin playwright-browser catalog
     for (const tool of tools) {
@@ -227,13 +228,9 @@ export class BrowserStreamService {
    * Check if Playwright MCP browser tools are available for an agent.
    * Only considers tools from the builtin playwright-browser catalog (PLAYWRIGHT_MCP_CATALOG_ID).
    * @param agentId - The agent ID
-   * @param userId - Optional user ID to check global catalog tools
    */
-  async checkAvailability(
-    agentId: string,
-    userId?: string,
-  ): Promise<AvailabilityResult> {
-    const tools = await this.getToolsForAgent(agentId, userId);
+  async checkAvailability(agentId: string): Promise<AvailabilityResult> {
+    const tools = await this.getToolsForAgent(agentId);
 
     // Only include tools from the builtin playwright-browser catalog
     const browserToolNames = tools
@@ -252,91 +249,70 @@ export class BrowserStreamService {
    * Matches tools like "browser_navigate" or "playwright__browser_navigate"
    * but NOT "browser_navigate_back" or "browser_navigate_forward"
    */
-  private async findNavigateTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => {
-        // Check if it ends with "browser_navigate" (to match both
-        // "browser_navigate" and "prefix__browser_navigate")
-        if (toolName.endsWith("browser_navigate")) return true;
-        // Check for __navigate suffix (older naming convention)
-        if (toolName.endsWith("__navigate")) return true;
-        // As a fallback, check for playwright navigate but exclude back/forward
-        if (
-          toolName.includes("playwright") &&
-          toolName.includes("navigate") &&
-          !toolName.includes("_back") &&
-          !toolName.includes("_forward")
-        ) {
-          return true;
-        }
-        return false;
-      },
-      userId,
-    );
+  private async findNavigateTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) => {
+      // Check if it ends with "browser_navigate" (to match both
+      // "browser_navigate" and "prefix__browser_navigate")
+      if (toolName.endsWith("browser_navigate")) return true;
+      // Check for __navigate suffix (older naming convention)
+      if (toolName.endsWith("__navigate")) return true;
+      // As a fallback, check for playwright navigate but exclude back/forward
+      if (
+        toolName.includes("playwright") &&
+        toolName.includes("navigate") &&
+        !toolName.includes("_back") &&
+        !toolName.includes("_forward")
+      ) {
+        return true;
+      }
+      return false;
+    });
   }
 
   /**
    * Find the Playwright browser navigate back tool for an agent
    * Matches tools like "browser_navigate_back" or "playwright__browser_navigate_back"
    */
-  private async findNavigateBackTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_navigate_back"),
-      userId,
+  private async findNavigateBackTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_navigate_back"),
     );
   }
 
   /**
    * Find the Playwright browser screenshot tool for an agent
    */
-  private async findScreenshotTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
+  private async findScreenshotTool(agentId: string): Promise<string | null> {
     // Prefer browser_take_screenshot or browser_screenshot
     return this.findToolName(
       agentId,
       (toolName) =>
         toolName.includes("browser_take_screenshot") ||
         toolName.includes("browser_screenshot"),
-      userId,
     );
   }
 
   /**
    * Find the Playwright browser tabs tool for an agent
    */
-  private async findTabsTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_tabs"),
-      userId,
+  private async findTabsTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_tabs"),
     );
   }
 
   private async getTabsList(params: {
     agentId: string;
+    conversationId: string;
     userContext: BrowserUserContext;
-    client: NonNullable<Awaited<ReturnType<typeof getChatMcpClient>>>;
     tabsTool: string;
   }): Promise<BrowserTabsListData | null> {
-    const { agentId, userContext, client, tabsTool } = params;
+    const { agentId, conversationId, userContext, tabsTool } = params;
 
     const listResult = await this.callTabsTool({
       agentId,
+      conversationId,
       userContext,
-      client,
       tabsTool,
       action: "list",
     });
@@ -351,22 +327,14 @@ export class BrowserStreamService {
 
   private async callTabsTool(params: {
     agentId: string;
-    conversationId?: string;
+    conversationId: string;
     userContext: BrowserUserContext;
-    client: NonNullable<Awaited<ReturnType<typeof getChatMcpClient>>>;
     tabsTool: string;
     action: BrowserTabsAction;
     index?: number;
   }) {
-    const {
-      agentId,
-      conversationId,
-      userContext,
-      client,
-      tabsTool,
-      action,
-      index,
-    } = params;
+    const { agentId, conversationId, userContext, tabsTool, action, index } =
+      params;
 
     const logContext = {
       agentId,
@@ -383,9 +351,12 @@ export class BrowserStreamService {
       logger.info(logContext, "[BrowserTabs] browser_tabs action");
     }
 
-    return client.callTool({
-      name: tabsTool,
-      arguments: index === undefined ? { action } : { action, index },
+    return this.executeTool({
+      toolName: tabsTool,
+      args: index === undefined ? { action } : { action, index },
+      agentId,
+      conversationId,
+      userContext,
     });
   }
 
@@ -450,7 +421,7 @@ export class BrowserStreamService {
     userContext: BrowserUserContext,
     initialUrl?: string,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       logTabSyncInfo(
         { agentId, conversationId },
@@ -459,28 +430,21 @@ export class BrowserStreamService {
       return { success: true, tabIndex: 0 };
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      return { success: false, error: "Failed to connect to MCP Gateway" };
-    }
-
     try {
-      // Load stored state for this conversation
-      const state = await browserStateManager.get(conversationId);
+      // Load stored state for this agent+user+conversation
+      const state = await browserStateManager.get(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       const storedTabIndex = state?.tabIndex;
       const storedUrl = state?.url;
 
       // Get current browser tabs
       const listData = await this.getTabsList({
         agentId,
+        conversationId,
         userContext,
-        client,
         tabsTool,
       });
       const browserTabs = listData?.tabs ?? [];
@@ -505,7 +469,6 @@ export class BrowserStreamService {
             agentId,
             conversationId,
             userContext,
-            client,
             tabsTool,
             action: "select",
             index: storedTabIndex,
@@ -515,6 +478,47 @@ export class BrowserStreamService {
             { agentId, conversationId, tabIndex: storedTabIndex },
             "[BrowserTabs] Selected existing tab for conversation",
           );
+
+          // If the tab exists but is blank (common after browser process restart),
+          // restore the persisted URL for this conversation.
+          const shouldRestoreStoredUrl =
+            this.isBlankUrl(existingTab.url) &&
+            storedUrl &&
+            !this.isBlankUrl(storedUrl);
+          if (shouldRestoreStoredUrl) {
+            const navigateTool = await this.findNavigateTool(agentId);
+            if (navigateTool) {
+              await this.executeTool({
+                toolName: navigateTool,
+                args: { url: storedUrl },
+                agentId,
+                conversationId,
+                userContext,
+              });
+              await browserStateManager.updateUrl(
+                agentId,
+                userContext.userId,
+                conversationId,
+                storedUrl,
+              );
+            }
+          }
+
+          // If browser has a non-blank URL for this tab, persist it immediately.
+          // This ensures URL restoration survives backend redeploys even when no
+          // explicit browser_navigate happened in this session.
+          if (
+            !shouldRestoreStoredUrl &&
+            existingTab.url &&
+            !this.isBlankUrl(existingTab.url)
+          ) {
+            await browserStateManager.updateUrl(
+              agentId,
+              userContext.userId,
+              conversationId,
+              existingTab.url,
+            );
+          }
 
           return { success: true, tabIndex: storedTabIndex };
         }
@@ -529,8 +533,8 @@ export class BrowserStreamService {
       // First, check if we need to close oldest tab
       await this.closeOldestTabIfNeeded({
         agentId,
+        conversationId,
         userContext,
-        client,
         tabsTool,
         browserTabs,
       });
@@ -546,7 +550,6 @@ export class BrowserStreamService {
           agentId,
           conversationId,
           userContext,
-          client,
           tabsTool,
           action: "select",
           index: newTabIndex,
@@ -562,7 +565,6 @@ export class BrowserStreamService {
           agentId,
           conversationId,
           userContext,
-          client,
           tabsTool,
           action: "new",
         });
@@ -570,8 +572,8 @@ export class BrowserStreamService {
         // Get updated tabs list to find the new tab's index
         const updatedListData = await this.getTabsList({
           agentId,
+          conversationId,
           userContext,
-          client,
           tabsTool,
         });
         const updatedTabs = updatedListData?.tabs ?? [];
@@ -587,14 +589,14 @@ export class BrowserStreamService {
       const urlToLoad =
         storedUrl && !this.isBlankUrl(storedUrl) ? storedUrl : initialUrl;
       if (urlToLoad) {
-        const navigateTool = await this.findNavigateTool(
-          agentId,
-          userContext.userId,
-        );
+        const navigateTool = await this.findNavigateTool(agentId);
         if (navigateTool) {
-          await client.callTool({
-            name: navigateTool,
-            arguments: { url: urlToLoad },
+          await this.executeTool({
+            toolName: navigateTool,
+            args: { url: urlToLoad },
+            agentId,
+            conversationId,
+            userContext,
           });
 
           logTabSyncInfo(
@@ -604,11 +606,29 @@ export class BrowserStreamService {
         }
       }
 
+      // If we did not navigate explicitly, attempt to recover current URL from
+      // browser state (current tab) and persist it when non-blank.
+      const recoveredCurrentUrl = !urlToLoad
+        ? await this.getCurrentUrl(agentId, conversationId, userContext)
+        : undefined;
+      const urlToPersist: string = !this.isBlankUrl(urlToLoad)
+        ? (urlToLoad ?? "")
+        : !this.isBlankUrl(recoveredCurrentUrl)
+          ? (recoveredCurrentUrl ?? "")
+          : !this.isBlankUrl(storedUrl)
+            ? (storedUrl ?? "")
+            : "";
+
       // Save state
-      await browserStateManager.set(conversationId, {
-        url: urlToLoad ?? "",
-        tabIndex: newTabIndex,
-      });
+      await browserStateManager.set(
+        agentId,
+        userContext.userId,
+        conversationId,
+        {
+          url: urlToPersist,
+          tabIndex: newTabIndex,
+        },
+      );
 
       return { success: true, tabIndex: newTabIndex };
     } catch (error) {
@@ -641,123 +661,86 @@ export class BrowserStreamService {
    */
   private async closeOldestTabIfNeeded(params: {
     agentId: string;
+    conversationId: string;
     userContext: BrowserUserContext;
-    client: NonNullable<Awaited<ReturnType<typeof getChatMcpClient>>>;
     tabsTool: string;
     browserTabs: Array<{ index: number; title?: string; url?: string }>;
   }): Promise<void> {
-    const { agentId, userContext, client, tabsTool, browserTabs } = params;
+    const { agentId, conversationId, userContext, tabsTool, browserTabs } =
+      params;
 
     if (browserTabs.length < MAX_TABS_PER_USER) {
       return;
     }
 
-    // Get oldest conversation with browser state
-    const oldest =
-      await ConversationModel.getOldestConversationWithBrowserState(
-        agentId,
-        userContext.userId,
-      );
+    // Get oldest tab state for this user across all agents
+    const oldest = await BrowserTabStateModel.getOldestForUser(
+      userContext.userId,
+    );
 
     if (!oldest) {
       return;
     }
 
-    const state = await browserStateManager.get(oldest.id);
-
-    if (state?.tabIndex !== undefined && state.tabIndex > 0) {
+    if (oldest.tabIndex !== null && oldest.tabIndex > 0) {
       logger.info(
         {
-          agentId,
+          agentId: oldest.agentId,
           userId: userContext.userId,
-          oldestConversationId: oldest.id,
-          tabIndex: state.tabIndex,
+          oldestIsolationKey: oldest.isolationKey,
+          tabIndex: oldest.tabIndex,
         },
         "[BrowserTabs] Closing oldest tab to make room for new conversation",
       );
 
       await this.callTabsTool({
         agentId,
-        conversationId: oldest.id,
+        conversationId,
         userContext,
-        client,
         tabsTool,
         action: "close",
-        index: state.tabIndex,
+        index: oldest.tabIndex,
       });
     }
 
-    // Clear state for the closed conversation
-    await browserStateManager.clear(oldest.id);
+    // Clear state for the closed tab
+    await browserStateManager.clear(
+      oldest.agentId,
+      userContext.userId,
+      oldest.isolationKey,
+    );
   }
 
   /**
    * Find the Playwright browser click tool for an agent
    */
-  private async findClickTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_click"),
-      userId,
+  private async findClickTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_click"),
     );
   }
 
-  /**
-   * Find the Playwright browser type tool for an agent
-   */
-  private async findTypeTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_type"),
-      userId,
+  private async findTypeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_type"),
     );
   }
 
-  /**
-   * Find the Playwright browser press key tool for an agent
-   */
-  private async findPressKeyTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_press_key"),
-      userId,
+  private async findPressKeyTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_press_key"),
     );
   }
 
-  /**
-   * Find the Playwright browser snapshot tool for an agent
-   */
-  private async findSnapshotTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_snapshot"),
-      userId,
+  private async findSnapshotTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_snapshot"),
     );
   }
 
-  /**
-   * Find the Playwright browser resize tool for an agent
-   */
-  private async findResizeTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_resize"),
-      userId,
+  private async findResizeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_resize"),
     );
   }
 
@@ -772,7 +755,7 @@ export class BrowserStreamService {
     width: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
     height: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   ): Promise<void> {
-    const resizeTool = await this.findResizeTool(agentId, userContext.userId);
+    const resizeTool = await this.findResizeTool(agentId);
     if (!resizeTool) {
       logger.debug(
         { agentId },
@@ -781,23 +764,15 @@ export class BrowserStreamService {
       return;
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      return;
-    }
-
     try {
       logger.debug({ agentId, width, height }, "Resizing browser viewport");
 
-      const result = await client.callTool({
-        name: resizeTool,
-        arguments: { width, height },
+      const result = await this.executeTool({
+        toolName: resizeTool,
+        args: { width, height },
+        agentId,
+        conversationId,
+        userContext,
       });
 
       if (result.isError) {
@@ -848,7 +823,7 @@ export class BrowserStreamService {
       "[BrowserNavigate] Tab selected/created",
     );
 
-    const toolName = await this.findNavigateTool(agentId, userContext.userId);
+    const toolName = await this.findNavigateTool(agentId);
     if (!toolName) {
       logger.error(
         { agentId, conversationId },
@@ -860,21 +835,6 @@ export class BrowserStreamService {
       );
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      logger.error(
-        { agentId, conversationId },
-        "[BrowserNavigate] Failed to get MCP client",
-      );
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     // Resize browser to ensure proper viewport dimensions before navigation
     // This ensures the page loads with the correct viewport from the start
     await this.resizeBrowser(agentId, conversationId, userContext);
@@ -884,9 +844,12 @@ export class BrowserStreamService {
       "[BrowserNavigate] Calling MCP navigate tool",
     );
 
-    const result = await client.callTool({
-      name: toolName,
-      arguments: { url },
+    const result = await this.executeTool({
+      toolName,
+      args: { url },
+      agentId,
+      conversationId,
+      userContext,
     });
 
     if (result.isError) {
@@ -907,7 +870,12 @@ export class BrowserStreamService {
       (await this.getCurrentUrl(agentId, conversationId, userContext)) ?? url;
 
     // Update URL in state
-    await browserStateManager.updateUrl(conversationId, resolvedUrl);
+    await browserStateManager.updateUrl(
+      agentId,
+      userContext.userId,
+      conversationId,
+      resolvedUrl,
+    );
 
     logTabSyncInfo(
       { agentId, conversationId, url: resolvedUrl },
@@ -952,10 +920,7 @@ export class BrowserStreamService {
     }
 
     // Find the browser_navigate_back tool
-    const navigateBackTool = await this.findNavigateBackTool(
-      agentId,
-      userContext.userId,
-    );
+    const navigateBackTool = await this.findNavigateBackTool(agentId);
     if (!navigateBackTool) {
       logger.error(
         { agentId, conversationId },
@@ -964,29 +929,17 @@ export class BrowserStreamService {
       throw new ApiError(400, "No browser navigate back tool available");
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      logger.error(
-        { agentId, conversationId },
-        "[BrowserNavigateBack] Failed to get MCP client",
-      );
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     logger.debug(
       { agentId, conversationId, toolName: navigateBackTool },
       "[BrowserNavigateBack] Calling browser navigate back tool",
     );
 
-    const result = await client.callTool({
-      name: navigateBackTool,
-      arguments: {},
+    const result = await this.executeTool({
+      toolName: navigateBackTool,
+      args: {},
+      agentId,
+      conversationId,
+      userContext,
     });
 
     if (result.isError) {
@@ -1011,7 +964,12 @@ export class BrowserStreamService {
 
     // Update the current URL in state (for page restoration when switching conversations)
     if (actualUrl && !this.isBlankUrl(actualUrl)) {
-      await browserStateManager.updateUrl(conversationId, actualUrl);
+      await browserStateManager.updateUrl(
+        agentId,
+        userContext.userId,
+        conversationId,
+        actualUrl,
+      );
 
       logTabSyncInfo(
         { agentId, conversationId, url: actualUrl },
@@ -1034,7 +992,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       throw new ApiError(400, "No browser tabs tool available for this agent");
     }
@@ -1056,28 +1014,18 @@ export class BrowserStreamService {
    */
   async listTabs(
     agentId: string,
+    conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       throw new ApiError(400, "No browser tabs tool available");
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-    );
-
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     const listData = await this.getTabsList({
       agentId,
+      conversationId,
       userContext,
-      client,
       tabsTool,
     });
 
@@ -1099,26 +1047,22 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<TabResult> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
-      await browserStateManager.clear(conversationId);
-      return { success: true };
-    }
-
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return { success: true };
     }
 
     // Load state to get tab index
-    const state = await browserStateManager.get(conversationId);
+    const state = await browserStateManager.get(
+      agentId,
+      userContext.userId,
+      conversationId,
+    );
     const tabIndex = state?.tabIndex;
 
     if (tabIndex === undefined || tabIndex === 0) {
@@ -1126,7 +1070,11 @@ export class BrowserStreamService {
         { agentId, conversationId, tabIndex },
         "[BrowserTabs] No tab to close (undefined or tab 0)",
       );
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return { success: true };
     }
 
@@ -1140,14 +1088,17 @@ export class BrowserStreamService {
         agentId,
         conversationId,
         userContext,
-        client,
         tabsTool,
         action: "close",
         index: tabIndex,
       });
 
       // Clear the state for this conversation
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
 
       logTabSyncInfo(
         { agentId, conversationId, closedTabIndex: tabIndex },
@@ -1158,7 +1109,11 @@ export class BrowserStreamService {
     } catch (error) {
       logger.error({ error, agentId, conversationId }, "Failed to close tab");
       // Clear state anyway to prevent stale data, but report failure
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to close tab",
@@ -1176,7 +1131,7 @@ export class BrowserStreamService {
     userContext: BrowserUserContext;
     toolResultContent: unknown;
   }): Promise<void> {
-    const { conversationId, toolResultContent } = params;
+    const { agentId, conversationId, userContext, toolResultContent } = params;
 
     // Extract URL from tool result
     // The Playwright MCP tool result contains the goto() call with the actual URL
@@ -1200,10 +1155,15 @@ export class BrowserStreamService {
     }
 
     // Update URL in state
-    await browserStateManager.updateUrl(conversationId, navigatedUrl);
+    await browserStateManager.updateUrl(
+      agentId,
+      userContext.userId,
+      conversationId,
+      navigatedUrl,
+    );
 
     logger.info(
-      { conversationId, url: navigatedUrl },
+      { agentId, conversationId, url: navigatedUrl },
       "[BrowserNavigate] Updated current URL from AI navigate action",
     );
   }
@@ -1301,24 +1261,12 @@ export class BrowserStreamService {
     // Tab is selected once on subscription. After that, we just capture
     // whatever is current, so LLM navigation works correctly.
 
-    const toolName = await this.findScreenshotTool(agentId, userContext.userId);
+    const toolName = await this.findScreenshotTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,
         "No browser screenshot tool available for this agent",
       );
-    }
-
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
     // Always use fixed viewport dimensions for consistent page rendering
@@ -1329,12 +1277,15 @@ export class BrowserStreamService {
       "Taking browser screenshot via MCP",
     );
 
-    const result = await client.callTool({
-      name: toolName,
-      arguments: {
+    const result = await this.executeTool({
+      toolName,
+      args: {
         type: "jpeg",
         raw: true, // Return base64 data instead of saving to file
       },
+      agentId,
+      conversationId,
+      userContext,
     });
 
     if (result.isError) {
@@ -1602,27 +1553,16 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<string | undefined> {
-    const tabsTool = await this.findTabsTool(agentId, userContext.userId);
+    const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
-      return undefined;
-    }
-
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
       return undefined;
     }
 
     try {
       const listData = await this.getTabsList({
         agentId,
+        conversationId,
         userContext,
-        client,
         tabsTool,
       });
       if (!listData) {
@@ -1638,14 +1578,9 @@ export class BrowserStreamService {
    * Find the Playwright browser run_code tool for an agent
    * This tool allows running arbitrary Playwright code including mouse operations
    */
-  private async findRunCodeTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_run_code"),
-      userId,
+  private async findRunCodeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_run_code"),
     );
   }
 
@@ -1684,23 +1619,9 @@ export class BrowserStreamService {
       await this.resizeBrowser(agentId, conversationId, userContext);
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     if (x !== undefined && y !== undefined) {
       // Use browser_run_code for native Playwright mouse click
-      const runCodeTool = await this.findRunCodeTool(
-        agentId,
-        userContext.userId,
-      );
+      const runCodeTool = await this.findRunCodeTool(agentId);
       if (runCodeTool) {
         // Validate coordinates to prevent code injection and ensure reasonable bounds
         const safeX = Math.round(x);
@@ -1728,9 +1649,12 @@ export class BrowserStreamService {
         const code = `async (page) => { await page.mouse.click(${safeX}, ${safeY}); }`;
 
         try {
-          const result = await client.callTool({
-            name: runCodeTool,
-            arguments: { code },
+          const result = await this.executeTool({
+            toolName: runCodeTool,
+            args: { code },
+            agentId,
+            conversationId,
+            userContext,
           });
 
           if (!result.isError) {
@@ -1764,7 +1688,7 @@ export class BrowserStreamService {
       throw new ApiError(400, "browser_run_code failed for coordinate clicks");
     } else if (element) {
       // Element ref-based click using browser_click
-      const toolName = await this.findClickTool(agentId, userContext.userId);
+      const toolName = await this.findClickTool(agentId);
       if (!toolName) {
         throw new ApiError(
           400,
@@ -1777,9 +1701,12 @@ export class BrowserStreamService {
         "Clicking element via MCP",
       );
 
-      const result = await client.callTool({
-        name: toolName,
-        arguments: { element, ref: element },
+      const result = await this.executeTool({
+        toolName,
+        args: { element, ref: element },
+        agentId,
+        conversationId,
+        userContext,
       });
 
       if (result.isError) {
@@ -1820,23 +1747,9 @@ export class BrowserStreamService {
       );
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     // If no element specified, use page.keyboard.type() to type into focused element
     if (!element) {
-      const runCodeTool = await this.findRunCodeTool(
-        agentId,
-        userContext.userId,
-      );
+      const runCodeTool = await this.findRunCodeTool(agentId);
       if (runCodeTool) {
         logger.debug(
           { agentId, conversationId, textLength: text.length },
@@ -1848,9 +1761,12 @@ export class BrowserStreamService {
         // Native Playwright keyboard type - async function with page argument
         const playwrightCode = `async (page) => { await page.keyboard.type(${safeText}); }`;
 
-        const result = await client.callTool({
-          name: runCodeTool,
-          arguments: { code: playwrightCode },
+        const result = await this.executeTool({
+          toolName: runCodeTool,
+          args: { code: playwrightCode },
+          agentId,
+          conversationId,
+          userContext,
         });
 
         if (!result.isError) {
@@ -1866,7 +1782,7 @@ export class BrowserStreamService {
     }
 
     // Fall back to browser_type tool (requires element ref)
-    const toolName = await this.findTypeTool(agentId, userContext.userId);
+    const toolName = await this.findTypeTool(agentId);
     if (!toolName) {
       throw new ApiError(400, "No browser type tool available for this agent");
     }
@@ -1876,15 +1792,18 @@ export class BrowserStreamService {
       "Typing text via browser_type MCP tool",
     );
 
-    const args: Record<string, string> = { text };
+    const typeArgs: Record<string, string> = { text };
     if (element) {
-      args.element = element;
-      args.ref = element;
+      typeArgs.element = element;
+      typeArgs.ref = element;
     }
 
-    const result = await client.callTool({
-      name: toolName,
-      arguments: args,
+    const result = await this.executeTool({
+      toolName,
+      args: typeArgs,
+      agentId,
+      conversationId,
+      userContext,
     });
 
     if (result.isError) {
@@ -1920,7 +1839,7 @@ export class BrowserStreamService {
       );
     }
 
-    const toolName = await this.findPressKeyTool(agentId, userContext.userId);
+    const toolName = await this.findPressKeyTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,
@@ -1928,22 +1847,14 @@ export class BrowserStreamService {
       );
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     logger.debug({ agentId, conversationId, key }, "Pressing key via MCP");
 
-    const result = await client.callTool({
-      name: toolName,
-      arguments: { key },
+    const result = await this.executeTool({
+      toolName,
+      args: { key },
+      agentId,
+      conversationId,
+      userContext,
     });
 
     if (result.isError) {
@@ -1977,7 +1888,7 @@ export class BrowserStreamService {
       );
     }
 
-    const toolName = await this.findSnapshotTool(agentId, userContext.userId);
+    const toolName = await this.findSnapshotTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,
@@ -1985,25 +1896,17 @@ export class BrowserStreamService {
       );
     }
 
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
     logger.debug(
       { agentId, conversationId },
       "Getting browser snapshot via MCP",
     );
 
-    const result = await client.callTool({
-      name: toolName,
-      arguments: {},
+    const result = await this.executeTool({
+      toolName,
+      args: {},
+      agentId,
+      conversationId,
+      userContext,
     });
 
     if (result.isError) {

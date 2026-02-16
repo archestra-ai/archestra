@@ -12,9 +12,9 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -1154,7 +1154,11 @@ export const vllmAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("vllm", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "vllm",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     // vLLM uses OpenAI SDK since it's OpenAI-compatible

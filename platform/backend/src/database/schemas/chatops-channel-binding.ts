@@ -33,6 +33,10 @@ const chatopsChannelBindingsTable = pgTable(
     channelId: varchar("channel_id", { length: 256 }).notNull(),
     /** Workspace/Team ID from the provider (e.g., Teams team ID) */
     workspaceId: varchar("workspace_id", { length: 256 }),
+    /** Human-readable channel name (resolved via TeamsInfo) */
+    channelName: varchar("channel_name", { length: 256 }),
+    /** Human-readable workspace/team name (resolved via TeamsInfo) */
+    workspaceName: varchar("workspace_name", { length: 256 }),
     /** The internal agent to route messages to */
     agentId: uuid("agent_id").references(() => agentsTable.id, {
       onDelete: "cascade",

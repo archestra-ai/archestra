@@ -1,8 +1,7 @@
 ---
 title: Private MCP Registry
-category: Archestra Platform
-subcategory: Concepts
-order: 6
+category: MCP Gateway
+order: 2
 description: Managing your organization's MCP servers in a private registry
 lastUpdated: 2025-10-31
 ---

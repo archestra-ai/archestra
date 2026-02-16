@@ -26,6 +26,10 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
     "Logo uploaded successfully",
     "Failed to upload logo",
   );
+  const removeOrganizationLogoMutation = useUpdateOrganization(
+    "Logo removed successfully",
+    "Failed to remove logo",
+  );
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,9 +55,14 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
         setPreview(base64);
 
         try {
-          await uploadOrganizationLogoMutation.mutateAsync({
+          const result = await uploadOrganizationLogoMutation.mutateAsync({
             logo: base64,
           });
+
+          if (!result) {
+            throw new Error("Upload failed");
+          }
+
           onLogoChange?.();
         } catch (error) {
           console.error("Failed to upload logo:", error);
@@ -67,15 +76,20 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
 
   const handleRemoveLogo = useCallback(async () => {
     try {
-      await uploadOrganizationLogoMutation.mutateAsync({
+      const result = await removeOrganizationLogoMutation.mutateAsync({
         logo: null,
       });
+
+      if (!result) {
+        throw new Error("Removal failed");
+      }
+
       setPreview(null);
       onLogoChange?.();
     } catch (error) {
       console.error("Failed to remove logo:", error);
     }
-  }, [onLogoChange, uploadOrganizationLogoMutation]);
+  }, [onLogoChange, removeOrganizationLogoMutation]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -124,7 +138,7 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
                 variant="outline"
                 size="sm"
                 onClick={handleRemoveLogo}
-                disabled={uploadOrganizationLogoMutation.isPending}
+                disabled={removeOrganizationLogoMutation.isPending}
               >
                 <X className="h-4 w-4 mr-2" />
                 Remove

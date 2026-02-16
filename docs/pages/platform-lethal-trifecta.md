@@ -1,6 +1,6 @@
 ---
 title: The Lethal Trifecta
-category: Archestra Platform
+category: LLM Proxy
 subcategory: Security Concepts
 order: 2
 ---

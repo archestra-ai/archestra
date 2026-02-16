@@ -2,6 +2,8 @@
  * ChatOps constants and configuration
  */
 
+import { TimeInMs } from "@shared";
+
 /**
  * Rate limit configuration for chatops webhooks
  */
@@ -40,6 +42,17 @@ export const CHATOPS_TEAM_CACHE = {
   MAX_SIZE: 500,
   /** Cache TTL in milliseconds (1 hour) */
   TTL_MS: 60 * 60 * 1000,
+};
+
+/**
+ * Bot commands recognized by the chatops system
+ */
+/**
+ * Channel discovery configuration for auto-populating channel bindings
+ */
+export const CHATOPS_CHANNEL_DISCOVERY = {
+  /** Minimum interval between channel discovery per workspace (5 minutes) */
+  TTL_MS: TimeInMs.Minute * 5,
 };
 
 /**

@@ -225,7 +225,7 @@ export function useBrowserStream({
       "browser_stream_error",
       (message) => {
         if (message.payload.conversationId === conversationId) {
-          setError(message.payload.error);
+          console.error("[BrowserStream] Error:", message.payload.error);
           setIsConnecting(false);
         }
       },

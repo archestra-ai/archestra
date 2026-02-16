@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -136,6 +136,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
+        // Playwright browser preview can only be installed as a personal server
+        if (
+          isPlaywrightCatalogItem(serverData.catalogId) &&
+          serverData.teamId
+        ) {
+          throw new ApiError(
+            400,
+            "Playwright browser preview can only be installed as a personal server",
+          );
+        }
+
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
@@ -199,6 +210,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (s) => s.ownerId === user.id && !s.teamId,
           );
           if (existingPersonal) {
+            // If agentIds provided, assign the server's tools to those agents
+            if (agentIds && agentIds.length > 0) {
+              const catalogTools = await ToolModel.findByCatalogId(
+                serverData.catalogId,
+              );
+              const toolIds = catalogTools.map((t) => t.id);
+              if (toolIds.length > 0) {
+                for (const agentId of agentIds) {
+                  await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+                }
+              }
+            }
             return reply.send(existingPersonal);
           }
         }
@@ -423,6 +446,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
+
+        // For local servers, store accessToken as a secret if provided
+        // (e.g., for servers that require JWT auth during tool discovery)
+        if (accessToken) {
+          if (secretId) {
+            // Merge accessToken into existing secret (e.g., when catalog has secret-type env vars)
+            const existingSecret = await secretManager().getSecret(secretId);
+            if (
+              existingSecret?.secret &&
+              typeof existingSecret.secret === "object"
+            ) {
+              await secretManager().updateSecret(secretId, {
+                ...(existingSecret.secret as Record<string, string>),
+                access_token: accessToken,
+              });
+            }
+          } else {
+            const secret = await secretManager().createSecret(
+              { access_token: accessToken },
+              `${serverData.name}-token`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+          }
+        }
       }
 
       // Create the MCP server with optional secret reference
@@ -599,9 +647,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // If agentIds were provided, create agent-tool assignments
         // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
+        // but need credentialSourceMcpServerId to resolve credentials at call time
         if (agentIds && agentIds.length > 0) {
           const toolIds = createdTools.map((t) => t.id);
-          await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds);
+          await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
+            credentialSourceMcpServerId: mcpServer.id,
+          });
         }
 
         // Set status to success for non-local servers

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import config from "@/config";
-import { SSO_PROVIDERS_API_PREFIX } from "@/constants";
+import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
 import { ApiError } from "@/types";
 
 // Pattern to match team external groups routes: /api/teams/:id/external-groups
@@ -14,8 +14,8 @@ const ENTERPRISE_CONTACT_MESSAGE =
  * Check if a URL is an enterprise-only route that requires license activation.
  */
 export function isEnterpriseOnlyRoute(url: string): boolean {
-  // SSO provider routes
-  if (url.startsWith(SSO_PROVIDERS_API_PREFIX)) {
+  // Identity provider routes
+  if (url.startsWith(IDENTITY_PROVIDERS_API_PREFIX)) {
     return true;
   }
 
@@ -42,7 +42,7 @@ const enterpriseLicenseMiddlewarePlugin: FastifyPluginAsync = async (
     if (isEnterpriseOnlyRoute(request.url)) {
       if (!config.enterpriseLicenseActivated) {
         // Provide feature-specific error messages
-        if (request.url.startsWith(SSO_PROVIDERS_API_PREFIX)) {
+        if (request.url.startsWith(IDENTITY_PROVIDERS_API_PREFIX)) {
           throw new ApiError(
             403,
             `SSO is an enterprise feature. ${ENTERPRISE_CONTACT_MESSAGE}`,

@@ -3,7 +3,11 @@ import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpHttpSessionModel,
+  McpServerModel,
+} from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
 import K8sDeployment, { fetchPlatformPodNodeSelector } from "./k8s-deployment";
@@ -452,6 +456,9 @@ export class McpServerRuntimeManager {
         catalogItem,
       );
 
+      // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
+      await k8sDeployment.resolveHttpEndpoint();
+
       this.mcpServerIdToDeploymentMap.set(mcpServerId, k8sDeployment);
       logger.info(
         `Lazy-loaded MCP server deployment ${mcpServerId} into memory`,
@@ -508,6 +515,11 @@ export class McpServerRuntimeManager {
         throw new Error(`MCP server with id ${mcpServerId} not found`);
       }
 
+      // Clean up stored HTTP session IDs before stopping the server.
+      // After a restart, existing session IDs become stale and would cause
+      // "Session not found" errors for in-flight conversations.
+      await McpHttpSessionModel.deleteByMcpServerId(mcpServerId);
+
       // Stop the deployment
       await this.stopServer(mcpServerId);
 
@@ -551,6 +563,20 @@ export class McpServerRuntimeManager {
       return undefined;
     }
     return k8sDeployment.getHttpEndpointUrl();
+  }
+
+  /**
+   * Get a pod-pinned HTTP endpoint URL for streamable-http servers.
+   * This helps preserve MCP sessions when multiple MCP server replicas are running.
+   */
+  async getRunningPodHttpEndpoint(
+    mcpServerId: string,
+  ): Promise<{ endpointUrl: string; podName: string } | undefined> {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    if (!k8sDeployment) {
+      return undefined;
+    }
+    return k8sDeployment.getRunningPodHttpEndpoint();
   }
 
   /**

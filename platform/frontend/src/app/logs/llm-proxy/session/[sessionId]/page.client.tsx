@@ -290,9 +290,10 @@ export default function SessionDetailPage({
                   "externalAgentIdLabel" in interaction
                     ? interaction.externalAgentIdLabel
                     : undefined;
-                // Show prompt name if available, otherwise fall back to Main/Subagent
+                // Show prompt name if available, fall back to raw externalAgentId, then Main/Subagent
                 const typeLabel =
                   externalAgentIdLabel ||
+                  interaction.externalAgentId ||
                   (requestType === "main" ? "Main" : "Subagent");
 
                 return (

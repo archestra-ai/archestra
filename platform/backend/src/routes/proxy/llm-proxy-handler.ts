@@ -8,13 +8,6 @@
 import type { FastifyReply } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
-import {
-  reportBlockedTools,
-  reportLLMCost,
-  reportLLMTokens,
-  reportTimeToFirstToken,
-  reportTokensPerSecond,
-} from "@/llm-metrics";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -23,6 +16,7 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
+import { metrics } from "@/observability";
 import {
   type Agent,
   ApiError,
@@ -40,6 +34,7 @@ export interface Context {
   organizationId: string;
   agentId?: string;
   externalAgentId?: string;
+  executionId?: string;
   userId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
@@ -76,7 +71,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
   context: Context,
 ): Promise<FastifyReply> {
-  const { agentId, externalAgentId } = context;
+  const { agentId, externalAgentId, executionId } = context;
   const providerName = provider.provider;
 
   // Extract session info if not already provided in context
@@ -143,6 +138,17 @@ export async function handleLLMProxy<
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
   );
+
+  if (executionId) {
+    const existsInDb = await InteractionModel.existsByExecutionId(executionId);
+    if (!existsInDb) {
+      metrics.agentExecution.reportAgentExecution({
+        executionId,
+        profile: resolvedAgent,
+        externalAgentId,
+      });
+    }
+  }
 
   // Extract API key
   const apiKey = provider.extractApiKey(headers);
@@ -238,16 +244,27 @@ export async function handleLLMProxy<
       });
     }
 
-    // Set SSE headers early if streaming
+    // Prepare SSE headers for lazy commitment if streaming.
+    // We defer writeHead(200) until the first actual write so that if the
+    // upstream provider call fails before any data is written, the proxy can
+    // return a proper HTTP error status code (e.g. 429) instead of being
+    // stuck with a 200. The AI SDK detects errors via HTTP status codes, so
+    // this is critical for error propagation to clients like the chat UI.
+    let sseHeaders: Record<string, string> | undefined;
     if (requestAdapter.isStreaming()) {
       logger.debug(
-        `[${providerName}Proxy] Setting up streaming response headers`,
+        `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
-      const sseHeaders = streamAdapter.getSSEHeaders();
-      for (const [key, value] of Object.entries(sseHeaders)) {
-        reply.header(key, value);
-      }
+      sseHeaders = streamAdapter.getSSEHeaders();
     }
+
+    // Helper to commit SSE headers before the first write.
+    // Safe to call multiple times — only writes headers once.
+    const ensureStreamHeaders = () => {
+      if (sseHeaders && !reply.raw.headersSent) {
+        reply.raw.writeHead(200, sseHeaders);
+      }
+    };
 
     // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
     const globalToolPolicy =
@@ -279,6 +296,7 @@ export async function handleLLMProxy<
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
+              ensureStreamHeaders();
               reply.raw.write(
                 streamAdapter.formatTextDeltaSSE(
                   "Analyzing with Dual LLM:\n\n",
@@ -295,6 +313,7 @@ export async function handleLLMProxy<
               const optionsText = progress.options
                 .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                 .join("\n");
+              ensureStreamHeaders();
               reply.raw.write(
                 streamAdapter.formatTextDeltaSSE(
                   `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
@@ -401,11 +420,13 @@ export async function handleLLMProxy<
         toonSkipReason,
         enabledToolNames,
         globalToolPolicy,
+        ensureStreamHeaders,
         externalAgentId,
         context.userId,
         sessionId,
         sessionSource,
         teamIds,
+        executionId,
       );
     } else {
       return handleNonStreaming(
@@ -427,6 +448,7 @@ export async function handleLLMProxy<
         sessionId,
         sessionSource,
         teamIds,
+        executionId,
       );
     }
   } catch (error) {
@@ -464,11 +486,13 @@ async function handleStreaming<
   toonSkipReason: ToonSkipReason | null,
   enabledToolNames: Set<string>,
   globalToolPolicy: "permissive" | "restrictive",
+  ensureStreamHeaders: () => void,
   externalAgentId?: string,
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
   teamIds?: string[],
+  executionId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -501,7 +525,7 @@ async function handleStreaming<
       if (!firstChunkTime) {
         firstChunkTime = Date.now();
         const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
-        reportTimeToFirstToken(
+        metrics.llm.reportTimeToFirstToken(
           providerName,
           agent,
           actualModel,
@@ -514,6 +538,7 @@ async function handleStreaming<
 
       // Stream non-tool-call data immediately
       if (result.sseData) {
+        ensureStreamHeaders();
         reply.raw.write(result.sseData);
       }
 
@@ -575,12 +600,13 @@ async function handleStreaming<
       const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
       // Stream refusal
+      ensureStreamHeaders();
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         reply.raw.write(event);
       }
 
-      reportBlockedTools(
+      metrics.llm.reportBlockedTools(
         providerName,
         agent,
         toolCalls.length,
@@ -594,6 +620,7 @@ async function handleStreaming<
         "Tool calls allowed, streaming them now",
       );
 
+      ensureStreamHeaders();
       const rawEvents = streamAdapter.getRawToolCallEvents();
       for (const event of rawEvents) {
         reply.raw.write(event);
@@ -601,6 +628,7 @@ async function handleStreaming<
     }
 
     // Stream end events
+    ensureStreamHeaders();
     reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
@@ -618,7 +646,7 @@ async function handleStreaming<
 
     const usage = streamAdapter.state.usage;
     if (usage) {
-      reportLLMTokens(
+      metrics.llm.reportLLMTokens(
         providerName,
         agent,
         { input: usage.inputTokens, output: usage.outputTokens },
@@ -628,7 +656,7 @@ async function handleStreaming<
 
       if (usage.outputTokens && firstChunkTime) {
         const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-        reportTokensPerSecond(
+        metrics.llm.reportTokensPerSecond(
           providerName,
           agent,
           actualModel,
@@ -649,7 +677,7 @@ async function handleStreaming<
         usage.outputTokens,
       );
 
-      reportLLMCost(
+      metrics.llm.reportLLMCost(
         providerName,
         agent,
         actualModel,
@@ -660,6 +688,7 @@ async function handleStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        executionId,
         userId,
         sessionId,
         sessionSource,
@@ -713,6 +742,7 @@ async function handleNonStreaming<
   sessionId?: string | null,
   sessionSource?: SessionSource,
   teamIds?: string[],
+  executionId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -776,7 +806,7 @@ async function handleNonStreaming<
         contentMessage,
       );
 
-      reportBlockedTools(
+      metrics.llm.reportBlockedTools(
         providerName,
         agent,
         toolCalls.length,
@@ -797,7 +827,7 @@ async function handleNonStreaming<
         usage.outputTokens,
       );
 
-      reportLLMCost(
+      metrics.llm.reportLLMCost(
         providerName,
         agent,
         actualModel,
@@ -808,6 +838,7 @@ async function handleNonStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        executionId,
         userId,
         sessionId,
         sessionSource,
@@ -839,7 +870,7 @@ async function handleNonStreaming<
   // for non-streaming requests. We only report cost here to avoid double counting.
   // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
   // mocked API clients can't use an observable fetch.
-  // reportLLMTokens(
+  // metrics.llm.reportLLMTokens(
   //   providerName,
   //   agent,
   //   { input: usage.inputTokens, output: usage.outputTokens },
@@ -858,11 +889,18 @@ async function handleNonStreaming<
     usage.outputTokens,
   );
 
-  reportLLMCost(providerName, agent, actualModel, actualCost, externalAgentId);
+  metrics.llm.reportLLMCost(
+    providerName,
+    agent,
+    actualModel,
+    actualCost,
+    externalAgentId,
+  );
 
   await InteractionModel.create({
     profileId: agent.id,
     externalAgentId,
+    executionId,
     userId,
     sessionId,
     sessionSource,
@@ -919,7 +957,9 @@ function handleError(
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
   // the status after headers are committed - so SSE error event is our only option.
-  if (isStreaming && reply.sent) {
+  // Check reply.raw.headersSent (set after writeHead) rather than reply.sent
+  // (which is only set after hijack or full send).
+  if (isStreaming && reply.raw.headersSent) {
     const errorEvent = {
       type: "error",
       error: {

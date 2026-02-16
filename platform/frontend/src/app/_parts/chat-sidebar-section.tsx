@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import {
   AlertDialog,
@@ -105,12 +105,46 @@ export function ChatSidebarSection() {
     ? searchParams.get(CONVERSATION_QUERY_PARAM)
     : null;
 
+  // Stabilize sidebar order: freeze backend order on first render,
+  // prepend new conversations at top, remove deleted ones.
+  // Resets on page refresh (ref remounts).
+  const stableOrderRef = useRef<string[] | null>(null);
+  const stableConversations = useMemo(() => {
+    if (conversations.length === 0) {
+      stableOrderRef.current = null;
+      return conversations;
+    }
+
+    const currentIds = new Set(conversations.map((c) => c.id));
+    const conversationMap = new Map(conversations.map((c) => [c.id, c]));
+
+    if (stableOrderRef.current === null) {
+      // First render: capture backend order as-is
+      stableOrderRef.current = conversations.map((c) => c.id);
+      return conversations;
+    }
+
+    const prevIds = new Set(stableOrderRef.current);
+    // New IDs not in previous order — prepend at top
+    const newIds = conversations
+      .filter((c) => !prevIds.has(c.id))
+      .map((c) => c.id);
+    // Existing IDs in their original order, excluding deleted
+    const keptIds = stableOrderRef.current.filter((id) => currentIds.has(id));
+    const orderedIds = [...newIds, ...keptIds];
+
+    stableOrderRef.current = orderedIds;
+    return orderedIds
+      .map((id) => conversationMap.get(id))
+      .filter((c): c is NonNullable<typeof c> => c != null);
+  }, [conversations]);
+
   const visibleChats = showAllChats
-    ? conversations
-    : conversations.slice(0, VISIBLE_CHAT_COUNT);
+    ? stableConversations
+    : stableConversations.slice(0, VISIBLE_CHAT_COUNT);
   const hiddenChatsCount = Math.max(
     0,
-    conversations.length - VISIBLE_CHAT_COUNT,
+    stableConversations.length - VISIBLE_CHAT_COUNT,
   );
 
   useEffect(() => {
@@ -215,7 +249,7 @@ export function ChatSidebarSection() {
                 </span>
               </div>
             </SidebarMenuItem>
-          ) : conversations.length === 0 ? (
+          ) : stableConversations.length === 0 ? (
             <SidebarMenuItem>
               <div className="px-2 py-1.5 text-xs text-muted-foreground">
                 No chats yet

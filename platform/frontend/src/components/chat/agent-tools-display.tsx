@@ -28,6 +28,7 @@ import {
   addPendingAction,
   applyPendingActions,
   getPendingActions,
+  PENDING_TOOL_STATE_CHANGE_EVENT,
   type PendingToolAction,
 } from "@/lib/pending-tool-state";
 import { cn } from "@/lib/utils";
@@ -118,6 +119,17 @@ export function AgentToolsDisplay({
     } else {
       setLocalPendingActions([]);
     }
+  }, [agentId, conversationId]);
+
+  // Re-sync when pending actions change externally (e.g. Playwright dialog disable button)
+  useEffect(() => {
+    if (conversationId) return;
+    const handler = () => {
+      setLocalPendingActions(getPendingActions(agentId));
+    };
+    window.addEventListener(PENDING_TOOL_STATE_CHANGE_EVENT, handler);
+    return () =>
+      window.removeEventListener(PENDING_TOOL_STATE_CHANGE_EVENT, handler);
   }, [agentId, conversationId]);
 
   // Fetch enabled tools for the conversation

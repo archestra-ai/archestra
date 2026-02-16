@@ -1379,6 +1379,129 @@ describe("ToolModel", () => {
     });
   });
 
+  describe("knowledge graph tool visibility", () => {
+    test("getMcpToolsByAgent excludes query_knowledge_graph when KG is not configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        // Other Archestra tools should still be present
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("getMcpToolsByAgent includes query_knowledge_graph when KG is configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue("lightrag");
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("findByCatalogId excludes query_knowledge_graph when KG is not configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+        const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("findByCatalogId includes query_knowledge_graph when KG is configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue("lightrag");
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+        const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("assignArchestraToolsToAgent excludes query_knowledge_graph when KG is not configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
+
+      try {
+        // Seed tools first (seeding is independent of visibility filtering)
+        const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+        await seedAndAssignArchestraTools(tempAgent.id);
+
+        // Create a new agent and assign all Archestra tools
+        const agent = await makeAgent({ name: "Test Agent" });
+        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+        await ToolModel.assignArchestraToolsToAgent(
+          agent.id,
+          ARCHESTRA_MCP_CATALOG_ID,
+        );
+
+        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+  });
+
   describe("syncToolsForCatalog", () => {
     test("creates new tools when none exist", async ({
       makeInternalMcpCatalog,

@@ -13,6 +13,7 @@ import {
   OpenAi,
   Vllm,
   Zhipuai,
+  Groq,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
@@ -158,6 +159,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["groq:chatCompletions"]),
+    request: Groq.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Groq.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Groq.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

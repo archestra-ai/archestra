@@ -15,6 +15,7 @@ import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
+import GroqChatCompletionInteraction from "./llmProviders/groq";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -130,6 +131,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new BedrockConverseInteraction(interaction);
     } else if (type === "zhipuai:chatCompletions") {
       return new ZhipuaiChatCompletionInteraction(interaction);
+    } else if (type === "groq:chatCompletions") {
+      return new GroqChatCompletionInteraction(interaction);
     } else if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);
     } else if (type === "mistral:chatCompletions") {

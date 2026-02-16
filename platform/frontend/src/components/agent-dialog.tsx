@@ -416,7 +416,7 @@ export function AgentDialog({
       return response.data || [];
     },
   });
-  const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
+  const { data: isProfileAdmin } = useHasPermissions({ agent: ["admin"] });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
 

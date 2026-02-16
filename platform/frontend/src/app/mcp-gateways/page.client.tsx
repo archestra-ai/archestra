@@ -447,7 +447,7 @@ function McpGateways({
         }
         actionButton={
           <PermissionButton
-            permissions={{ profile: ["create"] }}
+            permissions={{ agent: ["create"] }}
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
           >

@@ -18,7 +18,7 @@ interface RolePermissionBuilderProps {
 // Group resources by category for better organization
 const resourceCategories: Record<string, Resource[]> = {
   "Core Resources": [
-    "profile",
+    "agent",
     "tool",
     "policy",
     "interaction",
@@ -47,7 +47,7 @@ const resourceCategories: Record<string, Resource[]> = {
 
 // Human-readable labels for resources
 const resourceLabels: Record<Resource, string> = {
-  profile: "Profiles",
+  agent: "Agents",
   tool: "Tools",
   policy: "Policies",
   interaction: "Interactions",

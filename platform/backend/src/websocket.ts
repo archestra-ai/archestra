@@ -426,7 +426,7 @@ class WebSocketService {
   ): Promise<WebSocketClientContext | null> {
     const [{ success: userIsProfileAdmin }, { success: userIsMcpServerAdmin }] =
       await Promise.all([
-        hasPermission({ profile: ["admin"] }, request.headers),
+        hasPermission({ agent: ["admin"] }, request.headers),
         hasPermission({ mcpServer: ["admin"] }, request.headers),
       ]);
     const headers = new Headers(request.headers as HeadersInit);

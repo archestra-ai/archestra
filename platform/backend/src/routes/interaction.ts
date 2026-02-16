@@ -122,7 +122,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const sorting = { sortBy, sortDirection };
 
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -233,7 +233,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const pagination = { limit, offset };
 
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -301,7 +301,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -329,7 +329,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -357,7 +357,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { interactionId }, user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 

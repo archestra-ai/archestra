@@ -19,7 +19,7 @@ export const actions = [
 ] as const;
 
 export const resources = [
-  "profile",
+  "agent",
   "tool",
   "policy",
   "interaction",

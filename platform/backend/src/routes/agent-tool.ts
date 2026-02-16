@@ -69,7 +69,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -579,7 +579,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { agentId }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -630,7 +630,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { agentId }, body, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -695,7 +695,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { agentId, targetAgentId }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 

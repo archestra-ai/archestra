@@ -16,7 +16,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Start with better-auth defaults
   ...defaultStatements,
   // Override with Archestra-specific actions
-  profile: ["create", "read", "update", "delete", "admin"],
+  agent: ["create", "read", "update", "delete", "admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   dualLlmConfig: ["create", "read", "update", "delete"],
@@ -47,7 +47,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {
-  profile: ["create", "read", "update", "delete"],
+  agent: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
@@ -72,7 +72,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  profile: ["read"],
+  agent: ["read"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
@@ -118,69 +118,69 @@ export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
   [RouteId.GetAgents]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetAllAgents]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetAgent]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetDefaultMcpGateway]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetDefaultLlmProxy]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.CreateAgent]: {
-    profile: ["create"],
+    agent: ["create"],
   },
   [RouteId.UpdateAgent]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.DeleteAgent]: {
-    profile: ["delete"],
+    agent: ["delete"],
   },
   [RouteId.GetAgentTools]: {
-    profile: ["read"],
+    agent: ["read"],
     tool: ["read"],
   },
   [RouteId.GetAllAgentTools]: {
-    profile: ["read"],
+    agent: ["read"],
     tool: ["read"],
   },
   [RouteId.GetAgentAvailableTokens]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
   [RouteId.AssignToolToAgent]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.BulkAssignTools]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.BulkUpdateAgentTools]: {
-    profile: ["update"],
+    agent: ["update"],
     tool: ["update"],
   },
   [RouteId.AutoConfigureAgentToolPolicies]: {
-    profile: ["update"],
+    agent: ["update"],
     tool: ["update"],
   },
   [RouteId.UnassignToolFromAgent]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.UpdateAgentTool]: {
-    profile: ["update"],
+    agent: ["update"],
     tool: ["update"],
   },
   [RouteId.GetLabelKeys]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetLabelValues]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetTokens]: {
     team: ["read"],
@@ -453,7 +453,7 @@ export const requiredEndpointPermissionsMap: Partial<
     conversation: ["read"],
   },
   [RouteId.GetChatAgentMcpTools]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.CreateChatConversation]: {
     conversation: ["create"],
@@ -546,29 +546,29 @@ export const requiredEndpointPermissionsMap: Partial<
     prompt: ["update"],
   },
   [RouteId.GetAgentPrompts]: {
-    profile: ["read"],
+    agent: ["read"],
     prompt: ["read"],
   },
   [RouteId.AssignAgentPrompts]: {
-    profile: ["update"],
+    agent: ["update"],
     prompt: ["read"],
   },
   [RouteId.DeleteAgentPrompt]: {
-    profile: ["update"],
+    agent: ["update"],
     prompt: ["read"],
   },
   // Agent Delegation Routes (internal agents only)
   [RouteId.GetAgentDelegations]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.SyncAgentDelegations]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.DeleteAgentDelegation]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.GetAllDelegationConnections]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.GetLimits]: {
     limit: ["read"],
@@ -663,16 +663,16 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetOptimizationRules]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.CreateOptimizationRule]: {
-    profile: ["create"],
+    agent: ["create"],
   },
   [RouteId.UpdateOptimizationRule]: {
-    profile: ["update"],
+    agent: ["update"],
   },
   [RouteId.DeleteOptimizationRule]: {
-    profile: ["delete"],
+    agent: ["delete"],
   },
 
   // Secrets Routes
@@ -735,13 +735,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
 
   "/mcp-gateways": {
-    profile: ["read"],
+    agent: ["read"],
   },
   "/llm-proxies": {
-    profile: ["read"],
+    agent: ["read"],
   },
   "/agents": {
-    profile: ["read"],
+    agent: ["read"],
   },
 
   "/logs": {
@@ -823,6 +823,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     tokenPrice: ["read"],
   },
   "/cost/optimization-rules": {
-    profile: ["read"],
+    agent: ["read"],
   },
 };

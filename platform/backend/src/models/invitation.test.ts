@@ -174,7 +174,7 @@ describe("InvitationModel", () => {
       const customRole = await makeCustomRole(org.id, {
         role: "custom_reader",
         name: "Custom Reader",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
 
       // Create invitation with the custom role

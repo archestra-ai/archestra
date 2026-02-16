@@ -78,7 +78,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
       return reply.send(
@@ -127,7 +127,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query: { agentType, agentTypes }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
       return reply.send(
@@ -187,7 +187,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, user, headers }, reply) => {
       const { success: isProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -248,7 +248,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -280,7 +280,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Validate team assignment for non-admin users if teams are being updated
       if (body.teams !== undefined) {
         const { success: isProfileAdmin } = await hasPermission(
-          { profile: ["admin"] },
+          { agent: ["admin"] },
           headers,
         );
 
@@ -367,7 +367,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -408,7 +408,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, body: { version }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 

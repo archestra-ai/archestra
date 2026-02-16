@@ -46,7 +46,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check if user is a profile admin
       const { success: isProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -292,7 +292,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       const { success: isProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -570,7 +570,7 @@ async function validateScopeAndAuthorization(params: {
   // For org-wide keys, require profile admin permission
   if (scope === "org_wide") {
     const { success: isProfileAdmin } = await hasPermission(
-      { profile: ["admin"] },
+      { agent: ["admin"] },
       headers,
     );
     if (!isProfileAdmin) {
@@ -617,7 +617,7 @@ async function authorizeApiKeyAccess(
   // Org-wide keys: require profile admin
   if (apiKey.scope === "org_wide") {
     const { success: isProfileAdmin } = await hasPermission(
-      { profile: ["admin"] },
+      { agent: ["admin"] },
       headers,
     );
     if (!isProfileAdmin) {

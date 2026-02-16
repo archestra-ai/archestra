@@ -203,7 +203,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const { success: userIsProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -616,7 +616,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { agentId }, user, organizationId, headers }, reply) => {
       // Check if user is an agent admin
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -685,7 +685,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // Check if user is an agent admin
       const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
+        { agent: ["admin"] },
         headers,
       );
 
@@ -789,7 +789,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Validate agentId if provided
       if (body.agentId) {
         const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
+          { agent: ["admin"] },
           headers,
         );
 

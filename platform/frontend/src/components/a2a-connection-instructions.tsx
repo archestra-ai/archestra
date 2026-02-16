@@ -43,7 +43,7 @@ export function A2AConnectionInstructions({
   const { data: tokensData } = useTokens({ profileId: agent.id });
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ["admin"],
+    agent: ["admin"],
   });
   const { data: features } = useFeatures();
 

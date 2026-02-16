@@ -74,7 +74,7 @@ export function McpConnectionInstructions({
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ["admin"],
+    agent: ["admin"],
   });
 
   const [copiedConfig, setCopiedConfig] = useState(false);

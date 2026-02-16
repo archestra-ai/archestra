@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
+import { conversationStorageKeys } from "./chat-utils";
 import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
@@ -191,8 +192,9 @@ export function useDeleteConversation() {
 
       // Clean up localStorage keys associated with this conversation
       if (typeof window !== "undefined") {
-        localStorage.removeItem(`archestra-chat-artifact-open-${deletedId}`);
-        localStorage.removeItem(`archestra_chat_draft_${deletedId}`);
+        const keys = conversationStorageKeys(deletedId);
+        localStorage.removeItem(keys.artifactOpen);
+        localStorage.removeItem(keys.draft);
       }
 
       toast.success("Conversation deleted");

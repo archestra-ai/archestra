@@ -62,6 +62,7 @@ import {
   type SupportedChatProvider,
   useChatApiKeys,
 } from "@/lib/chat-settings.query";
+import { conversationStorageKeys } from "@/lib/chat-utils";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
@@ -76,7 +77,6 @@ import ArchestraPromptInput from "./prompt-input";
 const CONVERSATION_QUERY_PARAM = "conversation";
 
 const LocalStorageKeys = {
-  artifactOpen: "archestra-chat-artifact-open",
   browserOpen: "archestra-chat-browser-open",
   selectedChatModel: "archestra-chat-selected-chat-model",
 } as const;
@@ -338,15 +338,16 @@ export default function ChatPage() {
     if (isLoadingConversation) return;
 
     // Check for conversation-specific preference
-    const storageKey = `archestra-chat-artifact-open-${conversationId}`;
-    const storedState = localStorage.getItem(storageKey);
+    const { artifactOpen: artifactOpenKey } =
+      conversationStorageKeys(conversationId);
+    const storedState = localStorage.getItem(artifactOpenKey);
     if (storedState !== null) {
       // User has explicitly set a preference for this conversation
       setIsArtifactOpen(storedState === "true");
     } else if (conversation?.artifact) {
       // First time viewing this conversation with an artifact - auto-open
       setIsArtifactOpen(true);
-      localStorage.setItem(storageKey, "true");
+      localStorage.setItem(artifactOpenKey, "true");
     } else {
       // No artifact or no stored preference - keep closed
       setIsArtifactOpen(false);
@@ -456,8 +457,10 @@ export default function ChatPage() {
     setIsArtifactOpen(newValue);
     // Only persist state for active conversations
     if (conversationId) {
-      const storageKey = `archestra-chat-artifact-open-${conversationId}`;
-      localStorage.setItem(storageKey, String(newValue));
+      localStorage.setItem(
+        conversationStorageKeys(conversationId).artifactOpen,
+        String(newValue),
+      );
     }
   }, [isArtifactOpen, conversationId]);
 
@@ -479,8 +482,10 @@ export default function ChatPage() {
     ) {
       setIsArtifactOpen(true);
       // Save the preference for this conversation
-      const storageKey = `archestra-chat-artifact-open-${conversationId}`;
-      localStorage.setItem(storageKey, "true");
+      localStorage.setItem(
+        conversationStorageKeys(conversationId).artifactOpen,
+        "true",
+      );
     }
 
     // Update the ref for next comparison

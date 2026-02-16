@@ -716,6 +716,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Optional: Takes precedence over basic authentication if provided
   - Example: `your-bearer-token`
 
+- **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
+
+  - Default: `true` (enabled)
+  - Set to `false` to disable content capture for privacy or to reduce span sizes
+
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
 
   - Default: `archestra-metrics-secret`

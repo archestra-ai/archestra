@@ -9,6 +9,10 @@ datasources:
     url: http://prometheus:9090
     isDefault: false
     editable: true
+    jsonData:
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
 
   # Grafana Loki for log aggregation (running in docker-compose)
   - name: Loki
@@ -35,3 +39,12 @@ datasources:
         tags:
           - key: service.name
             value: service_name
+      tracesToMetrics:
+        datasourceUid: prometheus
+        tags:
+          - key: gen_ai.agent.name
+            value: agent_name
+          - key: gen_ai.provider.name
+            value: provider
+          - key: gen_ai.request.model
+            value: model

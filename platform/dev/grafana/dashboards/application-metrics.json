@@ -46,6 +46,18 @@
     },
     {
       "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Agent Sessions",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-agent-sessions/archestra-agent-sessions"
+    },
+    {
+      "asDropdown": false,
       "icon": "doc",
       "includeVars": false,
       "keepTime": false,

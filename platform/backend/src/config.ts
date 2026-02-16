@@ -607,6 +607,7 @@ export default {
   },
   observability: {
     otel: {
+      captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
       traceExporter: {
         url: getOtelExporterOtlpEndpoint(),
         headers: getOtlpAuthHeaders(),

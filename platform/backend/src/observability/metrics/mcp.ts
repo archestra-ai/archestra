@@ -9,7 +9,7 @@
 import client from "prom-client";
 import logger from "@/logging";
 import type { AgentType } from "@/types";
-import { sanitizeLabelKey } from "./utils";
+import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 let mcpToolCallDuration: client.Histogram<string>;
 let mcpToolCallsTotal: client.Counter<string>;
@@ -72,6 +72,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     help: "MCP tool call execution duration in seconds",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
+    enableExemplars: true,
   });
 
   mcpToolCallsTotal = new client.Counter({
@@ -163,7 +164,11 @@ export function reportMcpToolCall(params: {
 
   mcpToolCallsTotal.inc(labels);
   if (params.durationSeconds > 0) {
-    mcpToolCallDuration.observe(labels, params.durationSeconds);
+    mcpToolCallDuration.observe({
+      labels,
+      value: params.durationSeconds,
+      exemplarLabels: getExemplarLabels(),
+    });
   }
   if (params.requestSizeBytes != null && params.requestSizeBytes > 0) {
     mcpRequestSizeBytes.observe(labels, params.requestSizeBytes);

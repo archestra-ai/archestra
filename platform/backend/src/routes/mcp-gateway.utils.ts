@@ -173,6 +173,7 @@ export async function createAgentServer(
             agent,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
+            toolArgs: args,
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
@@ -263,6 +264,7 @@ export async function createAgentServer(
           agent,
           agentType: agent.agentType,
           toolCallId,
+          toolArgs: args,
           callback: async (span) => {
             const r = await mcpClient.executeToolCall(
               toolCall,

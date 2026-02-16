@@ -18,7 +18,7 @@ import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemin
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
 import type { Agent } from "@/types";
-import { sanitizeLabelKey } from "./utils";
+import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
   // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
@@ -136,6 +136,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, "status_code", ...nextLabelKeys],
     // Same bucket style as http_request_duration_seconds but adjusted for LLM latency
     buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
+    enableExemplars: true,
   });
 
   llmTokensCounter = new client.Counter({
@@ -162,6 +163,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     // Buckets optimized for TTFT - typically faster than full response
     buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+    enableExemplars: true,
   });
 
   llmTokensPerSecond = new client.Histogram({
@@ -170,6 +172,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     // Buckets for tokens/sec throughput - typical range 10-200 tokens/sec
     buckets: [5, 10, 25, 50, 75, 100, 150, 200, 300],
+    enableExemplars: true,
   });
 
   llmTokenUsage = new client.Histogram({
@@ -356,10 +359,11 @@ export function reportTimeToFirstToken(
     logger.warn("Invalid TTFT value, must be positive");
     return;
   }
-  llmTimeToFirstToken.observe(
-    buildMetricLabels(profile, { provider }, model, externalAgentId),
-    ttftSeconds,
-  );
+  llmTimeToFirstToken.observe({
+    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    value: ttftSeconds,
+    exemplarLabels: getExemplarLabels(),
+  });
 }
 
 /**
@@ -390,10 +394,11 @@ export function reportTokensPerSecond(
     return;
   }
   const tokensPerSecond = outputTokens / durationSeconds;
-  llmTokensPerSecond.observe(
-    buildMetricLabels(profile, { provider }, model, externalAgentId),
-    tokensPerSecond,
-  );
+  llmTokensPerSecond.observe({
+    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    value: tokensPerSecond,
+    exemplarLabels: getExemplarLabels(),
+  });
 }
 
 /**
@@ -436,27 +441,29 @@ export function getObservableFetch(
       const duration = Math.round((Date.now() - startTime) / 1000);
       const status = response.status.toString();
 
-      llmRequestDuration.observe(
-        buildMetricLabels(
+      llmRequestDuration.observe({
+        labels: buildMetricLabels(
           profile,
           { provider, status_code: status },
           model,
           externalAgentId,
         ),
-        duration,
-      );
+        value: duration,
+        exemplarLabels: getExemplarLabels(),
+      });
     } catch (error) {
       // Network errors only: fetch does not throw on 4xx or 5xx.
       const duration = Math.round((Date.now() - startTime) / 1000);
-      llmRequestDuration.observe(
-        buildMetricLabels(
+      llmRequestDuration.observe({
+        labels: buildMetricLabels(
           profile,
           { provider, status_code: "0" },
           model,
           externalAgentId,
         ),
-        duration,
-      );
+        value: duration,
+        exemplarLabels: getExemplarLabels(),
+      });
       throw error;
     }
 
@@ -524,15 +531,16 @@ export function getObservableGenAI(
       const duration = (Date.now() - startTime) / 1000;
 
       // Assuming 200 status code. Gemini doesn't expose HTTP status, but unlike fetch, throws on 4xx & 5xx.
-      llmRequestDuration.observe(
-        buildMetricLabels(
+      llmRequestDuration.observe({
+        labels: buildMetricLabels(
           profile,
           { provider, status_code: "200" },
           model,
           externalAgentId,
         ),
-        duration,
-      );
+        value: duration,
+        exemplarLabels: getExemplarLabels(),
+      });
 
       // Record token metrics
       const usage = result.usageMetadata;
@@ -573,15 +581,16 @@ export function getObservableGenAI(
       // streaming requests — fetch() resolves on response headers, not stream completion.
       const duration = (Date.now() - startTime) / 1000;
 
-      llmRequestDuration.observe(
-        buildMetricLabels(
+      llmRequestDuration.observe({
+        labels: buildMetricLabels(
           profile,
           { provider, status_code: "200" },
           model,
           externalAgentId,
         ),
-        duration,
-      );
+        value: duration,
+        exemplarLabels: getExemplarLabels(),
+      });
 
       return result;
     } catch (error) {
@@ -619,13 +628,14 @@ function observeGeminiError(
       ? error.status.toString()
       : "0";
 
-  llmRequestDuration.observe(
-    buildMetricLabels(
+  llmRequestDuration.observe({
+    labels: buildMetricLabels(
       profile,
       { provider: "gemini", status_code: statusCode },
       model,
       externalAgentId,
     ),
-    duration,
-  );
+    value: duration,
+    exemplarLabels: getExemplarLabels(),
+  });
 }

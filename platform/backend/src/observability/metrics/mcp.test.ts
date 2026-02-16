@@ -92,8 +92,8 @@ describe("reportMcpToolCall", () => {
       status: "success",
     });
 
-    expect(histogramObserve).toHaveBeenCalledWith(
-      {
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: {
         agent_id: "agent-1",
         agent_name: "My Agent",
         agent_type: "mcp_gateway",
@@ -101,8 +101,9 @@ describe("reportMcpToolCall", () => {
         tool_name: "github__list_repos",
         status: "success",
       },
-      1.5,
-    );
+      value: 1.5,
+      exemplarLabels: expect.any(Object),
+    });
   });
 
   test("reports failed tool call", () => {
@@ -125,8 +126,8 @@ describe("reportMcpToolCall", () => {
       status: "error",
     });
 
-    expect(histogramObserve).toHaveBeenCalledWith(
-      {
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: {
         agent_id: "agent-1",
         agent_name: "My Agent",
         agent_type: "mcp_gateway",
@@ -134,8 +135,9 @@ describe("reportMcpToolCall", () => {
         tool_name: "slack__send_message",
         status: "error",
       },
-      0.3,
-    );
+      value: 0.3,
+      exemplarLabels: expect.any(Object),
+    });
   });
 
   test("skips duration observation for zero duration", () => {
@@ -226,9 +228,13 @@ describe("reportMcpToolCall", () => {
       status: "success",
     };
 
-    // duration + request size + response size = 3 histogram observations
+    // duration (with exemplar) + request size + response size = 3 histogram observations
     expect(histogramObserve).toHaveBeenCalledTimes(3);
-    expect(histogramObserve).toHaveBeenCalledWith(expectedLabels, 1.0);
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 1.0,
+      exemplarLabels: expect.any(Object),
+    });
     expect(histogramObserve).toHaveBeenCalledWith(expectedLabels, 256);
     expect(histogramObserve).toHaveBeenCalledWith(expectedLabels, 4096);
   });

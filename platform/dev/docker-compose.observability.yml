@@ -59,6 +59,7 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--enable-feature=exemplar-storage"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

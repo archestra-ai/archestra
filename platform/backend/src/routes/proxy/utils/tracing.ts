@@ -1,7 +1,11 @@
 import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { SupportedProvider } from "@shared";
+import config from "@/config";
 import logger from "@/logging";
 import type { Agent, AgentType, GenAiOperationName } from "@/types";
+
+const MAX_CONTENT_LENGTH = 10_000;
+const { captureContent } = config.observability.otel;
 
 /**
  * Route categories for tracing
@@ -33,6 +37,7 @@ export enum RouteCategory {
  * @param params.executionId - Execution ID for tracking agent executions (optional)
  * @param params.externalAgentId - External agent ID from X-Archestra-Agent-Id header (optional)
  * @param params.serverAddress - The server address (base URL) of the LLM provider (optional)
+ * @param params.promptMessages - The prompt messages to capture as a span event (optional)
  * @param params.callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
@@ -46,6 +51,7 @@ export async function startActiveLlmSpan<T>(params: {
   executionId?: string;
   externalAgentId?: string;
   serverAddress?: string;
+  promptMessages?: unknown;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const spanName = `${params.operationName} ${params.model}`;
@@ -113,6 +119,12 @@ export async function startActiveLlmSpan<T>(params: {
         span.setAttribute("server.address", params.serverAddress);
       }
 
+      if (captureContent && params.promptMessages) {
+        span.addEvent("gen_ai.content.prompt", {
+          "gen_ai.prompt": truncateContent(params.promptMessages),
+        });
+      }
+
       logger.debug(
         { spanName },
         "[tracing] startActiveLlmSpan: executing callback",
@@ -152,6 +164,7 @@ export async function startActiveLlmSpan<T>(params: {
  * @param params.sessionId - Conversation/session ID (optional)
  * @param params.agentType - The agent type (optional)
  * @param params.toolCallId - The unique ID for this tool call (optional)
+ * @param params.toolArgs - The tool call arguments to capture as a span event (optional)
  * @param params.callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
@@ -162,6 +175,7 @@ export async function startActiveMcpSpan<T>(params: {
   sessionId?: string | null;
   agentType?: AgentType;
   toolCallId?: string;
+  toolArgs?: unknown;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
@@ -196,9 +210,22 @@ export async function startActiveMcpSpan<T>(params: {
         span.setAttribute("gen_ai.tool.call.id", params.toolCallId);
       }
 
+      if (captureContent && params.toolArgs) {
+        span.addEvent("gen_ai.content.input", {
+          "gen_ai.tool.call.arguments": truncateContent(params.toolArgs),
+        });
+      }
+
       try {
         const result = await params.callback(span);
         span.setStatus({ code: SpanStatusCode.OK });
+
+        if (captureContent) {
+          span.addEvent("gen_ai.content.output", {
+            "gen_ai.tool.call.result": truncateContent(result),
+          });
+        }
+
         return result;
       } catch (error) {
         span.setStatus({
@@ -215,4 +242,16 @@ export async function startActiveMcpSpan<T>(params: {
       }
     },
   );
+}
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+function truncateContent(content: unknown): string {
+  const str = typeof content === "string" ? content : JSON.stringify(content);
+  if (str.length <= MAX_CONTENT_LENGTH) {
+    return str;
+  }
+  return `${str.slice(0, MAX_CONTENT_LENGTH)}...[truncated]`;
 }

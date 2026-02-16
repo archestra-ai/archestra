@@ -118,6 +118,24 @@ This adds an `Authorization: Basic base64(username:password)` header to all OTEL
 
 If none of the authentication environment variables are configured, traces will be sent without authentication headers.
 
+### Content Capture
+
+The platform can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics).
+
+When enabled, traces include:
+
+- **LLM spans** - `gen_ai.content.prompt` event with the request messages, and `gen_ai.content.completion` event with the response text
+- **MCP spans** - `gen_ai.content.input` event with tool call arguments, and `gen_ai.content.output` event with tool call results
+
+Content is truncated to 10KB per event to avoid oversized spans.
+
+### Metric-to-Trace Exemplars
+
+Key histogram metrics (`llm_request_duration_seconds`, `llm_time_to_first_token_seconds`, `llm_tokens_per_second`, `mcp_tool_call_duration_seconds`) include trace exemplars. When viewing these metrics in Grafana, you can click on individual data points to jump directly to the corresponding trace in Tempo. This requires:
+
+- Prometheus configured with `--enable-feature=exemplar-storage`
+- Grafana Prometheus datasource configured with `exemplarTraceIdDestinations` pointing to your Tempo datasource
+
 ### What's Traced
 
 The platform automatically traces:
@@ -203,10 +221,11 @@ Labels are key-value pairs that can be configured when creating or updating agen
 
 ## Grafana Dashboards
 
-We provide three Grafana dashboards for monitoring your Archestra platform:
+We provide four Grafana dashboards for monitoring your Archestra platform:
 
 - **[GenAI Observability](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/genai-observability.json)** — LLM request metrics, token usage, cost analysis, latency, and traces
 - **[MCP Monitoring](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/mcp-monitoring.json)** — MCP tool call metrics, error rates, duration, and traces
+- **[Agent Sessions](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/agent-sessions.json)** — Session-level agent audit trail with drill-down into LLM calls, MCP tool calls, and correlated logs
 - **[Application Metrics](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/application-metrics.json)** — HTTP traffic, Node.js runtime health, and resource usage for monitoring your Archestra deployment
 
 ## Setting Up Prometheus

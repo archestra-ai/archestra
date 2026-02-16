@@ -30,6 +30,13 @@ import {
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 
+const {
+  benchmark: { mockMode },
+  observability: {
+    otel: { captureContent },
+  },
+} = config;
+
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
     return messages.length;
@@ -380,7 +387,7 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
-      mockMode: config.benchmark.mockMode,
+      mockMode,
       agent: resolvedAgent,
       externalAgentId,
       defaultHeaders:
@@ -515,6 +522,9 @@ async function handleStreaming<
       executionId,
       externalAgentId,
       serverAddress: provider.getBaseUrl(),
+      promptMessages: provider
+        .createRequestAdapter(originalRequest)
+        .getProviderMessages(),
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
 
@@ -568,6 +578,13 @@ async function handleStreaming<
           llmSpan.setAttribute("gen_ai.response.finish_reasons", [
             state.stopReason,
           ]);
+        }
+
+        // Capture streamed completion content
+        if (captureContent && state.text) {
+          llmSpan.addEvent("gen_ai.content.completion", {
+            "gen_ai.completion": state.text.slice(0, 10_000),
+          });
         }
       },
     });
@@ -787,6 +804,9 @@ async function handleNonStreaming<
     executionId,
     externalAgentId,
     serverAddress: provider.getBaseUrl(),
+    promptMessages: provider
+      .createRequestAdapter(originalRequest)
+      .getProviderMessages(),
     callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);
@@ -801,6 +821,16 @@ async function handleNonStreaming<
         "gen_ai.response.finish_reasons",
         adapter.getFinishReasons(),
       );
+
+      // Capture completion content
+      if (captureContent) {
+        const text = adapter.getText?.();
+        if (text) {
+          llmSpan.addEvent("gen_ai.content.completion", {
+            "gen_ai.completion": text.slice(0, 10_000),
+          });
+        }
+      }
 
       return { response: result, responseAdapter: adapter };
     },

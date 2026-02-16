@@ -1,0 +1,690 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Session-level agent audit trail — view recent agent sessions and drill into LLM calls, MCP tool calls, and logs",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "GenAI Observability",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-genai-observability/archestra-genai-observability"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "MCP Monitoring",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Application Metrics",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-application-metrics/archestra-application-metrics"
+    },
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Documentation",
+      "tooltip": "Archestra Documentation",
+      "type": "link",
+      "url": "https://archestra.ai/docs/platform-observability"
+    }
+  ],
+  "panels": [
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## Agent Sessions Audit Trail\n\nThis dashboard provides a session-level view of agent activity. Use the filters above to select an agent, then click a **Session ID** in the table below to drill into the full audit trail.\n\n**Workflow**: Filter by agent name → Find a session → Click the Session ID → View all LLM calls, MCP tool calls, and logs for that session.",
+        "mode": "markdown"
+      },
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "title": "Recent Sessions",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "${traces_datasource}"
+      },
+      "description": "Recent agent sessions. Click a Session ID to drill into the full audit trail of LLM and MCP requests.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.conversation.id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Session ID"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View session detail",
+                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-sessionId=${__data.fields[\"gen_ai.conversation.id\"]}&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.agent.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Agent Name"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.provider.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Provider"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.request.model"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Model"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "route.category"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Type"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "enablePagination": true,
+          "fields": "",
+          "reducer": ["count"],
+          "show": true
+        },
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${traces_datasource}"
+          },
+          "queryType": "traceqlSearch",
+          "limit": 100,
+          "tableType": "spans",
+          "filters": [
+            {
+              "id": "service-name",
+              "scope": "resource",
+              "tag": "service.name",
+              "operator": "=",
+              "value": ["Archestra Platform API"],
+              "valueType": "string"
+            },
+            {
+              "id": "conversation-id",
+              "scope": "span",
+              "tag": "gen_ai.conversation.id",
+              "operator": "!=",
+              "value": [""],
+              "valueType": "string"
+            },
+            {
+              "id": "route-category",
+              "scope": "span",
+              "tag": "route.category",
+              "operator": "=~",
+              "value": ["llm-proxy|mcp-gateway"],
+              "valueType": "string"
+            },
+            {
+              "id": "agent-name",
+              "scope": "span",
+              "tag": "gen_ai.agent.name",
+              "operator": "=~",
+              "value": ["$agent_name"],
+              "valueType": "string"
+            }
+          ],
+          "spss": 10,
+          "refId": "A"
+        }
+      ],
+      "title": "Recent Agent Sessions",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 4,
+      "title": "Session Detail — $sessionId",
+      "type": "row",
+      "repeat": null,
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "${traces_datasource}"
+      },
+      "description": "All LLM and MCP spans for the selected session displayed as a timeline. Each trace represents a full request lifecycle.",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 5,
+      "options": {},
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${traces_datasource}"
+          },
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=~\"llm-proxy|mcp-gateway\"}",
+          "limit": 100,
+          "tableType": "traces",
+          "refId": "A"
+        }
+      ],
+      "title": "Session Timeline",
+      "type": "traces"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "${traces_datasource}"
+      },
+      "description": "LLM proxy calls within this session — model, provider, operation, and duration.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.agent.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Agent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.provider.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Provider"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.request.model"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Model"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.operation.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Operation"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "enablePagination": true,
+          "fields": "",
+          "reducer": ["count"],
+          "show": true
+        },
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${traces_datasource}"
+          },
+          "queryType": "traceqlSearch",
+          "limit": 100,
+          "tableType": "spans",
+          "filters": [
+            {
+              "id": "service-name",
+              "scope": "resource",
+              "tag": "service.name",
+              "operator": "=",
+              "value": ["Archestra Platform API"],
+              "valueType": "string"
+            },
+            {
+              "id": "conversation-id",
+              "scope": "span",
+              "tag": "gen_ai.conversation.id",
+              "operator": "=",
+              "value": ["$sessionId"],
+              "valueType": "string"
+            },
+            {
+              "id": "route-category",
+              "scope": "span",
+              "tag": "route.category",
+              "operator": "=",
+              "value": ["llm-proxy"],
+              "valueType": "string"
+            }
+          ],
+          "spss": 10,
+          "refId": "A"
+        }
+      ],
+      "title": "LLM Calls",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "${traces_datasource}"
+      },
+      "description": "MCP tool calls within this session — tool name, MCP server, and duration.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.agent.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Agent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.tool.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Tool"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "mcp.server.name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MCP Server"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "enablePagination": true,
+          "fields": "",
+          "reducer": ["count"],
+          "show": true
+        },
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${traces_datasource}"
+          },
+          "queryType": "traceqlSearch",
+          "limit": 100,
+          "tableType": "spans",
+          "filters": [
+            {
+              "id": "service-name",
+              "scope": "resource",
+              "tag": "service.name",
+              "operator": "=",
+              "value": ["Archestra Platform API"],
+              "valueType": "string"
+            },
+            {
+              "id": "conversation-id",
+              "scope": "span",
+              "tag": "gen_ai.conversation.id",
+              "operator": "=",
+              "value": ["$sessionId"],
+              "valueType": "string"
+            },
+            {
+              "id": "route-category",
+              "scope": "span",
+              "tag": "route.category",
+              "operator": "=",
+              "value": ["mcp-gateway"],
+              "valueType": "string"
+            }
+          ],
+          "spss": 10,
+          "refId": "A"
+        }
+      ],
+      "title": "MCP Tool Calls",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${logs_datasource}"
+      },
+      "description": "Application logs correlated with the selected session via trace ID. Shows logs from spans belonging to this session.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 8,
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs_datasource}"
+          },
+          "editorMode": "code",
+          "expr": "{service_name=\"Archestra Platform API\"} | json | gen_ai_conversation_id = `$sessionId`",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Session Logs",
+      "type": "logs"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["archestra", "genai", "observability"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "grafanacloud-archestra-traces",
+          "value": "grafanacloud-traces"
+        },
+        "includeAll": false,
+        "label": "Traces data source",
+        "name": "traces_datasource",
+        "options": [],
+        "query": "tempo",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "grafanacloud-archestra-prom",
+          "value": "grafanacloud-prom"
+        },
+        "includeAll": false,
+        "label": "Metrics data source",
+        "name": "metrics_datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "(?!grafanacloud-usage|grafanacloud-ml-metrics).+",
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "grafanacloud-archestra-logs",
+          "value": "grafanacloud-logs"
+        },
+        "includeAll": false,
+        "label": "Logs data source",
+        "name": "logs_datasource",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics_datasource}"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "label": "Agent Name",
+        "name": "agent_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(llm_request_duration_seconds_count, agent_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query",
+        "definition": "label_values(llm_request_duration_seconds_count, agent_name)",
+        "hide": 0,
+        "multi": true,
+        "sort": 1
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "Enter a session ID to view its full audit trail. Click a Session ID in the table above to auto-populate.",
+        "label": "Session ID",
+        "name": "sessionId",
+        "options": [],
+        "query": "",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Archestra Agent Sessions",
+  "uid": "archestra-agent-sessions",
+  "version": 1,
+  "weekStart": ""
+}

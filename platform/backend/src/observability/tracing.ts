@@ -100,6 +100,15 @@ const sdk = new NodeSDK({
       "@opentelemetry/instrumentation-pino": {
         enabled: false, // We handle log-trace correlation and OTEL log sending manually in logging.ts
       },
+      "@opentelemetry/instrumentation-pg": {
+        enabled: false, // Internal DB queries add noise to traces — customers care about GenAI spans
+      },
+      "@opentelemetry/instrumentation-dns": {
+        enabled: false, // DNS lookups are infrastructure noise
+      },
+      "@opentelemetry/instrumentation-net": {
+        enabled: false, // Socket operations are infrastructure noise
+      },
     }),
   ],
   /**

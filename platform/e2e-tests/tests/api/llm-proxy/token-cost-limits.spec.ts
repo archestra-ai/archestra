@@ -246,7 +246,6 @@ const zhipuaiConfig: TokenCostLimitTestConfig = {
   },
 };
 
-
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
 
@@ -351,7 +350,7 @@ for (const config of testConfigs) {
       // Create fresh token price with exact values for our test
       const tokenPriceResponse = await createTokenPrice(
         request,
-        config.tokenPrice as any,
+        config.tokenPrice,
       );
       const tokenPrice = await tokenPriceResponse.json();
       tokenPriceId = tokenPrice.id;
@@ -472,7 +471,7 @@ for (const config of testConfigs) {
       // 0. Create token price for the model
       const tokenPriceResponse = await createTokenPrice(
         request,
-        config.tokenPrice as any,
+        config.tokenPrice,
       );
       if (tokenPriceResponse.ok()) {
         const tokenPrice = await tokenPriceResponse.json();

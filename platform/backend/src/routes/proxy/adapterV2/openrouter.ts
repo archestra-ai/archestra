@@ -3,7 +3,7 @@ import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type { Stream } from "openai/streaming";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
+import { metrics } from "@/observability";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -826,7 +826,7 @@ export const openrouterAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("openrouter", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch("openrouter", options.agent, options.externalAgentId)
       : undefined;
 
     // OpenRouter uses OpenAI SDK with custom base URL

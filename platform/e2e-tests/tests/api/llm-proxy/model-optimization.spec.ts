@@ -494,7 +494,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const ruleResponse = await createOptimizationRule(request, {
           entityType: "organization",
           entityId: organizationId,
-          provider: config.provider as any,
+          provider: config.provider,
           conditions: [{ maxLength: 1500 }],
           targetModel: config.optimizedModel,
           enabled: true,
@@ -538,7 +538,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const ruleResponse = await createOptimizationRule(request, {
           entityType: "organization",
           entityId: organizationId,
-          provider: config.provider as any,
+          provider: config.provider,
           conditions: [{ maxLength: 1500 }],
           targetModel: config.optimizedModel,
           enabled: true,
@@ -582,7 +582,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const ruleResponse = await createOptimizationRule(request, {
           entityType: "organization",
           entityId: organizationId,
-          provider: config.provider as any,
+          provider: config.provider,
           conditions: [{ hasTools: true }],
           targetModel: config.optimizedModel,
           enabled: true,
@@ -626,7 +626,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const ruleResponse = await createOptimizationRule(request, {
           entityType: "organization",
           entityId: organizationId,
-          provider: config.provider as any,
+          provider: config.provider,
           conditions: [{ hasTools: true }],
           targetModel: config.optimizedModel,
           enabled: true,

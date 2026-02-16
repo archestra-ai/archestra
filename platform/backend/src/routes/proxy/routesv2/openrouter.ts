@@ -48,7 +48,8 @@ const openRouterProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const userResult = await utils.user.getUser(request.headers);
+      const userId = userResult?.userId;
       return handleLLMProxy(
         request.body,
         request.headers,
@@ -92,7 +93,8 @@ const openRouterProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const userResult = await utils.user.getUser(request.headers);
+      const userId = userResult?.userId;
       return handleLLMProxy(
         request.body,
         request.headers,

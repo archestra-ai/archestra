@@ -177,6 +177,22 @@ export const ZhipuaiErrorTypes = {
   RATE_LIMIT: "1305",
 } as const;
 
+/**
+ * DeepSeek API error codes (from response body `error.code` field)
+ * DeepSeek uses OpenAI-compatible error format with string codes
+ * @see https://api-docs.deepseek.com/quick_start/error_codes
+ */
+export const DeepseekErrorTypes = {
+  INVALID_API_KEY: "invalid_api_key",
+  INVALID_REQUEST: "invalid_request_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  INSUFFICIENT_BALANCE: "insufficient_quota",
+  MODEL_NOT_FOUND: "model_not_found",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+} as const;
+
 // =============================================================================
 // Normalized Chat Error Codes
 // =============================================================================

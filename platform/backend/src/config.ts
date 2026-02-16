@@ -481,6 +481,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
     },
+    deepseek: {
+      baseUrl:
+        process.env.ARCHESTRA_DEEPSEEK_BASE_URL ||
+        "https://api.deepseek.com",
+    },
     zhipuai: {
       baseUrl:
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
@@ -518,6 +523,9 @@ export default {
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",

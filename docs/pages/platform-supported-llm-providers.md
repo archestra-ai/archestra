@@ -237,6 +237,42 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 - **No API key required**: Self-hosted Ollama typically doesn't require authentication. When adding an Ollama API key in the platform, the API key field is optional.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
 
+## DeepSeek
+
+[DeepSeek](https://deepseek.com/) is an AI company offering high-performance language models with strong reasoning capabilities. Their models are known for excellent code generation, mathematical reasoning, and cost-effectiveness through an OpenAI-compatible API.
+
+### Supported DeepSeek APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### DeepSeek Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/deepseek/{profile-id}`
+- **Authentication**: Pass your DeepSeek API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_DEEPSEEK_BASE_URL`     | No       | DeepSeek API base URL (default: `https://api.deepseek.com`)                   |
+| `ARCHESTRA_CHAT_DEEPSEEK_API_KEY` | No       | Default API key for DeepSeek (can be overridden per conversation/team/org)    |
+
+### Popular Models
+
+- **deepseek-chat** - General-purpose chat model (DeepSeek-V3), highly capable and cost-effective
+- **deepseek-reasoner** - Advanced reasoning model (DeepSeek-R1) with chain-of-thought capabilities
+
+### Getting an API Key
+
+You can get an API key from the [DeepSeek Platform](https://platform.deepseek.com/api_keys).
+
+### Important Notes
+
+- **OpenAI-compatible API**: DeepSeek's API follows the OpenAI Chat Completions format, making it a drop-in replacement for OpenAI in most applications
+- **Reasoning content**: DeepSeek-R1 (deepseek-reasoner) returns `reasoning_content` in responses, which contains the model's chain-of-thought reasoning process
+- **Tool calling**: Fully supported with the `deepseek-chat` model
+- **Cost-effective**: DeepSeek models offer competitive pricing with strong performance across coding, math, and general language tasks
+
 ## Zhipu AI
 
 [Zhipu AI (Z.ai)](https://z.ai/) is a Chinese AI company offering the GLM (General Language Model) series of large language models. The platform provides both free and commercial models with strong performance in Chinese and English language tasks.

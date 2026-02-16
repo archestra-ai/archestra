@@ -103,6 +103,16 @@ const vllmConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// DeepSeek - Uses OpenAI-compatible streaming format
+const deepseekConfig: ChatProviderTestConfig = {
+  providerName: "deepseek",
+  providerDisplayName: "DeepSeek",
+  modelId: "deepseek-chat",
+  modelDisplayName: "DeepSeek Chat",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 // ZhipuAI - Uses OpenAI-compatible streaming format
 const zhipuaiConfig: ChatProviderTestConfig = {
   providerName: "zhipuai",
@@ -122,6 +132,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   mistralConfig,
   ollamaConfig,
   vllmConfig,
+  deepseekConfig,
   zhipuaiConfig,
 ];
 

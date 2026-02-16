@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/deepseek/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "deepseek-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-deepseek-tool-persistence",
+      "object": "chat.completion",
+      "created": 1768324666,
+      "model": "deepseek-chat",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Tool persistence test response."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 150,
+        "completion_tokens": 10,
+        "total_tokens": 160
+      }
+    }
+  }
+}

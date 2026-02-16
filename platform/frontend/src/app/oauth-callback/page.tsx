@@ -24,6 +24,7 @@ function OAuthCallbackContent() {
   const reauthMutation = useReauthenticateMcpServer();
   const callbackMutation = useHandleOAuthCallback();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Mutation objects and router change reference on every render. Using stable function references prevents unnecessary re-executions. Effect is guarded by sessionStorage to run only once per callback.
   useEffect(() => {
     const handleOAuthCallback = async () => {
       const code = searchParams.get("code");
@@ -125,8 +126,6 @@ function OAuthCallbackContent() {
     };
 
     handleOAuthCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- router.push is stable but not memoized,
-    // and we intentionally run this effect only once per callback (guarded by sessionStorage)
   }, [
     searchParams,
     callbackMutation.mutateAsync,

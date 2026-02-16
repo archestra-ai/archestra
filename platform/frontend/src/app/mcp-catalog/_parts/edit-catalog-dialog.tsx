@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,6 +58,7 @@ export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
             mode="edit"
             initialValues={item}
             onSubmit={onSubmit}
+            nameDisabled={isPlaywrightCatalogItem(item.id)}
             footer={
               <DialogFooter>
                 <Button variant="outline" onClick={handleClose} type="button">

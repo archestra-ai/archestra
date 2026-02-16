@@ -1,7 +1,10 @@
 import { OAUTH_ENDPOINTS, OAUTH_SCOPES } from "@shared";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import db, { schema as dbSchema } from "@/database";
+import { UuidIdSchema } from "@/types";
 
 /**
  * OAuth 2.1 well-known discovery endpoints.
@@ -46,10 +49,21 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "",
       );
 
+      // Check if the profile has an external IdP configured
+      const authorizationServers = [baseUrl];
+      const profileId = extractProfileIdFromResourcePath(resourcePath);
+      if (profileId) {
+        const externalIssuer = await getExternalIdpIssuerForProfile(profileId);
+        if (externalIssuer) {
+          // Include the external IdP's issuer as an additional authorization server
+          authorizationServers.push(externalIssuer);
+        }
+      }
+
       reply.type("application/json");
       return {
         resource: `${baseUrl}${resourcePath}`,
-        authorization_servers: [baseUrl],
+        authorization_servers: authorizationServers,
         scopes_supported: ["mcp"],
         bearer_methods_supported: ["header"],
       };
@@ -126,3 +140,43 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default oauthServerRoutes;
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Extract profile ID from the resource path (e.g., /v1/mcp/<uuid>)
+ */
+function extractProfileIdFromResourcePath(resourcePath: string): string | null {
+  const segments = resourcePath.split("/").filter(Boolean);
+  const lastSegment = segments.at(-1);
+  if (!lastSegment) return null;
+  try {
+    return UuidIdSchema.parse(lastSegment);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the external IdP issuer URL for a profile, if configured.
+ * Returns null if the profile doesn't have an identity provider or if it's not OIDC.
+ */
+async function getExternalIdpIssuerForProfile(
+  profileId: string,
+): Promise<string | null> {
+  const [agent] = await db
+    .select({ identityProviderId: dbSchema.agentsTable.identityProviderId })
+    .from(dbSchema.agentsTable)
+    .where(eq(dbSchema.agentsTable.id, profileId));
+
+  if (!agent?.identityProviderId) return null;
+
+  const [provider] = await db
+    .select({ issuer: dbSchema.identityProvidersTable.issuer })
+    .from(dbSchema.identityProvidersTable)
+    .where(eq(dbSchema.identityProvidersTable.id, agent.identityProviderId));
+
+  return provider?.issuer ?? null;
+}

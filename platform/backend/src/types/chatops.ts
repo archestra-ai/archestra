@@ -101,6 +101,17 @@ export interface ChatOpsProcessingResult {
 }
 
 /**
+ * A channel discovered by a chatops provider.
+ * Used to auto-populate channel bindings so admins can assign agents from the UI.
+ */
+export interface DiscoveredChannel {
+  channelId: string;
+  channelName: string | null;
+  workspaceId: string;
+  workspaceName: string | null;
+}
+
+/**
  * Interface for chatops providers (MS Teams, Slack, Discord, etc.)
  *
  * Implementations should:
@@ -108,6 +119,7 @@ export interface ChatOpsProcessingResult {
  * 2. Parse incoming activities/events into IncomingChatMessage
  * 3. Send replies using provider-specific APIs
  * 4. Fetch thread history for conversation context
+ * 5. Discover available channels for auto-populating bindings
  */
 export interface ChatOpsProvider {
   /** Provider identifier */
@@ -183,6 +195,14 @@ export interface ChatOpsProvider {
    * @returns The user's email address, or null if not available
    */
   getUserEmail(userId: string): Promise<string | null>;
+
+  /**
+   * Discover all channels in a workspace/team.
+   * Used to auto-populate channel bindings so admins can assign agents from the UI.
+   * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
+   * @returns Discovered channels, or null if context doesn't support discovery
+   */
+  discoverChannels(context: unknown): Promise<DiscoveredChannel[] | null>;
 }
 
 /**

@@ -917,6 +917,504 @@ describe("executeArchestraTool", () => {
     });
   });
 
+  describe("create_tool_invocation_policy tool", () => {
+    test("should create a policy with correct fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "url", operator: "contains", value: "example.com" },
+          ],
+          action: "block_always",
+          reason: "Test reason",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.toolId).toBe(tool.id);
+      expect(policy.conditions).toEqual([
+        { key: "url", operator: "contains", value: "example.com" },
+      ]);
+      expect(policy.action).toBe("block_always");
+      expect(policy.reason).toBe("Test reason");
+      expect(policy.id).toBeDefined();
+    });
+
+    test("should create a policy with empty conditions", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_when_context_is_untrusted",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.toolId).toBe(tool.id);
+      expect(policy.conditions).toEqual([]);
+      expect(policy.action).toBe("block_when_context_is_untrusted");
+    });
+
+    test("should create a policy with allow_when_context_is_untrusted action", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "context.externalAgentId", operator: "equal", value: "abc" },
+          ],
+          action: "allow_when_context_is_untrusted",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.action).toBe("allow_when_context_is_untrusted");
+    });
+  });
+
+  describe("get_tool_invocation_policy tool", () => {
+    test("should retrieve a policy by id", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "url", operator: "startsWith", value: "https://" },
+          ],
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+        { id: created.id },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const fetched = JSON.parse((result.content[0] as any).text);
+      expect(fetched.id).toBe(created.id);
+      expect(fetched.toolId).toBe(tool.id);
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("update_tool_invocation_policy tool", () => {
+    test("should update policy fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_always",
+          reason: "Original reason",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+        {
+          id: created.id,
+          conditions: [{ key: "source", operator: "equal", value: "external" }],
+          action: "block_when_context_is_untrusted",
+          reason: "Updated reason",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const updated = JSON.parse((result.content[0] as any).text);
+      expect(updated.id).toBe(created.id);
+      expect(updated.conditions).toEqual([
+        { key: "source", operator: "equal", value: "external" },
+      ]);
+      expect(updated.action).toBe("block_when_context_is_untrusted");
+      expect(updated.reason).toBe("Updated reason");
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+        { action: "block_always" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+        {
+          id: "00000000-0000-0000-0000-000000000000",
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("delete_tool_invocation_policy tool", () => {
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("get_tool_invocation_policies tool", () => {
+    test("should return all policies", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policies`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policies = JSON.parse((result.content[0] as any).text);
+      expect(policies.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("create_trusted_data_policy tool", () => {
+    test("should create a policy with correct fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            {
+              key: "emails[*].from",
+              operator: "contains",
+              value: "@trusted.com",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Trust emails from trusted.com",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.toolId).toBe(tool.id);
+      expect(policy.conditions).toEqual([
+        {
+          key: "emails[*].from",
+          operator: "contains",
+          value: "@trusted.com",
+        },
+      ]);
+      expect(policy.action).toBe("mark_as_trusted");
+      expect(policy.description).toBe("Trust emails from trusted.com");
+      expect(policy.id).toBeDefined();
+    });
+
+    test("should create a policy with mark_as_untrusted action", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "mark_as_untrusted",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.action).toBe("mark_as_untrusted");
+    });
+
+    test("should create a policy with sanitize_with_dual_llm action", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "source", operator: "equal", value: "untrusted" },
+          ],
+          action: "sanitize_with_dual_llm",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.action).toBe("sanitize_with_dual_llm");
+    });
+  });
+
+  describe("get_trusted_data_policy tool", () => {
+    test("should retrieve a policy by id", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [{ key: "source", operator: "equal", value: "internal" }],
+          action: "mark_as_trusted",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+        { id: created.id },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const fetched = JSON.parse((result.content[0] as any).text);
+      expect(fetched.id).toBe(created.id);
+      expect(fetched.toolId).toBe(tool.id);
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("update_trusted_data_policy tool", () => {
+    test("should update policy fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "mark_as_trusted",
+          description: "Original description",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+        {
+          id: created.id,
+          conditions: [
+            { key: "data.type", operator: "notEqual", value: "sensitive" },
+          ],
+          action: "sanitize_with_dual_llm",
+          description: "Updated description",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const updated = JSON.parse((result.content[0] as any).text);
+      expect(updated.id).toBe(created.id);
+      expect(updated.conditions).toEqual([
+        { key: "data.type", operator: "notEqual", value: "sensitive" },
+      ]);
+      expect(updated.action).toBe("sanitize_with_dual_llm");
+      expect(updated.description).toBe("Updated description");
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+        { action: "block_always" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+        {
+          id: "00000000-0000-0000-0000-000000000000",
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("delete_trusted_data_policy tool", () => {
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("get_trusted_data_policies tool", () => {
+    test("should return all policies", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policies`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policies = JSON.parse((result.content[0] as any).text);
+      expect(policies.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe("unknown tool", () => {
     test("should throw error for unknown tool name", async () => {
       await expect(

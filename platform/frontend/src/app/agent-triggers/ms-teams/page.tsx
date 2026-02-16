@@ -1,13 +1,16 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Circle,
   ExternalLink,
   Grip,
   Info,
+  Loader2,
   MessageSquare,
   Pencil,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,10 +22,12 @@ import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -53,6 +58,7 @@ import { useProfiles } from "@/lib/agent.query";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
+  useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import config from "@/lib/config";
@@ -116,17 +122,17 @@ export default function MsTeamsPage() {
   const prodFirstStep = (
     <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
       <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-      <div className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">
+      <div className="flex flex-col gap-1">
+        <span className="font-medium text-sm">
           Archestra's webhook must be reachable from the Internet
         </span>
-        <span className="text-muted-foreground">
+        <span className="text-muted-foreground text-xs">
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             POST {"<archestra-url>/api/webhooks/chatops/ms-teams"}
           </code>{" "}
           must be publicly accessible so MS Teams can deliver messages to
-          Archestra. Deploy to a public URL or configure a tunnel.
+          Archestra
         </span>
       </div>
     </div>
@@ -218,6 +224,8 @@ function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const updateMutation = useUpdateChatOpsBinding();
+  const refreshMutation = useRefreshChatOpsChannelDiscovery();
+  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
   const msTeamsAgents =
     agents?.filter((a) =>
@@ -274,11 +282,11 @@ function ChannelBindingsSection() {
       <div>
         <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Use{" "}
+          Assign agents to Teams channels using the dropdown below or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             /select-agent
           </code>{" "}
-          command in Teams to connect more Archestra Agents to a Teams channels.
+          in Teams.
         </p>
       </div>
 
@@ -290,7 +298,36 @@ function ChannelBindingsSection() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[20%]">Agent</TableHead>
-                <TableHead className="w-[auto]">Channels</TableHead>
+                <TableHead className="w-[auto]">
+                  <div className="flex items-center gap-1">
+                    Channels
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-5 w-5"
+                            aria-label="Refresh channels"
+                            disabled={refreshMutation.isPending}
+                            onClick={() =>
+                              refreshMutation.mutate("ms-teams", {
+                                onSuccess: () => setRefreshDialogOpen(true),
+                              })
+                            }
+                          >
+                            {refreshMutation.isPending ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Refresh channels</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
                 <TableHead className="w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -452,6 +489,11 @@ function ChannelBindingsSection() {
         </Card>
       )}
 
+      <RefreshChannelsDialog
+        open={refreshDialogOpen}
+        onOpenChange={setRefreshDialogOpen}
+      />
+
       <AgentDialog
         open={!!editingAgent}
         onOpenChange={(open) => !open && setEditingAgent(null)}
@@ -459,6 +501,62 @@ function ChannelBindingsSection() {
         agentType="agent"
       />
     </section>
+  );
+}
+
+function RefreshChannelsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [confirmed, setConfirmed] = useState(false);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) setConfirmed(false);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Channel discovery cache cleared</DialogTitle>
+          <DialogDescription>
+            The list of channels will be refreshed on the next interaction with
+            the Teams bot. Send a message to the bot, then come back and click
+            Done.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="refresh-confirm"
+            checked={confirmed}
+            onCheckedChange={(v) => setConfirmed(v === true)}
+          />
+          <label htmlFor="refresh-confirm" className="text-sm cursor-pointer">
+            I have sent a message to the Teams bot
+          </label>
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={!confirmed}
+            onClick={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["chatops", "bindings"],
+              });
+              onOpenChange(false);
+              setConfirmed(false);
+            }}
+          >
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

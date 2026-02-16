@@ -80,6 +80,29 @@ keycloak:
   realm:
     import: true
 
+# MCP Server with JWKS authentication for JWT propagation testing
+mcpServerJwks:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
+    tag: "0.0.1"
+    pullPolicy: IfNotPresent
+  # JWT audience claim the server expects (must match Keycloak client's audience mapper)
+  jwtAudience: "archestra-oidc"
+  # Service configuration
+  service:
+    type: NodePort
+    port: 3456
+    nodePort: 30082
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
 # HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
 vault:
   enabled: true

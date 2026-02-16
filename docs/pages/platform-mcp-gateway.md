@@ -1,13 +1,12 @@
 ---
-title: MCP Gateway
-category: Archestra Platform
-subcategory: Concepts
-order: 5
+title: Overview
+category: MCP Gateway
+order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2025-10-31
+lastUpdated: 2025-02-12
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -24,7 +23,7 @@ MCP Gateway is the unified access point for all MCP servers in Archestra Platfor
 2. Go to **MCP Gateways** and create a new gateway or use an existing one.
 3. Click the pencil icon to open the **Edit MCP Gateway** form.
 4. In the **Tools** section, assign MCP server tools to the MCP Gateway and save the changes by pressing **Update**.
-5. Click the **Connect** icon to get connection instructions. 
+5. Click the **Connect** icon to get connection instructions.
 
 ```mermaid
 graph TB
@@ -71,38 +70,12 @@ graph TB
 
 ## Authentication
 
-Archestra's MCP Gateways support two authentication methods:
+Archestra's MCP Gateways support three authentication methods:
 
-### OAuth 2.1 (Recommended for MCP Clients)
+- **OAuth 2.1** — MCP-native clients (Claude Desktop, Cursor, Open WebUI) authenticate automatically via the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). Supports both DCR and CIMD client registration.
 
-The gateway implements the [MCP Authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) with OAuth 2.1. MCP clients that support OAuth can authenticate automatically — the client discovers endpoints via standard metadata URLs, performs an authorization code flow with PKCE, and receives an access token.
+- **Bearer Token** — For direct API integrations. Use `Authorization: Bearer archestra_<token>`. Tokens can be scoped to a user, team, or organization. Create tokens in **Settings → Tokens**.
 
-```
-POST /v1/mcp/<profile_id>
-Authorization: Bearer <access_token>
-```
+- **External Identity Provider (JWKS)** — For MCP clients that authenticate with an external IdP (Keycloak, Okta, Entra ID, Auth0, etc.). The gateway validates JWT bearer tokens directly against the IdP's JWKS endpoint, allowing external users to access MCP tools without an Archestra account. Configure in **Settings → Identity Providers**, then select in the MCP Gateway's **Identity Provider (JWKS Auth)** dropdown.
 
-**Discovery endpoints:**
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /.well-known/oauth-protected-resource/v1/mcp/<profile_id>` | Resource metadata (RFC 9728) |
-| `GET /.well-known/oauth-authorization-server` | Authorization server metadata (RFC 8414) |
-
-**Client registration methods:**
-
-The gateway supports two ways for OAuth clients to register:
-
-- **Dynamic Client Registration (DCR)** — Clients register by sending a POST to the `registration_endpoint`. This is the traditional OAuth 2.0 approach.
-- **Client ID Metadata Documents (CIMD)** — Clients use an HTTPS URL as their `client_id`. The gateway fetches client metadata (name, redirect URIs, grant types) from that URL automatically. No separate registration step is needed. This is the recommended approach in the [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents).
-
-### Bearer Token
-
-For direct API integrations, use Archestra-issued tokens in the `Authorization` header. Tokens can be scoped to an individual user, a team, or the entire organization — controlling which MCP Gateways and credentials are accessible.
-
-```
-POST /v1/mcp/<profile_id>
-Authorization: Bearer archestra_<token>
-```
-
-Create tokens in **Settings → Tokens** or via the Archestra API.
+See [MCP Authentication](/docs/mcp-authentication) for more details.

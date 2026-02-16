@@ -18,6 +18,7 @@ import {
   CloudAdapter,
   ConfigurationBotFrameworkAuthentication,
   type ConversationReference,
+  TeamsInfo,
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
@@ -29,6 +30,7 @@ import type {
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
@@ -155,6 +157,10 @@ class MSTeamsProvider implements ChatOpsProvider {
         channel?: { id?: string };
         tenant?: { id?: string };
       };
+      entities?: Array<{
+        type?: string;
+        mentioned?: { id?: string; name?: string };
+      }>;
     };
 
     logger.debug(
@@ -191,6 +197,24 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
     if (!cleanedText) {
       return null;
+    }
+
+    // In team channels, only respond when the bot is @mentioned.
+    // Normalizes IDs before comparing (strips "28:" prefix, case-insensitive)
+    // since Teams may format recipient.id and mentioned.id differently.
+    if (activity.conversation?.conversationType === "channel") {
+      const botId = activity.recipient?.id;
+      const isBotMentioned =
+        botId &&
+        activity.entities?.some(
+          (e) =>
+            e.type === "mention" &&
+            e.mentioned?.id != null &&
+            normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
+        );
+      if (!isBotMentioned) {
+        return null;
+      }
     }
 
     const conversationId = activity.conversation?.id;
@@ -288,21 +312,18 @@ class MSTeamsProvider implements ChatOpsProvider {
       // - Group chats: no workspaceId, or workspaceId starts with "19:" (thread ID format)
       // - Team channels: workspaceId is a UUID (the team's aadGroupId), channelId contains @thread.tacv2
       let workspaceId = params.workspaceId;
-      const isValidTeamId =
-        workspaceId &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          workspaceId,
-        );
+      const isValidTeamId = workspaceId && UUID_REGEX.test(workspaceId);
 
       // If workspaceId isn't a valid UUID but channel looks like a team channel,
       // try to look up the actual team ID
       const looksLikeTeamChannel = params.channelId.includes("@thread.tacv2");
       if (!isValidTeamId && looksLikeTeamChannel) {
-        logger.debug(
-          { channelId: params.channelId, teamChannelHint: workspaceId },
-          "[MSTeamsProvider] workspaceId not valid UUID, looking up team from channel",
+        // workspaceId should already be resolved by the route handler via TeamsInfo.
+        // Falling back to lookupTeamIdFromChannel (requires Azure AD app permissions).
+        logger.warn(
+          { channelId: params.channelId, workspaceId },
+          "[MSTeamsProvider] workspaceId not resolved to UUID — falling back to Graph API lookup",
         );
-        // Pass the original workspaceId as a hint - it's often the team's General channel ID
         const resolvedTeamId = await this.lookupTeamIdFromChannel(
           params.channelId,
           workspaceId || undefined,
@@ -312,11 +333,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
       }
 
-      const isTeamIdValid =
-        workspaceId &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          workspaceId,
-        );
+      const isTeamIdValid = workspaceId && UUID_REGEX.test(workspaceId);
       const isTeamChannel = isTeamIdValid && looksLikeTeamChannel;
       const isGroupChat = !isTeamChannel;
 
@@ -342,7 +359,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
       return converted;
     } catch (error) {
-      logger.error(
+      logger.warn(
         { error: errorMessage(error), channelId: params.channelId },
         "[MSTeamsProvider] Failed to fetch thread history",
       );
@@ -439,7 +456,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       this.teamIdCache.set(cacheKey, null);
       return null;
     } catch (error) {
-      logger.error(
+      logger.warn(
         { error: errorMessage(error), channelId },
         "[MSTeamsProvider] Failed to lookup team from channel. " +
           "This is only needed with Azure AD application permissions (not RSC). " +
@@ -475,6 +492,39 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  async discoverChannels(
+    context: unknown,
+  ): Promise<DiscoveredChannel[] | null> {
+    if (!(context instanceof TurnContext)) return null;
+
+    const teamData = context.activity.channelData?.team as
+      | { id?: string; aadGroupId?: string }
+      | undefined;
+    if (!teamData?.id) return null;
+
+    const [channels, teamDetails] = await Promise.all([
+      TeamsInfo.getTeamChannels(context),
+      TeamsInfo.getTeamDetails(context).catch(() => null),
+    ]);
+
+    if (!channels?.length) return null;
+
+    // Prefer aadGroupId (stable UUID) over thread-format team.id.
+    // channelData.team.aadGroupId is often absent, so fall back to
+    // the value returned by TeamsInfo.getTeamDetails().
+    const workspaceId =
+      teamData.aadGroupId || teamDetails?.aadGroupId || teamData.id;
+
+    return channels
+      .filter((ch): ch is typeof ch & { id: string } => !!ch.id)
+      .map((ch) => ({
+        channelId: ch.id,
+        channelName: ch.name ?? "General",
+        workspaceId,
+        workspaceName: teamDetails?.name ?? null,
+      }));
+  }
+
   async processActivity(
     req: {
       body: unknown;
@@ -490,21 +540,42 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    await this.adapter.process(
-      {
-        body: req.body as Record<string, unknown>,
-        headers: req.headers,
-        method: "POST",
-      },
-      {
-        socket: null,
-        end: () => {},
-        header: () => {},
-        send: res.send,
-        status: res.status,
-      },
-      handler,
-    );
+    // The Bot Framework SDK has a hardcoded `console.error(err)` in CloudAdapter.process()
+    // for auth failures. MS Teams sends duplicate webhooks per message — one always fails
+    // JWT validation with a different AppId. Suppress these expected 401s to avoid noisy logs.
+    const origConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      const err = args[0];
+      if (
+        err &&
+        typeof err === "object" &&
+        "statusCode" in err &&
+        (err as { statusCode: number }).statusCode === 401
+      ) {
+        return;
+      }
+      origConsoleError.apply(console, args);
+    };
+
+    try {
+      await this.adapter.process(
+        {
+          body: req.body as Record<string, unknown>,
+          headers: req.headers,
+          method: "POST",
+        },
+        {
+          socket: null,
+          end: () => {},
+          header: () => {},
+          send: res.send,
+          status: res.status,
+        },
+        handler,
+      );
+    } finally {
+      console.error = origConsoleError;
+    }
   }
 
   // ===========================================================================
@@ -755,6 +826,13 @@ function extractAdaptiveCardText(element: unknown): string {
   }
 
   return parts.join("\n");
+}
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeTeamsId(id: string): string {
+  return id.replace(/^28:/, "").toLowerCase();
 }
 
 function stripHtmlTags(html: string): string {

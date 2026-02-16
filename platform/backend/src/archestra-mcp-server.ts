@@ -978,9 +978,14 @@ export async function executeArchestraTool(
     );
 
     try {
-      const policy = await ToolInvocationPolicyModel.create(
-        args as ToolInvocation.InsertToolInvocationPolicy,
-      );
+      const a = args ?? {};
+      const policy = await ToolInvocationPolicyModel.create({
+        toolId: a.toolId as string,
+        conditions: (a.conditions ??
+          []) as ToolInvocation.InsertToolInvocationPolicy["conditions"],
+        action: a.action as ToolInvocation.InsertToolInvocationPolicy["action"],
+        reason: (a.reason as string) ?? null,
+      });
       return {
         content: [
           {
@@ -1071,9 +1076,8 @@ export async function executeArchestraTool(
     );
 
     try {
-      const { id, ...updateData } = args as {
-        id: string;
-      } & Partial<ToolInvocation.InsertToolInvocationPolicy>;
+      const a = args ?? {};
+      const id = a.id as string;
       if (!id) {
         return {
           content: [
@@ -1085,6 +1089,17 @@ export async function executeArchestraTool(
           isError: true,
         };
       }
+
+      const updateData: Partial<ToolInvocation.InsertToolInvocationPolicy> = {};
+      if (a.toolId !== undefined) updateData.toolId = a.toolId as string;
+      if (a.conditions !== undefined)
+        updateData.conditions =
+          a.conditions as ToolInvocation.InsertToolInvocationPolicy["conditions"];
+      if (a.action !== undefined)
+        updateData.action =
+          a.action as ToolInvocation.InsertToolInvocationPolicy["action"];
+      if (a.reason !== undefined)
+        updateData.reason = (a.reason as string) ?? null;
 
       const policy = await ToolInvocationPolicyModel.update(id, updateData);
       if (!policy) {
@@ -1222,9 +1237,14 @@ export async function executeArchestraTool(
     );
 
     try {
-      const policy = await TrustedDataPolicyModel.create(
-        args as TrustedData.InsertTrustedDataPolicy,
-      );
+      const a = args ?? {};
+      const policy = await TrustedDataPolicyModel.create({
+        toolId: a.toolId as string,
+        conditions: (a.conditions ??
+          []) as TrustedData.InsertTrustedDataPolicy["conditions"],
+        action: a.action as TrustedData.InsertTrustedDataPolicy["action"],
+        description: (a.description as string) ?? null,
+      });
       return {
         content: [
           {
@@ -1315,9 +1335,8 @@ export async function executeArchestraTool(
     );
 
     try {
-      const { id, ...updateData } = args as {
-        id: string;
-      } & Partial<TrustedData.InsertTrustedDataPolicy>;
+      const a = args ?? {};
+      const id = a.id as string;
       if (!id) {
         return {
           content: [
@@ -1329,6 +1348,17 @@ export async function executeArchestraTool(
           isError: true,
         };
       }
+
+      const updateData: Partial<TrustedData.InsertTrustedDataPolicy> = {};
+      if (a.toolId !== undefined) updateData.toolId = a.toolId as string;
+      if (a.conditions !== undefined)
+        updateData.conditions =
+          a.conditions as TrustedData.InsertTrustedDataPolicy["conditions"];
+      if (a.action !== undefined)
+        updateData.action =
+          a.action as TrustedData.InsertTrustedDataPolicy["action"];
+      if (a.description !== undefined)
+        updateData.description = (a.description as string) ?? null;
 
       const policy = await TrustedDataPolicyModel.update(id, updateData);
       if (!policy) {
@@ -2302,39 +2332,58 @@ export function getArchestraMcpTools(): Tool[] {
       inputSchema: {
         type: "object",
         properties: {
-          profileToolId: {
+          toolId: {
             type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            description: "The ID of the tool (UUID from the tools table)",
           },
-          operator: {
-            type: "string",
-            enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
-            ],
-            description: "The comparison operator to use",
-          },
-          path: {
-            type: "string",
+          conditions: {
+            type: "array",
             description:
-              "The path in the context to evaluate (e.g., 'user.email')",
-          },
-          value: {
-            type: "string",
-            description: "The value to compare against",
+              "Array of conditions that must all match (AND logic). Empty array means unconditional.",
+            items: {
+              type: "object",
+              properties: {
+                key: {
+                  type: "string",
+                  description:
+                    "The argument name or context path to evaluate (e.g., 'url', 'context.externalAgentId')",
+                },
+                operator: {
+                  type: "string",
+                  enum: [
+                    "equal",
+                    "notEqual",
+                    "contains",
+                    "notContains",
+                    "startsWith",
+                    "endsWith",
+                    "regex",
+                  ],
+                },
+                value: {
+                  type: "string",
+                  description: "The value to compare against",
+                },
+              },
+              required: ["key", "operator", "value"],
+            },
           },
           action: {
             type: "string",
-            enum: ["allow_when_context_is_untrusted", "block_always"],
+            enum: [
+              "allow_when_context_is_untrusted",
+              "block_when_context_is_untrusted",
+              "block_always",
+            ],
             description: "The action to take when the policy matches",
           },
+          reason: {
+            type: "string",
+            description:
+              "Human-readable explanation for why this policy exists",
+          },
         },
-        required: ["profileToolId", "operator", "path", "value", "action"],
+        required: ["toolId", "conditions", "action"],
       },
       annotations: {},
       _meta: {},
@@ -2365,37 +2414,57 @@ export function getArchestraMcpTools(): Tool[] {
         properties: {
           id: {
             type: "string",
-            description: "The ID of the tool invocation policy",
+            description: "The ID of the tool invocation policy to update",
           },
-          profileToolId: {
+          toolId: {
             type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            description: "The ID of the tool (UUID from the tools table)",
           },
-          operator: {
-            type: "string",
-            enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
-            ],
-            description: "The comparison operator to use",
-          },
-          path: {
-            type: "string",
-            description: "The path in the context to evaluate",
-          },
-          value: {
-            type: "string",
-            description: "The value to compare against",
+          conditions: {
+            type: "array",
+            description:
+              "Array of conditions that must all match (AND logic). Empty array means unconditional.",
+            items: {
+              type: "object",
+              properties: {
+                key: {
+                  type: "string",
+                  description:
+                    "The argument name or context path to evaluate (e.g., 'url', 'context.externalAgentId')",
+                },
+                operator: {
+                  type: "string",
+                  enum: [
+                    "equal",
+                    "notEqual",
+                    "contains",
+                    "notContains",
+                    "startsWith",
+                    "endsWith",
+                    "regex",
+                  ],
+                },
+                value: {
+                  type: "string",
+                  description: "The value to compare against",
+                },
+              },
+              required: ["key", "operator", "value"],
+            },
           },
           action: {
             type: "string",
-            enum: ["allow_when_context_is_untrusted", "block_always"],
+            enum: [
+              "allow_when_context_is_untrusted",
+              "block_when_context_is_untrusted",
+              "block_always",
+            ],
             description: "The action to take when the policy matches",
+          },
+          reason: {
+            type: "string",
+            description:
+              "Human-readable explanation for why this policy exists",
           },
         },
         required: ["id"],
@@ -2439,38 +2508,59 @@ export function getArchestraMcpTools(): Tool[] {
       inputSchema: {
         type: "object",
         properties: {
-          profileToolId: {
+          toolId: {
             type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            description: "The ID of the tool (UUID from the tools table)",
           },
-          operator: {
-            type: "string",
-            enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
-            ],
-            description: "The comparison operator to use",
-          },
-          path: {
-            type: "string",
-            description: "The path in the tool result to evaluate",
-          },
-          value: {
-            type: "string",
-            description: "The value to compare against",
+          conditions: {
+            type: "array",
+            description:
+              "Array of conditions that must all match (AND logic). Empty array means unconditional.",
+            items: {
+              type: "object",
+              properties: {
+                key: {
+                  type: "string",
+                  description:
+                    "The attribute key or path in the tool result to evaluate (e.g., 'emails[*].from', 'source')",
+                },
+                operator: {
+                  type: "string",
+                  enum: [
+                    "equal",
+                    "notEqual",
+                    "contains",
+                    "notContains",
+                    "startsWith",
+                    "endsWith",
+                    "regex",
+                  ],
+                },
+                value: {
+                  type: "string",
+                  description: "The value to compare against",
+                },
+              },
+              required: ["key", "operator", "value"],
+            },
           },
           action: {
             type: "string",
-            enum: ["block_always", "mark_as_trusted", "sanitize_with_dual_llm"],
+            enum: [
+              "block_always",
+              "mark_as_trusted",
+              "mark_as_untrusted",
+              "sanitize_with_dual_llm",
+            ],
             description: "The action to take when the policy matches",
           },
+          description: {
+            type: "string",
+            description:
+              "Human-readable explanation for why this policy exists",
+          },
         },
-        required: ["profileToolId", "operator", "path", "value", "action"],
+        required: ["toolId", "conditions", "action"],
       },
       annotations: {},
       _meta: {},
@@ -2501,37 +2591,58 @@ export function getArchestraMcpTools(): Tool[] {
         properties: {
           id: {
             type: "string",
-            description: "The ID of the trusted data policy",
+            description: "The ID of the trusted data policy to update",
           },
-          profileToolId: {
+          toolId: {
             type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            description: "The ID of the tool (UUID from the tools table)",
           },
-          operator: {
-            type: "string",
-            enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
-            ],
-            description: "The comparison operator to use",
-          },
-          path: {
-            type: "string",
-            description: "The path in the tool result to evaluate",
-          },
-          value: {
-            type: "string",
-            description: "The value to compare against",
+          conditions: {
+            type: "array",
+            description:
+              "Array of conditions that must all match (AND logic). Empty array means unconditional.",
+            items: {
+              type: "object",
+              properties: {
+                key: {
+                  type: "string",
+                  description:
+                    "The attribute key or path in the tool result to evaluate (e.g., 'emails[*].from', 'source')",
+                },
+                operator: {
+                  type: "string",
+                  enum: [
+                    "equal",
+                    "notEqual",
+                    "contains",
+                    "notContains",
+                    "startsWith",
+                    "endsWith",
+                    "regex",
+                  ],
+                },
+                value: {
+                  type: "string",
+                  description: "The value to compare against",
+                },
+              },
+              required: ["key", "operator", "value"],
+            },
           },
           action: {
             type: "string",
-            enum: ["block_always", "mark_as_trusted", "sanitize_with_dual_llm"],
+            enum: [
+              "block_always",
+              "mark_as_trusted",
+              "mark_as_untrusted",
+              "sanitize_with_dual_llm",
+            ],
             description: "The action to take when the policy matches",
+          },
+          description: {
+            type: "string",
+            description:
+              "Human-readable explanation for why this policy exists",
           },
         },
         required: ["id"],

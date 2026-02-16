@@ -1,5 +1,6 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -16,7 +17,10 @@ import {
   ChatOpsProviderTypeSchema,
   type IncomingChatMessage,
 } from "@/types/chatops";
-import { CHATOPS_MESSAGE_RETENTION } from "./constants";
+import {
+  CHATOPS_CHANNEL_DISCOVERY,
+  CHATOPS_MESSAGE_RETENTION,
+} from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 
 /**
@@ -94,6 +98,82 @@ export class ChatOpsManager {
     return ChatOpsProviderTypeSchema.options.some((type) =>
       this.getChatOpsProvider(type)?.isConfigured(),
     );
+  }
+
+  /**
+   * Discover all channels in a workspace and upsert them as bindings.
+   * Uses a distributed TTL cache to avoid rediscovering too frequently.
+   * Providers implement channel listing; this method handles caching, upsert, and stale cleanup.
+   */
+  async discoverChannels(params: {
+    provider: ChatOpsProvider;
+    context: unknown;
+    workspaceId: string;
+    /** Additional workspace ID variants for the same team (e.g. both aadGroupId and thread ID). */
+    allWorkspaceIds?: string[];
+  }): Promise<void> {
+    const { provider, context, workspaceId } = params;
+
+    // TTL check using distributed (PostgreSQL-backed) cache — shared across pods
+    const cacheKey =
+      `${CacheKey.ChannelDiscovery}-${provider.providerId}-${workspaceId}` as AllowedCacheKey;
+    if (await cacheManager.get(cacheKey)) return;
+
+    try {
+      const channels = await provider.discoverChannels(context);
+      if (!channels?.length) {
+        logger.debug(
+          { workspaceId },
+          "[ChatOps] No channels returned by provider",
+        );
+        return;
+      }
+
+      const organizationId = await getDefaultOrganizationId();
+      const activeChannelIds = channels.map((ch) => ch.channelId);
+
+      // Upsert discovered channels (creates with agentId=null, updates names for existing)
+      await ChatOpsChannelBindingModel.ensureChannelsExist({
+        organizationId,
+        provider: provider.providerId,
+        channels,
+      });
+
+      // Remove bindings for channels that no longer exist.
+      // Use all known workspace ID variants (UUID aadGroupId + thread ID) so stale
+      // bindings are cleaned up regardless of which format was used when they were created.
+      const workspaceIds = params.allWorkspaceIds?.length
+        ? params.allWorkspaceIds
+        : [workspaceId];
+      const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
+        {
+          organizationId,
+          provider: provider.providerId,
+          workspaceIds,
+          activeChannelIds,
+        },
+      );
+
+      // Clean up duplicate bindings for the same channel caused by different
+      // workspaceId formats (UUID vs thread ID) stored at different times.
+      await ChatOpsChannelBindingModel.deduplicateBindings({
+        provider: provider.providerId,
+        channelIds: activeChannelIds,
+      });
+
+      // Set TTL cache only after successful discovery
+      await cacheManager.set(cacheKey, true, CHATOPS_CHANNEL_DISCOVERY.TTL_MS);
+
+      logger.info(
+        { workspaceId, channelCount: channels.length, deletedCount },
+        "[ChatOps] Discovered channels",
+      );
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[ChatOps] Failed to discover channels",
+      );
+    }
   }
 
   async initialize(): Promise<void> {
@@ -608,6 +688,14 @@ export const chatOpsManager = new ChatOpsManager();
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+async function getDefaultOrganizationId(): Promise<string> {
+  const org = await OrganizationModel.getFirst();
+  if (!org) {
+    throw new Error("No organizations found");
+  }
+  return org.id;
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) {

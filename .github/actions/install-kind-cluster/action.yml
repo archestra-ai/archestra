@@ -1,0 +1,28 @@
+name: Install Kind Cluster
+description: |
+  Creates a Kind cluster with a pinned node image for deterministic behavior.
+  Wraps helm/kind-action with a known-good kindest/node version.
+
+inputs:
+  config:
+    description: "Path to the Kind cluster configuration file"
+    required: false
+    default: ".github/kind.yaml"
+  cluster-name:
+    description: "Name of the Kind cluster"
+    required: false
+    default: "archestra-ci-cluster"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Kind cluster
+      uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+      with:
+        config: ${{ inputs.config }}
+        cluster_name: ${{ inputs.cluster-name }}
+        # Pin a known-good node image to avoid compatibility issues with newer K8s versions.
+        # KinD v0.31.0 defaults to v1.35.0 which drops cgroup v1 support.
+        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
+        node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
+        install_only: false

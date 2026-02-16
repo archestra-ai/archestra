@@ -17,6 +17,8 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
       return "Org Token";
     case "team_token":
       return "Team Token";
+    case "external_idp":
+      return "External IdP";
   }
 }
 

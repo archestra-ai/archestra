@@ -63,3 +63,18 @@ export function useDeleteChatOpsBinding() {
     },
   });
 }
+
+export function useRefreshChatOpsChannelDiscovery() {
+  return useMutation({
+    mutationFn: async (provider: string) => {
+      const { error } = await archestraApiSdk.refreshChatOpsChannelDiscovery({
+        body: { provider: provider as "ms-teams" },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+  });
+}

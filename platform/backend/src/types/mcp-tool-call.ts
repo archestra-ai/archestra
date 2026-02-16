@@ -12,6 +12,7 @@ export const MCPGatewayAuthMethodSchema = z.enum([
   "user_token",
   "org_token",
   "team_token",
+  "external_idp",
 ]);
 export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
 

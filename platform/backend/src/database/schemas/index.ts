@@ -19,6 +19,7 @@ export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
+export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
@@ -46,7 +47,6 @@ export { organizationRole as organizationRolesTable } from "./organization-role"
 export { default as processedEmailsTable } from "./processed-email";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
-export { default as ssoProvidersTable } from "./sso-provider";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
 export { default as teamTokensTable } from "./team-token";

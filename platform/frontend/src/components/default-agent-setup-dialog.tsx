@@ -78,7 +78,7 @@ function StepEnableMsTeams() {
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "6fr 4fr" }}
     >
-      <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0">
+      <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 min-w-0">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium">Agents</h4>
           <span className="text-sm font-medium">Teams enabled</span>
@@ -202,10 +202,12 @@ function StepSelectAgentInTeams() {
               2
             </span>
             <span className="pt-0.5">
-              Mention the bot (e.g., <strong>@Archestra</strong>) or type{" "}
+              Mention the bot (e.g., <strong>@Archestra</strong>) and send any
+              message to it or use{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
                 /select-agent
-              </code>
+              </code>{" "}
+              command
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">

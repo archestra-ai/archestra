@@ -32,9 +32,12 @@ function getState(): PendingToolState {
   return { actions: [], agentId: null };
 }
 
+export const PENDING_TOOL_STATE_CHANGE_EVENT = "pending-tool-state-change";
+
 function setState(state: PendingToolState): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.dispatchEvent(new CustomEvent(PENDING_TOOL_STATE_CHANGE_EVENT));
 }
 
 /**

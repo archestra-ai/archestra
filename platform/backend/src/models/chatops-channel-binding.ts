@@ -1,4 +1,13 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  ne,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
@@ -243,6 +252,177 @@ class ChatOpsChannelBindingModel {
       );
 
     return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Batch upsert discovered channels.
+   * Creates bindings with agentId=null for new channels,
+   * updates channelName/workspaceName for existing ones (preserves agentId).
+   */
+  static async ensureChannelsExist(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+    channels: Array<{
+      channelId: string;
+      channelName: string | null;
+      workspaceId: string | null;
+      workspaceName: string | null;
+    }>;
+  }): Promise<void> {
+    if (params.channels.length === 0) return;
+
+    const values = params.channels.map((ch) => ({
+      organizationId: params.organizationId,
+      provider: params.provider,
+      channelId: ch.channelId,
+      workspaceId: ch.workspaceId,
+      channelName: ch.channelName,
+      workspaceName: ch.workspaceName,
+    }));
+
+    await db
+      .insert(schema.chatopsChannelBindingsTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          schema.chatopsChannelBindingsTable.provider,
+          schema.chatopsChannelBindingsTable.channelId,
+          schema.chatopsChannelBindingsTable.workspaceId,
+        ],
+        set: {
+          channelName: sql`excluded.channel_name`,
+          workspaceName: sql`excluded.workspace_name`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  /**
+   * Remove bindings for channels that no longer exist in Teams.
+   * Accepts multiple workspace IDs to handle the case where the same team
+   * has bindings stored with different ID formats (UUID aadGroupId vs thread ID).
+   * Returns the count of deleted rows.
+   */
+  static async deleteStaleChannels(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+    workspaceIds: string[];
+    activeChannelIds: string[];
+  }): Promise<number> {
+    if (
+      params.activeChannelIds.length === 0 ||
+      params.workspaceIds.length === 0
+    )
+      return 0;
+
+    const deleted = await db
+      .delete(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          inArray(
+            schema.chatopsChannelBindingsTable.workspaceId,
+            params.workspaceIds,
+          ),
+          notInArray(
+            schema.chatopsChannelBindingsTable.channelId,
+            params.activeChannelIds,
+          ),
+        ),
+      )
+      .returning();
+
+    return deleted.length;
+  }
+
+  /**
+   * Delete duplicate bindings for the same (provider, channelId) that have
+   * a different workspaceId than the canonical one. This cleans up duplicates
+   * caused by the same team being identified by both UUID (aadGroupId) and
+   * thread-format IDs at different times.
+   */
+  static async deleteDuplicateBindings(params: {
+    provider: ChatOpsProviderType;
+    channelId: string;
+    canonicalBindingId: string;
+  }): Promise<number> {
+    const deleted = await db
+      .delete(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
+          ne(schema.chatopsChannelBindingsTable.id, params.canonicalBindingId),
+        ),
+      )
+      .returning();
+
+    return deleted.length;
+  }
+
+  /**
+   * Deduplicate bindings for a batch of channels.
+   * For each (provider, channelId) with multiple rows, keeps the one with an
+   * agent assigned (preferring the most recently updated), and deletes the rest.
+   */
+  static async deduplicateBindings(params: {
+    provider: ChatOpsProviderType;
+    channelIds: string[];
+  }): Promise<number> {
+    if (params.channelIds.length === 0) return 0;
+
+    // Find all bindings for these channels
+    const bindings = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          inArray(
+            schema.chatopsChannelBindingsTable.channelId,
+            params.channelIds,
+          ),
+        ),
+      );
+
+    // Group by channelId
+    const byChannel = new Map<string, typeof bindings>();
+    for (const b of bindings) {
+      const list = byChannel.get(b.channelId) ?? [];
+      list.push(b);
+      byChannel.set(b.channelId, list);
+    }
+
+    // For each channel with duplicates, keep the best one and delete the rest
+    const idsToDelete: string[] = [];
+    for (const [, group] of byChannel) {
+      if (group.length <= 1) continue;
+
+      // Prefer binding with agent assigned, then most recently updated
+      group.sort((a, b) => {
+        if (a.agentId && !b.agentId) return -1;
+        if (!a.agentId && b.agentId) return 1;
+        return b.updatedAt.getTime() - a.updatedAt.getTime();
+      });
+
+      // Keep the first (best), delete the rest
+      for (let i = 1; i < group.length; i++) {
+        idsToDelete.push(group[i].id);
+      }
+    }
+
+    if (idsToDelete.length === 0) return 0;
+
+    const deleted = await db
+      .delete(schema.chatopsChannelBindingsTable)
+      .where(inArray(schema.chatopsChannelBindingsTable.id, idsToDelete))
+      .returning();
+
+    return deleted.length;
   }
 }
 

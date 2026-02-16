@@ -61,6 +61,8 @@ interface ChatMessagesProps {
   agentName?: string;
   suggestedPrompt?: string | null;
   onSuggestedPromptClick?: () => void;
+  /** Hide the decorative arrow pointing to agent selector (e.g., when an overlay is shown) */
+  hideArrow?: boolean;
 }
 
 // Type guards for tool parts
@@ -95,6 +97,7 @@ export function ChatMessages({
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
+  hideArrow = false,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
@@ -316,7 +319,7 @@ export function ChatMessages({
       return (
         <div className="flex items-center justify-center h-full relative">
           {/* Custom bent arrow pointing to agent selector - hidden on mobile */}
-          {arrowDimensions.visible && (
+          {arrowDimensions.visible && !hideArrow && (
             <svg
               className="fixed pointer-events-none z-50"
               width={arrowDimensions.width}

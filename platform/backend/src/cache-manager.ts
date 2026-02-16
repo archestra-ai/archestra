@@ -26,10 +26,12 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
-  /** SSO groups cache during login flow */
-  SsoGroups: "sso-groups",
+  /** IdP groups cache during login flow */
+  IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
   ChatStop: "chat-stop",
+  /** Channel discovery TTL per workspace */
+  ChannelDiscovery: "channel-discovery",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

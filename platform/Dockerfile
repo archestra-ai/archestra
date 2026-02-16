@@ -125,8 +125,11 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17, supervisord, and wget (needed for KinD download and health checks) (bump: pg 17.8 CVE-2026-2004..2007)
+    # Install PostgreSQL 17, supervisord, and wget
     apk add --no-cache postgresql17 postgresql17-contrib su-exec wget && \
+    # Upgrade all packages again to ensure postgresql17/18 transitive deps have latest security patches
+    # (CVE-2026-2004, CVE-2026-2005, CVE-2026-2006, CVE-2026-2007)
+    apk --no-cache upgrade && \
     # Download cloud database CA bundles for SSL certificate validation
     # AWS RDS global CA bundle
     wget -qO /tmp/aws-rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \

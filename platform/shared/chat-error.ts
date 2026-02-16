@@ -177,6 +177,31 @@ export const ZhipuaiErrorTypes = {
   RATE_LIMIT: "1305",
 } as const;
 
+/**
+ * MiniMax API error types (from response body `error.type` field)
+ * MiniMax uses string-based error types in OpenAI-compatible format
+ * @see https://console.minimax.com/docs/errors
+ */
+export const MiniMaxErrorTypes = {
+  // Rate limiting
+  RATE_LIMIT: "rate_limit_exceeded",
+
+  // Model errors
+  MODEL_NOT_FOUND: "model_not_found",
+
+  // Authentication errors
+  INVALID_API_KEY: "invalid_api_key",
+
+  // Request errors
+  INVALID_REQUEST: "invalid_request_error",
+
+  // Server errors
+  SERVER_ERROR: "server_error",
+
+  // Content moderation
+  CONTENT_FILTER: "content_filter",
+} as const;
+
 // =============================================================================
 // Normalized Chat Error Codes
 // =============================================================================

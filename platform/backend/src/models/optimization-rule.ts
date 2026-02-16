@@ -276,6 +276,7 @@ class OptimizationRuleModel {
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
+      deepseek: [], // DeepSeek pricing varies by usage, no defaults for now
       bedrock: [], // Bedrock model pricing varies by region and usage, so no defaults
     };
 
@@ -310,6 +311,7 @@ class OptimizationRuleModel {
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
+        deepseek: [], // DeepSeek optimization rules are deployment-specific, no defaults
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
       };
 

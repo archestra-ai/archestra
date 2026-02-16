@@ -62,6 +62,7 @@ import {
   ApiError,
   Cerebras,
   Cohere,
+  Deepseek,
   Gemini,
   Mistral,
   Ollama,
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Deepseek.API.ChatCompletionRequestSchema, {
+    id: "DeepSeekChatCompletionRequest",
+  });
+  z.globalRegistry.add(Deepseek.API.ChatCompletionResponseSchema, {
+    id: "DeepSeekChatCompletionResponse",
   });
 }
 

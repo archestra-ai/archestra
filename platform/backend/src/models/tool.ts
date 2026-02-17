@@ -16,6 +16,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   notIlike,
   or,
   sql,
@@ -310,7 +311,8 @@ class ToolModel {
       }
     }
 
-    return query;
+    const results = await query;
+    return ToolModel.filterUnavailableTools(results);
   }
 
   static async findByName(
@@ -366,7 +368,7 @@ class ToolModel {
       .where(or(...conditions))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return tools;
+    return ToolModel.filterUnavailableTools(tools);
   }
 
   /**
@@ -403,7 +405,7 @@ class ToolModel {
       )
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return tools;
+    return ToolModel.filterUnavailableTools(tools);
   }
 
   /**
@@ -598,7 +600,9 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.catalogId, catalogId));
 
-    const toolIds = archestraTools.map((t) => t.id);
+    // Filter out unavailable tools (e.g. query_knowledge_graph when KG not configured)
+    const availableTools = ToolModel.filterUnavailableTools(archestraTools);
+    const toolIds = availableTools.map((t) => t.id);
 
     // Assign all tools to agent in bulk to avoid N+1
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -827,7 +831,7 @@ class ToolModel {
       assignedAgents: Array<{ id: string; name: string }>;
     }>
   > {
-    const tools = await db
+    const allTools = await db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -839,7 +843,12 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, catalogId))
       .orderBy(desc(schema.toolsTable.createdAt));
 
+    const tools = ToolModel.filterUnavailableTools(allTools);
     const toolIds = tools.map((tool) => tool.id);
+
+    if (toolIds.length === 0) {
+      return [];
+    }
 
     // Get all agent assignments for these tools in one query to avoid N+1
     const assignments = await db
@@ -1562,6 +1571,13 @@ class ToolModel {
       );
     }
 
+    // Hide knowledge graph tool when provider is not configured
+    if (!getKnowledgeGraphProviderType()) {
+      toolWhereConditions.push(
+        ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME),
+      );
+    }
+
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments
     let accessibleAgentIds: string[] | undefined;
@@ -1800,6 +1816,23 @@ class ToolModel {
       limit: pagination.limit ?? 20,
       offset: pagination.offset ?? 0,
     });
+  }
+  // =============================================================================
+  // Private helpers
+  // =============================================================================
+
+  /**
+   * Filter out tools that should not be visible based on current configuration.
+   * Currently filters out the query_knowledge_graph tool when no knowledge graph
+   * provider is configured, since the tool would not be functional.
+   */
+  private static filterUnavailableTools<T extends { name: string }>(
+    tools: T[],
+  ): T[] {
+    if (getKnowledgeGraphProviderType()) {
+      return tools;
+    }
+    return tools.filter((t) => t.name !== TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
   }
 }
 

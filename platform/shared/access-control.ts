@@ -51,8 +51,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
-  dualLlmConfig: ["create", "read", "update", "delete"],
-  dualLlmResult: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["read"],
+  dualLlmResult: ["read"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
@@ -788,6 +788,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
   "/settings/roles": {
     organization: ["read"],
+  },
+  "/settings/security": {
+    organization: ["update"],
   },
   "/settings/appearance": {
     organization: ["update"],

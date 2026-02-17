@@ -296,6 +296,30 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 You can get an API key from the [x.ai Console](https://console.x.ai/).
 
+## MiniMax
+
+[MiniMax](https://www.minimaxi.com/) is a Chinese AI company providing advanced large language models through an OpenAI-compatible API. MiniMax offers models optimized for both Chinese and English language tasks with strong performance in reasoning and conversation.
+
+### Supported MiniMax APIs
+
+- **Chat Completions API** (`/chat/completions`) - Fully supported (OpenAI-compatible)
+
+### MiniMax Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/minimax/{profile-id}`
+- **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_MINIMAX_BASE_URL`      | No       | MiniMax API base URL (default: `https://api.minimax.chat/v1`)                 |
+| `ARCHESTRA_CHAT_MINIMAX_API_KEY`  | No       | Default API key for MiniMax (can be overridden per conversation/team/org)      |
+
+### Getting an API Key
+
+You can get an API key from the [MiniMax Platform](https://platform.minimax.io/).
+
 ## Amazon Bedrock
 
 ### Supported Bedrock APIs

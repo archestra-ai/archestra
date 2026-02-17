@@ -79,6 +79,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     name: "mcp_tool_calls_total",
     help: "Total MCP tool calls",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
+    enableExemplars: true,
   });
 
   mcpRequestSizeBytes = new client.Histogram({
@@ -86,6 +87,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     help: "MCP tool call request payload size in bytes",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     buckets: [100, 500, 1000, 5000, 10000, 50000, 100000],
+    enableExemplars: true,
   });
 
   mcpResponseSizeBytes = new client.Histogram({
@@ -93,6 +95,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     help: "MCP tool call response payload size in bytes",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     buckets: [100, 500, 1000, 5000, 10000, 50000, 100000, 500000],
+    enableExemplars: true,
   });
 
   logger.info(
@@ -162,18 +165,28 @@ export function reportMcpToolCall(params: {
     agentLabels: params.agentLabels,
   });
 
-  mcpToolCallsTotal.inc(labels);
+  const exemplarLabels = getExemplarLabels();
+
+  mcpToolCallsTotal.inc({ labels, value: 1, exemplarLabels });
   if (params.durationSeconds > 0) {
     mcpToolCallDuration.observe({
       labels,
       value: params.durationSeconds,
-      exemplarLabels: getExemplarLabels(),
+      exemplarLabels,
     });
   }
   if (params.requestSizeBytes != null && params.requestSizeBytes > 0) {
-    mcpRequestSizeBytes.observe(labels, params.requestSizeBytes);
+    mcpRequestSizeBytes.observe({
+      labels,
+      value: params.requestSizeBytes,
+      exemplarLabels,
+    });
   }
   if (params.responseSizeBytes != null && params.responseSizeBytes > 0) {
-    mcpResponseSizeBytes.observe(labels, params.responseSizeBytes);
+    mcpResponseSizeBytes.observe({
+      labels,
+      value: params.responseSizeBytes,
+      exemplarLabels,
+    });
   }
 }

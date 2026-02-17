@@ -120,7 +120,7 @@ Content is truncated to 10KB per event to avoid oversized spans.
 
 ### Metric-to-Trace Exemplars
 
-Key histogram metrics (`llm_request_duration_seconds`, `llm_time_to_first_token_seconds`, `llm_tokens_per_second`, `mcp_tool_call_duration_seconds`) include trace exemplars. When viewing these metrics in Grafana, you can click on individual data points to jump directly to the corresponding trace in Tempo. This requires:
+All LLM and MCP metrics include trace exemplars. When viewing these metrics in Grafana, you can click on individual data points to jump directly to the corresponding trace in Tempo. This requires:
 
 - Prometheus configured with `--enable-feature=exemplar-storage`
 - Grafana Prometheus datasource configured with `exemplarTraceIdDestinations` pointing to your Tempo datasource
@@ -250,29 +250,11 @@ We provide four Grafana dashboards for monitoring Archestra:
 - **[Agent Sessions](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/agent-sessions.json)** — Session-level agent audit trail with drill-down into LLM calls, MCP tool calls, and correlated logs
 - **[Application Metrics](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/application-metrics.json)** — HTTP traffic, Node.js runtime health, and resource usage for monitoring your Archestra deployment
 
-To install all four dashboards at once, create a [Grafana Service Account](https://grafana.com/docs/grafana/latest/administration/service-accounts/) token with **Editor** role and run:
+To install all four dashboards at once, create a [Grafana Service Account](https://grafana.com/docs/grafana/latest/administration/service-accounts/) token with the **Editor** [basic role](https://grafana.com/docs/grafana/latest/administration/roles-and-permissions/#organization-roles), or the [`fixed:folders:writer`](https://grafana.com/docs/grafana/latest/administration/roles-and-permissions/access-control/rbac-fixed-basic-role-definitions/) RBAC role for more granular access, and run:
 
 ```bash
 GRAFANA_URL=https://your-grafana-instance GRAFANA_TOKEN=glsa_xxx \
   bash <(curl -sL https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/dev/grafana/install-dashboards.sh)
 ```
 
-This creates an "Archestra" folder and imports all dashboards. Safe to re-run after updates.
-
-## Setting Up Prometheus
-
-_The following instructions assume you are familiar with Grafana and Prometheus and have them already set up._
-
-Add the following to your `prometheus.yml`:
-
-```yaml
-scrape_configs:
-  - job_name: "archestra"
-    static_configs:
-      - targets: ["localhost:9050"] # Archestra API base URL
-    scrape_interval: 15s
-    metrics_path: /metrics
-```
-
-If you are unsure what the Archestra API base URL is, check the Archestra UI's Settings. While the Archestra API is exposed
-on port 9000, `/metrics` is exposed separately on port 9050.
+This creates an "Archestra" folder and imports all dashboards. The script is idempotent — safe to re-run after updates to create new dashboards or update existing ones.

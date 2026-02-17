@@ -143,18 +143,21 @@ export function initializeMetrics(labelKeys: string[]): void {
     name: "llm_tokens_total",
     help: "Total tokens used",
     labelNames: [...baseLabelNames, "type", ...nextLabelKeys], // type: input|output
+    enableExemplars: true,
   });
 
   llmBlockedToolCounter = new client.Counter({
     name: "llm_blocked_tools_total",
     help: "Blocked tool count",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
+    enableExemplars: true,
   });
 
   llmCostTotal = new client.Counter({
     name: "llm_cost_total",
     help: "Total estimated cost in USD",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
+    enableExemplars: true,
   });
 
   llmTimeToFirstToken = new client.Histogram({
@@ -180,6 +183,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     help: "Token usage distribution per request (input + output combined)",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     buckets: [4, 16, 64, 256, 1024, 4096, 16384, 65536],
+    enableExemplars: true,
   });
 
   logger.info(
@@ -245,35 +249,40 @@ export function reportLLMTokens(
     return;
   }
 
+  const exemplarLabels = getExemplarLabels();
+
   if (usage.input && usage.input > 0) {
-    llmTokensCounter.inc(
-      buildMetricLabels(
+    llmTokensCounter.inc({
+      labels: buildMetricLabels(
         profile,
         { provider, type: "input" },
         model,
         externalAgentId,
       ),
-      usage.input,
-    );
+      value: usage.input,
+      exemplarLabels,
+    });
   }
   if (usage.output && usage.output > 0) {
-    llmTokensCounter.inc(
-      buildMetricLabels(
+    llmTokensCounter.inc({
+      labels: buildMetricLabels(
         profile,
         { provider, type: "output" },
         model,
         externalAgentId,
       ),
-      usage.output,
-    );
+      value: usage.output,
+      exemplarLabels,
+    });
   }
 
   const totalTokens = (usage.input ?? 0) + (usage.output ?? 0);
   if (totalTokens > 0 && llmTokenUsage) {
-    llmTokenUsage.observe(
-      buildMetricLabels(profile, { provider }, model, externalAgentId),
-      totalTokens,
-    );
+    llmTokenUsage.observe({
+      labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+      value: totalTokens,
+      exemplarLabels,
+    });
   }
 }
 
@@ -300,10 +309,11 @@ export function reportBlockedTools(
     );
     return;
   }
-  llmBlockedToolCounter.inc(
-    buildMetricLabels(profile, { provider }, model, externalAgentId),
-    count,
-  );
+  llmBlockedToolCounter.inc({
+    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    value: count,
+    exemplarLabels: getExemplarLabels(),
+  });
 }
 
 /**
@@ -328,10 +338,11 @@ export function reportLLMCost(
     logger.warn("Cost not specified when reporting");
     return;
   }
-  llmCostTotal.inc(
-    buildMetricLabels(profile, { provider }, model, externalAgentId),
-    cost,
-  );
+  llmCostTotal.inc({
+    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    value: cost,
+    exemplarLabels: getExemplarLabels(),
+  });
 }
 
 /**

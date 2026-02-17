@@ -11,6 +11,7 @@ import {
 } from "@opentelemetry/api-logs";
 import pino from "pino";
 import pretty from "pino-pretty";
+import { getActiveSessionId } from "@/observability/request-context";
 
 /**
  * Lazy-initialized pino logger using a Proxy.
@@ -85,11 +86,18 @@ function injectTraceContext(): Record<string, string> {
   const spanContext = span.spanContext();
   if (!isSpanContextValid(spanContext)) return {};
 
-  return {
+  const result: Record<string, string> = {
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
     trace_flags: `0${spanContext.traceFlags.toString(16)}`,
   };
+
+  const sessionId = getActiveSessionId();
+  if (sessionId) {
+    result.session_id = sessionId;
+  }
+
+  return result;
 }
 
 // --- Internal helpers (OTEL log stream) ---

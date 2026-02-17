@@ -1,5 +1,6 @@
 import {
   type Context,
+  context,
   type Span,
   SpanKind,
   SpanStatusCode,
@@ -8,6 +9,7 @@ import {
 import type { SupportedProvider } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
+import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { Agent, AgentType, GenAiOperationName } from "@/types";
 
 const MAX_CONTENT_LENGTH = 10_000;
@@ -157,19 +159,14 @@ export async function startActiveLlmSpan<T>(params: {
     }
   };
 
-  // When parentContext is provided (e.g., from extracted traceparent header),
-  // use the 4-arg overload so the LLM span becomes a child of the remote parent.
-  // When not provided, behavior is unchanged (creates root span or child of current context).
-  if (params.parentContext) {
-    return tracer.startActiveSpan(
-      spanName,
-      spanOptions,
-      params.parentContext,
-      spanCallback,
-    );
+  // Build the context: start from parentContext (if provided) or current context,
+  // then inject the session ID so it's available to the pino mixin for log correlation.
+  let ctx = params.parentContext ?? context.active();
+  if (params.sessionId) {
+    ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
   }
 
-  return tracer.startActiveSpan(spanName, spanOptions, spanCallback);
+  return tracer.startActiveSpan(spanName, spanOptions, ctx, spanCallback);
 }
 
 /**
@@ -201,6 +198,12 @@ export async function startActiveMcpSpan<T>(params: {
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
 
+  // Inject session ID into context so it's available to the pino mixin for log correlation
+  let ctx = context.active();
+  if (params.sessionId) {
+    ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
+  }
+
   return tracer.startActiveSpan(
     `execute_tool ${params.toolName}`,
     {
@@ -214,6 +217,7 @@ export async function startActiveMcpSpan<T>(params: {
         "gen_ai.agent.name": params.agent.name,
       },
     },
+    ctx,
     async (span) => {
       if (params.agent.labels && params.agent.labels.length > 0) {
         for (const label of params.agent.labels) {
@@ -295,6 +299,12 @@ export async function startActiveChatSpan<T>(params: {
   const routeCategory = params.routeCategory ?? RouteCategory.CHAT;
   const spanName = `chat ${params.agentName}`;
 
+  // Inject session ID into context so it's available to the pino mixin for log correlation
+  let ctx = context.active();
+  if (params.sessionId) {
+    ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
+  }
+
   return tracer.startActiveSpan(
     spanName,
     {
@@ -306,6 +316,7 @@ export async function startActiveChatSpan<T>(params: {
         "gen_ai.agent.name": params.agentName,
       },
     },
+    ctx,
     async (span) => {
       if (params.sessionId) {
         span.setAttribute("gen_ai.conversation.id", params.sessionId);

@@ -758,6 +758,7 @@ export function AgentDialog({
           ...(showSecurity && { considerContextUntrusted }),
           ...emailSettings,
         });
+        if (!created) return;
         savedAgentId = created?.id ?? "";
 
         // Save tool changes with the new agent ID

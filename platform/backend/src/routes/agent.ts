@@ -200,12 +200,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (userTeamIds.length === 0) {
             throw new ApiError(
               403,
-              "You must be a member of at least one team to create a profile",
+              "You must be a member of at least one team to create an agent",
             );
           }
           throw new ApiError(
             400,
-            "You must assign at least one team to the profile",
+            "You must assign at least one team to the agent",
           );
         }
 
@@ -215,7 +215,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (invalidTeams.length > 0) {
           throw new ApiError(
             403,
-            "You can only assign profiles to teams you are a member of",
+            "You can only assign agents to teams you are a member of",
           );
         }
       }

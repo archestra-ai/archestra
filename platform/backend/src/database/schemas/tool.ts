@@ -35,6 +35,8 @@ const toolsTable = pgTable(
       .notNull()
       .default({}),
     description: text("description"),
+    /** MCP tool metadata (e.g. _meta.ui.resourceUri for MCP Apps). Preserved from server when syncing tools. */
+    meta: jsonb("meta").$type<Record<string, unknown> | null>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

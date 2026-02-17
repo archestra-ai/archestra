@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack -H 0.0.0.0",
+    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev --turbopack -H 0.0.0.0",
     "build": "next build --turbopack",
     "start": "NODE_ENV=production next start",
     "lint": "biome check",
@@ -91,6 +91,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "cross-env": "^10.1.0",
     "highlight.js": "^11.11.1",
     "jsdom": "^27.3.0",
     "knip": "^5.72.0",

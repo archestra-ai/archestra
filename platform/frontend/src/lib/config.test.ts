@@ -23,13 +23,13 @@ describe("getBackendBaseUrl", () => {
     process.env = originalEnv;
   });
 
-  it("should return default localhost URL when no env vars are set", () => {
+  it("should return default 127.0.0.1 URL when no env vars are set", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
     delete process.env.ARCHESTRA_API_BASE_URL;
 
     const result = getBackendBaseUrl();
 
-    expect(result).toBe("http://localhost:9000");
+    expect(result).toBe("http://127.0.0.1:9000");
   });
 
   it("should return NEXT_PUBLIC_ARCHESTRA_API_BASE_URL when set", () => {
@@ -60,7 +60,7 @@ describe("getBackendBaseUrl", () => {
 
     const result = getBackendBaseUrl();
 
-    expect(result).toBe("http://localhost:9000");
+    expect(result).toBe("http://127.0.0.1:9000");
   });
 
   it("should handle URLs with ports", () => {
@@ -93,13 +93,13 @@ describe("getDisplayProxyUrl", () => {
     process.env = originalEnv;
   });
 
-  it("should return default localhost URL with /v1 when env var is not set", () => {
+  it("should return default 127.0.0.1 URL with /v1 when env var is not set", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
     delete process.env.ARCHESTRA_API_BASE_URL;
 
     const result = getDisplayProxyUrl();
 
-    expect(result).toBe("http://localhost:9000/v1");
+    expect(result).toBe("http://127.0.0.1:9000/v1");
   });
 
   it("should return URL as-is when it already ends with /v1", () => {
@@ -158,7 +158,7 @@ describe("getDisplayProxyUrl", () => {
 
     const result = getDisplayProxyUrl();
 
-    expect(result).toBe("http://localhost:9000/v1");
+    expect(result).toBe("http://127.0.0.1:9000/v1");
   });
 });
 
@@ -180,7 +180,7 @@ describe("getWebSocketUrl", () => {
 
     const result = getWebSocketUrl();
 
-    expect(result).toBe("ws://localhost:9000/ws");
+    expect(result).toBe("ws://127.0.0.1:9000/ws");
   });
 
   it("should convert http to ws", () => {
@@ -229,6 +229,6 @@ describe("getWebSocketUrl", () => {
 
     const result = getWebSocketUrl();
 
-    expect(result).toBe("ws://localhost:9000/ws");
+    expect(result).toBe("ws://127.0.0.1:9000/ws");
   });
 });

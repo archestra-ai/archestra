@@ -39,6 +39,14 @@ const browserTestIgnore = [
   testPatterns.ssoProviders,
 ];
 
+/** Specs excluded from chromium-stable (flaky or need extra setup); full run still uses chromium project */
+const chromiumStableIgnore = [
+  /chat-settings\.spec\.ts/,
+  /dynamic-credentials\.spec\.ts/,
+  /mcp-install\.spec\.ts/,
+  /static-credentials-management\.spec\.ts/,
+];
+
 /**
  * Common dependency configurations
  */
@@ -79,10 +87,10 @@ export default defineConfig({
     video: "retain-on-failure",
     /* Take screenshot only when test fails */
     screenshot: "only-on-failure",
-    /* Timeout for each action (click, fill, etc.) */
-    actionTimeout: 15_000,
-    /* Timeout for navigation actions */
-    navigationTimeout: 30_000,
+    /* Timeout for each action (click, fill, etc.) - generous for cold Next.js */
+    actionTimeout: 30_000,
+    /* Timeout for navigation actions (Next.js cold loads can be slow) */
+    navigationTimeout: 60_000,
   },
   /* Expect timeout for assertions */
   expect: {
@@ -96,6 +104,7 @@ export default defineConfig({
       name: projectNames.setupAdmin,
       testMatch: testPatterns.adminSetup,
       testDir: "./",
+      timeout: 120_000,
     },
     {
       name: projectNames.setupUsers,
@@ -138,6 +147,16 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
+      dependencies: dependencies.browserProjects,
+    },
+    {
+      name: "chromium-stable",
+      testDir: "./tests/ui",
+      testIgnore: [...browserTestIgnore, ...chromiumStableIgnore],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
       dependencies: dependencies.browserProjects,
     },
     {

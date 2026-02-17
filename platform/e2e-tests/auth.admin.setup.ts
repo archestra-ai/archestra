@@ -11,10 +11,13 @@ import { loginViaApi } from "./utils";
 setup("authenticate as admin", async ({ page }) => {
   // Sign in admin via API
   const signedIn = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  expect(signedIn, "Admin sign-in failed").toBe(true);
+  expect(
+    signedIn,
+    "Admin sign-in failed. Check test output for [loginViaApi] status/body. Ensure DB is running, backend seeded the default admin (admin@example.com), and ARCHESTRA_AUTH_* env (if set) match e2e-tests/consts.",
+  ).toBe(true);
 
-  // Navigate to trigger cookie storage
-  await page.goto(`${UI_BASE_URL}/chat`);
+  // Navigate to trigger cookie storage (allow 60s for cold Next.js /chat)
+  await page.goto(`${UI_BASE_URL}/chat`, { timeout: 60_000 });
   await page.waitForLoadState("networkidle");
 
   // Mark onboarding as complete via API

@@ -748,11 +748,12 @@ class McpClient {
         // Close connection (we just needed the tools)
         await client.close();
 
-        // Transform tools to our format
+        // Transform tools to our format (preserve _meta for MCP Apps)
         return toolsResult.tools.map((tool: Tool) => ({
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          meta: (tool as { _meta?: Record<string, unknown> })._meta,
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
@@ -780,6 +781,53 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  /**
+   * Connect to an MCP server, read a resource by URI (e.g. ui:// for MCP Apps), and close.
+   * Used to fetch MCP App HTML for rendering in chat.
+   */
+  async connectAndReadResource(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+    uri: string;
+  }): Promise<{ contents: Array<{ uri: string; mimeType?: string; text?: string; blob?: string }> }> {
+    const { catalogItem, mcpServerId, secrets, uri } = params;
+
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-platform", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    await Promise.race([
+      client.connect(transport),
+      this.createTimeout(15000, "Resource connection timeout"),
+    ]);
+
+    try {
+      // MCP SDK Client.readResource(params: { uri: string }) for resources/read (e.g. MCP Apps ui://)
+      const readResource = (client as {
+        readResource?: (params: { uri: string }) => Promise<{ contents: Array<{ uri: string; mimeType?: string; text?: string; blob?: string }> }>;
+      }).readResource;
+      if (!readResource || typeof readResource !== "function") {
+        await client.close();
+        throw new Error("MCP server does not support reading resources (resources/read)");
+      }
+      const result = await Promise.race([
+        readResource.call(client, { uri }),
+        this.createTimeout(15000, "Read resource timeout"),
+      ]);
+      return result as { contents: Array<{ uri: string; mimeType?: string; text?: string; blob?: string }> };
+    } finally {
+      await client.close();
+    }
   }
 
   /**

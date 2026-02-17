@@ -21,13 +21,17 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { McpAppFrame } from "./mcp-app-frame";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
+  /** Profile (agent) ID for the conversation; used for MCP App resource loading */
+  agentId?: string;
   messages: UIMessage[];
   hideToolCalls?: boolean;
   status: ChatStatus;
@@ -63,6 +67,7 @@ function isToolPart(part: any): part is {
 
 export function ChatMessages({
   conversationId,
+  agentId,
   messages,
   hideToolCalls = false,
   status,
@@ -71,6 +76,12 @@ export function ChatMessages({
   onUserMessageEdit,
   error = null,
 }: ChatMessagesProps) {
+  const { data: profileTools = [] } = useChatProfileMcpTools(agentId);
+  const toolMetaByName = Object.fromEntries(
+    profileTools
+      .filter((t): t is typeof t & { _meta?: { ui?: { resourceUri?: string } } } => Boolean((t as { _meta?: unknown })._meta))
+      .map((t) => [t.name, (t as { _meta?: { ui?: { resourceUri?: string } } })._meta]),
+  );
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
@@ -325,12 +336,14 @@ export function ChatMessages({
                         toolResultPart = nextPart;
                       }
 
-                      return (
+                        return (
                         <MessageTool
                           part={part}
                           key={`${message.id}-${i}`}
                           toolResultPart={toolResultPart}
                           toolName={toolName}
+                          agentId={agentId}
+                          toolMeta={toolMetaByName[toolName]}
                         />
                       );
                     }
@@ -360,6 +373,8 @@ export function ChatMessages({
                             key={`${message.id}-${i}`}
                             toolResultPart={toolResultPart}
                             toolName={toolName}
+                            agentId={agentId}
+                            toolMeta={toolMetaByName[toolName]}
                           />
                         );
                       }
@@ -436,10 +451,14 @@ function MessageTool({
   part,
   toolResultPart,
   toolName,
+  agentId,
+  toolMeta,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
+  agentId?: string;
+  toolMeta?: { ui?: { resourceUri?: string } };
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -449,11 +468,19 @@ function MessageTool({
     : (part.errorText ?? outputError);
 
   const hasInput = part.input && Object.keys(part.input).length > 0;
+  const effectiveResultPart = toolResultPart ?? (part.state === "output-available" ? part : null);
   const hasContent = Boolean(
     hasInput ||
       (toolResultPart && Boolean(toolResultPart.output)) ||
       (!toolResultPart && Boolean(part.output)),
   );
+
+  const resourceUri = toolMeta?.ui?.resourceUri;
+  const showMcpApp =
+    Boolean(agentId) &&
+    Boolean(resourceUri) &&
+    Boolean(effectiveResultPart) &&
+    !errorText;
 
   return (
     <Tool className={hasContent ? "cursor-pointer" : ""}>
@@ -469,14 +496,25 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
-        {toolResultPart && (
+        {showMcpApp && agentId && resourceUri && effectiveResultPart && (
+          <div className="p-4">
+            <McpAppFrame
+              agentId={agentId}
+              resourceUri={resourceUri}
+              toolResult={effectiveResultPart.output}
+              toolName={toolName}
+              className="rounded-md overflow-hidden"
+            />
+          </div>
+        )}
+        {!showMcpApp && toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && Boolean(part.output) && (
+        {!showMcpApp && !toolResultPart && Boolean(part.output) && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={part.output}

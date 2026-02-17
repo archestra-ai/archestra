@@ -6952,6 +6952,8 @@ export type GetChatAgentMcpToolsResponses = {
         parameters: {
             [key: string]: unknown;
         } | null;
+        /** MCP tool metadata (e.g. _meta.ui.resourceUri for MCP Apps) */
+        _meta?: Record<string, unknown>;
     }>;
 };
 

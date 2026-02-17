@@ -422,6 +422,7 @@ class McpServerModel {
       name: string;
       description: string;
       inputSchema: Record<string, unknown>;
+      meta?: Record<string, unknown>;
     }>
   > {
     // Get catalog information if this server was installed from a catalog
@@ -454,11 +455,12 @@ class McpServerModel {
         secrets,
       });
 
-      // Transform to ensure description is always a string
+      // Transform to ensure description is always a string; preserve meta for MCP Apps
       return tools.map((tool) => ({
         name: tool.name,
         description: tool.description || `Tool: ${tool.name}`,
         inputSchema: tool.inputSchema,
+        meta: tool.meta,
       }));
     } catch (error) {
       logger.error(

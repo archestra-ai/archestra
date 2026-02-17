@@ -8,10 +8,19 @@ export const CommonToolCallSchema = z
   })
   .describe("Represents a tool call in a provider-agnostic way");
 
+/** MCP App UI metadata (see https://modelcontextprotocol.io/docs/extensions/apps) */
+export type McpToolMetaUi = {
+  resourceUri?: string; // e.g. "ui://get-time/mcp-app.html"
+  permissions?: string[];
+  csp?: string;
+};
+
 export type CommonMcpToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  /** MCP tool metadata (e.g. _meta.ui for MCP Apps) */
+  meta?: { ui?: McpToolMetaUi } & Record<string, unknown>;
 };
 
 /**

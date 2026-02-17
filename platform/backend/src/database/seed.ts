@@ -515,10 +515,71 @@ async function seedTeamTokens(): Promise<void> {
   const teams = await TeamModel.findByOrganization(org.id);
   for (const team of teams) {
     const teamToken = await TeamTokenModel.ensureTeamToken(team.id, team.name);
-    logger.info(
-      { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
-      "Ensured team token exists",
-    );
+  logger.info(
+    { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
+    "Ensured team token exists",
+  );
+  }
+}
+
+/**
+ * Seeds recommended MCP Apps (n8n-mcp, excalidraw-mcp) into the catalog.
+ * Idempotent: skips if already present.
+ */
+async function seedMcpAppsCatalog(): Promise<void> {
+  const entries: Array<{
+    name: string;
+    description: string;
+    serverType: "remote" | "local";
+    serverUrl?: string;
+    docsUrl?: string;
+    repository?: string;
+    localConfig?: {
+      command: string;
+      arguments: string[];
+      transportType: "stdio";
+    };
+  }> = [
+    {
+      name: "excalidraw-mcp",
+      description:
+        "Official Excalidraw MCP App. Draw and edit diagrams in chat with viewport control and fullscreen editing. Tools expose ui:// resources for rich in-chat canvas.",
+      serverType: "remote",
+      serverUrl: "https://excalidraw-mcp-app.vercel.app/mcp",
+      docsUrl: "https://github.com/excalidraw/excalidraw-mcp",
+      repository: "https://github.com/excalidraw/excalidraw-mcp",
+    },
+    {
+      name: "n8n-mcp",
+      description:
+        "n8n MCP server: AI assistants get access to n8n node documentation (1,084+ workflow nodes). Run locally via npx; optional N8N_MCP_API_KEY for hosted features.",
+      serverType: "local",
+      repository: "https://github.com/czlonkowski/n8n-mcp",
+      docsUrl: "https://github.com/czlonkowski/n8n-mcp#readme",
+      localConfig: {
+        command: "npx",
+        arguments: ["-y", "n8n-mcp"],
+        transportType: "stdio",
+      },
+    },
+  ];
+
+  for (const entry of entries) {
+    const existing = await InternalMcpCatalogModel.findByName(entry.name);
+    if (existing) {
+      logger.info({ name: entry.name }, "MCP App already in catalog, skipping");
+      continue;
+    }
+    await InternalMcpCatalogModel.create({
+      name: entry.name,
+      description: entry.description,
+      serverType: entry.serverType,
+      serverUrl: entry.serverUrl,
+      docsUrl: entry.docsUrl,
+      repository: entry.repository,
+      localConfig: entry.localConfig,
+    });
+    logger.info({ name: entry.name }, "Seeded MCP App catalog entry");
   }
 }
 
@@ -532,5 +593,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultRegularPrompts();
   await seedArchestraTools();
   await seedTestMcpServer();
+  await seedMcpAppsCatalog();
   await seedTeamTokens();
 }

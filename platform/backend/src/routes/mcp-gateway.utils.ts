@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -22,13 +23,16 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
+  InternalMcpCatalogModel,
   isArchestraPrefixedToken,
+  McpServerModel,
   McpToolCallModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -112,6 +116,7 @@ export async function createAgentServer(
     {
       capabilities: {
         tools: { listChanged: false },
+        resources: { listChanged: false },
       },
     },
   );
@@ -139,13 +144,13 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
+    const toolsList = mcpTools.map(({ name, description, parameters, meta }) => ({
       name,
       title: archestraToolTitles.get(name) || name,
       description,
       inputSchema: parameters,
       annotations: {},
-      _meta: {},
+      _meta: meta ?? {},
     }));
 
     // Log tools/list request
@@ -272,6 +277,71 @@ export async function createAgentServer(
           code: -32603, // Internal error
           message: "Tool execution failed",
           data: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+  );
+
+  // MCP Apps: allow 3rd-party clients to read ui:// resources via resources/read
+  server.setRequestHandler(
+    ReadResourceRequestSchema,
+    async ({ params: { uri } }) => {
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+      const tool = mcpTools.find(
+        (t) =>
+          (t.meta as { ui?: { resourceUri?: string } } | null)?.ui
+            ?.resourceUri === uri,
+      );
+      if (!tool?.mcpServerId) {
+        throw {
+          code: -32602,
+          message: "MCP App resource not found for this agent",
+          data: { uri },
+        };
+      }
+      const mcpServer = await McpServerModel.findById(tool.mcpServerId);
+      if (!mcpServer?.catalogId) {
+        throw {
+          code: -32602,
+          message: "MCP server or catalog not found",
+          data: { uri },
+        };
+      }
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        mcpServer.catalogId,
+      );
+      if (!catalogItem) {
+        throw {
+          code: -32602,
+          message: "Catalog item not found",
+          data: { uri },
+        };
+      }
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(mcpServer.secretId);
+        if (secretRecord?.secret) {
+          secrets = secretRecord.secret;
+        }
+      }
+      try {
+        const result = await mcpClient.connectAndReadResource({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          uri,
+        });
+        return { contents: result.contents };
+      } catch (err) {
+        logger.info(
+          { err, uri, agentId },
+          "MCP gateway resources/read failed",
+        );
+        throw {
+          code: -32603,
+          message:
+            err instanceof Error ? err.message : "Failed to read MCP App resource",
+          data: { uri },
         };
       }
     },

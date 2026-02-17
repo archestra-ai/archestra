@@ -332,6 +332,8 @@ class ToolModel {
       parameters: Record<string, unknown>;
       catalogId: string;
       mcpServerId: string;
+      /** MCP tool metadata (e.g. _meta.ui.resourceUri for MCP Apps) */
+      meta?: Record<string, unknown> | null;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -372,6 +374,7 @@ class ToolModel {
           catalogId: tool.catalogId,
           mcpServerId: tool.mcpServerId,
           agentId: null,
+          meta: (tool.meta ?? undefined) as Record<string, unknown> | null | undefined,
         });
       }
     }

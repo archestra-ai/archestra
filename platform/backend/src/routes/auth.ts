@@ -204,7 +204,13 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body,
       });
 
-      const response = await betterAuth.handler(req);
+      let response: Response;
+      try {
+        response = await betterAuth.handler(req);
+      } catch (err) {
+        fastify.log.error({ err, url: request.url }, "Auth handler threw");
+        return reply.status(500).send("Internal Server Error");
+      }
 
       reply.status(response.status);
 

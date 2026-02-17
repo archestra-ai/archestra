@@ -39,7 +39,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!canUpdateOrganization) {
         // Non-admin users only see predefined roles
         return reply.send(
-          await OrganizationRoleModel.getPredefinedOnly(organizationId),
+          OrganizationRoleModel.getPredefinedOnly(organizationId),
         );
       }
 

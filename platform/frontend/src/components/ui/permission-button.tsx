@@ -46,7 +46,9 @@ export function PermissionButton({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button {...props}>{children}</Button>
+          <span>
+            <Button {...props}>{children}</Button>
+          </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
       </Tooltip>

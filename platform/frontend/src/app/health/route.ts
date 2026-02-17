@@ -1,4 +1,5 @@
 import { getBackendBaseUrl } from "@/lib/config";
+import { unwrapNetworkErrorCode } from "@/lib/utils";
 import { NextResponse } from "next/server";
 
 /**
@@ -17,24 +18,7 @@ export async function GET() {
       headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
     });
   } catch (err: unknown) {
-    // Next.js / undici may wrap network errors in AggregateError or `cause`, so
-    // drill down to find a Node-style `code` if present.
-    const unwrapCode = (error: unknown): string | undefined => {
-      if (!error || typeof error !== "object") return undefined;
-      const anyErr = error as { code?: unknown; cause?: unknown; errors?: unknown[] };
-      if (typeof anyErr.code === "string") return anyErr.code;
-      if (anyErr.cause) {
-        const nested = (anyErr.cause as any).code ?? (Array.isArray((anyErr.cause as any).errors) ? (anyErr.cause as any).errors[0]?.code : undefined);
-        if (typeof nested === "string") return nested;
-      }
-      if (Array.isArray(anyErr.errors) && anyErr.errors.length > 0) {
-        const nested = (anyErr.errors[0] as any)?.code;
-        if (typeof nested === "string") return nested;
-      }
-      return undefined;
-    };
-
-    const code = unwrapCode(err);
+    const code = unwrapNetworkErrorCode(err);
     if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "ETIMEDOUT") {
       return NextResponse.json(
         {

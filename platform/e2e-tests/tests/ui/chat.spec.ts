@@ -113,6 +113,16 @@ const zhipuaiConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// Groq - Uses OpenAI-compatible streaming format
+const groqConfig: ChatProviderTestConfig = {
+  providerName: "groq",
+  providerDisplayName: "Groq",
+  modelId: "llama-3.3-70b-versatile",
+  modelDisplayName: "Llama 3.3 70B Versatile",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
@@ -123,6 +133,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   ollamaConfig,
   vllmConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 // =============================================================================

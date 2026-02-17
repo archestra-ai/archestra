@@ -397,6 +397,44 @@ const zhipuaiConfig: CompressionTestConfig = {
   }),
 };
 
+const groqConfig: CompressionTestConfig = {
+  providerName: "Groq",
+
+  endpoint: (profileId) => `/v1/groq/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Groq uses OpenAI-compatible format: tool results are sent as separate "tool" role messages
+  buildRequestWithToolResult: () => ({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -411,6 +449,7 @@ const testConfigs: CompressionTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 for (const config of testConfigs) {

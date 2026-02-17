@@ -169,6 +169,28 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
 
+## Groq
+
+[Groq](https://groq.com/) provides ultra-fast AI inference powered by their custom LPU (Language Processing Unit) hardware. Groq offers an OpenAI-compatible API.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{agent-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Getting an API Key
+
+You can get an API key from the [Groq Console](https://console.groq.com/keys).
+
+### Important Notes
+
+- **API Key format**: API keys start with `gsk_`
+- **Rate limits**: Groq applies rate limits per model. See their [documentation](https://console.groq.com/docs/rate-limits) for details.
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.

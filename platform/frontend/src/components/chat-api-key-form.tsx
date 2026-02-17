@@ -100,6 +100,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://dashboard.cohere.com/api-keys",
     consoleName: "Cohere Dashboard",
   },
+  groq: {
+    name: "Groq",
+    icon: "/icons/groq.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.groq.com/keys",
+    consoleName: "Groq Console",
+  },
   mistral: {
     name: "Mistral AI",
     icon: "/icons/mistral.png",

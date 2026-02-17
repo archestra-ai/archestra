@@ -63,6 +63,7 @@ import {
   Cerebras,
   Cohere,
   Gemini,
+  Groq,
   Mistral,
   Ollama,
   OpenAi,
@@ -129,6 +130,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Cohere.API.ChatResponseSchema, {
     id: "CohereChatResponse",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
   });
   z.globalRegistry.add(Mistral.API.ChatCompletionRequestSchema, {
     id: "MistralChatCompletionRequest",

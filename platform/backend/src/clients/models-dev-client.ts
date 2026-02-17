@@ -50,7 +50,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
   deepseek: "openai",
-  groq: "openai",
+  groq: "groq",
   "fireworks-ai": "openai",
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)

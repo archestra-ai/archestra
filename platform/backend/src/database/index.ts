@@ -1,3 +1,4 @@
+import { instrumentDrizzleClient } from "@kubiks/otel-drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
@@ -61,6 +62,7 @@ export async function initializeDatabase(): Promise<void> {
     schema,
   });
 
+  instrumentDrizzleClient(db, { dbSystem: "postgresql" });
   logger.info("Database connection pool initialized");
 }
 

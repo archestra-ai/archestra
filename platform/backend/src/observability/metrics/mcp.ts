@@ -109,7 +109,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
 function buildMetricLabels(params: {
   agentId: string;
   agentName: string;
-  agentType?: AgentType;
+  agentType: AgentType | null;
   mcpServerName: string;
   toolName: string;
   status: "success" | "error";
@@ -140,7 +140,7 @@ function buildMetricLabels(params: {
 export function reportMcpToolCall(params: {
   agentId: string;
   agentName: string;
-  agentType?: AgentType;
+  agentType: AgentType | null;
   mcpServerName: string;
   toolName: string;
   durationSeconds: number;

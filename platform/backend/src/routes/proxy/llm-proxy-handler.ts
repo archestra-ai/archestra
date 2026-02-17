@@ -39,7 +39,7 @@ import type { SessionSource } from "./utils/headers/session-id";
 
 const {
   observability: {
-    otel: { captureContent },
+    otel: { captureContent, contentMaxLength },
   },
 } = config;
 
@@ -625,7 +625,7 @@ async function handleStreaming<
         // Capture streamed completion content
         if (captureContent && state.text) {
           llmSpan.addEvent("gen_ai.content.completion", {
-            "gen_ai.completion": state.text.slice(0, 10_000),
+            "gen_ai.completion": state.text.slice(0, contentMaxLength),
           });
         }
       },
@@ -897,7 +897,7 @@ async function handleNonStreaming<
         const text = adapter.getText?.();
         if (text) {
           llmSpan.addEvent("gen_ai.content.completion", {
-            "gen_ai.completion": text.slice(0, 10_000),
+            "gen_ai.completion": text.slice(0, contentMaxLength),
           });
         }
       }

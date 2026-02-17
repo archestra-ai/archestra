@@ -208,7 +208,7 @@ export async function createAgentServer(
           metrics.mcp.reportMcpToolCall({
             agentId: agent.id,
             agentName: agent.name,
-            agentType: agent.agentType ?? "",
+            agentType: agent.agentType,
             mcpServerName,
             toolName: name,
             durationSeconds,
@@ -299,7 +299,7 @@ export async function createAgentServer(
         metrics.mcp.reportMcpToolCall({
           agentId: agent.id,
           agentName: agent.name,
-          agentType: agent.agentType ?? "",
+          agentType: agent.agentType,
           mcpServerName,
           toolName: name,
           durationSeconds,
@@ -339,7 +339,7 @@ export async function createAgentServer(
         metrics.mcp.reportMcpToolCall({
           agentId: agent.id,
           agentName: agent.name,
-          agentType: agent.agentType ?? "",
+          agentType: agent.agentType,
           mcpServerName,
           toolName: name,
           durationSeconds,

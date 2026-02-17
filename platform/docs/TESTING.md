@@ -1,5 +1,46 @@
 # Testing Guide
 
+## 0. Prerequisites & database setup
+
+- **Postgres running** and reachable from the backend.
+- **Node + pnpm** installed (see main README for versions).
+- A **`.env`** in `platform/` with at least `ARCHESTRA_DATABASE_URL` set.
+
+### 0.1 One‑shot DB setup (recommended for local dev)
+
+From **platform** root (Windows PowerShell):
+
+```powershell
+.\scripts\SETUP-DATABASE-NOW.ps1
+```
+
+This script:
+
+- Creates the dev database and user (if needed).
+- Applies all migrations, including `0099_tools_meta_mcp_apps.sql` (adds `tools.meta` used by MCP apps/E2E).
+
+After this, you can run backend/frontend/dev scripts and E2E without manual SQL.
+
+### 0.2 Manual / scripted DB setup
+
+If you prefer more control:
+
+- **PowerShell helpers** (from `platform` root):
+  - `.\scripts\setup-db.ps1` – base DB bootstrap.
+  - `.\scripts\setup-db-auto.ps1` / `setup-db-simple.ps1` / `setup-db-final.ps1` – variants for different environments.
+- **Raw SQL**: `scripts/setup-db.sql` contains the schema/user bootstrap you can apply directly in Postgres.
+- **Standalone TypeScript helper**:
+  - `backend/src/standalone-scripts/setup-dev-db.ts` – programmatic dev DB setup (run via `pnpm ts-node` or similar).
+
+Once DB exists, always make sure migrations are up to date:
+
+```bash
+cd platform
+pnpm db:migrate
+```
+
+---
+
 ## 1. Unit and integration tests (Vitest)
 
 From **platform** root:
@@ -111,6 +152,39 @@ pnpm exec playwright codegen http://localhost:3000
 ```
 
 This opens the Playwright Inspector and a browser; actions are recorded and can be copied as test code. Optional: `--target=javascript` for a Node script.
+
+---
+
+## 5. Helper scripts & shortcuts
+
+These live in `platform/scripts/` and are useful when iterating locally:
+
+- **`dev-for-e2e.ps1` / `dev-for-e2e.sh`**  
+  Starts backend + frontend in an E2E‑friendly way (backend‑first, env wired correctly) and leaves them running so you can:
+  - Run `pnpm exec playwright test` manually,
+  - Or use Playwright UI / codegen against a stable dev stack.
+
+- **`run-e2e-with-app.ps1` / `run-e2e-with-app.sh`**  
+  Described above in **2. E2E tests** – one‑shot backend‑first + full Playwright run.
+
+- **`run-e2e-vault.ps1` / `run-e2e-vault.sh`**  
+  Described above – real Vault + `credentials-with-vault` only.
+
+- **`test-all.ps1`**  
+  Convenience wrapper to:
+  - Run unit/integration tests (`pnpm test -- --run`),
+  - Then run the main E2E flows (via the scripts above).  
+  Exact sequence is kept in the script; use this when you want a “one button” local CI.
+
+- **`backend/scripts/dev-with-server.mjs`**  
+  Backend‑only dev script that:
+  - Clears `backend/dist/`,
+  - Runs a one‑time build with `tsdown`,
+  - Starts `tsdown --watch` and `node dist/server.mjs` in parallel.  
+  Useful if you want a pure Node backend dev loop instead of `pnpm --filter @backend dev`.
+
+- **Frontend health route**  
+  - `frontend/src/app/health/route.ts` exposes a simple health endpoint from the Next.js app, primarily for liveness checks in environments where you need a frontend‑side `/health`.
 
 ---
 

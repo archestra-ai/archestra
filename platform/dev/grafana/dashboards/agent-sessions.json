@@ -115,7 +115,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "## Agent Session Viewer\n\nSession-level view of agent activity across all invocation channels (Chat UI, A2A, MS Teams, Slack, Email). Filter by **Agent Name**, click a **Session ID** to drill in, then use the **Trace ID** links to jump to full request waterfalls in the GenAI or MCP dashboards. You can also paste a session ID directly into the **Session ID** variable above.",
+        "content": "## Agent Session Viewer\n\nSession-level view of agent activity across all invocation channels (Chat UI, A2A, MS Teams, Slack, Email). Filter by **Agent Name**, click a **Session ID** to drill in, then click any **Trace ID** link to load the trace waterfall in the **Trace Viewer** panel below. You can also paste a session ID directly into the **Session ID** variable above.",
         "mode": "markdown"
       },
       "pluginVersion": "12.3.2",
@@ -503,6 +503,66 @@
         }
       ],
       "title": "Recent Agent Sessions",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "rootServiceName": true,
+              "rootTraceName": true,
+              "Trace Service": true,
+              "Trace Name": true
+            }
+          }
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "span.gen_ai.conversation.id": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "gen_ai.conversation.id": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "span.gen_ai.agent.name": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "gen_ai.agent.name": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "span.archestra.user.email": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "archestra.user.email": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "span.archestra.trigger.source": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "archestra.trigger.source": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "Start time": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              },
+              "startTimeUnixNano": {
+                "aggregations": ["first"],
+                "operation": "aggregate"
+              }
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
@@ -542,7 +602,7 @@
                 "value": [
                   {
                     "title": "View trace waterfall",
-                    "url": "/d/archestra-genai-observability/archestra-genai-observability?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}",
+                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}",
                     "targetBlank": false
                   }
                 ]
@@ -1134,8 +1194,8 @@
                 "value": [
                   {
                     "targetBlank": false,
-                    "title": "View Trace in GenAI Dashboard",
-                    "url": "/d/archestra-genai-observability/archestra-genai-observability?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
+                    "title": "View trace waterfall",
+                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
                   }
                 ]
               }
@@ -1156,8 +1216,8 @@
                 "value": [
                   {
                     "targetBlank": false,
-                    "title": "View Trace in GenAI Dashboard",
-                    "url": "/d/archestra-genai-observability/archestra-genai-observability?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
+                    "title": "View trace waterfall",
+                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
                   }
                 ]
               },
@@ -1438,8 +1498,8 @@
                 "value": [
                   {
                     "targetBlank": false,
-                    "title": "View Trace in MCP Dashboard",
-                    "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
+                    "title": "View trace waterfall",
+                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
                   }
                 ]
               }
@@ -1460,8 +1520,8 @@
                 "value": [
                   {
                     "targetBlank": false,
-                    "title": "View Trace in MCP Dashboard",
-                    "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
+                    "title": "View trace waterfall",
+                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
                   }
                 ]
               },
@@ -1653,8 +1713,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
-        "w": 24,
+        "h": 18,
+        "w": 12,
         "x": 0,
         "y": 38
       },
@@ -1684,6 +1744,38 @@
       ],
       "title": "Session Logs",
       "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "${traces_datasource}"
+      },
+      "description": "Trace waterfall for the selected trace. Click a Trace ID link in any table above to load a trace here.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "id": 10,
+      "options": {},
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${traces_datasource}"
+          },
+          "query": "${traceId}",
+          "queryType": "traceql",
+          "refId": "A"
+        }
+      ],
+      "title": "Trace Viewer",
+      "type": "traces"
     }
   ],
   "preload": false,
@@ -1772,6 +1864,18 @@
         "description": "Enter a session ID to view its full audit trail. Click a Session ID in the table above to auto-populate.",
         "label": "Session ID",
         "name": "sessionId",
+        "options": [],
+        "query": "",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "description": "Click a Trace ID link in any table to load the trace waterfall below.",
+        "label": "Trace ID",
+        "name": "traceId",
         "options": [],
         "query": "",
         "type": "textbox"

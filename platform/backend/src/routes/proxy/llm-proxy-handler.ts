@@ -5,7 +5,11 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
-import { type Context, context, propagation } from "@opentelemetry/api";
+import {
+  type Context,
+  context as otelContext,
+  propagation,
+} from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
@@ -19,6 +23,7 @@ import {
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
+import { SESSION_ID_KEY } from "@/observability/request-context";
 import {
   type Agent,
   ApiError,
@@ -33,7 +38,6 @@ import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 
 const {
-  benchmark: { mockMode },
   observability: {
     otel: { captureContent },
   },
@@ -101,7 +105,10 @@ export async function handleLLMProxy<
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
   // headers so the LLM span becomes a child of the chat parent span.
   // For external API calls (no traceparent header), this returns root context (unchanged behavior).
-  const parentContext = propagation.extract(context.active(), request.headers);
+  const parentContext = propagation.extract(
+    otelContext.active(),
+    request.headers,
+  );
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
@@ -396,7 +403,7 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
-      mockMode,
+      mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
       defaultHeaders:
@@ -683,12 +690,14 @@ async function handleStreaming<
         reply.raw.write(event);
       }
 
-      metrics.llm.reportBlockedTools(
-        providerName,
-        agent,
-        toolCalls.length,
-        actualModel,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportBlockedTools(
+          providerName,
+          agent,
+          toolCalls.length,
+          actualModel,
+          externalAgentId,
+        ),
       );
     } else if (toolCalls.length > 0) {
       // Tool calls approved - stream raw events
@@ -723,25 +732,27 @@ async function handleStreaming<
 
     const usage = streamAdapter.state.usage;
     if (usage) {
-      metrics.llm.reportLLMTokens(
-        providerName,
-        agent,
-        { input: usage.inputTokens, output: usage.outputTokens },
-        actualModel,
-        externalAgentId,
-      );
-
-      if (usage.outputTokens && firstChunkTime) {
-        const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-        metrics.llm.reportTokensPerSecond(
+      withSessionContext(sessionId, () => {
+        metrics.llm.reportLLMTokens(
           providerName,
           agent,
+          { input: usage.inputTokens, output: usage.outputTokens },
           actualModel,
-          usage.outputTokens,
-          totalDurationSeconds,
           externalAgentId,
         );
-      }
+
+        if (usage.outputTokens && firstChunkTime) {
+          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+          metrics.llm.reportTokensPerSecond(
+            providerName,
+            agent,
+            actualModel,
+            usage.outputTokens,
+            totalDurationSeconds,
+            externalAgentId,
+          );
+        }
+      });
 
       const baselineCost = await utils.costOptimization.calculateCost(
         baselineModel,
@@ -754,12 +765,14 @@ async function handleStreaming<
         usage.outputTokens,
       );
 
-      metrics.llm.reportLLMCost(
-        providerName,
-        agent,
-        actualModel,
-        actualCost,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportLLMCost(
+          providerName,
+          agent,
+          actualModel,
+          actualCost,
+          externalAgentId,
+        ),
       );
 
       await InteractionModel.create({
@@ -931,12 +944,14 @@ async function handleNonStreaming<
         contentMessage,
       );
 
-      metrics.llm.reportBlockedTools(
-        providerName,
-        agent,
-        toolCalls.length,
-        actualModel,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportBlockedTools(
+          providerName,
+          agent,
+          toolCalls.length,
+          actualModel,
+          externalAgentId,
+        ),
       );
 
       // Record interaction with refusal
@@ -952,12 +967,14 @@ async function handleNonStreaming<
         usage.outputTokens,
       );
 
-      metrics.llm.reportLLMCost(
-        providerName,
-        agent,
-        actualModel,
-        actualCost,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportLLMCost(
+          providerName,
+          agent,
+          actualModel,
+          actualCost,
+          externalAgentId,
+        ),
       );
 
       await InteractionModel.create({
@@ -1014,12 +1031,14 @@ async function handleNonStreaming<
     usage.outputTokens,
   );
 
-  metrics.llm.reportLLMCost(
-    providerName,
-    agent,
-    actualModel,
-    actualCost,
-    externalAgentId,
+  withSessionContext(sessionId, () =>
+    metrics.llm.reportLLMCost(
+      providerName,
+      agent,
+      actualModel,
+      actualCost,
+      externalAgentId,
+    ),
   );
 
   await InteractionModel.create({
@@ -1053,6 +1072,20 @@ async function handleNonStreaming<
 // =============================================================================
 // HELPERS
 // =============================================================================
+
+/**
+ * Run a function within the OTEL context that has the session ID set.
+ * Used for metric calls that happen outside the span callback so that
+ * exemplar labels include the sessionID for Grafana correlation.
+ */
+function withSessionContext<T>(
+  sessionId: string | null | undefined,
+  fn: () => T,
+): T {
+  if (!sessionId) return fn();
+  const ctx = otelContext.active().setValue(SESSION_ID_KEY, sessionId);
+  return otelContext.with(ctx, fn);
+}
 
 function handleError(
   error: unknown,

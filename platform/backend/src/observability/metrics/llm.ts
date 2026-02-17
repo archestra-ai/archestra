@@ -449,7 +449,7 @@ export function getObservableFetch(
 
     try {
       response = await fetch(url, init);
-      const duration = Math.round((Date.now() - startTime) / 1000);
+      const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 
       llmRequestDuration.observe({
@@ -464,7 +464,7 @@ export function getObservableFetch(
       });
     } catch (error) {
       // Network errors only: fetch does not throw on 4xx or 5xx.
-      const duration = Math.round((Date.now() - startTime) / 1000);
+      const duration = (Date.now() - startTime) / 1000;
       llmRequestDuration.observe({
         labels: buildMetricLabels(
           profile,

@@ -3,7 +3,7 @@ import {
   context as otelContext,
   trace,
 } from "@opentelemetry/api";
-import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
+import { getActiveSessionId } from "@/observability/request-context";
 
 const sanitizeRegexp = /[^a-zA-Z0-9_]/g;
 
@@ -38,10 +38,8 @@ export function getExemplarLabels(): Record<string, string> {
     spanID: spanContext.spanId,
   };
 
-  const sessionId = (span as unknown as ReadableSpan).attributes?.[
-    "gen_ai.conversation.id"
-  ];
-  if (typeof sessionId === "string") {
+  const sessionId = getActiveSessionId();
+  if (sessionId) {
     labels.sessionID = sessionId;
   }
 

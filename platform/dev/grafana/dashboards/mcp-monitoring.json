@@ -833,7 +833,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "traceID"
+              "options": "Trace ID"
             },
             "properties": [
               {
@@ -845,56 +845,6 @@
                     "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceIdHidden"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Trace ID"
-              },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.hidden",
-                "value": false
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.archestra.user.email"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "User"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "archestra.user.email"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "User"
               }
             ]
           }
@@ -927,10 +877,10 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\" && span.mcp.server.name=~\"$mcp_server_name\" && span.gen_ai.tool.name=~\"$tool_name\" && rootName =~ \"execute_tool .*\"} | select(span.archestra.user.email)",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\" && span.mcp.server.name=~\"$mcp_server_name\" && span.gen_ai.tool.name=~\"$tool_name\"}",
           "queryType": "traceql",
           "refId": "A",
-          "tableType": "spans"
+          "tableType": "traces"
         }
       ],
       "title": "",
@@ -941,8 +891,8 @@
             "excludeByName": {
               "rootServiceName": true,
               "rootTraceName": true,
-              "Trace Service": true,
-              "Trace Name": true
+              "Service": true,
+              "Name": true
             }
           }
         }

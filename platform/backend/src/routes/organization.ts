@@ -13,6 +13,7 @@ import {
   SelectOrganizationSchema,
   UpdateOrganizationSchema,
 } from "@/types";
+import { validateLogoDataUrl } from "@/utils/logo-validation";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -48,6 +49,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      if ("logo" in body && body.logo !== null && body.logo !== undefined) {
+        const validation = validateLogoDataUrl(body.logo);
+        if (!validation.valid) {
+          throw new ApiError(400, validation.error);
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

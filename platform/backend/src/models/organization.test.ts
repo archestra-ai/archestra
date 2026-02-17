@@ -161,19 +161,57 @@ describe("OrganizationModel", () => {
         OrganizationModel.patch(org.id, {
           logo: "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
         }),
-      ).rejects.toThrow("Logo must be a PNG image in base64 format");
+      ).rejects.toThrow("Logo must be a PNG image in data URL format");
+    });
+
+    test("should reject plain text disguised as base64 logo", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await expect(
+        OrganizationModel.patch(org.id, {
+          logo: "data:image/png;base64,NotAnImageJustText",
+        }),
+      ).rejects.toThrow();
+    });
+
+    test("should reject logo with invalid PNG magic bytes", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // "SGVsbG8gV29ybGQh" decodes to "Hello World!" — not a PNG
+      await expect(
+        OrganizationModel.patch(org.id, {
+          logo: "data:image/png;base64,SGVsbG8gV29ybGQh",
+        }),
+      ).rejects.toThrow("invalid file signature");
     });
 
     test("should accept valid PNG logo", async ({ makeOrganization }) => {
       const org = await makeOrganization();
+      // Minimal 1x1 PNG with valid magic bytes
       const validLogo =
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==";
 
       const updated = await OrganizationModel.patch(org.id, {
         logo: validLogo,
       });
 
       expect(updated?.logo).toBe(validLogo);
+    });
+
+    test("should allow clearing logo with null", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        logo: null,
+      });
+
+      expect(updated?.logo).toBeNull();
     });
 
     test("should return null for non-existent organization", async () => {

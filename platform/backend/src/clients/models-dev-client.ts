@@ -47,6 +47,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cohere: "cohere",
   cerebras: "cerebras",
   deepseek: "deepseek",
+  groq: "groq",
   mistral: "mistral",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
@@ -408,6 +409,7 @@ class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       deepseek: ["deepseek/"],
+      groq: ["groq/"],
       mistral: ["mistral/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],

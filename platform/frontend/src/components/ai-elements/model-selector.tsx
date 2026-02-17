@@ -163,6 +163,7 @@ export type ModelSelectorLogoProps = Omit<
     | "amazon-bedrock"
     | "cerebras"
     | "deepseek"
+    | "groq"
     | (string & {});
 };
 

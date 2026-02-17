@@ -82,6 +82,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
+  groq: () => config.chat.groq.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
@@ -197,6 +198,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   deepseek: "deepseek-chat", // DeepSeek's fast chat model
+  groq: "llama-3.3-70b-versatile", // Groq's fast model
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama

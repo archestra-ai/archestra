@@ -100,6 +100,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://platform.deepseek.com/api_keys",
     consoleName: "DeepSeek Platform",
   },
+  groq: {
+    name: "Groq",
+    icon: "/icons/groq.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.groq.com/keys",
+    consoleName: "Groq Console",
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

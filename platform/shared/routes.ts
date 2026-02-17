@@ -172,6 +172,11 @@ export const RouteId = {
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
+  // Proxy Routes - Groq
+  GroqChatCompletionsWithDefaultAgent:
+    "groqChatCompletionsWithDefaultAgent",
+  GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
+
   // Proxy Routes - Mistral
   MistralChatCompletionsWithDefaultAgent:
     "mistralChatCompletionsWithDefaultAgent",

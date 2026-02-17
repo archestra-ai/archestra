@@ -10,6 +10,7 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import GroqChatCompletionInteraction from "./llmProviders/groq";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
@@ -132,6 +133,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new ZhipuaiChatCompletionInteraction(interaction);
     } else if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);
+    } else if (type === "groq:chatCompletions") {
+      return new GroqChatCompletionInteraction(interaction);
     } else if (type === "mistral:chatCompletions") {
       return new MistralChatCompletionInteraction(interaction);
     } else if (type === "vllm:chatCompletions") {

@@ -8,6 +8,7 @@ import {
   Cerebras,
   Cohere,
   Gemini,
+  Groq,
   Mistral,
   Ollama,
   OpenAi,
@@ -31,6 +32,7 @@ export const InteractionRequestSchema = z.union([
   Anthropic.API.MessagesRequestSchema,
   Bedrock.API.ConverseRequestSchema,
   Cerebras.API.ChatCompletionRequestSchema,
+  Groq.API.ChatCompletionRequestSchema,
   Mistral.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
@@ -44,6 +46,7 @@ export const InteractionResponseSchema = z.union([
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
+  Groq.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
@@ -115,6 +118,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Cerebras.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Cerebras.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["groq:chatCompletions"]),
+    request: Groq.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Groq.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Groq.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

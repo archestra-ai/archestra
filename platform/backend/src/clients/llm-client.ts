@@ -82,6 +82,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  groq: () => config.chat.groq.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
@@ -196,6 +197,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
+  groq: "gemma2-9b-it", // Groq's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
@@ -295,6 +297,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createCohere({
       apiKey,
       baseURL: config.llm.cohere.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    // Groq uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
     });
     return client(modelName);
   },
@@ -463,6 +480,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      // Groq uses OpenAI-compatible API, so we use the OpenAI SDK
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+      });
+      // Use .chat() to force Chat Completions API
+      return client.chat(modelName);
     },
 
     cerebras: ({ apiKey, agentId, modelName, headers }) => {

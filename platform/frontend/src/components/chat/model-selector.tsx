@@ -98,6 +98,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   bedrock: "amazon-bedrock",
   cerebras: "cerebras",
   cohere: "cohere",
+  groq: "groq",
   mistral: "mistral",
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider

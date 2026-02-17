@@ -25,8 +25,7 @@ const toolsTable = pgTable(
     catalogId: uuid("catalog_id").references(() => mcpCatalogTable.id, {
       onDelete: "cascade",
     }),
-    // mcpServerId indicates which MCP server discovered this tool (metadata)
-    // null for proxy-sniffed tools or if the discovering server was deleted
+    /** @deprecated Kept for schema compatibility only. Use `catalogId` instead. Will be dropped in a future migration. */
     mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
       onDelete: "set null",
     }),

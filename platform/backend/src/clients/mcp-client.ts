@@ -52,10 +52,7 @@ class StaleSessionError extends Error {
 type McpToolWithServerMetadata = {
   toolName: string;
   responseModifierTemplate: string | null;
-  mcpServerSecretId: string | null;
   mcpServerName: string | null;
-  mcpServerCatalogId: string | null;
-  mcpServerId: string | null;
   credentialSourceMcpServerId: string | null;
   executionSourceMcpServerId: string | null;
   useDynamicTeamCredential: boolean;

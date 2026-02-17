@@ -155,7 +155,6 @@ describe("McpClient", () => {
           description: "Test MCP tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         // Assign tool to agent with response modifier
@@ -204,7 +203,6 @@ describe("McpClient", () => {
           description: "Test MCP tool with JSON",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -240,7 +238,6 @@ describe("McpClient", () => {
           description: "GitHub issues tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -290,7 +287,6 @@ describe("McpClient", () => {
           description: "Test tool accessing full content",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -326,7 +322,6 @@ describe("McpClient", () => {
           description: "Test tool with bad template",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         // Invalid Handlebars template
@@ -365,7 +360,6 @@ describe("McpClient", () => {
           description: "Test tool with image content",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -399,7 +393,6 @@ describe("McpClient", () => {
           description: "Test tool without template",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         // Assign tool without response modifier template
@@ -437,7 +430,6 @@ describe("McpClient", () => {
           description: "First tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         const tool2 = await ToolModel.createToolIfNotExists({
@@ -445,7 +437,6 @@ describe("McpClient", () => {
           description: "Second tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
@@ -539,7 +530,6 @@ describe("McpClient", () => {
             description: "Limiter disabled tool",
             parameters: {},
             catalogId,
-            mcpServerId,
           });
 
           await AgentToolModel.create(agentId, tool.id, {
@@ -617,7 +607,6 @@ describe("McpClient", () => {
             description: "Limiter http tool",
             parameters: {},
             catalogId,
-            mcpServerId,
           });
 
           await AgentToolModel.create(agentId, tool.id, {
@@ -707,7 +696,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -759,7 +747,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -801,7 +788,6 @@ describe("McpClient", () => {
           description: "Tool with template",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -845,7 +831,6 @@ describe("McpClient", () => {
           description: "Tool using K8s attach",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -924,7 +909,6 @@ describe("McpClient", () => {
             description: "Limiter stdio tool",
             parameters: {},
             catalogId: localCatalogId,
-            mcpServerId: localMcpServerId,
           });
 
           await AgentToolModel.create(agentId, tool.id, {
@@ -975,7 +959,6 @@ describe("McpClient", () => {
           description: "Tool for testing prefix stripping fallback",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1025,7 +1008,6 @@ describe("McpClient", () => {
           description: "Tool using server name prefix",
           parameters: {},
           catalogId: otherCatalog.id,
-          mcpServerId: localMcpServerId,
         });
 
         // Ensure mcpServerName is 'custom-server-name' for this test
@@ -1073,7 +1055,6 @@ describe("McpClient", () => {
           description: "Tool without standard prefix",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1150,7 +1131,6 @@ describe("McpClient", () => {
           description: "Search Jira issues",
           parameters: {},
           catalogId: dynCatalog.id,
-          mcpServerId: mcpServerId,
         });
 
         // Assign tool to agent with dynamic team credential enabled
@@ -1219,7 +1199,6 @@ describe("McpClient", () => {
           description: "Get Jira issue",
           parameters: {},
           catalogId: dynCatalog.id,
-          mcpServerId: mcpServerId,
         });
 
         await AgentToolModel.createOrUpdateCredentials(
@@ -1294,7 +1273,6 @@ describe("McpClient", () => {
           description: "Send a Slack message",
           parameters: {},
           catalogId: dynCatalog.id,
-          mcpServerId: mcpServerId,
         });
 
         await AgentToolModel.createOrUpdateCredentials(
@@ -1395,7 +1373,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1443,7 +1420,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1501,7 +1477,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1554,7 +1529,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1622,7 +1596,6 @@ describe("McpClient", () => {
           description: "Get user info",
           parameters: { type: "object", properties: {} },
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1663,7 +1636,6 @@ describe("McpClient", () => {
           description: "Get repository",
           parameters: { type: "object", properties: {} },
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1700,7 +1672,6 @@ describe("McpClient", () => {
           description: "Some tool",
           parameters: { type: "object", properties: {} },
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1736,7 +1707,6 @@ describe("McpClient", () => {
           description: "Missing tool",
           parameters: { type: "object", properties: {} },
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1774,7 +1744,6 @@ describe("McpClient", () => {
           description: "Search issues",
           parameters: { type: "object", properties: {} },
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {

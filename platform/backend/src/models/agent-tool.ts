@@ -796,7 +796,6 @@ class AgentToolModel {
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
           catalogId: schema.toolsTable.catalogId,
-          mcpServerId: schema.toolsTable.mcpServerId,
           mcpServerName: schema.mcpServersTable.name,
           mcpServerCatalogId: schema.mcpServersTable.catalogId,
         },
@@ -812,7 +811,10 @@ class AgentToolModel {
       )
       .leftJoin(
         schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        eq(
+          schema.mcpServersTable.id,
+          sql`COALESCE(${schema.agentToolsTable.credentialSourceMcpServerId}, ${schema.agentToolsTable.executionSourceMcpServerId})`,
+        ),
       )
       .where(whereClause)
       .orderBy(orderByClause)
@@ -839,7 +841,10 @@ class AgentToolModel {
         )
         .leftJoin(
           schema.mcpServersTable,
-          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+          eq(
+            schema.mcpServersTable.id,
+            sql`COALESCE(${schema.agentToolsTable.credentialSourceMcpServerId}, ${schema.agentToolsTable.executionSourceMcpServerId})`,
+          ),
         )
         .where(whereClause),
     ]);

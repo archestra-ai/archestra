@@ -101,20 +101,23 @@ async function setupDatabase() {
   try {
     console.log("Connected successfully!");
 
-    // Create user if not exists
+    // Create user if not exists (identifiers can't be parameterized in Postgres)
     console.log(`\nCreating user '${DB_USER}'...`);
-    const createUserQuery = `
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = $1) THEN
-          CREATE USER $1 WITH PASSWORD $2;
-        ELSE
-          ALTER USER $1 WITH PASSWORD $2;
-        END IF;
-      END
-      $$;
-    `;
-    await superuserClient.query(createUserQuery, [DB_USER, DB_PASSWORD]);
+    const roleExists = await superuserClient.query(
+      "SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = $1",
+      [DB_USER],
+    );
+    const quotedUser = `"${DB_USER.replace(/"/g, '""')}"`;
+    const escapedPassword = DB_PASSWORD.replace(/'/g, "''");
+    if (roleExists.rows.length === 0) {
+      await superuserClient.query(
+        `CREATE USER ${quotedUser} WITH PASSWORD '${escapedPassword}'`,
+      );
+    } else {
+      await superuserClient.query(
+        `ALTER USER ${quotedUser} WITH PASSWORD '${escapedPassword}'`,
+      );
+    }
     console.log(`User '${DB_USER}' created/updated successfully`);
 
     // Create database if not exists

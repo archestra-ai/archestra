@@ -481,7 +481,12 @@
         "cellHeight": "sm",
         "enablePagination": true,
         "showHeader": true,
-        "sortBy": []
+        "sortBy": [
+          {
+            "displayName": "Start Time",
+            "desc": true
+          }
+        ]
       },
       "pluginVersion": "12.3.2",
       "targets": [

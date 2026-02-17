@@ -1,5 +1,12 @@
 import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import {
   getAdditionalTrustedSsoProviderIds,
   getCorsOrigins,
@@ -692,8 +699,19 @@ describe("getOtelExporterOtlpEndpoint", () => {
 });
 
 describe("getOtelExporterOtlpLogEndpoint", () => {
+  const savedEnv = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+
+  afterAll(() => {
+    if (savedEnv !== undefined) {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT = savedEnv;
+    } else {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+    }
+  });
+
   describe("default value", () => {
     test("should return default endpoint when no value provided", () => {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
       const result = getOtelExporterOtlpLogEndpoint(undefined);
       expect(result).toBe("http://localhost:4318/v1/logs");
     });

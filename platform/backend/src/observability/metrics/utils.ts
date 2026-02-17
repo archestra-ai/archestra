@@ -3,6 +3,7 @@ import {
   context as otelContext,
   trace,
 } from "@opentelemetry/api";
+import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 
 const sanitizeRegexp = /[^a-zA-Z0-9_]/g;
 
@@ -22,11 +23,8 @@ export function sanitizeLabelKey(key: string): string {
 
 /**
  * Get exemplar labels from the current OTEL trace context.
- * Returns traceId and spanId if a valid span context is active,
- * or an empty object otherwise.
- *
- * Used to link Prometheus metrics to specific traces in Grafana
- * via exemplar-based metric-to-trace navigation.
+ * Returns traceId, spanId, and sessionID (if available) for linking
+ * Prometheus metrics to specific traces and sessions in Grafana.
  */
 export function getExemplarLabels(): Record<string, string> {
   const span = trace.getSpan(otelContext.active());
@@ -35,8 +33,17 @@ export function getExemplarLabels(): Record<string, string> {
   const spanContext = span.spanContext();
   if (!isSpanContextValid(spanContext)) return {};
 
-  return {
+  const labels: Record<string, string> = {
     traceID: spanContext.traceId,
     spanID: spanContext.spanId,
   };
+
+  const sessionId = (span as unknown as ReadableSpan).attributes?.[
+    "gen_ai.conversation.id"
+  ];
+  if (typeof sessionId === "string") {
+    labels.sessionID = sessionId;
+  }
+
+  return labels;
 }

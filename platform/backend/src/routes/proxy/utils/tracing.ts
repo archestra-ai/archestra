@@ -12,8 +12,7 @@ import logger from "@/logging";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { Agent, AgentType, GenAiOperationName } from "@/types";
 
-const MAX_CONTENT_LENGTH = 10_000;
-const { captureContent } = config.observability.otel;
+const { captureContent, contentMaxLength } = config.observability.otel;
 
 /**
  * Route categories for tracing
@@ -386,8 +385,8 @@ export async function startActiveChatSpan<T>(params: {
 
 function truncateContent(content: unknown): string {
   const str = typeof content === "string" ? content : JSON.stringify(content);
-  if (str.length <= MAX_CONTENT_LENGTH) {
+  if (str.length <= contentMaxLength) {
     return str;
   }
-  return `${str.slice(0, MAX_CONTENT_LENGTH)}...[truncated]`;
+  return `${str.slice(0, contentMaxLength)}...[truncated]`;
 }

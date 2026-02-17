@@ -116,7 +116,7 @@ When enabled, traces include:
 - **LLM spans** - `gen_ai.content.prompt` event with the request messages, and `gen_ai.content.completion` event with the response text
 - **MCP spans** - `gen_ai.content.input` event with tool call arguments, and `gen_ai.content.output` event with tool call results
 
-Content is truncated to 10KB per event to avoid oversized spans.
+Content is truncated to 10,000 characters per event by default to avoid oversized spans. This limit is configurable via the `ARCHESTRA_OTEL_CONTENT_MAX_LENGTH` [environment variable](/docs/platform-deployment#observability--metrics).
 
 ### Metric-to-Trace Exemplars
 

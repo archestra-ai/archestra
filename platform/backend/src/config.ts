@@ -292,6 +292,7 @@ const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
+const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
 const OTEL_TRACES_PATH = "/v1/traces";
 const OTEL_LOGS_PATH = "/v1/logs";
 
@@ -365,6 +366,25 @@ export const getOtelExporterOtlpLogEndpoint = (
   }
 
   return `${normalizedUrl}${OTEL_LOGS_PATH}`;
+};
+
+export const parseContentMaxLength = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "${value}", using default ${DEFAULT_OTEL_CONTENT_MAX_LENGTH}`,
+    );
+    return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  return parsed;
 };
 
 export default {
@@ -608,6 +628,9 @@ export default {
   observability: {
     otel: {
       captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
+      contentMaxLength: parseContentMaxLength(
+        process.env.ARCHESTRA_OTEL_CONTENT_MAX_LENGTH,
+      ),
       verboseTracing: process.env.ARCHESTRA_OTEL_VERBOSE_TRACING === "true",
       traceExporter: {
         url: getOtelExporterOtlpEndpoint(),

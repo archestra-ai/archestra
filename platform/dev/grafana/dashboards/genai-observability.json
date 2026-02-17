@@ -499,7 +499,8 @@
           "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (provider)",
           "legendFormat": "{{provider}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Request Volume by Provider",
@@ -601,7 +602,8 @@
           "expr": "increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[1h]) / 1000",
           "legendFormat": "{{provider}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Cost Trend Analysis",
@@ -702,7 +704,8 @@
           "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]))",
           "legendFormat": "Total Requests",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Request Success Rate",
@@ -803,7 +806,8 @@
           "expr": "rate(llm_blocked_tools_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])",
           "legendFormat": "{{agent_name}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Blocked Tool Calls",
@@ -1273,7 +1277,8 @@
           "expr": "sum(rate(llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval]) ) by (model)",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Request Rate by Model",
@@ -1461,7 +1466,8 @@
           "legendFormat": "Prompt Tokens",
           "range": true,
           "refId": "A",
-          "useBackend": false
+          "useBackend": false,
+          "exemplar": true
         },
         {
           "datasource": {
@@ -1477,7 +1483,8 @@
           "legendFormat": "Completion Tokens",
           "range": true,
           "refId": "B",
-          "useBackend": false
+          "useBackend": false,
+          "exemplar": true
         },
         {
           "datasource": {
@@ -1493,7 +1500,8 @@
           "legendFormat": "Usage Cost",
           "range": true,
           "refId": "C",
-          "useBackend": false
+          "useBackend": false,
+          "exemplar": true
         }
       ],
       "title": "Average Token Consumption vs. Average Usage Cost Comparison",
@@ -1554,18 +1562,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "rootServiceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom.viz",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "traceID"
             },
             "properties": [
@@ -1578,6 +1574,32 @@
                     "url": "/d/archestra-genai-observability/archestra-genai-observability?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "traceIdHidden"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trace ID"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View trace waterfall",
+                    "url": "/d/archestra-genai-observability/archestra-genai-observability?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
+                  }
+                ]
+              },
+              {
+                "id": "custom.hidden",
+                "value": false
               }
             ]
           },
@@ -1713,6 +1735,19 @@
         }
       ],
       "title": "",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "rootServiceName": true,
+              "rootTraceName": true,
+              "Trace Service": true,
+              "Trace Name": true
+            }
+          }
+        }
+      ],
       "transparent": true,
       "type": "table"
     },
@@ -1917,7 +1952,8 @@
           "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"} [$__rate_interval])) / 1000",
           "legendFormat": "Total Cost",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         },
         {
           "datasource": {
@@ -1929,7 +1965,8 @@
           "instant": false,
           "legendFormat": "Cost by {{provider}}",
           "range": true,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": true
         }
       ],
       "title": "Total Cost By Provider",
@@ -2034,7 +2071,8 @@
           "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by(model) / 1000",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Total Cost By Model",
@@ -2484,7 +2522,8 @@
           "legendFormat": "{{agent_name}}",
           "queryType": "range",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Inference Cost per Agent",
@@ -2581,7 +2620,8 @@
           "legendFormat": "{{agent_name}}",
           "queryType": "range",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Inference + Execution Cost",
@@ -2728,7 +2768,8 @@
           "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le, provider))",
           "legendFormat": "{{provider}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Latency P95 by Provider",
@@ -2811,7 +2852,8 @@
           "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (le, model))",
           "legendFormat": "{{model}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Latency P95 by Model",
@@ -3258,7 +3300,8 @@
           "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (provider, le))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Time to first token",
@@ -3359,7 +3402,8 @@
           "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (model, le))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Time to first token",
@@ -3460,7 +3504,8 @@
           "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (provider, le))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Tokens Generation Duration",
@@ -3561,7 +3606,8 @@
           "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\"}[$__rate_interval])) by (model, le))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": true
         }
       ],
       "title": "Tokens Generation Duration",

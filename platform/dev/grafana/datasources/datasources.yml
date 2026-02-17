@@ -13,6 +13,12 @@ datasources:
       exemplarTraceIdDestinations:
         - name: traceID
           datasourceUid: tempo
+        - name: traceID
+          url: "/d/archestra-genai-observability/archestra-genai-observability?var-traceId=$${__value.raw}&var-traces_datasource=tempo&var-metrics_datasource=prometheus"
+          urlDisplayLabel: "View in GenAI Dashboard"
+        - name: sessionID
+          url: "/d/archestra-agent-sessions/archestra-agent-sessions?var-sessionId=$${__value.raw}&var-traces_datasource=tempo&var-metrics_datasource=prometheus&var-logs_datasource=loki"
+          urlDisplayLabel: "View Session"
 
   # Grafana Loki for log aggregation (running in docker-compose)
   - name: Loki

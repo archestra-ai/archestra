@@ -16,6 +16,7 @@ import {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseContentMaxLength,
 } from "./config";
 
 // Mock the logger
@@ -787,6 +788,53 @@ describe("getOtelExporterOtlpLogEndpoint", () => {
       );
       expect(result).toBe("https://otel.example.com/v1/logs");
     });
+  });
+});
+
+describe("parseContentMaxLength", () => {
+  test("should return default 10000 when no value provided", () => {
+    expect(parseContentMaxLength(undefined)).toBe(10_000);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseContentMaxLength("")).toBe(10_000);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseContentMaxLength("   ")).toBe(10_000);
+  });
+
+  test("should parse valid integer value", () => {
+    expect(parseContentMaxLength("5000")).toBe(5000);
+  });
+
+  test("should parse large value", () => {
+    expect(parseContentMaxLength("100000")).toBe(100_000);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseContentMaxLength("  8000  ")).toBe(8000);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseContentMaxLength("abc")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "abc", using default 10000',
+    );
+  });
+
+  test("should return default and warn for zero", () => {
+    expect(parseContentMaxLength("0")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "0", using default 10000',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseContentMaxLength("-100")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
+    );
   });
 });
 

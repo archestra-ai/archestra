@@ -183,6 +183,7 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes
 
 # OpenTelemetry Tracing
 ARCHESTRA_OTEL_VERBOSE_TRACING=false  # Set to true to include Fastify/HTTP/fetch infrastructure spans (default: false, only GenAI spans)
+ARCHESTRA_OTEL_CONTENT_MAX_LENGTH=10000  # Max characters for captured content in span events (default: 10000)
 
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal

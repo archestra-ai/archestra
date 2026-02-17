@@ -721,6 +721,12 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `true` (enabled)
   - Set to `false` to disable content capture for privacy or to reduce span sizes
 
+- **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
+
+  - Default: `10000` (10,000 characters)
+  - Content exceeding this limit is truncated with a `...[truncated]` suffix
+  - Only applies when `ARCHESTRA_OTEL_CAPTURE_CONTENT` is enabled
+
 - **`ARCHESTRA_OTEL_VERBOSE_TRACING`** - Enable verbose infrastructure spans (HTTP routes, outgoing HTTP calls, Node.js fetch, etc).
 
   - Default: `false` (disabled)

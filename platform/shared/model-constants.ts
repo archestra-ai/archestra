@@ -92,6 +92,10 @@ export const MODEL_MARKER_PATTERNS: Record<
     fastest: ["deepseek-chat"],
     best: ["deepseek-reasoner", "deepseek-chat"],
   },
+  groq: {
+    fastest: ["llama-3.3-70b-versatile"],
+    best: ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+  },
   cohere: {
     fastest: ["command-light"],
     best: ["command-r-plus", "command-r"],

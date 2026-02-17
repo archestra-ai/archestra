@@ -304,6 +304,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     return client(modelName);
   },
 
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    // Groq uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
+    });
+    return client(modelName);
+  },
+
   cohere: ({ apiKey, modelName }) => {
     if (!apiKey) {
       throw new ApiError(
@@ -500,6 +515,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      // Groq uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
         headers,
       });
       return client.chat(modelName);

@@ -176,7 +176,7 @@ export function TeamsList() {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Users className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No teams yet. Create your first team to get started.
+                There are not teams you have access to
               </p>
             </div>
           ) : (

@@ -89,7 +89,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "## Agent Sessions Audit Trail\n\nThis dashboard provides a session-level view of agent activity.\n\n**Workflow:**\n1. Use the **Agent Name** filter above to narrow down agents\n2. Find a session in the table below and click the **Session ID** link to drill in\n3. The **Session Detail** section shows a trace timeline plus tables of all LLM calls and MCP tool calls for that session\n4. Click a **Trace ID** in the detail tables to jump to the full request waterfall in the GenAI or MCP dashboard\n\n**Tip:** You can also paste a session ID directly into the **Session ID** variable above.",
+        "content": "## Agent Sessions Audit Trail\n\nThis dashboard provides a session-level view of agent activity across all invocation channels (Chat UI, A2A protocol, MS Teams, Slack, Email).\n\n**Workflow:**\n1. Use the **Agent Name** filter above to narrow down agents\n2. Find a session in the table below and click the **Session ID** link to drill in\n3. The **Session Detail** section shows a unified trace waterfall with the parent session span and all child LLM and MCP tool call spans\n4. Click a **Trace ID** in the detail tables to jump to the full request waterfall in the GenAI or MCP dashboard\n\n**Tip:** You can also paste a session ID directly into the **Session ID** variable above. The **Trigger** column shows the invocation channel (e.g. ms-teams, email).",
         "mode": "markdown"
       },
       "pluginVersion": "12.3.2",
@@ -124,9 +124,7 @@
               "type": "auto"
             },
             "footer": {
-              "reducers": [
-                "countAll"
-              ]
+              "reducers": ["countAll"]
             },
             "inspect": false
           },
@@ -289,6 +287,30 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "archestra.trigger.source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trigger"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.trigger.source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trigger"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "rootServiceName"
             },
             "properties": [
@@ -405,7 +427,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id!=\"\" && span.route.category=~\"llm-proxy|mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\"} | select(span.gen_ai.conversation.id, span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.route.category)",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id!=\"\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\"} | select(span.gen_ai.conversation.id, span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.route.category, span.archestra.trigger.source)",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "spans"
@@ -460,7 +482,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=~\"llm-proxy|mcp-gateway\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -713,9 +735,7 @@
           "countRows": true,
           "enablePagination": true,
           "fields": "",
-          "reducer": [
-            "count"
-          ],
+          "reducer": ["count"],
           "show": true
         },
         "showHeader": true,
@@ -728,7 +748,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"llm-proxy\"} | select(span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.operation.name)",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"llm-proxy\"} | select(span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.operation.name)",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "spans"
@@ -957,9 +977,7 @@
           "countRows": true,
           "enablePagination": true,
           "fields": "",
-          "reducer": [
-            "count"
-          ],
+          "reducer": ["count"],
           "show": true
         },
         "showHeader": true,
@@ -972,7 +990,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"mcp-gateway\"} | select(span.gen_ai.agent.name, span.gen_ai.tool.name, span.mcp.server.name)",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"mcp-gateway\"} | select(span.gen_ai.agent.name, span.gen_ai.tool.name, span.mcp.server.name)",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "spans"
@@ -982,6 +1000,11 @@
       "type": "table"
     },
     {
+      "datasource": {
+        "type": "loki",
+        "uid": "${logs_datasource}"
+      },
+      "description": "Application logs containing the selected session ID. Requires Loki datasource to be configured.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -994,27 +1017,35 @@
       },
       "id": 8,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "### Session Logs\n\nPer-request logs are available via trace correlation. Click a trace in the **Session Timeline** above to view the full trace waterfall, then use the **Logs** tab in the trace detail view to see correlated application logs.\n\n_Session-level log aggregation requires Tempo\u2192Loki datasource correlation to be configured._",
-        "mode": "markdown"
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
       },
-      "title": "",
-      "transparent": true,
-      "type": "text"
+      "pluginVersion": "12.3.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs_datasource}"
+          },
+          "expr": "{service_name=\"Archestra\"} |= `$sessionId`",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Session Logs",
+      "type": "logs"
     }
   ],
   "preload": false,
   "refresh": "",
   "schemaVersion": 42,
-  "tags": [
-    "archestra",
-    "genai",
-    "observability"
-  ],
+  "tags": ["archestra", "genai", "observability"],
   "templating": {
     "list": [
       {

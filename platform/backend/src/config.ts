@@ -372,7 +372,7 @@ export default {
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
-    name: "Archestra Platform API",
+    name: "Archestra",
     version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
@@ -608,6 +608,7 @@ export default {
   observability: {
     otel: {
       captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
+      verboseTracing: process.env.ARCHESTRA_OTEL_VERBOSE_TRACING === "true",
       traceExporter: {
         url: getOtelExporterOtlpEndpoint(),
         headers: getOtlpAuthHeaders(),

@@ -145,9 +145,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -222,9 +220,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -303,9 +299,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "inverted",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -380,9 +374,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -865,9 +857,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1180,7 +1170,7 @@
           ],
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{status=ok && resource.service.name=\"Archestra Platform API\" && span.route.category=\"llm-proxy\" }",
+          "query": "{status=ok && resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" }",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1343,9 +1333,7 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1622,7 +1610,7 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"llm-proxy\" && span.gen_ai.agent.name=~\"$agent_name\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.agent.name=~\"$agent_name\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1794,10 +1782,7 @@
               {
                 "id": "custom.lineStyle",
                 "value": {
-                  "dash": [
-                    10,
-                    10
-                  ],
+                  "dash": [10, 10],
                   "fill": "dash"
                 }
               }
@@ -1814,9 +1799,7 @@
       "id": 29,
       "options": {
         "legend": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -1933,9 +1916,7 @@
       "id": 32,
       "options": {
         "legend": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -2016,9 +1997,7 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": true
         },
@@ -2120,9 +2099,7 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": true
         },
@@ -2211,9 +2188,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -2298,9 +2273,7 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -2392,9 +2365,7 @@
       "id": 66,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -2491,9 +2462,7 @@
       "id": 67,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -2643,9 +2612,7 @@
       "id": 57,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2728,9 +2695,7 @@
       "id": 53,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2875,9 +2840,7 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -2953,9 +2916,7 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": true
         },
@@ -3057,9 +3018,7 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": true
         },
@@ -3181,9 +3140,7 @@
       "id": 41,
       "options": {
         "legend": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3284,9 +3241,7 @@
       "id": 42,
       "options": {
         "legend": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3387,9 +3342,7 @@
       "id": 39,
       "options": {
         "legend": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3490,9 +3443,7 @@
       "id": 43,
       "options": {
         "legend": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -3525,10 +3476,7 @@
   "preload": false,
   "refresh": "30s",
   "schemaVersion": 42,
-  "tags": [
-    "archestra",
-    "genai"
-  ],
+  "tags": ["archestra", "genai"],
   "templating": {
     "list": [
       {

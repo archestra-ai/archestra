@@ -10,6 +10,10 @@ import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
+import {
+  RouteCategory,
+  startActiveChatSpan,
+} from "@/routes/proxy/utils/tracing";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**
@@ -301,15 +305,24 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const sessionId =
           headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
 
-        // Execute using shared A2A service
-        // Pass agentId as the initial delegation chain (will be extended by any delegated calls)
-        const result = await executeA2AMessage({
+        // Wrap A2A execution with a parent span so all LLM and MCP tool calls
+        // within this request appear as children of a single unified trace.
+        const result = await startActiveChatSpan({
+          agentName: agent.name,
           agentId,
-          message: userMessage,
-          organizationId,
-          userId,
+          agentType: agent.agentType ?? undefined,
           sessionId,
-          parentDelegationChain: undefined, // This is the root call, chain starts with agentId
+          routeCategory: RouteCategory.A2A,
+          callback: async () => {
+            return executeA2AMessage({
+              agentId,
+              message: userMessage,
+              organizationId,
+              userId,
+              sessionId,
+              parentDelegationChain: undefined, // This is the root call, chain starts with agentId
+            });
+          },
         });
 
         return reply.send({

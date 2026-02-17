@@ -1,4 +1,10 @@
-import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
+import {
+  type Context,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from "@opentelemetry/api";
 import type { SupportedProvider } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
@@ -13,6 +19,11 @@ const { captureContent } = config.observability.otel;
 export enum RouteCategory {
   LLM_PROXY = "llm-proxy",
   MCP_GATEWAY = "mcp-gateway",
+  CHAT = "chat",
+  A2A = "a2a",
+  CHATOPS = "chatops",
+  EMAIL = "email",
+  MCP_TOOL = "mcp-tool",
   API = "api",
 }
 
@@ -52,6 +63,7 @@ export async function startActiveLlmSpan<T>(params: {
   externalAgentId?: string;
   serverAddress?: string;
   promptMessages?: unknown;
+  parentContext?: Context;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const spanName = `${params.operationName} ${params.model}`;
@@ -67,88 +79,97 @@ export async function startActiveLlmSpan<T>(params: {
   );
   const tracer = trace.getTracer("archestra");
 
-  return tracer.startActiveSpan(
-    spanName,
-    {
-      kind: SpanKind.CLIENT,
-      attributes: {
-        "route.category": RouteCategory.LLM_PROXY,
-        "gen_ai.operation.name": params.operationName,
-        "gen_ai.provider.name": params.provider,
-        "gen_ai.request.model": params.model,
-        "gen_ai.request.streaming": params.stream,
-      },
+  const spanOptions = {
+    kind: SpanKind.CLIENT,
+    attributes: {
+      "route.category": RouteCategory.LLM_PROXY,
+      "gen_ai.operation.name": params.operationName,
+      "gen_ai.provider.name": params.provider,
+      "gen_ai.request.model": params.model,
+      "gen_ai.request.streaming": params.stream,
     },
-    async (span) => {
-      if (params.agent) {
-        logger.debug(
-          {
-            agentId: params.agent.id,
-            agentName: params.agent.name,
-            labelCount: params.agent.labels?.length || 0,
-          },
-          "[tracing] startActiveLlmSpan: setting agent attributes",
-        );
-        span.setAttribute("gen_ai.agent.id", params.agent.id);
-        span.setAttribute("gen_ai.agent.name", params.agent.name);
+  };
 
-        if (params.agent.agentType) {
-          span.setAttribute("archestra.agent.type", params.agent.agentType);
-        }
-
-        if (params.agent.labels && params.agent.labels.length > 0) {
-          for (const label of params.agent.labels) {
-            span.setAttribute(`archestra.label.${label.key}`, label.value);
-          }
-        }
-      }
-
-      if (params.sessionId) {
-        span.setAttribute("gen_ai.conversation.id", params.sessionId);
-      }
-      if (params.executionId) {
-        span.setAttribute("archestra.execution.id", params.executionId);
-      }
-      if (params.externalAgentId) {
-        span.setAttribute(
-          "archestra.external_agent_id",
-          params.externalAgentId,
-        );
-      }
-      if (params.serverAddress) {
-        span.setAttribute("server.address", params.serverAddress);
-      }
-
-      if (captureContent && params.promptMessages) {
-        span.addEvent("gen_ai.content.prompt", {
-          "gen_ai.prompt": truncateContent(params.promptMessages),
-        });
-      }
-
+  const spanCallback = async (span: Span) => {
+    if (params.agent) {
       logger.debug(
-        { spanName },
-        "[tracing] startActiveLlmSpan: executing callback",
+        {
+          agentId: params.agent.id,
+          agentName: params.agent.name,
+          labelCount: params.agent.labels?.length || 0,
+        },
+        "[tracing] startActiveLlmSpan: setting agent attributes",
       );
+      span.setAttribute("gen_ai.agent.id", params.agent.id);
+      span.setAttribute("gen_ai.agent.name", params.agent.name);
 
-      try {
-        const result = await params.callback(span);
-        span.setStatus({ code: SpanStatusCode.OK });
-        return result;
-      } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : "Unknown error",
-        });
-        span.setAttribute(
-          "error.type",
-          error instanceof Error ? error.constructor.name : "Error",
-        );
-        throw error;
-      } finally {
-        span.end();
+      if (params.agent.agentType) {
+        span.setAttribute("archestra.agent.type", params.agent.agentType);
       }
-    },
-  );
+
+      if (params.agent.labels && params.agent.labels.length > 0) {
+        for (const label of params.agent.labels) {
+          span.setAttribute(`archestra.label.${label.key}`, label.value);
+        }
+      }
+    }
+
+    if (params.sessionId) {
+      span.setAttribute("gen_ai.conversation.id", params.sessionId);
+    }
+    if (params.executionId) {
+      span.setAttribute("archestra.execution.id", params.executionId);
+    }
+    if (params.externalAgentId) {
+      span.setAttribute("archestra.external_agent_id", params.externalAgentId);
+    }
+    if (params.serverAddress) {
+      span.setAttribute("server.address", params.serverAddress);
+    }
+
+    if (captureContent && params.promptMessages) {
+      span.addEvent("gen_ai.content.prompt", {
+        "gen_ai.prompt": truncateContent(params.promptMessages),
+      });
+    }
+
+    logger.debug(
+      { spanName },
+      "[tracing] startActiveLlmSpan: executing callback",
+    );
+
+    try {
+      const result = await params.callback(span);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+      span.setAttribute(
+        "error.type",
+        error instanceof Error ? error.constructor.name : "Error",
+      );
+      throw error;
+    } finally {
+      span.end();
+    }
+  };
+
+  // When parentContext is provided (e.g., from extracted traceparent header),
+  // use the 4-arg overload so the LLM span becomes a child of the remote parent.
+  // When not provided, behavior is unchanged (creates root span or child of current context).
+  if (params.parentContext) {
+    return tracer.startActiveSpan(
+      spanName,
+      spanOptions,
+      params.parentContext,
+      spanCallback,
+    );
+  }
+
+  return tracer.startActiveSpan(spanName, spanOptions, spanCallback);
 }
 
 /**
@@ -226,6 +247,84 @@ export async function startActiveMcpSpan<T>(params: {
           });
         }
 
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+        span.setAttribute(
+          "error.type",
+          error instanceof Error ? error.constructor.name : "Error",
+        );
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
+ * Starts an active parent chat span that groups LLM and MCP tool calls within
+ * a single chat turn into a unified trace.
+ *
+ * Span name format: `chat {agentName}`.
+ *
+ * @param params.agentName - The agent/profile name
+ * @param params.agentId - The agent/profile ID
+ * @param params.agentType - The agent type (optional)
+ * @param params.sessionId - Conversation/session ID (optional)
+ * @param params.labels - Agent labels (optional)
+ * @param params.routeCategory - The route category (defaults to RouteCategory.CHAT)
+ * @param params.triggerSource - The invocation trigger (e.g. "ms-teams", "slack", "email", "mcp-tool")
+ * @param params.callback - The callback function to execute within the span context
+ * @returns The result of the callback function
+ */
+export async function startActiveChatSpan<T>(params: {
+  agentName: string;
+  agentId: string;
+  agentType?: AgentType;
+  sessionId?: string;
+  labels?: Agent["labels"];
+  routeCategory?: RouteCategory;
+  triggerSource?: string;
+  callback: (span: Span) => Promise<T>;
+}): Promise<T> {
+  const tracer = trace.getTracer("archestra");
+  const routeCategory = params.routeCategory ?? RouteCategory.CHAT;
+  const spanName = `chat ${params.agentName}`;
+
+  return tracer.startActiveSpan(
+    spanName,
+    {
+      kind: SpanKind.SERVER,
+      attributes: {
+        "route.category": routeCategory,
+        "gen_ai.operation.name": "chat",
+        "gen_ai.agent.id": params.agentId,
+        "gen_ai.agent.name": params.agentName,
+      },
+    },
+    async (span) => {
+      if (params.sessionId) {
+        span.setAttribute("gen_ai.conversation.id", params.sessionId);
+      }
+      if (params.agentType) {
+        span.setAttribute("archestra.agent.type", params.agentType);
+      }
+      if (params.triggerSource) {
+        span.setAttribute("archestra.trigger.source", params.triggerSource);
+      }
+      if (params.labels && params.labels.length > 0) {
+        for (const label of params.labels) {
+          span.setAttribute(`archestra.label.${label.key}`, label.value);
+        }
+      }
+
+      try {
+        const result = await params.callback(span);
+        span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {
         span.setStatus({

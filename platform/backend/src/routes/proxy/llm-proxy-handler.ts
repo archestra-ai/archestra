@@ -5,6 +5,7 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
+import { type Context, context, propagation } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
@@ -93,6 +94,12 @@ export async function handleLLMProxy<
           }
         | undefined,
     );
+
+  // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
+  // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
+  // headers so the LLM span becomes a child of the chat parent span.
+  // For external API calls (no traceparent header), this returns root context (unchanged behavior).
+  const parentContext = propagation.extract(context.active(), request.headers);
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
@@ -432,6 +439,7 @@ export async function handleLLMProxy<
         sessionSource,
         teamIds,
         executionId,
+        parentContext,
       );
     } else {
       return handleNonStreaming(
@@ -454,6 +462,7 @@ export async function handleLLMProxy<
         sessionSource,
         teamIds,
         executionId,
+        parentContext,
       );
     }
   } catch (error) {
@@ -498,6 +507,7 @@ async function handleStreaming<
   sessionSource?: SessionSource,
   teamIds?: string[],
   executionId?: string,
+  parentContext?: Context,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -525,6 +535,7 @@ async function handleStreaming<
       promptMessages: provider
         .createRequestAdapter(originalRequest)
         .getProviderMessages(),
+      parentContext,
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
 
@@ -785,6 +796,7 @@ async function handleNonStreaming<
   sessionSource?: SessionSource,
   teamIds?: string[],
   executionId?: string,
+  parentContext?: Context,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -807,6 +819,7 @@ async function handleNonStreaming<
     promptMessages: provider
       .createRequestAdapter(originalRequest)
       .getProviderMessages(),
+    parentContext,
     callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);

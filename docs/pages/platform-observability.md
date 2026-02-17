@@ -10,22 +10,11 @@ Check ../docs_writer_prompt.md before changing this file.
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
 -->
 
-# Platform Observability
+# Observability
 
-![Platform Logs Viewer](/docs/automated_screenshots/platform_logs_viewer.png)
+![Archestra Logs Viewer](/docs/automated_screenshots/platform_logs_viewer.png)
 
-The Archestra platform exposes Prometheus metrics and OpenTelemetry traces for monitoring system health, tracking HTTP requests, and analyzing LLM API performance.
-
-## Health Check
-
-The endpoint `http://localhost:9000/health` returns basic service status:
-
-```json
-{
-  "status": "Archestra Platform API",
-  "version": "0.0.1"
-}
-```
+Archestra exposes Prometheus metrics and OpenTelemetry traces for monitoring system health, tracking HTTP requests, and analyzing LLM API performance.
 
 ## Metrics
 
@@ -77,7 +66,7 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 ## Distributed Tracing
 
-The platform exports OpenTelemetry traces to help you understand request flows and identify performance bottlenecks. Traces can be consumed by any OTLP-compatible backend (Jaeger, Tempo, Honeycomb, Grafana Cloud, etc.).
+Archestra exports OpenTelemetry traces to help you understand request flows and identify performance bottlenecks. Traces can be consumed by any OTLP-compatible backend (Jaeger, Tempo, Honeycomb, Grafana Cloud, etc.).
 
 ### Configuration
 
@@ -87,11 +76,11 @@ Configure the OpenTelemetry Collector endpoint via environment variable:
 ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
 ```
 
-This base URL is used for both traces (`/v1/traces`) and logs (`/v1/logs`). If not specified, the platform defaults to `http://localhost:4318`.
+This base URL is used for both traces (`/v1/traces`) and logs (`/v1/logs`). If not specified, it defaults to `http://localhost:4318`.
 
 ### Authentication
 
-The platform supports authentication for OTEL trace export through environment variables. Authentication is optional and can be configured using either basic authentication or bearer token authentication.
+Archestra supports authentication for OTEL trace export through environment variables. Authentication is optional and can be configured using either basic authentication or bearer token authentication.
 
 #### Bearer Token Authentication
 
@@ -120,7 +109,7 @@ If none of the authentication environment variables are configured, traces will 
 
 ### Content Capture
 
-The platform can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics).
+Archestra can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics).
 
 When enabled, traces include:
 
@@ -136,12 +125,19 @@ Key histogram metrics (`llm_request_duration_seconds`, `llm_time_to_first_token_
 - Prometheus configured with `--enable-feature=exemplar-storage`
 - Grafana Prometheus datasource configured with `exemplarTraceIdDestinations` pointing to your Tempo datasource
 
+### Verbose Tracing
+
+By default, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view. To also capture internal infrastructure spans (HTTP routes, outgoing HTTP calls, Node.js fetch, etc), set the `ARCHESTRA_OTEL_VERBOSE_TRACING` [environment variable](/docs/platform-deployment#observability--metrics) to `true`. This is useful for debugging but produces significantly more spans.
+
+When [Sentry](/docs/platform-deployment#observability--metrics) is configured, infrastructure auto-instrumentations are automatically enabled so that Sentry receives full traces for internal debugging. However, the customer-facing OTLP export is filtered to only include GenAI/MCP spans — customers see a clean trace view while Sentry gets the complete picture. Setting `ARCHESTRA_OTEL_VERBOSE_TRACING=true` disables this filtering, sending all spans to both Sentry and OTLP.
+
 ### What's Traced
 
-The platform automatically traces:
+Archestra automatically traces:
 
-- **HTTP requests** - All API requests with method, route, and status code
-- **LLM API calls** - External calls to OpenAI, Anthropic, and Gemini with dedicated spans showing exact response time
+- **LLM API calls** - Calls to LLM providers with dedicated spans showing model, tokens, and response time
+- **MCP tool calls** - Tool executions through the MCP Gateway with tool name, server, and duration
+- **HTTP requests** (verbose mode only) - All API requests with method, route, and status code
 
 Trace attributes follow the [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/) where applicable.
 
@@ -210,23 +206,58 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 
 ### Session Tracking
 
-The platform supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session.
+Archestra supports session-based grouping of LLM and tool call traces via the `gen_ai.conversation.id` attribute. Pass a session ID via the [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header in your LLM proxy requests to group all related traces together. This enables viewing the full timeline of LLM calls and tool executions within a single agent session.
+
+### Chat Traces
+
+When using the built-in chat feature, each chat turn produces a unified trace that groups LLM calls and MCP tool executions under a single parent span:
+
+```
+chat {agentName}                       ← parent span (SpanKind.SERVER)
+├── chat {model}                       ← LLM call via proxy (SpanKind.CLIENT)
+├── execute_tool {tool_name}           ← MCP tool execution
+└── chat {model}                       ← follow-up LLM call after tool result
+```
+
+The parent span (`route.category=chat`) carries the agent identity and session ID. LLM proxy calls from chat are linked via W3C `traceparent` header propagation, so the LLM spans appear as children rather than independent root traces. MCP tool executions run within the same async context and are automatically parented.
+
+This same unified tracing applies to all agent invocation paths:
+
+| Invocation Path | `route.category` | `archestra.trigger.source` |
+| --------------- | ---------------- | -------------------------- |
+| Chat UI         | `chat`           | —                          |
+| A2A Protocol    | `a2a`            | —                          |
+| MS Teams        | `chatops`        | `ms-teams`                 |
+| Email           | `email`          | `email`                    |
+
+The `archestra.trigger.source` span attribute lets you filter traces by invocation channel (e.g., find all agent executions triggered from MS Teams).
+
+External LLM proxy calls produce independent root traces.
 
 ### Custom Agent Labels
 
-Labels are key-value pairs that can be configured when creating or updating agents through the Archestra Platform UI. Use them, for example, to logically group agents by environment or application type. Once added, labels automatically appear in:
+Labels are key-value pairs that can be configured when creating or updating agents through the Archestra UI. Use them, for example, to logically group agents by environment or application type. Once added, labels automatically appear in:
 
 - **Metrics** - As additional label dimensions on all LLM and MCP metrics. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
 - **Traces** - As `archestra.label.<key>` span attributes. Use them to filter traces.
 
 ## Grafana Dashboards
 
-We provide four Grafana dashboards for monitoring your Archestra platform:
+We provide four Grafana dashboards for monitoring Archestra:
 
 - **[GenAI Observability](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/genai-observability.json)** — LLM request metrics, token usage, cost analysis, latency, and traces
 - **[MCP Monitoring](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/mcp-monitoring.json)** — MCP tool call metrics, error rates, duration, and traces
 - **[Agent Sessions](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/agent-sessions.json)** — Session-level agent audit trail with drill-down into LLM calls, MCP tool calls, and correlated logs
 - **[Application Metrics](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/application-metrics.json)** — HTTP traffic, Node.js runtime health, and resource usage for monitoring your Archestra deployment
+
+To install all four dashboards at once, create a [Grafana Service Account](https://grafana.com/docs/grafana/latest/administration/service-accounts/) token with **Editor** role and run:
+
+```bash
+GRAFANA_URL=https://your-grafana-instance GRAFANA_TOKEN=glsa_xxx \
+  bash <(curl -sL https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/dev/grafana/install-dashboards.sh)
+```
+
+This creates an "Archestra" folder and imports all dashboards. Safe to re-run after updates.
 
 ## Setting Up Prometheus
 
@@ -236,143 +267,12 @@ Add the following to your `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: "archestra-backend"
+  - job_name: "archestra"
     static_configs:
-      - targets: ["localhost:9050"] # Platform API base URL
+      - targets: ["localhost:9050"] # Archestra API base URL
     scrape_interval: 15s
     metrics_path: /metrics
 ```
 
-If you are unsure what the Platform API base URL is, check the Platform UI's Settings. While the Platform API is exposed
+If you are unsure what the Archestra API base URL is, check the Archestra UI's Settings. While the Archestra API is exposed
 on port 9000, `/metrics` is exposed separately on port 9050.
-
-## Chart Examples
-
-Here are some PromQL queries for Grafana charts to get you started:
-
-### HTTP Metrics
-
-- Request rate by route:
-
-  ```promql
-  rate(http_request_duration_seconds_count[5m])
-  ```
-
-- Error rate by route:
-  ```promql
-  sum(rate(http_request_duration_seconds_count{status_code=~"4..|5.."}[5m])) by (route, method) / sum(rate(http_request_duration_seconds_count[5m])) by (route, method) * 100
-  ```
-- Response time percentiles:
-  ```promql
-  histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
-  ```
-- Memory usage:
-  ```promql
-  process_resident_memory_bytes / 1024 / 1024
-  ```
-
-### LLM Metrics
-
-- LLM requests per second by agent and provider:
-
-  ```promql
-  sum(rate(llm_request_duration_seconds_count[5m])) by (agent_name, provider)
-  ```
-
-- LLM error rate by provider:
-
-  ```promql
-  sum(rate(llm_request_duration_seconds_count{status_code!="200"}[5m])) by (provider) / sum(rate(llm_request_duration_seconds_count[5m])) by (provider) * 100
-  ```
-
-- LLM token usage rate (tokens/sec) by agent name:
-
-  ```promql
-  sum(rate(llm_tokens_total[5m])) by (provider, agent_name, type)
-  ```
-
-- Total tokens by agent name:
-
-  ```promql
-  sum(rate(llm_tokens_total[5m])) by (agent_name, type)
-  ```
-
-- Request duration by agent name and provider:
-
-  ```promql
-  histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (agent_name, provider, le))
-  ```
-
-- Error rate by agent:
-
-  ```promql
-  sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (agent_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (agent_name)
-  ```
-
-- Cost rate by agent and provider (USD/min):
-
-  ```promql
-  sum(rate(llm_cost_total[5m])) by (agent_name, provider) * 60
-  ```
-
-- Total accumulated cost by model:
-
-  ```promql
-  sum(llm_cost_total) by (model)
-  ```
-
-- Time to first token (TTFT) p95 by model:
-
-  ```promql
-  histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket[5m])) by (model, le))
-  ```
-
-- Average time to first token by provider:
-
-  ```promql
-  sum(rate(llm_time_to_first_token_seconds_sum[5m])) by (provider) / sum(rate(llm_time_to_first_token_seconds_count[5m])) by (provider)
-  ```
-
-- Tokens per second throughput p50 by model:
-
-  ```promql
-  histogram_quantile(0.50, sum(rate(llm_tokens_per_second_bucket[5m])) by (model, le))
-  ```
-
-- Average tokens per second by provider and model:
-
-  ```promql
-  sum(rate(llm_tokens_per_second_sum[5m])) by (provider, model) / sum(rate(llm_tokens_per_second_count[5m])) by (provider, model)
-  ```
-
-### MCP Metrics
-
-- Tool calls per second by MCP server:
-
-  ```promql
-  sum(rate(mcp_tool_calls_total[5m])) by (mcp_server_name)
-  ```
-
-- Tool call error rate by MCP server:
-
-  ```promql
-  sum(rate(mcp_tool_calls_total{status="error"}[5m])) by (mcp_server_name) / sum(rate(mcp_tool_calls_total[5m])) by (mcp_server_name)
-  ```
-
-- Tool call duration p95 by MCP server:
-
-  ```promql
-  histogram_quantile(0.95, sum(rate(mcp_tool_call_duration_seconds_bucket[5m])) by (mcp_server_name, le))
-  ```
-
-- Tool calls per second by tool name:
-
-  ```promql
-  sum(rate(mcp_tool_calls_total[5m])) by (tool_name)
-  ```
-
-- Average tool call duration by agent:
-
-  ```promql
-  sum(rate(mcp_tool_call_duration_seconds_sum[5m])) by (agent_name) / sum(rate(mcp_tool_call_duration_seconds_count[5m])) by (agent_name)
-  ```

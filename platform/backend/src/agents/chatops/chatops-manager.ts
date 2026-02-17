@@ -11,6 +11,10 @@ import {
   UserModel,
 } from "@/models";
 import {
+  RouteCategory,
+  startActiveChatSpan,
+} from "@/routes/proxy/utils/tracing";
+import {
   type ChatOpsProcessingResult,
   type ChatOpsProvider,
   type ChatOpsProviderType,
@@ -641,11 +645,23 @@ export class ChatOpsManager {
     } = params;
 
     try {
-      const result = await executeA2AMessage({
+      // Wrap A2A execution with a parent span so all LLM and MCP tool calls
+      // appear as children of a single unified trace. The provider ID (e.g.
+      // "ms-teams", "slack") is recorded as archestra.trigger.source so traces
+      // can be filtered by invocation channel.
+      const result = await startActiveChatSpan({
+        agentName: agent.name,
         agentId: agent.id,
-        organizationId: binding.organizationId,
-        message: fullMessage,
-        userId,
+        routeCategory: RouteCategory.CHATOPS,
+        triggerSource: provider.providerId,
+        callback: async () => {
+          return executeA2AMessage({
+            agentId: agent.id,
+            organizationId: binding.organizationId,
+            message: fullMessage,
+            userId,
+          });
+        },
       });
 
       const agentResponse = result.text || "";

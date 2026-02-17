@@ -181,6 +181,9 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=  # Username for OTLP basic auth (req
 ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=  # Password for OTLP basic auth (requires username)
 ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes precedence over basic auth)
 
+# OpenTelemetry Tracing
+ARCHESTRA_OTEL_VERBOSE_TRACING=false  # Set to true to include Fastify/HTTP/fetch infrastructure spans (default: false, only GenAI spans)
+
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 

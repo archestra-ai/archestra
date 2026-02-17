@@ -1259,7 +1259,7 @@ function reportToolMetrics(params: {
   toolName: string;
   agentId: string;
   agentName: string;
-  agentType?: AgentType;
+  agentType?: AgentType | null;
   startTime: number;
   isError: boolean;
 }): void {
@@ -1267,7 +1267,7 @@ function reportToolMetrics(params: {
   metrics.mcp.reportMcpToolCall({
     agentId: params.agentId,
     agentName: params.agentName,
-    agentType: params.agentType,
+    agentType: params.agentType ?? null,
     mcpServerName: serverName ?? "unknown",
     toolName: params.toolName,
     durationSeconds: (Date.now() - params.startTime) / 1000,

@@ -162,6 +162,7 @@ export type ModelSelectorLogoProps = Omit<
     | "scaleway"
     | "amazon-bedrock"
     | "cerebras"
+    | "deepseek"
     | (string & {});
 };
 

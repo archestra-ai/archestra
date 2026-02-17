@@ -300,6 +300,7 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
   bedrock: "bedrock:converse",
   cohere: "cohere:chat",
   cerebras: "cerebras:chatCompletions",
+  deepseek: "deepseek:chatCompletions",
   mistral: "mistral:chatCompletions",
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",

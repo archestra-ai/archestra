@@ -81,6 +81,7 @@ const envApiKeyGetters: Record<
   anthropic: () => config.chat.anthropic.apiKey,
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
@@ -195,6 +196,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  deepseek: "deepseek-chat", // DeepSeek's fast chat model
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
@@ -281,6 +283,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createCerebras({
       apiKey,
       baseURL: config.llm.cerebras.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    // DeepSeek uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
     });
     return client(modelName);
   },
@@ -473,6 +490,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/deepseek/:agentId (SDK appends /chat/completions)
+      // DeepSeek uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      return client.chat(modelName);
     },
 
     mistral: ({ apiKey, agentId, modelName, headers }) => {

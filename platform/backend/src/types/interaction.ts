@@ -7,6 +7,7 @@ import {
   Bedrock,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
   Mistral,
   Ollama,
@@ -115,6 +116,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Cerebras.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Cerebras.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["deepseek:chatCompletions"]),
+    request: DeepSeek.API.ChatCompletionRequestSchema,
+    processedRequest:
+      DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: DeepSeek.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

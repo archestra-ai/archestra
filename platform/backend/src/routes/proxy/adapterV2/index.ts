@@ -8,3 +8,4 @@ export { ollamaAdapterFactory } from "./ollama";
 export { openaiAdapterFactory } from "./openai";
 export { vllmAdapterFactory } from "./vllm";
 export { zhipuaiAdapterFactory } from "./zhipuai";
+export { openrouterAdapterFactory } from "./openrouter";

@@ -218,6 +218,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
+  openrouter: "openrouter",
   perplexity: null,
   xai: null,
   nvidia: null,

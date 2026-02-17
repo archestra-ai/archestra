@@ -1177,6 +1177,85 @@ Return only the JSON object, no other text.`;
   }
 }
 
+/**
+ * OpenRouter implementation of DualLlmClient
+ * OpenRouter exposes an OpenAI-compatible API, so we use the OpenAI SDK with OpenRouter's base URL
+ */
+export class OpenRouterDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "openai/gpt-4o") {
+    logger.debug({ model }, "[dualLlmClient] OpenRouter: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.openrouter.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] OpenRouter: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] OpenRouter: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] OpenRouter: starting chat with schema",
+    );
+
+    // OpenRouter uses OpenAI-compatible API with JSON schema support
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] OpenRouter: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
 type DualLlmClientFactory = (
   apiKey: string | undefined,
   model: string | undefined,
@@ -1236,6 +1315,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
         model,
         config.llm.bedrock.baseUrl,
       );
+    },
+    openrouter: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for OpenRouter dual LLM");
+      return new OpenRouterDualLlmClient(apiKey, model);
     },
   };
 

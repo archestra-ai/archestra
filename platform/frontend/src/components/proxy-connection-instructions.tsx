@@ -64,6 +64,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.bedrock,
     originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",
   },
+  openrouter: {
+    label: providerDisplayNames.openrouter,
+    originalUrl: "https://openrouter.ai/api/v1/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 

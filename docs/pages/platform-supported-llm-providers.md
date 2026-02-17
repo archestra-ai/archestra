@@ -272,6 +272,32 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
 
+## OpenRouter
+
+[OpenRouter](https://openrouter.ai/) is a unified API gateway that provides access to hundreds of AI models from multiple providers (OpenAI, Anthropic, Google, Meta, Mistral, and more) through a single OpenAI-compatible API endpoint.
+
+### Supported OpenRouter APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### OpenRouter Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/openrouter/{agent-id}`
+- **Authentication**: Pass your OpenRouter API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                            | Required | Description                                                                    |
+| ----------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_OPENROUTER_BASE_URL`     | No       | OpenRouter API base URL (default: `https://openrouter.ai/api/v1`)             |
+| `ARCHESTRA_CHAT_OPENROUTER_API_KEY` | No       | Default API key for OpenRouter (can be overridden per conversation/team/org)   |
+
+### Important Notes
+
+- **Unified model access**: OpenRouter provides access to models from many providers through a single API key and endpoint. Model IDs use the format `provider/model-name` (e.g., `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`).
+- **OpenAI-compatible API**: OpenRouter's API follows the OpenAI Chat Completions format, making it easy to use with any OpenAI-compatible client.
+- **API Key format**: Obtain your API key from the [OpenRouter Dashboard](https://openrouter.ai/keys). Keys start with `sk-or-`.
+
 ## Amazon Bedrock
 
 ### Supported Bedrock APIs

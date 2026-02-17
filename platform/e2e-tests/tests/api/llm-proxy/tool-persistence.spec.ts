@@ -274,6 +274,30 @@ const cohereConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const openrouterConfig: ToolPersistenceTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "openai/gpt-4o-mini",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -288,6 +312,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  openrouterConfig,
 ];
 
 for (const config of testConfigs) {

@@ -53,6 +53,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
+  openrouter: "openrouter",
   // Explicitly unsupported providers (return null to skip)
   perplexity: null,
   xai: null,
@@ -411,6 +412,7 @@ class ModelsDevClient {
       ollama: ["ollama/"],
       vllm: ["vllm/"],
       zhipuai: ["zhipuai/"],
+      openrouter: ["openrouter/"],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

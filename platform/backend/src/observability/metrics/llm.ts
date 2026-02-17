@@ -41,6 +41,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   zhipuai: getZhipuaiUsage,
   gemini: null,
   bedrock: null,
+  openrouter: getOpenAIUsage,
 };
 
 type Fetch = (

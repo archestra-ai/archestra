@@ -88,6 +88,7 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  openrouter: () => config.chat.openrouter.apiKey,
 };
 
 /**
@@ -201,6 +202,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   zhipuai: "glm-4-flash", // Zhipu's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
+  openrouter: "openai/gpt-4o-mini", // OpenRouter's fast model via OpenAI
 };
 
 /**
@@ -369,6 +371,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     });
     return client(modelName);
   },
+
+  openrouter: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "OpenRouter API key is required. Please configure OPENROUTER_API_KEY.",
+      );
+    }
+    // OpenRouter uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.openrouter.baseUrl,
+    });
+    return client(modelName);
+  },
 };
 
 /**
@@ -534,6 +551,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    openrouter: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/openrouter/:agentId (SDK appends /chat/completions)
+      // OpenRouter is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("openrouter", agentId),
+        headers,
+      });
+      return client.chat(modelName);
     },
   };
 

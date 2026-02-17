@@ -8,10 +8,12 @@ import {
   Cerebras,
   Cohere,
   Gemini,
+  MiniMax,
   Mistral,
   Ollama,
   OpenAi,
   Vllm,
+  Xai,
   Zhipuai,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
@@ -35,7 +37,9 @@ export const InteractionRequestSchema = z.union([
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Cohere.API.ChatRequestSchema,
+  Xai.API.ChatCompletionRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
+  MiniMax.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -48,7 +52,9 @@ export const InteractionResponseSchema = z.union([
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Cohere.API.ChatResponseSchema,
+  Xai.API.ChatCompletionResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
+  MiniMax.API.ChatCompletionResponseSchema,
 ]);
 
 /**
@@ -153,11 +159,31 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
+    type: z.enum(["xai:chatCompletions"]),
+    request: Xai.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Xai.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Xai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
     request: Zhipuai.API.ChatCompletionRequestSchema,
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["minimax:chatCompletions"]),
+    request: MiniMax.API.ChatCompletionRequestSchema,
+    processedRequest:
+      MiniMax.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: MiniMax.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

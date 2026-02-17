@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/minimax/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "MiniMax-Text-01",
+          "created": 1700000000,
+          "owned_by": "minimax"
+        },
+        {
+          "id": "abab7-chat-preview",
+          "created": 1700000000,
+          "owned_by": "minimax"
+        }
+      ]
+    }
+  }
+}

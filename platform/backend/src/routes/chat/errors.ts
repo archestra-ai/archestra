@@ -1126,7 +1126,9 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  xai: parseOpenAIError, // xAI uses OpenAI-compatible API
   zhipuai: parseZhipuaiError,
+  minimax: parseOpenAIError, // MiniMax uses OpenAI-compatible API
 };
 
 /**
@@ -1144,7 +1146,9 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  xai: mapOpenAIErrorWrapper, // xAI uses OpenAI-compatible API
   zhipuai: mapZhipuaiErrorWrapper,
+  minimax: mapOpenAIErrorWrapper, // MiniMax uses OpenAI-compatible API
 };
 
 // =============================================================================

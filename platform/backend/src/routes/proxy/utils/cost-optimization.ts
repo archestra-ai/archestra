@@ -12,9 +12,11 @@ import type {
   Cerebras,
   Cohere,
   Gemini,
+  MiniMax,
   Mistral,
   OpenAi,
   Vllm,
+  Xai,
   Zhipuai,
 } from "@/types";
 
@@ -27,7 +29,9 @@ type ProviderMessages = {
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
+  xai: Xai.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  minimax: MiniMax.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

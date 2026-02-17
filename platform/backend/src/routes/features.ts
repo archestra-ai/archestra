@@ -39,6 +39,10 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ollamaEnabled: z.boolean(),
             /** Mistral mode - when enabled, Mistral AI provider is available */
             mistralEnabled: z.boolean(),
+            /** xAI mode - when enabled, xAI (Grok) provider is available */
+            xaiEnabled: z.boolean(),
+            /** MiniMax mode - when enabled, MiniMax provider is available */
+            minimaxEnabled: z.boolean(),
             /** Global tool policy - permissive bypasses policy checks, restrictive enforces them */
             globalToolPolicy: z.enum(["permissive", "restrictive"]),
             /** Browser streaming - enables live browser automation via Playwright MCP */
@@ -90,6 +94,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         vllmEnabled: config.llm.vllm.enabled,
         ollamaEnabled: config.llm.ollama.enabled,
         mistralEnabled: true, // Mistral is always enabled (has default base URL)
+        xaiEnabled: true, // xAI is always enabled (has default base URL)
+        minimaxEnabled: true, // MiniMax is always enabled (has default base URL)
         globalToolPolicy,
         incomingEmail: getEmailProviderInfo(),
         knowledgeGraph: getKnowledgeGraphProviderInfo(),

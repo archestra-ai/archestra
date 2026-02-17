@@ -280,6 +280,83 @@ async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from MiniMax API (OpenAI-compatible)
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+async function fetchMinimaxModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.minimax.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch MiniMax models",
+    );
+    throw new Error(`Failed to fetch MiniMax models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "minimax" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
+ * Fetch models from xAI API (OpenAI-compatible)
+ */
+async function fetchXaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.xai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch xAI models",
+    );
+    throw new Error(`Failed to fetch xAI models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "xai" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -735,6 +812,8 @@ async function getProviderApiKey({
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
+    xai: () => config.chat.xai.apiKey || null,
+    minimax: () => config.chat.minimax.apiKey || null,
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
   };
@@ -751,8 +830,10 @@ const modelFetchers: Record<
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
+  minimax: fetchMinimaxModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
+  xai: fetchXaiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
@@ -823,7 +904,7 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
+      ["anthropic", "cerebras", "cohere", "minimax", "mistral", "openai", "xai"].includes(
         provider,
       )
     ) {

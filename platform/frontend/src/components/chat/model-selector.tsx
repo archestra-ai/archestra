@@ -101,6 +101,8 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   mistral: "mistral",
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
+  xai: "xai",
+  minimax: "minimax",
   zhipuai: "zhipuai",
 };
 

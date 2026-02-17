@@ -178,6 +178,30 @@ const mistralConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const xaiConfig: ToolPersistenceTestConfig = {
+  providerName: "xAI",
+
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "grok-2-mini",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const vllmConfig: ToolPersistenceTestConfig = {
   providerName: "vLLM",
 
@@ -274,6 +298,30 @@ const cohereConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const minimaxConfig: ToolPersistenceTestConfig = {
+  providerName: "MiniMax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "MiniMax-Text-01",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -285,6 +333,8 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   cohereConfig,
   cerebrasConfig,
   mistralConfig,
+  xaiConfig,
+  minimaxConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,

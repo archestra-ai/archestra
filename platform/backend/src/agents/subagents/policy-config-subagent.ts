@@ -303,5 +303,7 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
   mistral: "mistral:chatCompletions",
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",
+  xai: "xai:chatCompletions",
+  minimax: "minimax:chatCompletions",
   zhipuai: "zhipuai:chatCompletions",
 };

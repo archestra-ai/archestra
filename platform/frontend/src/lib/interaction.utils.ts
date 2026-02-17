@@ -14,6 +14,8 @@ import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
+import MiniMaxChatCompletionInteraction from "./llmProviders/minimax";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
 
 export interface CostSavingsInput {
@@ -142,6 +144,10 @@ export class DynamicInteraction implements InteractionUtils {
       return new CohereChatInteraction(interaction);
     } else if (type === "gemini:generateContent") {
       return new GeminiGenerateContentInteraction(interaction);
+    } else if (type === "xai:chatCompletions") {
+      return new XaiChatCompletionInteraction(interaction);
+    } else if (type === "minimax:chatCompletions") {
+      return new MiniMaxChatCompletionInteraction(interaction);
     }
     throw new Error(`Unsupported interaction type: ${type}`);
   }

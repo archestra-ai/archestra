@@ -133,6 +133,22 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  xai: {
+    name: "xAI (Grok)",
+    icon: "/icons/xai.png",
+    placeholder: "xai-...",
+    enabled: true,
+    consoleUrl: "https://console.x.ai/",
+    consoleName: "xAI Console",
+  },
+  minimax: {
+    name: "MiniMax",
+    icon: "/icons/minimax.png",
+    placeholder: "eyJ...",
+    enabled: true,
+    consoleUrl: "https://platform.minimax.io/",
+    consoleName: "MiniMax Platform",
+  },
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",

@@ -272,6 +272,30 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
 
+## x.ai (Grok)
+
+[x.ai](https://x.ai/) provides the Grok family of AI models through an OpenAI-compatible API.
+
+### Supported x.ai APIs
+
+- **Chat Completions API** (`/chat/completions`) - Fully supported
+
+### x.ai Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/xai/{profile-id}`
+- **Authentication**: Pass your x.ai API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                     | Required | Description                                                                |
+| ---------------------------- | -------- | -------------------------------------------------------------------------- |
+| `ARCHESTRA_XAI_BASE_URL`    | No       | x.ai API base URL (default: `https://api.x.ai/v1`)                       |
+| `ARCHESTRA_CHAT_XAI_API_KEY`| No       | Default API key for x.ai (can be overridden per conversation/team/org)    |
+
+### Getting an API Key
+
+You can get an API key from the [x.ai Console](https://console.x.ai/).
+
 ## Amazon Bedrock
 
 ### Supported Bedrock APIs

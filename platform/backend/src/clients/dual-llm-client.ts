@@ -1004,6 +1004,164 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * MiniMax implementation of DualLlmClient (OpenAI-compatible)
+ * MiniMax exposes an OpenAI-compatible API, so we use the OpenAI SDK with MiniMax's base URL
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+export class MinimaxDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "MiniMax-Text-01") {
+    logger.debug({ model }, "[dualLlmClient] MiniMax: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] MiniMax: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] MiniMax: starting chat with schema",
+    );
+
+    // MiniMax uses OpenAI-compatible API with JSON schema support
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
+ * xAI (Grok) implementation of DualLlmClient (OpenAI-compatible)
+ */
+export class XaiDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "grok-2") {
+    logger.debug({ model }, "[dualLlmClient] xAI: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] xAI: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] xAI: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] xAI: starting chat with schema",
+    );
+
+    // xAI uses OpenAI-compatible API with JSON schema support
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] xAI: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
  * Bedrock implementation of DualLlmClient
  * Uses AWS Bedrock Converse API for chat completions
  */
@@ -1200,6 +1358,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
       if (!apiKey) throw new Error("API key required for Cohere dual LLM");
       return new CohereDualLlmClient(apiKey, model);
     },
+    minimax: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for MiniMax dual LLM");
+      return new MinimaxDualLlmClient(apiKey, model);
+    },
     mistral: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Mistral dual LLM");
       return new MistralDualLlmClient(apiKey, model);
@@ -1219,6 +1381,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     ollama: (apiKey, model) => {
       if (!model) throw new Error("Model name required for Ollama dual LLM");
       return new OllamaDualLlmClient(apiKey, model);
+    },
+    xai: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for xAI dual LLM");
+      return new XaiDualLlmClient(apiKey, model);
     },
     zhipuai: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Zhipuai dual LLM");

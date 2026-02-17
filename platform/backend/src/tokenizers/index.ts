@@ -19,7 +19,9 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   mistral: () => new TiktokenTokenizer(),
   vllm: () => new TiktokenTokenizer(),
   ollama: () => new TiktokenTokenizer(),
+  xai: () => new TiktokenTokenizer(),
   zhipuai: () => new TiktokenTokenizer(),
+  minimax: () => new TiktokenTokenizer(),
   gemini: () => new TiktokenTokenizer(),
   bedrock: () => new TiktokenTokenizer(),
 };

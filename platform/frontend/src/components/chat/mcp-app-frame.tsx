@@ -64,8 +64,8 @@ export function McpAppFrame({
     const iframe = iframeRef.current;
     const handleLoad = () => {
       try {
-        // srcdoc iframe is same-origin with parent
-        const targetOrigin = typeof window !== "undefined" ? window.location.origin : "*";
+        // Keep iframe origin opaque for security (no allow-same-origin in sandbox),
+        // so we treat it as untrusted and use "*" as targetOrigin.
         iframe.contentWindow?.postMessage(
           {
             jsonrpc: "2.0",
@@ -82,10 +82,10 @@ export function McpAppFrame({
               toolName,
             },
           },
-          targetOrigin,
+          "*",
         );
       } catch (_e) {
-        // Ignore postMessage errors (e.g. iframe not same-origin)
+        // Ignore postMessage errors (e.g. iframe not available)
       }
     };
 
@@ -125,7 +125,9 @@ export function McpAppFrame({
       ref={iframeRef}
       title={`MCP App: ${toolName}`}
       srcDoc={html}
-      sandbox="allow-scripts allow-same-origin"
+      // Do NOT use allow-same-origin here; keeping an opaque origin prevents the app
+      // HTML (fetched from remote MCP servers) from accessing parent DOM, cookies, or storage.
+      sandbox="allow-scripts"
       className={className}
       style={{ minHeight: 280, width: "100%", border: "1px solid var(--border)" }}
     />

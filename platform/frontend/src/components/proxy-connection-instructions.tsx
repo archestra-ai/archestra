@@ -44,6 +44,14 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.deepseek,
     originalUrl: "https://api.deepseek.com/v1/",
   },
+  xai: {
+    label: providerDisplayNames.xai,
+    originalUrl: "https://api.x.ai/v1/",
+  },
+  groq: {
+    label: providerDisplayNames.groq,
+    originalUrl: "https://api.groq.com/openai/v1/",
+  },
   mistral: {
     label: providerDisplayNames.mistral,
     originalUrl: "https://api.mistral.ai/v1/",

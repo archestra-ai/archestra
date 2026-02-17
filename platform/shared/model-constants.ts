@@ -11,6 +11,9 @@ export const SupportedProvidersSchema = z.enum([
   "cohere",
   "cerebras",
   "deepseek",
+  "groq",
+  "xai",
+  "openrouter",
   "mistral",
   "vllm",
   "ollama",
@@ -25,6 +28,9 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cohere:chat",
   "cerebras:chatCompletions",
   "deepseek:chatCompletions",
+  "groq:chatCompletions",
+  "xai:chatCompletions",
+  "openrouter:chatCompletions",
   "mistral:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
@@ -45,6 +51,9 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cohere: "Cohere",
   cerebras: "Cerebras",
   deepseek: "DeepSeek",
+  groq: "Groq",
+  xai: "x.ai",
+  openrouter: "OpenRouter",
   mistral: "Mistral AI",
   vllm: "vLLM",
   ollama: "Ollama",
@@ -88,6 +97,18 @@ export const MODEL_MARKER_PATTERNS: Record<
   deepseek: {
     fastest: ["deepseek-chat"],
     best: ["deepseek-reasoner", "deepseek-chat"],
+  },
+  groq: {
+    fastest: ["llama-3.3-70b-versatile"],
+    best: ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+  },
+  xai: {
+    fastest: ["grok-3-mini-fast"],
+    best: ["grok-3", "grok-3-mini"],
+  },
+  openrouter: {
+    fastest: ["openai/gpt-4o-mini"],
+    best: ["anthropic/claude-sonnet-4", "openai/gpt-4o"],
   },
   cohere: {
     fastest: ["command-light"],

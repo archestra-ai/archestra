@@ -82,6 +82,9 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
+  xai: () => config.chat.xai.apiKey,
+  openrouter: () => config.chat.openrouter.apiKey,
+  groq: () => config.chat.groq.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
@@ -197,6 +200,9 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   deepseek: "deepseek-chat", // DeepSeek's fast chat model
+  xai: "grok-3-mini-fast", // x.ai's fast model
+  openrouter: "openai/gpt-4o-mini", // OpenRouter's fast model
+  groq: "llama-3.3-70b-versatile", // Groq's fast model
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
@@ -298,6 +304,51 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.deepseek.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  xai: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "x.ai API key is required. Please configure XAI_API_KEY.",
+      );
+    }
+    // x.ai uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  openrouter: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "OpenRouter API key is required. Please configure OPENROUTER_API_KEY.",
+      );
+    }
+    // OpenRouter uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.openrouter.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    // Groq uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
     });
     return client(modelName);
   },
@@ -498,6 +549,39 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    xai: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/xai/:agentId (SDK appends /chat/completions)
+      // x.ai uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("xai", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    openrouter: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/openrouter/:agentId (SDK appends /chat/completions)
+      // OpenRouter uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("openrouter", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      // Groq uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
         headers,
       });
       return client.chat(modelName);

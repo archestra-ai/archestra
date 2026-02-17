@@ -121,6 +121,8 @@ export type ModelSelectorLogoProps = Omit<
     | "vercel"
     | "nebius"
     | "deepseek"
+    | "openrouter"
+    | "xai"
     | "alibaba-cn"
     | "google-vertex-anthropic"
     | "venice"
@@ -163,6 +165,9 @@ export type ModelSelectorLogoProps = Omit<
     | "amazon-bedrock"
     | "cerebras"
     | "deepseek"
+    | "openrouter"
+    | "xai"
+    | "groq"
     | (string & {});
 };
 

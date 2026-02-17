@@ -1123,6 +1123,9 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   bedrock: parseBedrockError,
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
   deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
+  openrouter: parseOpenAIError, // OpenRouter uses OpenAI-compatible API
+  xai: parseOpenAIError, // x.ai uses OpenAI-compatible API
+  groq: parseOpenAIError, // Groq uses OpenAI-compatible API
   cohere: parseCohereError,
   mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
   vllm: parseVllmError,
@@ -1142,6 +1145,9 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   bedrock: mapBedrockErrorWrapper,
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
   deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
+  openrouter: mapOpenAIErrorWrapper, // OpenRouter uses OpenAI-compatible API
+  xai: mapOpenAIErrorWrapper, // x.ai uses OpenAI-compatible API
+  groq: mapOpenAIErrorWrapper, // Groq uses OpenAI-compatible API
   cohere: mapCohereErrorWrapper,
   mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,

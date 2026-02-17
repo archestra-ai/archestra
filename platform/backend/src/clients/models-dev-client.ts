@@ -47,16 +47,15 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cohere: "cohere",
   cerebras: "cerebras",
   deepseek: "deepseek",
+  groq: "groq",
   mistral: "mistral",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
-  deepseek: "openai",
-  groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)
   perplexity: null,
-  xai: null,
+  xai: "xai",
   nvidia: null,
   "amazon-bedrock": null,
   azure: null,
@@ -408,6 +407,9 @@ class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       deepseek: ["deepseek/"],
+      xai: ["xai/"],
+      openrouter: [], // OpenRouter is an aggregator, no models.dev prefix
+      groq: ["groq/"],
       mistral: ["mistral/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],

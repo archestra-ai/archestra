@@ -282,10 +282,7 @@ export function McpAssignmentsDialog({
     for (const profile of allProfiles) {
       if (profile.agentType === "mcp_gateway") {
         mcp.push(profile);
-      } else if (
-        profile.agentType === "agent" ||
-        profile.agentType === "system_agent"
-      ) {
+      } else if (profile.agentType === "agent") {
         agent.push(profile);
       }
     }

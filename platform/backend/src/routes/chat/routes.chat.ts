@@ -243,6 +243,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Pass agentId as initial delegation chain (will be extended by delegated agents)
         delegationChain: conversation.agentId,
         abortSignal: chatAbortController.signal,
+        user: { id: user.id, email: user.email, name: user.name },
       });
 
       // Build system prompt from agent's systemPrompt and userPrompt fields
@@ -297,6 +298,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentName: conversation.agent.name,
         agentId: conversation.agentId,
         sessionId: conversationId,
+        user: { id: user.id, email: user.email, name: user.name },
         callback: async () => {
           // Create LLM model using shared service
           // Pass conversationId as sessionId to group all requests in this chat session

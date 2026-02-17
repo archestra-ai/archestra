@@ -856,6 +856,30 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
           }
         ]
       },
@@ -886,10 +910,10 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\" && span.mcp.server.name=~\"$mcp_server_name\" && span.gen_ai.tool.name=~\"$tool_name\" && rootName =~ \"execute_tool .*\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\" && span.mcp.server.name=~\"$mcp_server_name\" && span.gen_ai.tool.name=~\"$tool_name\" && rootName =~ \"execute_tool .*\"} | select(span.archestra.user.email)",
           "queryType": "traceql",
           "refId": "A",
-          "tableType": "traces"
+          "tableType": "spans"
         }
       ],
       "title": "",

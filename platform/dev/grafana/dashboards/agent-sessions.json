@@ -339,6 +339,30 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "span.archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "rootServiceName"
             },
             "properties": [
@@ -467,7 +491,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=~\"${sessionId}.*\" && span.gen_ai.conversation.id!=\"\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\"} | select(span.gen_ai.conversation.id, span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.route.category, span.archestra.trigger.source)",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=~\"${sessionId}.*\" && span.gen_ai.conversation.id!=\"\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\"} | select(span.gen_ai.conversation.id, span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.route.category, span.archestra.trigger.source, span.archestra.user.email)",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "spans"
@@ -811,6 +835,102 @@
                 "value": "Type"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.cost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost ($)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.cost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost ($)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.gen_ai.usage.input_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Input Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.usage.input_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Input Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.gen_ai.usage.output_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Output Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.usage.output_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Output Tokens"
+              }
+            ]
           }
         ]
       },
@@ -828,7 +948,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\"} | select(span.gen_ai.agent.name, span.gen_ai.operation.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.tool.name, span.mcp.server.name, span.route.category)",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\"} | select(span.gen_ai.agent.name, span.gen_ai.operation.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.tool.name, span.mcp.server.name, span.route.category, span.archestra.user.email, span.archestra.cost, span.gen_ai.usage.input_tokens, span.gen_ai.usage.output_tokens)",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "spans"
@@ -947,6 +1067,54 @@
               {
                 "id": "displayName",
                 "value": "Operation"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.cost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost ($)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.cost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost ($)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.gen_ai.usage.total_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.usage.total_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Tokens"
               }
             ]
           },
@@ -1156,7 +1324,7 @@
             "uid": "${traces_datasource}"
           },
           "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"llm-proxy\"} | select(span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.operation.name)",
+          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"llm-proxy\"} | select(span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.operation.name, span.archestra.cost, span.gen_ai.usage.total_tokens)",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "spans"

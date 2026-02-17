@@ -645,6 +645,10 @@ export class ChatOpsManager {
     } = params;
 
     try {
+      // Resolve user for span attributes
+      const chatOpsUser =
+        userId !== "system" ? await UserModel.getById(userId) : null;
+
       // Wrap A2A execution with a parent span so all LLM and MCP tool calls
       // appear as children of a single unified trace. The provider ID (e.g.
       // "ms-teams", "slack") is recorded as archestra.trigger.source so traces
@@ -654,6 +658,13 @@ export class ChatOpsManager {
         agentId: agent.id,
         routeCategory: RouteCategory.CHATOPS,
         triggerSource: provider.providerId,
+        user: chatOpsUser
+          ? {
+              id: chatOpsUser.id,
+              email: chatOpsUser.email,
+              name: chatOpsUser.name,
+            }
+          : null,
         callback: async () => {
           return executeA2AMessage({
             agentId: agent.id,

@@ -789,6 +789,10 @@ ${formattedHistory}
     "[IncomingEmail] Invoking agent with email content",
   );
 
+  // Resolve user for span attributes (skip when userId is "system")
+  const emailUser =
+    userId !== "system" ? await UserModel.getById(userId) : null;
+
   // Execute using the shared A2A service, wrapped in a parent span so all
   // LLM and MCP tool calls appear as children of a single unified trace.
   // userId is determined by security mode:
@@ -799,6 +803,9 @@ ${formattedHistory}
     agentId,
     routeCategory: RouteCategory.EMAIL,
     triggerSource: "email",
+    user: emailUser
+      ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
+      : null,
     callback: async () => {
       return executeA2AMessage({
         agentId,

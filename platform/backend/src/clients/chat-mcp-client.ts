@@ -559,6 +559,7 @@ export async function getChatMcpTools({
   sessionId,
   delegationChain,
   abortSignal,
+  user,
 }: {
   agentName: string;
   agentId: string;
@@ -573,6 +574,8 @@ export async function getChatMcpTools({
   delegationChain?: string;
   /** Optional cancellation signal from parent stream execution */
   abortSignal?: AbortSignal;
+  /** User identity for OTEL span attributes */
+  user?: { id: string; email?: string; name?: string };
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -694,6 +697,7 @@ export async function getChatMcpTools({
               agent: { id: agentId, name: agentName },
               sessionId,
               toolArgs: toolArguments,
+              user,
               callback: async (span) => {
                 try {
                   throwIfAborted(abortSignal);
@@ -873,6 +877,7 @@ export async function getChatMcpTools({
                 agent: { id: agentId, name: agentName },
                 sessionId,
                 toolArgs: args,
+                user,
                 callback: async (span) => {
                   try {
                     throwIfAborted(abortSignal);

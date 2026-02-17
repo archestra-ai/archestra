@@ -66,6 +66,7 @@ export async function startActiveLlmSpan<T>(params: {
   serverAddress?: string;
   promptMessages?: unknown;
   parentContext?: Context;
+  user?: { id: string; email?: string; name?: string } | null;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const spanName = `${params.operationName} ${params.model}`;
@@ -127,6 +128,14 @@ export async function startActiveLlmSpan<T>(params: {
     }
     if (params.serverAddress) {
       span.setAttribute("server.address", params.serverAddress);
+    }
+
+    if (params.user) {
+      span.setAttribute("archestra.user.id", params.user.id);
+      if (params.user.email)
+        span.setAttribute("archestra.user.email", params.user.email);
+      if (params.user.name)
+        span.setAttribute("archestra.user.name", params.user.name);
     }
 
     if (captureContent && params.promptMessages) {
@@ -194,6 +203,7 @@ export async function startActiveMcpSpan<T>(params: {
   agentType?: AgentType;
   toolCallId?: string;
   toolArgs?: unknown;
+  user?: { id: string; email?: string; name?: string } | null;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
@@ -233,6 +243,14 @@ export async function startActiveMcpSpan<T>(params: {
       }
       if (params.toolCallId) {
         span.setAttribute("gen_ai.tool.call.id", params.toolCallId);
+      }
+
+      if (params.user) {
+        span.setAttribute("archestra.user.id", params.user.id);
+        if (params.user.email)
+          span.setAttribute("archestra.user.email", params.user.email);
+        if (params.user.name)
+          span.setAttribute("archestra.user.name", params.user.name);
       }
 
       if (captureContent && params.toolArgs) {
@@ -293,6 +311,7 @@ export async function startActiveChatSpan<T>(params: {
   labels?: Agent["labels"];
   routeCategory?: RouteCategory;
   triggerSource?: string;
+  user?: { id: string; email?: string; name?: string } | null;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
@@ -326,6 +345,13 @@ export async function startActiveChatSpan<T>(params: {
       }
       if (params.triggerSource) {
         span.setAttribute("archestra.trigger.source", params.triggerSource);
+      }
+      if (params.user) {
+        span.setAttribute("archestra.user.id", params.user.id);
+        if (params.user.email)
+          span.setAttribute("archestra.user.email", params.user.email);
+        if (params.user.name)
+          span.setAttribute("archestra.user.name", params.user.name);
       }
       if (params.labels && params.labels.length > 0) {
         for (const label of params.labels) {

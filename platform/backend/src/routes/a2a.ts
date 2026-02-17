@@ -305,6 +305,12 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const sessionId =
           headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
 
+        // Resolve user for span attributes (user is already fetched above for user tokens)
+        const a2aUser =
+          tokenAuth.userId && userId !== "system"
+            ? await UserModel.getById(tokenAuth.userId)
+            : null;
+
         // Wrap A2A execution with a parent span so all LLM and MCP tool calls
         // within this request appear as children of a single unified trace.
         const result = await startActiveChatSpan({
@@ -313,6 +319,9 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agent.agentType ?? undefined,
           sessionId,
           routeCategory: RouteCategory.A2A,
+          user: a2aUser
+            ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
+            : null,
           callback: async () => {
             return executeA2AMessage({
               agentId,

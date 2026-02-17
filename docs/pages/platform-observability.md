@@ -160,6 +160,9 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
+- `archestra.user.id` - The Archestra user ID who made the request (when available)
+- `archestra.user.email` - The Archestra user email (when available)
+- `archestra.user.name` - The Archestra user display name (when available)
 
 **Response Attributes:**
 
@@ -167,6 +170,8 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.response.id` - Provider-assigned response ID
 - `gen_ai.usage.input_tokens` - Number of input tokens consumed
 - `gen_ai.usage.output_tokens` - Number of output tokens generated
+- `gen_ai.usage.total_tokens` - Total tokens (input + output)
+- `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 
 **Error Attributes:**
@@ -197,6 +202,9 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `gen_ai.conversation.id` - Session ID (when available)
 - `archestra.agent.type` - Agent type
 - `archestra.label.<key>` - Custom agent labels
+- `archestra.user.id` - The Archestra user ID (when available)
+- `archestra.user.email` - The Archestra user email (when available)
+- `archestra.user.name` - The Archestra user display name (when available)
 - `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution.
 - `error.type` - The error class name when an exception occurs during tool execution
 

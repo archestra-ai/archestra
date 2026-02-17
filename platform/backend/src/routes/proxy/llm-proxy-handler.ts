@@ -16,6 +16,7 @@ import {
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
+  UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import {
@@ -83,6 +84,7 @@ export async function handleLLMProxy<
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
+  const resolvedUser = userId ? await UserModel.getById(userId) : null;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -440,6 +442,7 @@ export async function handleLLMProxy<
         teamIds,
         executionId,
         parentContext,
+        resolvedUser,
       );
     } else {
       return handleNonStreaming(
@@ -463,6 +466,7 @@ export async function handleLLMProxy<
         teamIds,
         executionId,
         parentContext,
+        resolvedUser,
       );
     }
   } catch (error) {
@@ -508,6 +512,7 @@ async function handleStreaming<
   teamIds?: string[],
   executionId?: string,
   parentContext?: Context,
+  resolvedUser?: { id: string; email: string; name: string } | null,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -536,6 +541,13 @@ async function handleStreaming<
         .createRequestAdapter(originalRequest)
         .getProviderMessages(),
       parentContext,
+      user: resolvedUser
+        ? {
+            id: resolvedUser.id,
+            email: resolvedUser.email,
+            name: resolvedUser.name,
+          }
+        : null,
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
 
@@ -584,6 +596,18 @@ async function handleStreaming<
             "gen_ai.usage.output_tokens",
             state.usage.outputTokens,
           );
+          llmSpan.setAttribute(
+            "gen_ai.usage.total_tokens",
+            state.usage.inputTokens + state.usage.outputTokens,
+          );
+          const cost = await utils.costOptimization.calculateCost(
+            actualModel,
+            state.usage.inputTokens,
+            state.usage.outputTokens,
+          );
+          if (cost !== undefined) {
+            llmSpan.setAttribute("archestra.cost", cost);
+          }
         }
         if (state.stopReason) {
           llmSpan.setAttribute("gen_ai.response.finish_reasons", [
@@ -797,6 +821,7 @@ async function handleNonStreaming<
   teamIds?: string[],
   executionId?: string,
   parentContext?: Context,
+  resolvedUser?: { id: string; email: string; name: string } | null,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -820,6 +845,13 @@ async function handleNonStreaming<
       .createRequestAdapter(originalRequest)
       .getProviderMessages(),
     parentContext,
+    user: resolvedUser
+      ? {
+          id: resolvedUser.id,
+          email: resolvedUser.email,
+          name: resolvedUser.name,
+        }
+      : null,
     callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);
@@ -830,6 +862,18 @@ async function handleNonStreaming<
       llmSpan.setAttribute("gen_ai.response.id", adapter.getId());
       llmSpan.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens);
       llmSpan.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens);
+      llmSpan.setAttribute(
+        "gen_ai.usage.total_tokens",
+        usage.inputTokens + usage.outputTokens,
+      );
+      const cost = await utils.costOptimization.calculateCost(
+        actualModel,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+      if (cost !== undefined) {
+        llmSpan.setAttribute("archestra.cost", cost);
+      }
       llmSpan.setAttribute(
         "gen_ai.response.finish_reasons",
         adapter.getFinishReasons(),

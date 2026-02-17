@@ -148,6 +148,23 @@ export async function createAgentServer(
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
+      // Resolve user identity for OTEL span attributes
+      let mcpUser: {
+        id: string;
+        email?: string;
+        name?: string;
+      } | null = null;
+      if (tokenAuth?.userId) {
+        const userDetails = await UserModel.getById(tokenAuth.userId);
+        if (userDetails) {
+          mcpUser = {
+            id: userDetails.id,
+            email: userDetails.email,
+            name: userDetails.name,
+          };
+        }
+      }
+
       try {
         // Check if this is an Archestra tool or agent delegation tool
         const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
@@ -174,6 +191,7 @@ export async function createAgentServer(
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
+            user: mcpUser,
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
@@ -265,6 +283,7 @@ export async function createAgentServer(
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,
+          user: mcpUser,
           callback: async (span) => {
             const r = await mcpClient.executeToolCall(
               toolCall,

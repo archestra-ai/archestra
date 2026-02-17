@@ -1580,6 +1580,102 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.user.email"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.archestra.cost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost ($)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "archestra.cost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost ($)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.gen_ai.usage.input_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Input Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.usage.input_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Input Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.gen_ai.usage.output_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Output Tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gen_ai.usage.output_tokens"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Output Tokens"
+              }
+            ]
           }
         ]
       },
@@ -1610,10 +1706,10 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.agent.name=~\"$agent_name\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\" && rootName !~ \"execute_tool .*\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.agent.name=~\"$agent_name\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\" && rootName !~ \"execute_tool .*\"} | select(span.archestra.user.email, span.archestra.cost, span.gen_ai.usage.input_tokens, span.gen_ai.usage.output_tokens)",
           "queryType": "traceql",
           "refId": "A",
-          "tableType": "traces"
+          "tableType": "spans"
         }
       ],
       "title": "",

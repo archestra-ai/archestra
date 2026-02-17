@@ -266,49 +266,25 @@ export function McpServerCard({
   // JSX parts - Action buttons for Edit and Logs
   const actionButtons = (
     <div className="flex gap-1 mb-2">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 h-8 text-xs"
-              onClick={onEdit}
-            >
-              <Pencil className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Edit server configuration</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 h-8 text-xs"
-              onClick={() => setIsLogsDialogOpen(true)}
-              disabled={!isLogsAvailable}
-            >
-              <FileText className="h-3 w-3 mr-1" />
-              Logs
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>
-              {variant !== "local"
-                ? "Available for local servers only"
-                : !hasLocalInstallations
-                  ? "Connect first"
-                  : "View container logs"}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex-1 h-8 text-xs"
+        onClick={onEdit}
+      >
+        <Pencil className="h-3 w-3 mr-1" />
+        Edit
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex-1 h-8 text-xs"
+        onClick={() => setIsLogsDialogOpen(true)}
+        disabled={!isLogsAvailable}
+      >
+        <FileText className="h-3 w-3 mr-1" />
+        Logs
+      </Button>
     </div>
   );
 

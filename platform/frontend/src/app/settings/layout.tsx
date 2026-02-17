@@ -28,7 +28,9 @@ export default function SettingsLayout({
     { label: "Your Account", href: "/settings/account" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "LLM API Keys", href: "/settings/llm-api-keys" },
-    { label: "Security", href: "/settings/security" },
+    ...(userCanUpdateOrganization
+      ? [{ label: "Security", href: "/settings/security" }]
+      : []),
     ...(userCanReadOrganization
       ? [
           { label: "Members", href: "/settings/members" },
@@ -46,8 +48,10 @@ export default function SettingsLayout({
                 },
               ]
             : []),
-          { label: "Appearance", href: "/settings/appearance" },
         ]
+      : []),
+    ...(userCanUpdateOrganization
+      ? [{ label: "Appearance", href: "/settings/appearance" }]
       : []),
     /**
      * Secrets tab is only shown when using Vault storage (not DB)

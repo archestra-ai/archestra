@@ -47,6 +47,8 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cohere: "cohere",
   cerebras: "cerebras",
   deepseek: "deepseek",
+  perplexity: "perplexity",
+  minimax: "minimax",
   mistral: "mistral",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
@@ -55,7 +57,6 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   "fireworks-ai": "openai",
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)
-  perplexity: null,
   xai: null,
   nvidia: null,
   "amazon-bedrock": null,
@@ -408,6 +409,8 @@ class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       deepseek: ["deepseek/"],
+      perplexity: ["perplexity/"],
+      minimax: ["minimax/"],
       mistral: ["mistral/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],

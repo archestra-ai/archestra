@@ -172,6 +172,16 @@ export const RouteId = {
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
+  // Proxy Routes - Perplexity
+  PerplexityChatCompletionsWithDefaultAgent:
+    "perplexityChatCompletionsWithDefaultAgent",
+  PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
+
+  // Proxy Routes - MiniMax
+  MiniMaxChatCompletionsWithDefaultAgent:
+    "minimaxChatCompletionsWithDefaultAgent",
+  MiniMaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
+
   // Proxy Routes - Mistral
   MistralChatCompletionsWithDefaultAgent:
     "mistralChatCompletionsWithDefaultAgent",

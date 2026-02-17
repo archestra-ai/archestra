@@ -8,6 +8,8 @@ import {
   Cerebras,
   Cohere,
   DeepSeek,
+  Perplexity,
+  MiniMax,
   Gemini,
   Mistral,
   Ollama,
@@ -126,6 +128,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
     response: DeepSeek.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["perplexity:chatCompletions"]),
+    request: Perplexity.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Perplexity.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Perplexity.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["minimax:chatCompletions"]),
+    request: MiniMax.API.ChatCompletionRequestSchema,
+    processedRequest:
+      MiniMax.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: MiniMax.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

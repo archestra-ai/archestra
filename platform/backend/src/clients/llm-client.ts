@@ -82,6 +82,8 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
+  minimax: () => config.chat.minimax.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
@@ -197,6 +199,8 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   deepseek: "deepseek-chat", // DeepSeek's fast chat model
+  perplexity: "sonar", // Perplexity's fast search model
+  minimax: "MiniMax-Text-01", // MiniMax's text model
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
@@ -298,6 +302,36 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.deepseek.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
+      );
+    }
+    // Perplexity uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  minimax: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "MiniMax API key is required. Please configure MINIMAX_API_KEY.",
+      );
+    }
+    // MiniMax uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
     });
     return client(modelName);
   },
@@ -498,6 +532,28 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      // Perplexity uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    minimax: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/minimax/:agentId (SDK appends /chat/completions)
+      // MiniMax uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("minimax", agentId),
         headers,
       });
       return client.chat(modelName);

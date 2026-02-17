@@ -169,7 +169,6 @@ describe("ModelsDevClient", () => {
     });
 
     test("returns null for explicitly unsupported providers", () => {
-      expect(modelsDevClient.mapProvider("perplexity")).toBeNull();
       expect(modelsDevClient.mapProvider("xai")).toBeNull();
       expect(modelsDevClient.mapProvider("nvidia")).toBeNull();
       expect(modelsDevClient.mapProvider("amazon-bedrock")).toBeNull();
@@ -218,7 +217,7 @@ describe("ModelsDevClient", () => {
 
     test("returns null for unsupported provider", () => {
       const model = createMockModel({ id: "test-model", name: "Test" });
-      const result = modelsDevClient.convertToModel("perplexity", model);
+      const result = modelsDevClient.convertToModel("xai", model);
       expect(result).toBeNull();
     });
 
@@ -305,8 +304,8 @@ describe("ModelsDevClient", () => {
 
       const count = await modelsDevClient.syncModelMetadata(true);
 
-      // Should sync 2 models (openai + anthropic), not perplexity
-      expect(count).toBe(2);
+      // Should sync 3 models (openai + anthropic + perplexity)
+      expect(count).toBe(3);
 
       const openaiMetadata = await ModelModel.findByProviderAndModelId(
         "openai",

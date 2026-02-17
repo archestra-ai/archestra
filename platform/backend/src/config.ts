@@ -470,6 +470,14 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
     },
+    minimax: {
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.chat/v1",
+    },
+    perplexity: {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_BASE_URL || "https://api.perplexity.ai",
+    },
     mistral: {
       baseUrl:
         process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
@@ -513,6 +521,12 @@ export default {
     },
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+    },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+    },
+    perplexity: {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",

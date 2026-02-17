@@ -11,6 +11,8 @@ export const SupportedProvidersSchema = z.enum([
   "cohere",
   "cerebras",
   "deepseek",
+  "perplexity",
+  "minimax",
   "mistral",
   "vllm",
   "ollama",
@@ -25,6 +27,8 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cohere:chat",
   "cerebras:chatCompletions",
   "deepseek:chatCompletions",
+  "perplexity:chatCompletions",
+  "minimax:chatCompletions",
   "mistral:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
@@ -45,6 +49,8 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cohere: "Cohere",
   cerebras: "Cerebras",
   deepseek: "DeepSeek",
+  perplexity: "Perplexity",
+  minimax: "MiniMax",
   mistral: "Mistral AI",
   vllm: "vLLM",
   ollama: "Ollama",
@@ -88,6 +94,14 @@ export const MODEL_MARKER_PATTERNS: Record<
   deepseek: {
     fastest: ["deepseek-chat"],
     best: ["deepseek-reasoner", "deepseek-chat"],
+  },
+  perplexity: {
+    fastest: ["sonar"],
+    best: ["sonar-pro", "sonar-reasoning-pro"],
+  },
+  minimax: {
+    fastest: ["MiniMax-Text-01"],
+    best: ["MiniMax-Text-01"],
   },
   cohere: {
     fastest: ["command-light"],

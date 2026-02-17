@@ -16,6 +16,8 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   openai: () => new TiktokenTokenizer(),
   cerebras: () => new TiktokenTokenizer(),
   deepseek: () => new TiktokenTokenizer(),
+  perplexity: () => new TiktokenTokenizer(),
+  minimax: () => new TiktokenTokenizer(),
   cohere: () => new TiktokenTokenizer(),
   mistral: () => new TiktokenTokenizer(),
   vllm: () => new TiktokenTokenizer(),

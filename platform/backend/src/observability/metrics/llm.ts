@@ -34,6 +34,8 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   openai: getOpenAIUsage,
   cerebras: getOpenAIUsage,
   deepseek: getOpenAIUsage,
+  minimax: getOpenAIUsage,
+  perplexity: getOpenAIUsage,
   vllm: getOpenAIUsage,
   ollama: getOpenAIUsage,
   mistral: getOpenAIUsage,

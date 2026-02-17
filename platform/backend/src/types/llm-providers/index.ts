@@ -2,6 +2,8 @@ export { default as Anthropic } from "./anthropic";
 export { default as Bedrock } from "./bedrock";
 export { default as Cerebras } from "./cerebras";
 export { default as DeepSeek } from "./deepseek";
+export { default as Perplexity } from "./perplexity";
+export { default as MiniMax } from "./minimax";
 export { default as Cohere } from "./cohere";
 export { default as Gemini } from "./gemini";
 export { default as Mistral } from "./mistral";

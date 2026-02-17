@@ -1004,6 +1004,84 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * DeepSeek implementation of DualLlmClient (OpenAI-compatible)
+ */
+export class DeepSeekDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "deepseek-chat") {
+    logger.debug({ model }, "[dualLlmClient] DeepSeek: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] DeepSeek: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] DeepSeek: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] DeepSeek: starting chat with schema",
+    );
+
+    // DeepSeek uses OpenAI-compatible API with JSON schema support
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] DeepSeek: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
  * Bedrock implementation of DualLlmClient
  * Uses AWS Bedrock Converse API for chat completions
  */
@@ -1203,6 +1281,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     mistral: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Mistral dual LLM");
       return new MistralDualLlmClient(apiKey, model);
+    },
+    deepseek: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for DeepSeek dual LLM");
+      return new DeepSeekDualLlmClient(apiKey, model);
     },
     gemini: (apiKey) => {
       // Gemini supports Vertex AI mode where apiKey may be undefined

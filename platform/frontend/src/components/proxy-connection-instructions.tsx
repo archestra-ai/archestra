@@ -44,6 +44,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.mistral,
     originalUrl: "https://api.mistral.ai/v1/",
   },
+  deepseek: {
+    label: providerDisplayNames.deepseek,
+    originalUrl: "https://api.deepseek.com/",
+  },
   cohere: {
     label: providerDisplayNames.cohere,
     originalUrl: "https://api.cohere.com/v2/",

@@ -186,6 +186,40 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 You can get an API key from the [Mistral AI Console](https://console.mistral.ai/api-keys).
 
+## DeepSeek
+
+[DeepSeek](https://deepseek.com/) provides high-performance AI models including DeepSeek-V3 and DeepSeek-R1 (reasoning model) through an OpenAI-compatible API.
+
+### Supported DeepSeek APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### DeepSeek Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/deepseek/{agent-id}`
+- **Authentication**: Pass your DeepSeek API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_DEEPSEEK_BASE_URL`     | No       | DeepSeek API base URL (default: `https://api.deepseek.com`)                   |
+| `ARCHESTRA_CHAT_DEEPSEEK_API_KEY` | No       | Default API key for DeepSeek (can be overridden per conversation/team/org)    |
+
+### Popular Models
+
+- **deepseek-chat** - DeepSeek-V3, fast general-purpose model
+- **deepseek-reasoner** - DeepSeek-R1, reasoning model with chain-of-thought
+
+### Getting an API Key
+
+You can get an API key from the [DeepSeek Platform](https://platform.deepseek.com/api_keys).
+
+### Important Notes
+
+- **OpenAI-compatible API**: DeepSeek's API follows the OpenAI Chat Completions format, making it easy to switch between providers
+- **Reasoning model**: DeepSeek-R1 (deepseek-reasoner) may include a `reasoning_content` field in responses with chain-of-thought reasoning
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.

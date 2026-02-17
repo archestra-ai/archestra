@@ -273,6 +273,7 @@ class OptimizationRuleModel {
       cohere: [],
       cerebras: [],
       mistral: [],
+      deepseek: [],
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
@@ -307,6 +308,7 @@ class OptimizationRuleModel {
         cohere: [],
         cerebras: [],
         mistral: [],
+        deepseek: [],
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],

@@ -7,7 +7,7 @@ import {
   Trash2,
   Vault,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,7 @@ export default function TeamVaultFolderDialog({
   team,
 }: TeamVaultFolderDialogProps) {
   const [vaultPath, setVaultPath] = useState("");
+  const vaultPathInputRef = useRef<HTMLInputElement>(null);
   const [connectivityResult, setConnectivityResult] = useState<{
     connected: boolean;
     secretCount: number;
@@ -90,7 +91,8 @@ export default function TeamVaultFolderDialog({
 
   const handleCheckConnectivity = async () => {
     setConnectivityResult(null);
-    const pathToTest = vaultPath.trim();
+    const pathToTest =
+      vaultPathInputRef.current?.value?.trim() ?? vaultPath.trim();
     try {
       const result = await checkConnectivityMutation.mutateAsync({
         teamId: team.id,
@@ -166,6 +168,7 @@ export default function TeamVaultFolderDialog({
               <div className="space-y-2">
                 <Label htmlFor="vault-path">Vault Path</Label>
                 <Input
+                  ref={vaultPathInputRef}
                   id="vault-path"
                   placeholder={
                     vaultKvVersion === "1"

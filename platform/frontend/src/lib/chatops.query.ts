@@ -37,7 +37,8 @@ export function useUpdateChatOpsBinding() {
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("Binding updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
@@ -57,7 +58,8 @@ export function useDeleteChatOpsBinding() {
       }
       return true;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("Binding deleted");
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },

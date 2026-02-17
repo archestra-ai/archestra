@@ -46,7 +46,8 @@ export function useSetupIncomingEmailWebhook() {
       }
       return response.data as archestraApiTypes.SetupIncomingEmailWebhookResponses["200"];
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("Webhook subscription created successfully");
       queryClient.invalidateQueries({ queryKey: incomingEmailKeys.status() });
     },
@@ -65,7 +66,8 @@ export function useRenewIncomingEmailSubscription() {
       }
       return response.data as archestraApiTypes.RenewIncomingEmailSubscriptionResponses["200"];
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("Subscription renewed successfully");
       queryClient.invalidateQueries({ queryKey: incomingEmailKeys.status() });
     },
@@ -84,7 +86,8 @@ export function useDeleteIncomingEmailSubscription() {
       }
       return response.data as archestraApiTypes.DeleteIncomingEmailSubscriptionResponses["200"];
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("Subscription deleted successfully");
       queryClient.invalidateQueries({ queryKey: incomingEmailKeys.status() });
     },

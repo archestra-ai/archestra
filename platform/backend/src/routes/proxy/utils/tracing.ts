@@ -24,8 +24,6 @@ export enum RouteCategory {
   A2A = "a2a",
   CHATOPS = "chatops",
   EMAIL = "email",
-  MCP_TOOL = "mcp-tool",
-  API = "api",
 }
 
 /**

@@ -178,6 +178,30 @@ const mistralConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const perplexityConfig: ToolPersistenceTestConfig = {
+  providerName: "Perplexity",
+
+  endpoint: (agentId) => `/v1/perplexity/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "sonar-pro",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const vllmConfig: ToolPersistenceTestConfig = {
   providerName: "vLLM",
 
@@ -285,6 +309,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   cohereConfig,
   cerebrasConfig,
   mistralConfig,
+  perplexityConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,

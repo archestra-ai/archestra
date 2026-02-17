@@ -11,6 +11,7 @@ export const SupportedProvidersSchema = z.enum([
   "cohere",
   "cerebras",
   "mistral",
+  "perplexity",
   "vllm",
   "ollama",
   "zhipuai",
@@ -24,6 +25,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cohere:chat",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
+  "perplexity:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
@@ -43,6 +45,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cohere: "Cohere",
   cerebras: "Cerebras",
   mistral: "Mistral AI",
+  perplexity: "Perplexity AI",
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
@@ -89,6 +92,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   mistral: {
     fastest: ["mistral-small", "ministral"],
     best: ["mistral-large"],
+  },
+  perplexity: {
+    fastest: ["sonar"],
+    best: ["sonar-pro"],
   },
   ollama: {
     fastest: ["llama3.2", "phi"],

@@ -5,6 +5,7 @@ export { cohereAdapterFactory } from "./cohere";
 export { geminiAdapterFactory } from "./gemini";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
+export { perplexityAdapterFactory } from "./perplexity";
 export { openaiAdapterFactory } from "./openai";
 export { vllmAdapterFactory } from "./vllm";
 export { zhipuaiAdapterFactory } from "./zhipuai";

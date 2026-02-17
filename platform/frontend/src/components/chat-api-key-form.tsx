@@ -108,6 +108,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.mistral.ai/api-keys",
     consoleName: "Mistral AI Console",
   },
+  perplexity: {
+    name: "Perplexity AI",
+    icon: "/icons/perplexity.png",
+    placeholder: "pplx-...",
+    enabled: true,
+    consoleUrl: "https://www.perplexity.ai/settings/api",
+    consoleName: "Perplexity Settings",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

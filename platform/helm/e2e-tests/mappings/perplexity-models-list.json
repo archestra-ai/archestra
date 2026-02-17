@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/perplexity/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "sonar-pro",
+          "created": 1700000000,
+          "owned_by": "perplexity"
+        },
+        {
+          "id": "sonar",
+          "created": 1700000000,
+          "owned_by": "perplexity"
+        }
+      ]
+    }
+  }
+}

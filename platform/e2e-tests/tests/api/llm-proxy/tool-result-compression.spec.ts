@@ -283,6 +283,44 @@ const mistralConfig: CompressionTestConfig = {
   }),
 };
 
+const perplexityConfig: CompressionTestConfig = {
+  providerName: "Perplexity",
+
+  endpoint: (profileId) => `/v1/perplexity/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Perplexity format: same as OpenAI (tool results as separate "tool" role messages)
+  buildRequestWithToolResult: () => ({
+    model: "sonar-pro",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 const vllmConfig: CompressionTestConfig = {
   providerName: "vLLM",
 
@@ -408,6 +446,7 @@ const testConfigs: CompressionTestConfig[] = [
   cohereConfig,
   cerebrasConfig,
   mistralConfig,
+  perplexityConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,

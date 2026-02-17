@@ -53,8 +53,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
-  // Explicitly unsupported providers (return null to skip)
-  perplexity: null,
+  perplexity: "perplexity",
   xai: null,
   nvidia: null,
   "amazon-bedrock": null,
@@ -407,6 +406,7 @@ class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       mistral: ["mistral/"],
+      perplexity: ["perplexity/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],
       vllm: ["vllm/"],

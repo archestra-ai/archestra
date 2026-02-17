@@ -84,6 +84,7 @@ const envApiKeyGetters: Record<
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
@@ -201,6 +202,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   zhipuai: "glm-4-flash", // Zhipu's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
+  perplexity: "sonar", // Perplexity's fast model
 };
 
 /**
@@ -309,6 +311,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createMistral({
       apiKey,
       baseURL: config.llm.mistral.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure ARCHESTRA_CHAT_PERPLEXITY_API_KEY.",
+      );
+    }
+    // Perplexity uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
     });
     return client(modelName);
   },
@@ -483,6 +500,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      // Perplexity uses OpenAI-compatible API
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
+        headers,
+      });
+      return client.chat(modelName);
     },
 
     vllm: ({ apiKey, agentId, modelName, headers }) => {

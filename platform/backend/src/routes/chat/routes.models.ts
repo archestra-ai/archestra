@@ -280,6 +280,44 @@ async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Perplexity API (OpenAI-compatible)
+ */
+async function fetchPerplexityModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.perplexity.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Perplexity models",
+    );
+    throw new Error(`Failed to fetch Perplexity models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "perplexity" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -732,6 +770,7 @@ async function getProviderApiKey({
     cohere: () => config.chat.cohere?.apiKey || null,
     gemini: () => config.chat.gemini.apiKey || null,
     mistral: () => config.chat.mistral.apiKey || null,
+    perplexity: () => config.chat.perplexity.apiKey || null,
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
@@ -752,6 +791,7 @@ const modelFetchers: Record<
   cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
+  perplexity: fetchPerplexityModels,
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
@@ -823,7 +863,7 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
+      ["anthropic", "cerebras", "cohere", "mistral", "perplexity", "openai"].includes(
         provider,
       )
     ) {

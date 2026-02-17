@@ -83,6 +83,16 @@ const mistralConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// Perplexity - Uses OpenAI-compatible streaming format
+const perplexityConfig: ChatProviderTestConfig = {
+  providerName: "perplexity",
+  providerDisplayName: "Perplexity AI",
+  modelId: "sonar-pro",
+  modelDisplayName: "Sonar Pro",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 // Ollama - Uses OpenAI-compatible streaming format
 const ollamaConfig: ChatProviderTestConfig = {
   providerName: "ollama",
@@ -120,6 +130,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   cerebrasConfig,
   cohereConfig,
   mistralConfig,
+  perplexityConfig,
   ollamaConfig,
   vllmConfig,
   zhipuaiConfig,

@@ -218,7 +218,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
-  perplexity: null,
+  perplexity: "perplexity",
   xai: null,
   nvidia: null,
   "amazon-bedrock": "bedrock",

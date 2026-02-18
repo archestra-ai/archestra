@@ -190,7 +190,7 @@ export function TeamsList() {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Users className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                There are not teams you have access to
+                There are no teams you have access to
               </p>
             </div>
           ) : (

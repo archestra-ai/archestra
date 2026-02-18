@@ -181,6 +181,7 @@ openssl rand -base64 32
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types)
+- `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 

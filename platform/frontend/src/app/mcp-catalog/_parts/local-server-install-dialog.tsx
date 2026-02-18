@@ -276,17 +276,18 @@ export function LocalServerInstallDialog({
           <DialogTitle>
             {isReinstall ? "Reinstall" : "Install"} - {catalogItem?.name}
           </DialogTitle>
-          <DialogDescription asChild>
-            <div className="text-sm text-muted-foreground prose prose-sm max-w-none">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={markdownComponents}
-              >
-                {catalogItem?.instructions ||
-                  "Provide the required configuration values to install this MCP server."}
-              </ReactMarkdown>
-            </div>
-          </DialogDescription>
+          {catalogItem?.instructions && (
+            <DialogDescription asChild>
+              <div className="text-sm text-muted-foreground prose prose-sm max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={markdownComponents}
+                >
+                  {catalogItem?.instructions}
+                </ReactMarkdown>
+              </div>
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <SelectMcpServerCredentialTypeAndTeams

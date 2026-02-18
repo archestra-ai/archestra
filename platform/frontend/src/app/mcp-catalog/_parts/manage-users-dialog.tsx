@@ -103,13 +103,13 @@ export function ManageUsersDialog({
       return "You need MCP server create permission to re-authenticate";
     }
     if (!mcpServer.teamId) {
-      return "Only the credential owner can re-authenticate";
+      return "Only the connection owner can re-authenticate";
     }
     // WHY: Different messages for different failure reasons
     if (!hasMcpServerUpdatePermission) {
-      return "You don't have permission to re-authenticate team credentials";
+      return "You don't have permission to re-authenticate team connections";
     }
-    return "You can only re-authenticate credentials for teams you are a member of";
+    return "You can only re-authenticate connections for teams you are a member of";
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
@@ -179,20 +179,20 @@ export function ManageUsersDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage credentials
+            Manage connections
             <span className="text-muted-foreground font-normal">
               {label || firstServer.name}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage credentials for this MCP Registry item.
+            Manage connections for this MCP Registry item.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
           {allServers?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No credentials available for this server.
+              No connections available for this server.
             </div>
           ) : (
             <div className="rounded-md border">

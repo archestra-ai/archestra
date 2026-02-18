@@ -234,19 +234,26 @@ const AgentToolsEditorContent = forwardRef<
         }
 
         // Add tools (skip invalidation, will do it once at the end)
+        const useDynamicCredential =
+          isPlaywrightCatalogItem(changes.catalogItem.id) ||
+          changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
+
         for (const toolId of toAdd) {
           await assignTool.mutateAsync({
             agentId: targetAgentId,
             toolId,
-            credentialSourceMcpServerId: !isLocal
-              ? changes.credentialSourceId
-              : undefined,
-            executionSourceMcpServerId: isLocal
-              ? changes.credentialSourceId
-              : undefined,
-            useDynamicTeamCredential:
-              isPlaywrightCatalogItem(changes.catalogItem.id) ||
-              changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
+            // When using dynamic credentials, omit server IDs — they are mutually
+            // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
+            // field based on whether the server is local (execution) or remote (credential).
+            credentialSourceMcpServerId:
+              !isLocal && !useDynamicCredential
+                ? changes.credentialSourceId
+                : undefined,
+            executionSourceMcpServerId:
+              isLocal && !useDynamicCredential
+                ? changes.credentialSourceId
+                : undefined,
+            useDynamicTeamCredential: useDynamicCredential,
             skipInvalidation: true,
           });
         }
@@ -436,12 +443,15 @@ function McpServerPill({
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
 
-  // Get current credential source (from first assigned tool or first available credential)
-  const currentCredentialSource =
-    assignedTools[0]?.credentialSourceMcpServerId ??
-    assignedTools[0]?.executionSourceMcpServerId ??
-    mcpServers[0]?.id ??
-    null;
+  // Resolve which credential to show as selected in the dropdown. Dynamic credentials
+  // store no server ID, so we must check the flag first to avoid falling through to a
+  // static server and misrepresenting the saved state.
+  const currentCredentialSource = assignedTools[0]?.useDynamicTeamCredential
+    ? DYNAMIC_CREDENTIAL_VALUE
+    : (assignedTools[0]?.credentialSourceMcpServerId ??
+      assignedTools[0]?.executionSourceMcpServerId ??
+      mcpServers[0]?.id ??
+      null);
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -582,7 +592,7 @@ function McpServerPill({
         {/* Credential Selector */}
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
-            <Label className="text-sm font-medium">Credential</Label>
+            <Label className="text-sm font-medium">Connect on behalf of</Label>
             <TokenSelect
               catalogId={catalogItem.id}
               value={selectedCredential}

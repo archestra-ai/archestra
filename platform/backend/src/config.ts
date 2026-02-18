@@ -517,10 +517,10 @@ export default {
     cerebras: {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+    },
     deepseek: {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
-    },
     },
     mistral: {
       baseUrl:
@@ -544,9 +544,6 @@ export default {
     },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
-    deepseek: {
-      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
-    },
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
       /** Prefix for cross-region inference profile models (e.g., "us." or "eu.") */
       inferenceProfilePrefix:
@@ -567,8 +564,7 @@ export default {
       apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
     },
     deepseek: {
-      baseUrl:
-        process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
@@ -587,9 +583,6 @@ export default {
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
-    deepseek: {
-      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
-    },
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

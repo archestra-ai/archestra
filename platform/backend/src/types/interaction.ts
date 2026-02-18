@@ -155,11 +155,13 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
     request: Zhipuai.API.ChatCompletionRequestSchema,
-  DeepSeek.API.ChatCompletionRequestSchema,    processedRequest:
+    processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
-  DeepSeek.API.ChatCompletionResponseSchema,    requestType: RequestTypeSchema.optional(),
+    requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["deepseek:chatCompletions"]),
     request: DeepSeek.API.ChatCompletionRequestSchema,
@@ -167,8 +169,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
     response: DeepSeek.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
-    externalAgentIdLabel: z.string().nullable().optional(),
-  }),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);

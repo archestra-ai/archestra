@@ -512,6 +512,47 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from OpenRouter API (OpenAI-compatible)
+ * @see https://openrouter.ai/docs/api-reference/list-available-models
+ */
+async function fetchOpenRouterModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.openrouter.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch OpenRouter models",
+    );
+    throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      name?: string;
+      created?: number;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.name ?? model.id,
+    provider: "openrouter" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : new Date().toISOString(),
+  }));
+}
+
+/**
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
  */
@@ -737,6 +778,7 @@ async function getProviderApiKey({
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
+    openrouter: () => config.chat.openrouter.apiKey || null,
   };
 
   return envApiKeyFallbacks[provider]();
@@ -757,6 +799,7 @@ const modelFetchers: Record<
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
+  openrouter: fetchOpenRouterModels,
 };
 
 // Register all model fetchers with the sync service

@@ -538,6 +538,11 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    openrouter: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
+        "https://openrouter.ai/api/v1",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -576,6 +581,9 @@ export default {
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
+    },
+    openrouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

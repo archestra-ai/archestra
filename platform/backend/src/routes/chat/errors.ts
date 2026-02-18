@@ -1127,6 +1127,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  openrouter: parseOpenAIError, // OpenRouter uses OpenAI-compatible API
 };
 
 /**
@@ -1145,6 +1146,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  openrouter: mapOpenAIErrorWrapper, // OpenRouter uses OpenAI-compatible API
 };
 
 // =============================================================================

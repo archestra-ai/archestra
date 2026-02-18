@@ -73,21 +73,6 @@ class OrganizationModel {
       { id, dataKeys: Object.keys(data) },
       "OrganizationModel.patch: updating organization",
     );
-    if ("logo" in data && data.logo) {
-      const logo = data.logo;
-
-      if (!logo.startsWith("data:image/png;base64,")) {
-        throw new Error("Logo must be a PNG image in base64 format");
-      }
-
-      // Check size (rough estimate: base64 is ~1.33x original size)
-      // 2MB * 1.33 = ~2.66MB in base64
-      const maxSize = 2.66 * 1024 * 1024;
-      if (logo.length > maxSize) {
-        // ~2.66MB
-        throw new Error("Logo must be less than 2MB");
-      }
-    }
 
     const [updatedOrganization] = await db
       .update(schema.organizationsTable)

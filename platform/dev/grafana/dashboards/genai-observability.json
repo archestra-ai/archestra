@@ -2244,7 +2244,7 @@
       },
       "id": 64,
       "panels": [],
-      "title": "Agent Executions",
+      "title": "External Agent Executions",
       "type": "row"
     },
     {
@@ -2298,9 +2298,9 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by (agent_name) (sum_over_time(increase(agent_executions_total{agent_name=~\"$agent_name\", agent_name!=\"\"}[5m])[$__range:5m])))",
+          "expr": "round(sum by (external_agent_id) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m])))",
           "instant": true,
-          "legendFormat": "{{agent_name}}",
+          "legendFormat": "{{external_agent_id}}",
           "queryType": "instant",
           "range": false,
           "refId": "A"
@@ -2395,9 +2395,9 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_name) (sum_over_time(increase(llm_cost_total{agent_name=~\"$agent_name\", agent_name!=\"\"}[5m])[$__range:5m]))",
+          "expr": "sum by (external_agent_id) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[1m])[$__range:1m]))",
           "instant": false,
-          "legendFormat": "{{agent_name}}",
+          "legendFormat": "{{external_agent_id}}",
           "queryType": "range",
           "range": true,
           "refId": "A",
@@ -2493,9 +2493,9 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_name) (sum_over_time(increase(llm_cost_total{agent_name=~\"$agent_name\", agent_name!=\"\"}[5m])[$__range:5m])) + round(sum by (agent_name) (sum_over_time(increase(agent_executions_total{agent_name=~\"$agent_name\", agent_name!=\"\"}[5m])[$__range:5m]))) * 1",
+          "expr": "sum by (external_agent_id) (sum_over_time(increase(llm_cost_total{external_agent_id!=\"\"}[1m])[$__range:1m])) + round(sum by (external_agent_id) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m]))) * 1",
           "instant": false,
-          "legendFormat": "{{agent_name}}",
+          "legendFormat": "{{external_agent_id}}",
           "queryType": "range",
           "range": true,
           "refId": "A",

@@ -1,0 +1,77 @@
+# Reusable workflow for bot-initiated Claude actions.
+# Wraps the common pattern: GitHub App token + checkout + run-claude composite action.
+# Called by claude-community-pr-triage.yml and claude-community-issue-triage.yml.
+#
+# Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
+name: Claude Community Bot (Shared)
+
+on:
+  workflow_call:
+    inputs:
+      prompt:
+        description: The prompt to send to Claude
+        required: true
+        type: string
+      allowed_tools:
+        description: Comma-separated list of allowed Claude tools
+        required: true
+        type: string
+      timeout_minutes:
+        description: Job timeout in minutes
+        required: false
+        type: number
+        default: 10
+      use_sticky_comment:
+        description: Use sticky comments to reduce notification noise
+        required: false
+        type: boolean
+        default: false
+      track_progress:
+        description: Track progress in PR/issue comments
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      TRIAGE_SHERIFF_APP_ID:
+        required: true
+      TRIAGE_SHERIFF_PRIVATE_KEY:
+        required: true
+
+jobs:
+  run-claude:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    # Both pull-requests and issues write are needed because this shared workflow
+    # serves both PR triage and issue triage callers. The caller's permissions
+    # act as the ceiling, so the unused permission has no effect in practice.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.TRIAGE_SHERIFF_APP_ID }}
+          private-key: ${{ secrets.TRIAGE_SHERIFF_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run Claude
+        uses: ./.github/actions/run-claude
+        with:
+          prompt: ${{ inputs.prompt }}
+          allowed_tools: ${{ inputs.allowed_tools }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          allowed_non_write_users: "*"
+          use_sticky_comment: ${{ inputs.use_sticky_comment }}
+          track_progress: ${{ inputs.track_progress }}

@@ -1,0 +1,75 @@
+# Composite action wrapping anthropics/claude-code-action.
+# Centralizes the action version, default model, and common settings.
+# All workflows that run Claude should use this action instead of
+# referencing anthropics/claude-code-action directly.
+name: Run Claude Code Action
+description: Wraps anthropics/claude-code-action with standard configuration
+
+inputs:
+  prompt:
+    description: The prompt to send to Claude
+    required: false
+    default: ""
+  allowed_tools:
+    description: Comma-separated list of allowed Claude tools
+    required: true
+  anthropic_api_key:
+    description: Anthropic API key (for bot/API key auth)
+    required: false
+    default: ""
+  claude_code_oauth_token:
+    description: Claude Code OAuth token (for user-scoped auth)
+    required: false
+    default: ""
+  github_token:
+    description: GitHub token for API calls (defaults to GITHUB_TOKEN)
+    required: false
+    default: ""
+  allowed_non_write_users:
+    description: Users allowed to trigger without write access (use * for all)
+    required: false
+    default: ""
+  use_sticky_comment:
+    description: Use sticky comments to reduce notification noise
+    required: false
+    default: "false"
+  track_progress:
+    description: Track progress in PR/issue comments
+    required: false
+    default: "false"
+  model:
+    description: Claude model to use
+    required: false
+    default: "claude-opus-4-6"
+  additional_permissions:
+    description: "Additional permissions for Claude (e.g., actions: read)"
+    required: false
+    default: ""
+  assignee_trigger:
+    description: GitHub username that triggers Claude when assigned to an issue
+    required: false
+    default: ""
+  additional_claude_args:
+    description: Extra claude_args lines appended after model and allowed tools
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run Claude
+      uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+      with:
+        prompt: ${{ inputs.prompt }}
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        github_token: ${{ inputs.github_token || github.token }}
+        allowed_non_write_users: ${{ inputs.allowed_non_write_users }}
+        use_sticky_comment: ${{ inputs.use_sticky_comment }}
+        track_progress: ${{ inputs.track_progress }}
+        additional_permissions: ${{ inputs.additional_permissions }}
+        assignee_trigger: ${{ inputs.assignee_trigger }}
+        claude_args: |
+          --model ${{ inputs.model }}
+          --allowedTools "${{ inputs.allowed_tools }}"
+          ${{ inputs.additional_claude_args }}

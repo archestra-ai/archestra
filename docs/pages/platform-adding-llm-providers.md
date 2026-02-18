@@ -65,13 +65,13 @@ The adapter pattern provides a **provider-agnostic API** for business logic. LLM
 
 HTTP endpoint that receives client requests and delegates to `handleLLMProxy()`.
 
-| File                                                          | Description                                                                                                                                          |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared/routes.ts`                                            | Add `RouteId` constants for the new provider (e.g., `{Provider}ChatCompletionsWithDefaultAgent`, `{Provider}ChatCompletionsWithAgent`)               |
-| `backend/src/routes/proxy/routesv2/{provider}.ts`             | Fastify route that validates request and calls `handleLLMProxy(body, request, reply, adapterFactory)`. Agent ID, headers, and all context are extracted from the Fastify request object internally. |
-| `backend/src/routes/proxy/routesv2/proxy-prehandler.ts`       | Shared `createProxyPreHandler()` utility — use this when registering `fastifyHttpProxy` to handle UUID stripping and endpoint exclusion (see example below) |
-| `backend/src/routes/index.ts`                                 | Export the new route module                                                                                                                          |
-| `backend/src/server.ts`                                       | Register the route with Fastify and add request/response schemas to the global Zod registry for OpenAPI generation                                   |
+| File                                                    | Description                                                                                                                                                                                         |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/routes.ts`                                      | Add `RouteId` constants for the new provider (e.g., `{Provider}ChatCompletionsWithDefaultAgent`, `{Provider}ChatCompletionsWithAgent`)                                                              |
+| `backend/src/routes/proxy/routesv2/{provider}.ts`       | Fastify route that validates request and calls `handleLLMProxy(body, request, reply, adapterFactory)`. Agent ID, headers, and all context are extracted from the Fastify request object internally. |
+| `backend/src/routes/proxy/routesv2/proxy-prehandler.ts` | Shared `createProxyPreHandler()` utility — use this when registering `fastifyHttpProxy` to handle UUID stripping and endpoint exclusion (see example below)                                         |
+| `backend/src/routes/index.ts`                           | Export the new route module                                                                                                                                                                         |
+| `backend/src/server.ts`                                 | Register the route with Fastify and add request/response schemas to the global Zod registry for OpenAPI generation                                                                                  |
 
 > **Important: Deterministic Codegen**
 >

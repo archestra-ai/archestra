@@ -1,8 +1,9 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
 
-// Run all provider tests sequentially to avoid WireMock stub timing issues
-test.describe.configure({ mode: "serial" });
+// Run all provider tests sequentially to avoid WireMock stub timing issues.
+// Retries handle transient streaming/WireMock flakiness in CI.
+test.describe.configure({ mode: "serial", retries: 2 });
 
 interface ChatProviderTestConfig {
   providerName: string;

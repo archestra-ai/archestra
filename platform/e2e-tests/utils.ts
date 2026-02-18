@@ -669,13 +669,15 @@ export async function waitForServerInstallation(
 /**
  * Get a JWT access token from Keycloak using the resource owner password
  * credentials grant (direct access grant).
+ * Retries with backoff to handle Keycloak startup delays in CI.
  */
 export async function getKeycloakJwt(): Promise<string> {
   // Use KEYCLOAK_EXTERNAL_URL because this runs from the Playwright test container
   // (outside K8s), not from the backend. KEYCLOAK_OIDC.tokenEndpoint uses K8s internal
   // DNS which is not resolvable from the test container.
   const tokenUrl = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
-  const response = await fetch(tokenUrl, {
+
+  const response = await fetchWithRetry(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -760,7 +762,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
  * Uses external URL since this runs from the test (CI host), not from inside K8s.
  */
 export async function fetchKeycloakSamlMetadata(): Promise<string> {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml/descriptor`,
   );
   if (!response.ok) {
@@ -787,4 +789,37 @@ export function extractCertFromMetadata(metadata: string): string {
     throw new Error("Could not extract certificate from IdP metadata");
   }
   return match[1];
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Fetch with retry and exponential backoff.
+ * Handles transient connection errors (SocketError, ECONNREFUSED, etc.)
+ * that occur when services like Keycloak are still starting up in CI.
+ */
+async function fetchWithRetry(
+  url: string | URL,
+  init?: RequestInit,
+  maxRetries = 5,
+  initialDelayMs = 2000,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        const delay = initialDelayMs * 2 ** attempt;
+        console.log(
+          `fetch ${url} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${error instanceof Error ? error.message : error}. Retrying in ${delay}ms...`,
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
 }

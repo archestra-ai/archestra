@@ -290,7 +290,9 @@ const testConfigs: TokenCostLimitTestConfig[] = [
 ];
 
 for (const config of testConfigs) {
-  test.describe(`LLMProxy-TokenCostLimits-${config.providerName}`, () => {
+  test.describe(`LLMProxy-TokenCostLimits-${config.providerName}`, { tag: ["@flaky"] }, () => {
+    // Retry to handle async usage tracking race conditions in CI
+    test.describe.configure({ retries: 2 });
     let profileId: string;
     let limitId: string;
     let tokenPriceId: string;

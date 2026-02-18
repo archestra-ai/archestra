@@ -240,7 +240,7 @@ setup("authenticate as editor", async ({ page }) => {
 
     // Navigate to establish cookie context with organization
     await page.goto(`${UI_BASE_URL}/chat`);
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Create invitation for editor
     const invitationId = await createInvitation(
@@ -271,7 +271,7 @@ setup("authenticate as editor", async ({ page }) => {
 
   // Navigate to trigger cookie storage and verify auth
   await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Verify we're authenticated
   await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
@@ -305,7 +305,7 @@ setup("authenticate as member", async ({ page }) => {
 
     // Navigate to establish cookie context with organization
     await page.goto(`${UI_BASE_URL}/chat`);
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Create invitation for member
     const invitationId = await createInvitation(
@@ -336,7 +336,7 @@ setup("authenticate as member", async ({ page }) => {
 
   // Navigate to trigger cookie storage and verify auth
   await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Verify we're authenticated
   await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({

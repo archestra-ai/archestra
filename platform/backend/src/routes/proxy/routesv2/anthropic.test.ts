@@ -341,12 +341,16 @@ describe("Anthropic V2 proxy routing", () => {
         upstream: `http://localhost:${upstreamPort}`,
         prefix: API_PREFIX,
         rewritePrefix: "/v1",
-        preHandler: (request, _reply, next) => {
-          if (
-            request.method === "POST" &&
-            request.url.includes(MESSAGES_SUFFIX)
-          ) {
-            next(new Error("skip"));
+        preHandler: (request, reply, next) => {
+          const urlPath = request.url.split("?")[0];
+          if (request.method === "POST" && urlPath.endsWith(MESSAGES_SUFFIX)) {
+            reply.code(400).send({
+              type: "error",
+              error: {
+                type: "invalid_request_error",
+                message: "Messages requests should use the dedicated endpoint",
+              },
+            });
             return;
           }
 
@@ -428,7 +432,8 @@ describe("Anthropic V2 proxy routing", () => {
       },
     });
 
-    expect([404, 500]).toContain(response.statusCode);
+    // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
+    expect(response.statusCode).toBe(400);
   });
 
   test("skips proxy for messages routes with UUID", async () => {
@@ -445,6 +450,7 @@ describe("Anthropic V2 proxy routing", () => {
       },
     });
 
-    expect([404, 500]).toContain(response.statusCode);
+    // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
+    expect(response.statusCode).toBe(400);
   });
 });

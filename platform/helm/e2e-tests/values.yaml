@@ -34,13 +34,14 @@ keycloak:
     port: 8080
     nodePort: 30081
   # Resource limits for CI environment
+  # Keycloak 26 (Java) needs ~1.5GB+ for JVM + realm import; 1024Mi causes OOMKill
   resources:
     requests:
       cpu: 250m
-      memory: 512Mi
+      memory: 1024Mi
     limits:
       cpu: 1000m
-      memory: 1024Mi
+      memory: 2048Mi
   # Liveness probe
   livenessProbe:
     initialDelaySeconds: 60

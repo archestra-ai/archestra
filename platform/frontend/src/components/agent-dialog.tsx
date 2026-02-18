@@ -1152,7 +1152,7 @@ export function AgentDialog({
             {/* Agent Trigger Rules (Agent only) */}
             {isInternalAgent && (
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold">Agent Trigger Rules</h3>
+                <h3 className="text-sm font-semibold">Trigger Channels</h3>
 
                 {/* ChatOps */}
                 <div className="space-y-3">
@@ -1169,8 +1169,7 @@ export function AgentDialog({
                           {provider.displayName}
                         </label>
                         <p className="text-xs text-muted-foreground">
-                          Allow this agent to be triggered via{" "}
-                          {provider.displayName}
+                          Allow triggers from {provider.displayName}
                         </p>
                       </div>
                       {provider.configured ? (
@@ -1221,7 +1220,7 @@ export function AgentDialog({
                           Email
                         </label>
                         <p className="text-xs text-muted-foreground">
-                          Allow this agent to be triggered via email
+                          Allow triggers from email
                         </p>
                       </div>
                       <Switch
@@ -1341,7 +1340,7 @@ export function AgentDialog({
                     <div className="space-y-0.5">
                       <span className="text-sm">Email</span>
                       <p className="text-xs text-muted-foreground">
-                        Allow this agent to be triggered via email
+                        Allow triggers from email
                       </p>
                     </div>
                     <a

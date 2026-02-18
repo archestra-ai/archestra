@@ -4,42 +4,15 @@ import {
   index,
   integer,
   jsonb,
-  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AgentHistoryEntry, AgentType } from "@/types/agent";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
-
-/**
- * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
- * Only used when agent_type is 'agent'.
- */
-export interface AgentHistoryEntry {
-  version: number;
-  userPrompt: string | null;
-  systemPrompt: string | null;
-  createdAt: string; // ISO timestamp
-}
-
-/**
- * Agent type enum:
- * - profile: External profiles for API gateway routing
- * - mcp_gateway: MCP gateway specific configuration
- * - llm_proxy: LLM proxy specific configuration
- * - agent: Internal agents with prompts for chat
- */
-export const agentTypeEnum = pgEnum("agent_type", [
-  "profile",
-  "mcp_gateway",
-  "llm_proxy",
-  "agent",
-]);
-
-export type AgentType = (typeof agentTypeEnum.enumValues)[number];
 
 /**
  * Unified agents table supporting both external profiles and internal agents.
@@ -72,10 +45,10 @@ const agentsTable = pgTable(
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
-
-    // Agent type: 'profile' (external profile), 'mcp_gateway', 'llm_proxy', or 'agent' (internal agent)
-    agentType: agentTypeEnum("agent_type").notNull().default("mcp_gateway"),
-
+    agentType: text("agent_type")
+      .$type<AgentType>()
+      .notNull()
+      .default("mcp_gateway"),
     // Prompt fields (only used when agentType = 'agent')
     systemPrompt: text("system_prompt"),
     userPrompt: text("user_prompt"),

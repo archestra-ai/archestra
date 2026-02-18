@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # Grafana Tempo for distributed tracing storage
   tempo:
@@ -10,14 +8,26 @@ services:
       - ./tempo.yaml:/etc/tempo.yaml
       - tempo-storage:/var/tempo
     ports:
-      - "3200:3200" # Tempo HTTP API
-      - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver
+      - "3200:3200" # Tempo HTTP API (Grafana queries)
     networks:
       - archestra-observability
     restart: unless-stopped
 
-  # OpenTelemetry Collector
+  # Grafana Loki for log aggregation
+  loki:
+    image: grafana/loki:3.3.3
+    container_name: archestra-loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki.yaml:/etc/loki/loki.yaml
+      - loki-storage:/loki
+    ports:
+      - "3100:3100" # Loki HTTP API
+    networks:
+      - archestra-observability
+    restart: unless-stopped
+
+  # OpenTelemetry Collector — single ingestion point for traces and logs
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: archestra-otel-collector
@@ -25,14 +35,15 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4319:4317" # OTLP gRPC (mapped to 4319 to avoid conflict with Tempo)
-      - "4320:4318" # OTLP HTTP (mapped to 4320 to avoid conflict with Tempo)
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - archestra-observability
     depends_on:
       - tempo
+      - loki
     restart: unless-stopped
 
   prometheus:
@@ -48,6 +59,7 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--enable-feature=exemplar-storage"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -74,6 +86,7 @@ services:
     depends_on:
       - prometheus
       - tempo
+      - loki
     restart: unless-stopped
 
 networks:
@@ -84,3 +97,4 @@ volumes:
   grafana-storage:
   prometheus-storage:
   tempo-storage:
+  loki-storage:

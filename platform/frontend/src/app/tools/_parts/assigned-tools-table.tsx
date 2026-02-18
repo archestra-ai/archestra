@@ -694,24 +694,16 @@ export function AssignedToolsTable({
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={!hasPermission}
-                      onClick={() => onToolClick(row.original)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Edit policies</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Edit policies"
+                disabled={!hasPermission}
+                onClick={() => onToolClick(row.original)}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
             )}
           </WithPermissions>
         ),

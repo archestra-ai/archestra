@@ -559,6 +559,11 @@ class AnthropicResponseAdapter
     return this.response;
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.stop_reason;
+    return reason ? [reason] : [];
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -1129,9 +1134,7 @@ export const anthropicAdapterFactory: LLMProvider<
     return config.llm.anthropic.baseUrl;
   },
 
-  getSpanName(): string {
-    return "anthropic.messages";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

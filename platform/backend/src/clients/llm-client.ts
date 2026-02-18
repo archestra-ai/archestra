@@ -7,6 +7,7 @@ import { createVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
+import { context, propagation } from "@opentelemetry/api";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   SESSION_ID_HEADER,
@@ -409,6 +410,26 @@ export function createDirectLLMModel({
 }
 
 /**
+ * Creates a fetch wrapper that injects W3C trace context (traceparent/tracestate)
+ * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
+ * parent context and create child spans, linking chat → LLM proxy traces together.
+ */
+function createTracedFetch(): typeof globalThis.fetch {
+  return (input, init) => {
+    const headers = new Headers(init?.headers);
+    // Inject active trace context (traceparent, tracestate) into outgoing headers.
+    // Uses a carrier object because propagation.inject expects a plain object,
+    // then copies the injected headers into the actual Headers instance.
+    const carrier: Record<string, string> = {};
+    propagation.inject(context.active(), carrier);
+    for (const [key, value] of Object.entries(carrier)) {
+      headers.set(key, value);
+    }
+    return globalThis.fetch(input, { ...init, headers });
+  };
+}
+
+/**
  * Parameters for creating a proxied LLM model (through LLM Proxy)
  */
 type ProxiedModelParams = {
@@ -444,6 +465,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey,
         baseURL: `${buildProxyBaseUrl("anthropic", agentId)}/v1`,
         headers,
+        fetch: createTracedFetch(),
       });
       return client(modelName);
     },
@@ -455,6 +477,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey: apiKey || "vertex-ai-mode",
         baseURL: `${buildProxyBaseUrl("gemini", agentId)}/v1beta`,
         headers,
+        fetch: createTracedFetch(),
       });
       return client(modelName);
     },
@@ -465,6 +488,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey,
         baseURL: buildProxyBaseUrl("openai", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       // Use .chat() to force Chat Completions API (not Responses API)
       // so our proxy's tool policy evaluation is applied
@@ -478,6 +502,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey,
         baseURL: buildProxyBaseUrl("cohere", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       return client(modelName);
     },
@@ -488,6 +513,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey,
         baseURL: buildProxyBaseUrl("cerebras", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       return client(modelName);
     },
@@ -508,6 +534,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey,
         baseURL: buildProxyBaseUrl("mistral", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       return client(modelName);
     },
@@ -519,6 +546,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey: apiKey || "EMPTY", // vLLM typically doesn't require API keys
         baseURL: buildProxyBaseUrl("vllm", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       // Use .chat() to force Chat Completions API
       return client.chat(modelName);
@@ -531,6 +559,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
         baseURL: buildProxyBaseUrl("ollama", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       // Use .chat() to force Chat Completions API
       return client.chat(modelName);
@@ -543,6 +572,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         apiKey,
         baseURL: buildProxyBaseUrl("zhipuai", agentId),
         headers,
+        fetch: createTracedFetch(),
       });
       return client.chat(modelName);
     },
@@ -559,6 +589,7 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         sessionToken: undefined,
         credentialProvider: undefined,
         headers,
+        fetch: createTracedFetch(),
       });
       return client(modelName);
     },

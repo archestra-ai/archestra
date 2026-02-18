@@ -37,7 +37,7 @@ Determine if the PR is **exempt** from demo video. A PR is exempt if ANY of thes
 - Total lines changed (additions + deletions) is under 10 AND changes are typo fixes, small doc edits, or comment-only
 - Changes are test-only (only adds or modifies test files)
 - Changes are backend/API-only with no UI impact (no frontend file changes)
-- Pure refactoring that maintains existing behavior with no new features
+- Pure refactoring (under 100 lines changed) that maintains existing behavior with no new features
 
 **If the PR is not exempt and does not include a demo video** (a link to a video, gif, Loom, or screen recording in the PR description), close it with this comment:
 "PRs with UI or functional changes require a demo video (screen recording, gif, or Loom link) showing the change in action. Please reopen this PR with a demo attached to the description. Test-only, backend-only, and small doc/typo fixes are exempt."
@@ -54,7 +54,7 @@ This is informational only — do not close the PR for this reason. Continue eva
 
 ## Rule 5: Issue reference check
 
-If the PR does not reference an issue (no "Fixes #", "Closes #", "Resolves #", or "#NNN" in the description), comment:
+If the PR does not reference an issue (no "Fixes #", "Closes #", "Resolves #", or "#NNN" in the title or description), comment:
 "Please link this PR to a related issue. If there is no existing issue, please create one describing the problem or feature before this PR can be reviewed."
 
 Do not close the PR for this reason, but do NOT add the `ready for review` label. Apply the `needs more info` label instead along with the appropriate type label (`bug`, `enhancement`, or `documentation`).

@@ -45,17 +45,10 @@ jobs:
     outputs:
       should_review: ${{ steps.check.outputs.should_review }}
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
-        with:
-          app-id: ${{ secrets.TRIAGE_SHERIFF_APP_ID }}
-          private-key: ${{ secrets.TRIAGE_SHERIFF_PRIVATE_KEY }}
-
       - name: Check if PR passed triage
         id: check
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |

@@ -163,11 +163,20 @@ export async function handleLLMProxy<
   if (executionId) {
     const existsInDb = await InteractionModel.existsByExecutionId(executionId);
     if (!existsInDb) {
+      logger.debug(
+        { executionId, agentId: resolvedAgentId, externalAgentId },
+        `[${providerName}Proxy] New execution detected, reporting metric`,
+      );
       metrics.agentExecution.reportAgentExecution({
         executionId,
         profile: resolvedAgent,
         externalAgentId,
       });
+    } else {
+      logger.debug(
+        { executionId, agentId: resolvedAgentId },
+        `[${providerName}Proxy] Execution already exists in DB, skipping metric`,
+      );
     }
   }
 

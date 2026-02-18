@@ -138,7 +138,8 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release edit "${{ needs.release-please.outputs.platform_tag_name }}" --draft=false
+          TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
+        run: gh release edit "$TAG_NAME" --draft=false
 
   trigger-website-deploy:
     name: Trigger Website Deploy

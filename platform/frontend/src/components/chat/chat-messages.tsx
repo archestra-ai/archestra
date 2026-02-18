@@ -28,6 +28,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
   parseAuthRequired,
@@ -103,6 +104,9 @@ export function ChatMessages({
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const { data: userCanCreateAgent } = useHasPermissions({
+    profile: ["create"],
+  });
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
@@ -373,13 +377,17 @@ export function ChatMessages({
               </span>{" "}
               agent,
               <br />
-              or{" "}
-              <a
-                href="/agents?create=true"
-                className="text-primary hover:underline"
-              >
-                create a new one
-              </a>
+              {userCanCreateAgent && (
+                <>
+                  or{" "}
+                  <a
+                    href="/agents?create=true"
+                    className="text-primary hover:underline"
+                  >
+                    create a new one
+                  </a>
+                </>
+              )}
             </p>
             {suggestedPrompt && onSuggestedPromptClick && (
               <button

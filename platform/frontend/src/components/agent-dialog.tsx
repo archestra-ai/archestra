@@ -736,7 +736,9 @@ export function AgentDialog({
           },
         });
         savedAgentId = updated?.id ?? agent.id;
-        toast.success(getSuccessMessage(agentType, true));
+        if (updated?.id) {
+          toast.success(getSuccessMessage(agentType, true));
+        }
       } else {
         // Create new agent
         const created = await createAgent.mutateAsync({

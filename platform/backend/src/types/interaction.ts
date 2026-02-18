@@ -13,7 +13,7 @@ import {
   OpenAi,
   Vllm,
   Zhipuai,
-} from "./llm-providers";
+  Groq,} from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
 export const UserInfoSchema = z.object({
@@ -36,7 +36,7 @@ export const InteractionRequestSchema = z.union([
   Ollama.API.ChatCompletionRequestSchema,
   Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
-]);
+  Groq.API.ChatCompletionRequestSchema,]);
 
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
@@ -49,7 +49,7 @@ export const InteractionResponseSchema = z.union([
   Ollama.API.ChatCompletionResponseSchema,
   Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
-]);
+  Groq.API.ChatCompletionResponseSchema,]);
 
 /**
  * Base database schema without discriminated union
@@ -155,11 +155,20 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
     request: Zhipuai.API.ChatCompletionRequestSchema,
-    processedRequest:
+  Groq.API.ChatCompletionRequestSchema,    processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
-    requestType: RequestTypeSchema.optional(),
+  Groq.API.ChatCompletionResponseSchema,    requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["groq:chatCompletions"]),
+    request: Groq.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Groq.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Groq.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);

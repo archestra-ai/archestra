@@ -236,8 +236,8 @@ export function SelectMcpServerCredentialTypeAndTeams({
       </Select>
       <p className="text-xs text-muted-foreground">
         {selectedValue === PERSONAL_VALUE
-          ? "Only admin will have ability to choose your authorized credential when assigning tools to agents and MCP gateways"
-          : "Every team member will have access to this server on behalf of authorized credential"}
+          ? "Only admins can select this connection when assigning tools to agents and MCP gateways - other users will not see it."
+          : "Any team member can select this connection when assigning tools to agents and MCP gateways."}
       </p>
     </div>
   );

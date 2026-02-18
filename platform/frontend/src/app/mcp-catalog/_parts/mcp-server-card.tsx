@@ -323,7 +323,7 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Credentials
+          Connections
           <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
             {" "}
             in your team
@@ -344,7 +344,7 @@ export function McpServerCard({
                 <TooltipContent className="max-w-xs">
                   <p className="font-medium mb-1">Authentication failed</p>
                   <p className="text-xs text-muted-foreground">
-                    Some credentials need re-authentication.
+                    Some connections need re-authentication.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Click Manage to fix.
@@ -376,7 +376,7 @@ export function McpServerCard({
           className="text-muted-foreground"
           data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
         >
-          Credentials
+          Connections
           <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
             {" "}
             in your team
@@ -392,7 +392,7 @@ export function McpServerCard({
                 <TooltipContent className="max-w-xs">
                   <p className="font-medium mb-1">Authentication failed</p>
                   <p className="text-xs text-muted-foreground">
-                    Some credentials need re-authentication.
+                    Some connections need re-authentication.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Click Manage to fix.
@@ -682,7 +682,7 @@ export function McpServerCard({
             }}
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Uninstall
+            Disconnect
           </Button>
         )}
         {!isInstalling && !isCurrentUserAuthenticated && (

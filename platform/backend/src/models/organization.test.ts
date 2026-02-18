@@ -2,7 +2,12 @@ import { DEFAULT_THEME_ID } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { UpdateOrganizationSchema } from "@/types";
 import OrganizationModel from "./organization";
+
+// Minimal valid 1x1 transparent PNG (Base64-encoded)
+const VALID_PNG_BASE64 =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
 
 describe("OrganizationModel", () => {
   describe("getPublicAppearance", () => {
@@ -63,17 +68,16 @@ describe("OrganizationModel", () => {
 
     test("should return logo when set", async ({ makeOrganization }) => {
       const org = await makeOrganization();
-      const testLogo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
 
       // Update organization with logo
       await db
         .update(schema.organizationsTable)
-        .set({ logo: testLogo })
+        .set({ logo: VALID_PNG_BASE64 })
         .where(eq(schema.organizationsTable.id, org.id));
 
       const appearance = await OrganizationModel.getPublicAppearance();
 
-      expect(appearance.logo).toBe(testLogo);
+      expect(appearance.logo).toBe(VALID_PNG_BASE64);
     });
 
     test("should return first organization's appearance when multiple exist", async ({
@@ -154,26 +158,26 @@ describe("OrganizationModel", () => {
       expect(updated?.customFont).toBe("inter");
     });
 
-    test("should reject non-PNG logo", async ({ makeOrganization }) => {
-      const org = await makeOrganization();
-
-      await expect(
-        OrganizationModel.patch(org.id, {
-          logo: "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
-        }),
-      ).rejects.toThrow("Logo must be a PNG image in base64 format");
-    });
-
     test("should accept valid PNG logo", async ({ makeOrganization }) => {
       const org = await makeOrganization();
-      const validLogo =
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
 
       const updated = await OrganizationModel.patch(org.id, {
-        logo: validLogo,
+        logo: VALID_PNG_BASE64,
       });
 
-      expect(updated?.logo).toBe(validLogo);
+      expect(updated?.logo).toBe(VALID_PNG_BASE64);
+    });
+
+    test("should accept null logo (removal)", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      // First set a logo
+      await OrganizationModel.patch(org.id, { logo: VALID_PNG_BASE64 });
+
+      // Then remove it
+      const updated = await OrganizationModel.patch(org.id, { logo: null });
+
+      expect(updated?.logo).toBeNull();
     });
 
     test("should return null for non-existent organization", async () => {
@@ -182,6 +186,113 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated).toBeNull();
+    });
+  });
+
+  describe("patch logo validation (via UpdateOrganizationSchema)", () => {
+    const parseLogoField = (logo: string | null) =>
+      UpdateOrganizationSchema.shape.logo.safeParse(logo);
+
+    describe("MIME type validation", () => {
+      test("should reject non-PNG data URI prefix", () => {
+        const result = parseLogoField(
+          "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+        );
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+          expect(result.error.issues[0].message).toContain("PNG");
+        }
+      });
+
+      test("should reject WebP data URI prefix", () => {
+        const result = parseLogoField(
+          "data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAQAcJaQAA3AA/v3AgAA",
+        );
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+          expect(result.error.issues[0].message).toContain("PNG");
+        }
+      });
+    });
+
+    describe("Base64 validation", () => {
+      test("should reject invalid Base64 payload", () => {
+        const result = parseLogoField(
+          "data:image/png;base64,NotAnImageJustText",
+        );
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+          expect(result.error.issues[0].message).toContain("Base64");
+        }
+      });
+
+      test("should reject valid Base64 but non-PNG content", () => {
+        // "Hello World" encoded as Base64 — valid Base64 but not a PNG
+        const result = parseLogoField("data:image/png;base64,SGVsbG8gV29ybGQ=");
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+          expect(result.error.issues[0].message).toContain("PNG image data");
+        }
+      });
+    });
+
+    describe("Format validation", () => {
+      test("should reject plain text without data URI prefix", () => {
+        const result = parseLogoField("just-a-random-string");
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+          expect(result.error.issues[0].message).toContain("data URI");
+        }
+      });
+
+      test("should reject empty string", () => {
+        const result = parseLogoField("");
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+          expect(result.error.issues[0].message).toContain("data URI");
+        }
+      });
+
+      test("should reject malformed data URI", () => {
+        const result = parseLogoField("data:image/png;");
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues).toHaveLength(1);
+        }
+      });
+    });
+
+    describe("Valid inputs", () => {
+      test("should accept null", () => {
+        const result = parseLogoField(null);
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data).toBeNull();
+        }
+      });
+
+      test("should accept valid PNG data URI", () => {
+        const result = parseLogoField(VALID_PNG_BASE64);
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data).toBe(VALID_PNG_BASE64);
+        }
+      });
     });
   });
 

@@ -47,26 +47,6 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 [Full Quickstart Guide →](https://archestra.ai/docs/platform-quickstart)
 
-
-<picture>
-  <source
-    media="(prefers-color-scheme: dark)"
-    srcset="
-      https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date&theme=dark
-    "
-  />
-  <source
-    media="(prefers-color-scheme: light)"
-    srcset="
-      https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date
-    "
-  />
-  <img
-    alt="Star History Chart"
-    src="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date"
-  />
-</picture>
-
 ## 👩‍💻 ChatGPT-like chat with MCPs
 
 🎁 with private company-wide prompt registry!

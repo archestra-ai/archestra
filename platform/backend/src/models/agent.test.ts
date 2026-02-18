@@ -1661,3 +1661,122 @@ describe("AgentModel", () => {
     });
   });
 });
+
+  describe("Version History (fix for #2579)", () => {
+    test("update() on an internal agent tracks version history", async () => {
+      // Create an internal agent (agentType='agent')
+      const agent = await AgentModel.create({
+        name: "My Agent",
+        agentType: "agent",
+        systemPrompt: "Original system prompt",
+        userPrompt: "Original user prompt",
+        teams: [],
+      });
+
+      // Initial state: version 1, no history
+      expect(agent.promptVersion).toBe(1);
+      expect(agent.promptHistory).toEqual([]);
+
+      // Update the agent (simulating user editing the agent and saving)
+      const updated = await AgentModel.update(agent.id, {
+        systemPrompt: "Updated system prompt",
+      });
+
+      expect(updated).not.toBeNull();
+      // Version should be incremented
+      expect(updated!.promptVersion).toBe(2);
+      // History should now contain the original version
+      expect(updated!.promptHistory).toHaveLength(1);
+      expect(updated!.promptHistory![0]).toMatchObject({
+        version: 1,
+        systemPrompt: "Original system prompt",
+        userPrompt: "Original user prompt",
+      });
+    });
+
+    test("update() accumulates history across multiple edits", async () => {
+      const agent = await AgentModel.create({
+        name: "Versioned Agent",
+        agentType: "agent",
+        systemPrompt: "v1 prompt",
+        teams: [],
+      });
+
+      // First edit: v1 → v2
+      await AgentModel.update(agent.id, { systemPrompt: "v2 prompt" });
+      // Second edit: v2 → v3
+      const after2 = await AgentModel.update(agent.id, {
+        systemPrompt: "v3 prompt",
+      });
+
+      expect(after2!.promptVersion).toBe(3);
+      expect(after2!.promptHistory).toHaveLength(2);
+
+      const versions = after2!.promptHistory!.map((h) => h.version).sort();
+      expect(versions).toEqual([1, 2]);
+    });
+
+    test("getVersions() returns populated history after updates", async () => {
+      const agent = await AgentModel.create({
+        name: "History Agent",
+        agentType: "agent",
+        systemPrompt: "First prompt",
+        teams: [],
+      });
+
+      // Perform two updates
+      await AgentModel.update(agent.id, { systemPrompt: "Second prompt" });
+      await AgentModel.update(agent.id, { systemPrompt: "Third prompt" });
+
+      const versions = await AgentModel.getVersions(agent.id);
+
+      expect(versions).not.toBeNull();
+      // Current version should reflect latest state
+      expect(versions!.current.promptVersion).toBe(3);
+      expect(versions!.current.systemPrompt).toBe("Third prompt");
+      // History should have the previous two versions
+      expect(versions!.history).toHaveLength(2);
+    });
+
+    test("update() does NOT track history for non-internal agents", async () => {
+      // Create an MCP gateway agent (agentType='mcp_gateway')
+      const agent = await AgentModel.create({
+        name: "MCP Gateway",
+        agentType: "mcp_gateway",
+        teams: [],
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        name: "MCP Gateway Updated",
+      });
+
+      expect(updated).not.toBeNull();
+      // Version should stay at 1 (no versioning for mcp_gateway)
+      expect(updated!.promptVersion).toBe(1);
+      expect(updated!.promptHistory).toEqual([]);
+    });
+
+    test("rollback() restores a previous prompt version", async () => {
+      const agent = await AgentModel.create({
+        name: "Rollback Agent",
+        agentType: "agent",
+        systemPrompt: "Original prompt",
+        teams: [],
+      });
+
+      // Edit the agent
+      await AgentModel.update(agent.id, { systemPrompt: "Changed prompt" });
+
+      // Verify current state
+      const versions = await AgentModel.getVersions(agent.id);
+      expect(versions!.current.systemPrompt).toBe("Changed prompt");
+      expect(versions!.history).toHaveLength(1);
+      expect(versions!.history[0].version).toBe(1);
+
+      // Rollback to version 1
+      const rolledBack = await AgentModel.rollback(agent.id, 1);
+      expect(rolledBack).not.toBeNull();
+      expect(rolledBack!.systemPrompt).toBe("Original prompt");
+      expect(rolledBack!.promptVersion).toBe(3); // incremented by rollback
+    });
+  });

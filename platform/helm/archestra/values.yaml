@@ -44,6 +44,21 @@ archestra:
   #     node.kubernetes.io/instance-type: m5.large
   nodeSelector: {}
 
+  # Tolerations for scheduling pods on nodes with specific taints
+  # This is useful for running pods on dedicated or specialized nodes (e.g., GPU nodes, spot instances)
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  # Example:
+  #   tolerations:
+  #     - key: "foo.bar.com/role"
+  #       operator: "Equal"
+  #       value: "master"
+  #       effect: "NoSchedule"
+  #     - key: "node.kubernetes.io/not-ready"
+  #       operator: "Exists"
+  #       effect: "NoExecute"
+  #       tolerationSeconds: 300
+  tolerations: []
+
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.

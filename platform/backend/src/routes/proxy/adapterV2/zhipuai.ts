@@ -535,6 +535,11 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
     return { inputTokens: input, outputTokens: output };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): ZhipuaiResponse {
     return this.response;
   }
@@ -984,9 +989,7 @@ export const zhipuaiAdapterFactory: LLMProvider<
     return config.llm.zhipuai.baseUrl;
   },
 
-  getSpanName(): string {
-    return "zhipuai.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

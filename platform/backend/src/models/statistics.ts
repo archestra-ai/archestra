@@ -215,9 +215,18 @@ class StatisticsModel {
   ): T[] {
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
 
-    // If the interval is standard (60 minutes or more), no custom grouping needed
+    // If the interval is standard (60 minutes or more), no custom grouping needed.
+    // Still coerce numeric fields since PostgreSQL DOUBLE PRECISION / DECIMAL
+    // values are returned as strings by node-postgres, which causes Zod schema
+    // validation failures (z.number() rejects string values).
     if (intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d") {
-      return timeSeriesData;
+      return timeSeriesData.map((row) => ({
+        ...row,
+        requests: Number(row.requests) || 0,
+        inputTokens: Number(row.inputTokens) || 0,
+        outputTokens: Number(row.outputTokens) || 0,
+        cost: Number(row.cost) || 0,
+      }));
     }
 
     // Group by custom intervals, preserving the groupBy dimension

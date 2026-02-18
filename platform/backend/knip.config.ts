@@ -7,8 +7,6 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@shared",
-    // Used in logging.ts
-    "pino-pretty",
   ],
   ignoreBinaries: [
     // biome is in root package.json

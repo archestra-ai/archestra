@@ -25,6 +25,8 @@ import {
   UserTokenModel,
 } from "@/models";
 import { metrics } from "@/observability";
+import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
+import type { AgentType } from "@/types";
 
 /**
  * MCP Gateway base URL (internal)
@@ -557,6 +559,7 @@ export async function getChatMcpTools({
   sessionId,
   delegationChain,
   abortSignal,
+  user,
 }: {
   agentName: string;
   agentId: string;
@@ -571,6 +574,8 @@ export async function getChatMcpTools({
   delegationChain?: string;
   /** Optional cancellation signal from parent stream execution */
   abortSignal?: AbortSignal;
+  /** User identity for OTEL span attributes */
+  user?: { id: string; email?: string; name?: string };
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -682,101 +687,118 @@ export async function getChatMcpTools({
             );
 
             const toolArguments = isRecord(args) ? args : undefined;
+            const { serverName } = parseFullToolName(mcpTool.name);
 
             const toolStartTime = Date.now();
 
-            try {
-              throwIfAborted(abortSignal);
-              // Check if this is an Archestra tool - handle directly without DB lookup
-              if (isArchestraMcpServerTool(mcpTool.name)) {
-                const archestraResponse = await executeArchestraTool(
-                  mcpTool.name,
-                  toolArguments,
-                  {
-                    agent: { id: agentId, name: agentName },
-                    conversationId,
-                    userId,
-                    agentId,
-                    organizationId,
-                    sessionId,
-                    abortSignal,
-                  },
-                );
+            return startActiveMcpSpan({
+              toolName: mcpTool.name,
+              mcpServerName: serverName ?? "unknown",
+              agent: { id: agentId, name: agentName },
+              sessionId,
+              toolArgs: toolArguments,
+              user,
+              callback: async (span) => {
+                try {
+                  throwIfAborted(abortSignal);
+                  // Check if this is an Archestra tool - handle directly without DB lookup
+                  if (isArchestraMcpServerTool(mcpTool.name)) {
+                    const archestraResponse = await executeArchestraTool(
+                      mcpTool.name,
+                      toolArguments,
+                      {
+                        agent: { id: agentId, name: agentName },
+                        conversationId,
+                        userId,
+                        agentId,
+                        organizationId,
+                        sessionId,
+                        abortSignal,
+                      },
+                    );
 
-                reportToolMetrics({
-                  toolName: mcpTool.name,
-                  agentName,
-                  startTime: toolStartTime,
-                  isError: archestraResponse.isError ?? false,
-                });
+                    span.setAttribute(
+                      "mcp.is_error_result",
+                      archestraResponse.isError ?? false,
+                    );
+                    reportToolMetrics({
+                      toolName: mcpTool.name,
+                      agentId,
+                      agentName,
+                      startTime: toolStartTime,
+                      isError: archestraResponse.isError ?? false,
+                    });
 
-                // Check for errors
-                if (archestraResponse.isError) {
-                  const errorText = (
-                    archestraResponse.content as Array<{
-                      type: string;
-                      text?: string;
-                    }>
-                  )
-                    .map((item) =>
-                      item.type === "text" && item.text
-                        ? item.text
-                        : JSON.stringify(item),
+                    // Check for errors
+                    if (archestraResponse.isError) {
+                      const errorText = (
+                        archestraResponse.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
+                      )
+                        .map((item) =>
+                          item.type === "text" && item.text
+                            ? item.text
+                            : JSON.stringify(item),
+                        )
+                        .join("\n");
+                      throw new Error(errorText);
+                    }
+
+                    // Convert MCP content to string for AI SDK
+                    return (
+                      archestraResponse.content as Array<{
+                        type: string;
+                        text?: string;
+                      }>
                     )
-                    .join("\n");
-                  throw new Error(errorText);
+                      .map((item) =>
+                        item.type === "text" && item.text
+                          ? item.text
+                          : JSON.stringify(item),
+                      )
+                      .join("\n");
+                  }
+
+                  // Execute non-Archestra tools via shared helper with browser sync
+                  return await executeMcpTool({
+                    toolName: mcpTool.name,
+                    toolArguments,
+                    agentId,
+                    agentName,
+                    userId,
+                    organizationId,
+                    userIsProfileAdmin,
+                    conversationId,
+                    mcpGwToken,
+                    abortSignal,
+                  });
+                } catch (error) {
+                  reportToolMetrics({
+                    toolName: mcpTool.name,
+                    agentId,
+                    agentName,
+                    startTime: toolStartTime,
+                    isError: true,
+                  });
+                  const logPayload = {
+                    agentId,
+                    userId,
+                    toolName: mcpTool.name,
+                    err: error,
+                    errorMessage:
+                      error instanceof Error ? error.message : String(error),
+                  };
+                  if (isAbortLikeError(error)) {
+                    logger.info(logPayload, "MCP tool execution aborted");
+                  } else {
+                    logger.error(logPayload, "MCP tool execution failed");
+                  }
+                  throw error;
                 }
-
-                // Convert MCP content to string for AI SDK
-                return (
-                  archestraResponse.content as Array<{
-                    type: string;
-                    text?: string;
-                  }>
-                )
-                  .map((item) =>
-                    item.type === "text" && item.text
-                      ? item.text
-                      : JSON.stringify(item),
-                  )
-                  .join("\n");
-              }
-
-              // Execute non-Archestra tools via shared helper with browser sync
-              return await executeMcpTool({
-                toolName: mcpTool.name,
-                toolArguments,
-                agentId,
-                agentName,
-                userId,
-                organizationId,
-                userIsProfileAdmin,
-                conversationId,
-                mcpGwToken,
-                abortSignal,
-              });
-            } catch (error) {
-              reportToolMetrics({
-                toolName: mcpTool.name,
-                agentName,
-                startTime: toolStartTime,
-                isError: true,
-              });
-              const logPayload = {
-                agentId,
-                userId,
-                toolName: mcpTool.name,
-                err: error,
-                errorMessage:
-                  error instanceof Error ? error.message : String(error),
-              };
-              if (isAbortLikeError(error)) {
-                logger.info(logPayload, "MCP tool execution aborted");
-              } else {
-                logger.error(logPayload, "MCP tool execution failed");
-              }
-              throw error;
-            }
+              },
+            });
           },
         };
       } catch (error) {
@@ -844,67 +866,92 @@ export async function getChatMcpTools({
                 "Executing agent tool from chat",
               );
 
+              const { serverName: agentServerName } = parseFullToolName(
+                agentTool.name,
+              );
               const agentToolStartTime = Date.now();
 
-              try {
-                throwIfAborted(abortSignal);
-                const response = await executeArchestraTool(
-                  agentTool.name,
-                  args,
-                  archestraContext,
-                );
+              return startActiveMcpSpan({
+                toolName: agentTool.name,
+                mcpServerName: agentServerName ?? "unknown",
+                agent: { id: agentId, name: agentName },
+                sessionId,
+                toolArgs: args,
+                user,
+                callback: async (span) => {
+                  try {
+                    throwIfAborted(abortSignal);
+                    const response = await executeArchestraTool(
+                      agentTool.name,
+                      args,
+                      archestraContext,
+                    );
 
-                reportToolMetrics({
-                  toolName: agentTool.name,
-                  agentName,
-                  startTime: agentToolStartTime,
-                  isError: response.isError ?? false,
-                });
+                    span.setAttribute(
+                      "mcp.is_error_result",
+                      response.isError ?? false,
+                    );
+                    reportToolMetrics({
+                      toolName: agentTool.name,
+                      agentId,
+                      agentName,
+                      startTime: agentToolStartTime,
+                      isError: response.isError ?? false,
+                    });
 
-                if (response.isError) {
-                  const errorText = (
-                    response.content as Array<{ type: string; text?: string }>
-                  )
-                    .map((item) =>
-                      item.type === "text" && item.text
-                        ? item.text
-                        : JSON.stringify(item),
+                    if (response.isError) {
+                      const errorText = (
+                        response.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
+                      )
+                        .map((item) =>
+                          item.type === "text" && item.text
+                            ? item.text
+                            : JSON.stringify(item),
+                        )
+                        .join("\n");
+                      throw new Error(errorText);
+                    }
+
+                    return (
+                      response.content as Array<{
+                        type: string;
+                        text?: string;
+                      }>
                     )
-                    .join("\n");
-                  throw new Error(errorText);
-                }
-
-                return (
-                  response.content as Array<{ type: string; text?: string }>
-                )
-                  .map((item) =>
-                    item.type === "text" && item.text
-                      ? item.text
-                      : JSON.stringify(item),
-                  )
-                  .join("\n");
-              } catch (error) {
-                reportToolMetrics({
-                  toolName: agentTool.name,
-                  agentName,
-                  startTime: agentToolStartTime,
-                  isError: true,
-                });
-                const logPayload = {
-                  agentId,
-                  userId,
-                  toolName: agentTool.name,
-                  err: error,
-                  errorMessage:
-                    error instanceof Error ? error.message : String(error),
-                };
-                if (isAbortLikeError(error)) {
-                  logger.info(logPayload, "Agent tool execution aborted");
-                } else {
-                  logger.error(logPayload, "Agent tool execution failed");
-                }
-                throw error;
-              }
+                      .map((item) =>
+                        item.type === "text" && item.text
+                          ? item.text
+                          : JSON.stringify(item),
+                      )
+                      .join("\n");
+                  } catch (error) {
+                    reportToolMetrics({
+                      toolName: agentTool.name,
+                      agentId,
+                      agentName,
+                      startTime: agentToolStartTime,
+                      isError: true,
+                    });
+                    const logPayload = {
+                      agentId,
+                      userId,
+                      toolName: agentTool.name,
+                      err: error,
+                      errorMessage:
+                        error instanceof Error ? error.message : String(error),
+                    };
+                    if (isAbortLikeError(error)) {
+                      logger.info(logPayload, "Agent tool execution aborted");
+                    } else {
+                      logger.error(logPayload, "Agent tool execution failed");
+                    }
+                    throw error;
+                  }
+                },
+              });
             },
           };
         }
@@ -1043,12 +1090,19 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     );
     reportToolMetrics({
       toolName,
+      agentId,
       agentName,
       startTime,
       isError: result.isError ?? false,
     });
   } catch (error) {
-    reportToolMetrics({ toolName, agentName, startTime, isError: true });
+    reportToolMetrics({
+      toolName,
+      agentId,
+      agentName,
+      startTime,
+      isError: true,
+    });
     throw error;
   }
   throwIfAborted(abortSignal);
@@ -1203,13 +1257,17 @@ function isAbortLikeError(error: unknown): boolean {
 
 function reportToolMetrics(params: {
   toolName: string;
+  agentId: string;
   agentName: string;
+  agentType?: AgentType | null;
   startTime: number;
   isError: boolean;
 }): void {
   const { serverName } = parseFullToolName(params.toolName);
   metrics.mcp.reportMcpToolCall({
-    profileName: params.agentName,
+    agentId: params.agentId,
+    agentName: params.agentName,
+    agentType: params.agentType ?? null,
     mcpServerName: serverName ?? "unknown",
     toolName: params.toolName,
     durationSeconds: (Date.now() - params.startTime) / 1000,

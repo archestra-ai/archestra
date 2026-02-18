@@ -1,6 +1,6 @@
 import { USER_ID_HEADER } from "@shared";
 import { describe, expect, test } from "@/test";
-import { getUser } from "./get-user";
+import { getUser } from "./user-id";
 
 const headerKey = USER_ID_HEADER.toLowerCase();
 

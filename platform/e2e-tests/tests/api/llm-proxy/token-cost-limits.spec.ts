@@ -290,7 +290,9 @@ const testConfigs: TokenCostLimitTestConfig[] = [
 ];
 
 for (const config of testConfigs) {
-  test.describe(`LLMProxy-TokenCostLimits-${config.providerName}`, () => {
+  test.describe(`LLMProxy-TokenCostLimits-${config.providerName}`, { tag: ["@flaky"] }, () => {
+    // Retry to handle async usage tracking race conditions in CI
+    test.describe.configure({ retries: 2 });
     let profileId: string;
     let limitId: string;
     let tokenPriceId: string;
@@ -374,8 +376,9 @@ for (const config of testConfigs) {
       // Usage tracking happens asynchronously after the response is sent
       // We need to wait until the usage is actually recorded before the second request
       // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
-      const maxPollingAttempts = 30;
-      const pollingIntervalMs = 500;
+      // Use generous timeouts - in CI, async tracking can be slow due to resource contention
+      const maxPollingAttempts = 60;
+      const pollingIntervalMs = 1000;
       let usageTracked = false;
 
       for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {

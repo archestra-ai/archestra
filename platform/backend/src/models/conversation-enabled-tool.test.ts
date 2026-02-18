@@ -1,6 +1,13 @@
+import { vi } from "vitest";
+import * as knowledgeGraph from "@/knowledge-graph";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
 import ConversationEnabledToolModel from "./conversation-enabled-tool";
+
+// Mock knowledge graph as configured so all default Archestra tools (including query_knowledge_graph) are available
+vi.spyOn(knowledgeGraph, "getKnowledgeGraphProviderType").mockReturnValue(
+  "lightrag",
+);
 
 describe("ConversationEnabledToolModel", () => {
   test("returns todo_write and artifact_write tools enabled by default", async ({

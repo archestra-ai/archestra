@@ -99,26 +99,6 @@ else:
     serve_env=frontend_env_vars
   )
 
-local_resource(
-  'lint:fix',
-  cmd='pnpm type-check && pnpm lint:fix',
-  labels=['dev'],
-  resource_deps=['pnpm-install'],
-  # Disabled auto-watching to prevent spawning processes on every file change
-  # Trigger manually with: tilt trigger lint:fix
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-)
-
-local_resource(
-  'lint:fix:unsafe',
-  cmd='pnpm lint:fix:unsafe && tilt trigger lint:fix',
-  labels=['dev'],
-  resource_deps=['pnpm-install'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-)
-
 # Port-forward for MCP servers using streamable-http transport
 # Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use
 # kubectl port-forward (which goes through the K8s API server) to make them accessible.
@@ -163,8 +143,28 @@ local_resource(
   auto_init=False,
 )
 
-# Codegen depends on backend being up (for API schema generation)                                                    
-codegen_backend_dep = dev_resource_name if is_prod else dev_resource_name + '-backend' 
+local_resource(
+  'lint:fix',
+  cmd='pnpm type-check && pnpm lint:fix',
+  labels=['dev'],
+  resource_deps=['pnpm-install'],
+  # Disabled auto-watching to prevent spawning processes on every file change
+  # Trigger manually with: tilt trigger lint:fix
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
+  'lint:fix:unsafe',
+  cmd='pnpm lint:fix:unsafe && tilt trigger lint:fix',
+  labels=['dev'],
+  resource_deps=['pnpm-install'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+# Codegen depends on backend being up (for API schema generation)
+codegen_backend_dep = dev_resource_name if is_prod else dev_resource_name + '-backend'
 local_resource(
   'codegen',
   cmd='pnpm codegen',

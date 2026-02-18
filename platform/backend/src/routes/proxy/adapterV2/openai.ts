@@ -718,6 +718,11 @@ export class OpenAIResponseAdapter
     return this.response;
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -1164,9 +1169,7 @@ export const openaiAdapterFactory: LLMProvider<
     return config.llm.openai.baseUrl;
   },
 
-  getSpanName(): string {
-    return "openai.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

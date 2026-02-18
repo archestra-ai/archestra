@@ -162,6 +162,48 @@ describe("persistTools", () => {
     expect(proxyTools[0].name).toBe("proxy-tool-1");
   });
 
+  test("skips MCP tools with null mcpServerId (deleted MCP server)", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+    const catalog = await makeInternalMcpCatalog();
+
+    // Create an MCP tool with catalogId but no mcpServerId (simulates deleted MCP server)
+    const mcpTool = await makeTool({
+      name: "mcp-tool-orphaned",
+      catalogId: catalog.id,
+      mcpServerId: null,
+    });
+    await AgentToolModel.createIfNotExists(agent.id, mcpTool.id);
+
+    // Try to persist a tool with the same name as the orphaned MCP tool
+    const tools = [
+      {
+        toolName: "mcp-tool-orphaned", // Same name as MCP tool with null mcpServerId
+        toolParameters: { type: "object" },
+        toolDescription: "Should be skipped",
+      },
+      {
+        toolName: "proxy-tool-1",
+        toolParameters: { type: "object" },
+        toolDescription: "Should be created",
+      },
+    ];
+
+    await persistTools(tools, agent.id);
+
+    // Only the proxy tool should be created (orphaned MCP tool should be skipped)
+    const agentTools = await ToolModel.getToolsByAgent(agent.id);
+    const proxyTools = agentTools.filter(
+      (t) => t.agentId === agent.id && t.catalogId === null,
+    );
+
+    expect(proxyTools).toHaveLength(1);
+    expect(proxyTools[0].name).toBe("proxy-tool-1");
+  });
+
   test("is idempotent - does not create duplicate tools", async ({
     makeAgent,
   }) => {

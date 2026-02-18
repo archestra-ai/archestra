@@ -1,13 +1,22 @@
 import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import {
   getAdditionalTrustedSsoProviderIds,
   getCorsOrigins,
   getDatabaseUrl,
   getOtelExporterOtlpEndpoint,
+  getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseContentMaxLength,
 } from "./config";
 
 // Mock the logger
@@ -687,6 +696,145 @@ describe("getOtelExporterOtlpEndpoint", () => {
       );
       expect(result).toBe("http://otel-collector:4318/v1/traces");
     });
+  });
+});
+
+describe("getOtelExporterOtlpLogEndpoint", () => {
+  const savedEnv = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+
+  afterAll(() => {
+    if (savedEnv !== undefined) {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT = savedEnv;
+    } else {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+    }
+  });
+
+  describe("default value", () => {
+    test("should return default endpoint when no value provided", () => {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+      const result = getOtelExporterOtlpLogEndpoint(undefined);
+      expect(result).toBe("http://localhost:4318/v1/logs");
+    });
+
+    test("should return default endpoint when empty string provided", () => {
+      const result = getOtelExporterOtlpLogEndpoint("");
+      expect(result).toBe("http://localhost:4318/v1/logs");
+    });
+
+    test("should return default endpoint when only whitespace provided", () => {
+      const result = getOtelExporterOtlpLogEndpoint("   ");
+      expect(result).toBe("http://localhost:4318/v1/logs");
+    });
+  });
+
+  describe("URL already ends with /v1/logs", () => {
+    test("should return URL as-is when it ends with /v1/logs", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1/logs",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("should normalize trailing slashes and return URL with /v1/logs", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1/logs/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+  });
+
+  describe("URL ends with /v1", () => {
+    test("should append /logs when URL ends with /v1", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("should handle /v1 with trailing slash", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+  });
+
+  describe("URL without /v1/logs suffix", () => {
+    test("should append /v1/logs to base URL", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("should append /v1/logs to URL with trailing slash", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+  });
+
+  describe("HTTPS URLs", () => {
+    test("should work with HTTPS URLs", () => {
+      const result = getOtelExporterOtlpLogEndpoint("https://otel.example.com");
+      expect(result).toBe("https://otel.example.com/v1/logs");
+    });
+
+    test("should work with HTTPS URLs that already have /v1/logs", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "https://otel.example.com/v1/logs",
+      );
+      expect(result).toBe("https://otel.example.com/v1/logs");
+    });
+  });
+});
+
+describe("parseContentMaxLength", () => {
+  test("should return default 10000 when no value provided", () => {
+    expect(parseContentMaxLength(undefined)).toBe(10_000);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseContentMaxLength("")).toBe(10_000);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseContentMaxLength("   ")).toBe(10_000);
+  });
+
+  test("should parse valid integer value", () => {
+    expect(parseContentMaxLength("5000")).toBe(5000);
+  });
+
+  test("should parse large value", () => {
+    expect(parseContentMaxLength("100000")).toBe(100_000);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseContentMaxLength("  8000  ")).toBe(8000);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseContentMaxLength("abc")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "abc", using default 10000',
+    );
+  });
+
+  test("should return default and warn for zero", () => {
+    expect(parseContentMaxLength("0")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "0", using default 10000',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseContentMaxLength("-100")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
+    );
   });
 });
 

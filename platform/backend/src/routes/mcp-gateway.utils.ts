@@ -39,7 +39,7 @@ import {
 import { metrics } from "@/observability";
 import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
-import { type CommonToolCall, UuidIdSchema } from "@/types";
+import { type AgentType, type CommonToolCall, UuidIdSchema } from "@/types";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
@@ -71,6 +71,7 @@ export interface TokenAuthResult {
 type AgentInfo = {
   name: string;
   id: string;
+  agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
 };
 
@@ -147,6 +148,23 @@ export async function createAgentServer(
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
+      // Resolve user identity for OTEL span attributes
+      let mcpUser: {
+        id: string;
+        email?: string;
+        name?: string;
+      } | null = null;
+      if (tokenAuth?.userId) {
+        const userDetails = await UserModel.getById(tokenAuth.userId);
+        if (userDetails) {
+          mcpUser = {
+            id: userDetails.id,
+            email: userDetails.email,
+            name: userDetails.name,
+          };
+        }
+      }
+
       try {
         // Check if this is an Archestra tool or agent delegation tool
         const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
@@ -170,6 +188,10 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            agentType: agent.agentType,
+            toolCallId: `archestra-${Date.now()}`,
+            toolArgs: args,
+            user: mcpUser,
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
@@ -184,12 +206,18 @@ export async function createAgentServer(
 
           const durationSeconds = (Date.now() - startTime) / 1000;
           metrics.mcp.reportMcpToolCall({
-            profileName: agent.name,
+            agentId: agent.id,
+            agentName: agent.name,
+            agentType: agent.agentType,
             mcpServerName,
             toolName: name,
             durationSeconds,
             isError: false,
-            profileLabels: agent.labels,
+            agentLabels: agent.labels,
+            requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+            responseSizeBytes: response.content
+              ? JSON.stringify(response.content).length
+              : undefined,
           });
 
           logger.info(
@@ -252,6 +280,10 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          agentType: agent.agentType,
+          toolCallId,
+          toolArgs: args,
+          user: mcpUser,
           callback: async (span) => {
             const r = await mcpClient.executeToolCall(
               toolCall,
@@ -265,12 +297,18 @@ export async function createAgentServer(
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
-          profileName: agent.name,
+          agentId: agent.id,
+          agentName: agent.name,
+          agentType: agent.agentType,
           mcpServerName,
           toolName: name,
           durationSeconds,
           isError: result.isError ?? false,
-          profileLabels: agent.labels,
+          agentLabels: agent.labels,
+          requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+          responseSizeBytes: result.content
+            ? JSON.stringify(result.content).length
+            : undefined,
         });
 
         const contentLength = estimateToolResultContentLength(result.content);
@@ -299,12 +337,15 @@ export async function createAgentServer(
       } catch (error) {
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
-          profileName: agent.name,
+          agentId: agent.id,
+          agentName: agent.name,
+          agentType: agent.agentType,
           mcpServerName,
           toolName: name,
           durationSeconds,
           isError: true,
-          profileLabels: agent.labels,
+          agentLabels: agent.labels,
+          requestSizeBytes: args ? JSON.stringify(args).length : undefined,
         });
 
         if (typeof error === "object" && error !== null && "code" in error) {

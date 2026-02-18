@@ -69,22 +69,25 @@ graph TB
     style Modifier fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
 
-## External Agent Identification
+## Custom Headers
 
-When multiple applications share the same [Profile](/docs/platform-profiles), you can use the `X-Archestra-Agent-Id` header to identify which application each request originates from. This allows you to:
+Archestra supports the following custom headers on LLM Proxy requests. All headers are optional.
 
-- **Reuse a single Profile** across multiple applications while maintaining distinct tracking
-- **Filter logs** by application in the LLM Proxy Logs viewer
-- **Segment metrics** by application in your observability dashboards (Prometheus, Grafana, etc.)
+| Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `X-Archestra-Agent-Id`     | Client-provided identifier for the calling agent or application. Stored with each interaction and included in Prometheus metrics as the `external_agent_id` label. Useful when multiple applications share the same LLM Proxy.                       | `my-chatbot-prod`                      |
+| `X-Archestra-User-Id`      | Associates the request with a specific Archestra user. Automatically included when using the built-in Archestra Chat.                                                                                                                                | `123e4567-e89b-12d3-a456-426614174000` |
+| `X-Archestra-Session-Id`   | Groups related LLM requests into a session - included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`.                                                                                           | `session-abc-123`                      |
+| `X-Archestra-Execution-Id` | Associates the request with a specific execution run. Used for the `agent_executions_total` Prometheus metric which counts unique executions. See [Observability](/docs/platform-observability).                                                     | `exec-run-456`                         |
+| `X-Archestra-Meta`         | Composite header combining agent ID, execution ID, and session ID in one value. Format: `<agent-id>/<execution-id>/<session-id>`. Any segment can be empty. Individual headers take precedence over meta header values. Values must not contain `/`. | `my-agent/exec-123/session-456`        |
 
 ### Usage
-
-Include the header in your LLM requests:
 
 ```bash
 curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -H "X-Archestra-Agent-Id: my-chatbot-prod" \
+  -H "X-Archestra-Session-Id: session-abc-123" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
@@ -92,46 +95,15 @@ curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
   }'
 ```
 
-The external agent ID will be:
-
-- **Stored** with each interaction in the database
-- **Displayed** in the LLM Proxy Logs table (filterable)
-- **Included** in Prometheus metrics as the `agent_id` label
-- **Available** in the interaction detail page
-
-### Example Use Cases
-
-| Scenario              | Profile            | X-Archestra-Agent-Id                                |
-| --------------------- | ------------------ | --------------------------------------------------- |
-| Multiple environments | `customer-support` | `customer-support-prod`, `customer-support-staging` |
-| Multiple applications | `shared-assistant` | `mobile-app`, `web-app`, `slack-bot`                |
-| Per-customer tracking | `multi-tenant-bot` | `customer-123`, `customer-456`                      |
-
-This approach lets you maintain centralized security policies through Profiles while still having granular visibility into which applications are generating traffic.
-
-## User Identification
-
-You can use the `X-Archestra-User-Id` header to associate LLM requests with a specific Archestra user. This is particularly useful for:
-
-- **Tracking user activity** in the LLM Proxy Logs viewer
-- **Identifying which user** made a request from the Archestra Chat
-- **Auditing and compliance** purposes
-
-### Usage
-
-Include the header in your LLM requests with the Archestra user's UUID:
+Or equivalently using the composite meta header:
 
 ```bash
 curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -H "X-Archestra-User-Id: 123e4567-e89b-12d3-a456-426614174000" \
+  -H "X-Archestra-Meta: my-chatbot-prod//session-abc-123" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
-
-### Archestra Chat Integration
-
-When using the built-in Archestra Chat, the `X-Archestra-User-Id` header is automatically included in all requests, allowing you to see which team member initiated each conversation in the logs.

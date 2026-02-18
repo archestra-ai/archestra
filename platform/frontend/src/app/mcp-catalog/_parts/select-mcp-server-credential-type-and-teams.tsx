@@ -237,7 +237,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
       <p className="text-xs text-muted-foreground">
         {selectedValue === PERSONAL_VALUE
           ? "Only you can use this server installation"
-          : "All members of the selected team can use this server"}
+          : "Every team member will use server on behalf of authorized credential"}
       </p>
     </div>
   );

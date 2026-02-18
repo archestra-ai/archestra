@@ -156,7 +156,7 @@ test.describe("Chat - Auth Required Tool", () => {
   }) => {
     // Navigate to chat as member user
     await goToMemberPage("/chat");
-    await memberPage.waitForLoadState("networkidle");
+    await memberPage.waitForLoadState("domcontentloaded");
 
     // Skip onboarding if present
     const skipButton = memberPage.getByTestId(E2eTestId.OnboardingSkipButton);

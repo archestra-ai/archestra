@@ -77,7 +77,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
         .click({ timeout: CONNECT_BUTTON_TIMEOUT });
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
       // Installation type dropdown should show "Myself" by default when vault is disabled
       await expect(
         page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
@@ -189,7 +189,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await goToPage(page, "/mcp-catalog/registry");
         await openManageCredentialsDialog(page, catalogItemName);
         await clickButton({ page, options: { name: "Revoke" }, first: true });
-        await page.waitForLoadState("networkidle");
+        await page.waitForLoadState("domcontentloaded");
         await clickButton({ page, options: { name: "Close" }, nth: 1 });
 
         // And we check that the credential is revoked
@@ -230,7 +230,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   extractCookieHeaders,
   makeRandomString,
 }) => {
-  test.setTimeout(45_000); // 45 seconds
+  test.setTimeout(90_000); // 90 seconds - multiple users installing concurrently
   // Create catalog item as Admin
   // Editor and Member cannot add items to MCP Registry
   const catalogItemName = makeRandomString(10, "mcp");
@@ -250,7 +250,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   const install = async (page: Page, canCreateTeamCredential: boolean) => {
     // Go to MCP Registry page
     await goToPage(page, "/mcp-catalog/registry");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     // Click connect button for the catalog item
     await page
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
@@ -259,7 +259,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await clickButton({ page, options: { name: "Install" } });
 
     if (!canCreateTeamCredential) {
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
       return;
     }
 
@@ -285,7 +285,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // And this time team credential type should be selected by default, install using team credential
     await clickButton({ page, options: { name: "Install" } });
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   };
 
   // Each user adds personal credential, Admin and Editor also add team credential
@@ -301,7 +301,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     user: "Admin" | "Editor" | "Member",
   ) => {
     await goToPage(page, "/mcp-catalog/registry");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     // Members can't create team installations (they lack mcpServer:update permission)
     // So only 5 credentials are created: 3 personal + 2 team (Admin's DEFAULT, Editor's ENGINEERING)
     const expectedCredentialsCount = {
@@ -334,7 +334,7 @@ test("Verify tool calling using different static credentials", async ({
   makeRandomString,
   extractCookieHeaders,
 }) => {
-  test.setTimeout(45_000); // 45 seconds
+  test.setTimeout(120_000); // 120 seconds - MCP server startup + tool discovery + tool calls
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   // Assign engineering team to default profile
@@ -362,7 +362,7 @@ test("Verify tool calling using different static credentials", async ({
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Admin-personal-credential");
   await clickButton({ page: adminPage, options: { name: "Install" } });
-  await adminPage.waitForLoadState("networkidle");
+  await adminPage.waitForLoadState("domcontentloaded");
 
   // Install test server for editor
   await goToPage(editorPage, "/mcp-catalog/registry");
@@ -373,7 +373,7 @@ test("Verify tool calling using different static credentials", async ({
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Editor-personal-credential");
   await clickButton({ page: editorPage, options: { name: "Install" } });
-  await editorPage.waitForLoadState("networkidle");
+  await editorPage.waitForLoadState("domcontentloaded");
 
   // Assign tool to profiles using admin static credential
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
@@ -387,7 +387,7 @@ test("Verify tool calling using different static credentials", async ({
   await adminPage.waitForTimeout(200);
   // Click Save button at the bottom of the McpAssignmentsDialog
   await clickButton({ page: adminPage, options: { name: "Save" } });
-  await adminPage.waitForLoadState("networkidle");
+  await adminPage.waitForLoadState("domcontentloaded");
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
     request,
@@ -409,7 +409,7 @@ test("Verify tool calling using different static credentials", async ({
   await editorPage.waitForTimeout(200);
   // Click Save button at the bottom of the McpAssignmentsDialog
   await clickButton({ page: editorPage, options: { name: "Save" } });
-  await editorPage.waitForLoadState("networkidle");
+  await editorPage.waitForLoadState("domcontentloaded");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({
     request,

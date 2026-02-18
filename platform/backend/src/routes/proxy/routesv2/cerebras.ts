@@ -31,11 +31,12 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.cerebras.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       // Skip chat/completions - handled by custom handler below
+      const urlPath = request.url.split("?")[0];
       if (
         request.method === "POST" &&
-        request.url.includes(CHAT_COMPLETIONS_SUFFIX)
+        urlPath.endsWith(CHAT_COMPLETIONS_SUFFIX)
       ) {
         logger.info(
           {
@@ -46,7 +47,13 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Cerebras proxy preHandler: skipping chat/completions route",
         );
-        next(new Error("skip"));
+        reply.code(400).send({
+          error: {
+            message:
+              "Chat completions requests should use the dedicated endpoint",
+            type: "invalid_request_error",
+          },
+        });
         return;
       }
 

@@ -50,6 +50,99 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("create - null byte sanitization", () => {
+    test("strips null bytes from JSONB fields to avoid PostgreSQL rejection", async () => {
+      // PostgreSQL JSONB rejects \u0000 (null byte) Unicode escape sequences.
+      // These can appear in LLM responses, e.g. Gemini's thoughtSignature fields.
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Hello \u0000 world \u0000 test" },
+          ],
+        },
+        response: {
+          id: "test-nullbytes",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Response \u0000 with \u0000 null bytes",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      expect(interaction).toBeDefined();
+      expect(interaction.id).toBeDefined();
+
+      // Verify the null bytes were stripped by reading back from DB
+      const found = await InteractionModel.findById(interaction.id);
+      expect(found).not.toBeNull();
+
+      const response = found?.response as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      expect(response?.choices?.[0]?.message?.content).toBe(
+        "Response  with  null bytes",
+      );
+
+      const request = found?.request as {
+        messages?: Array<{ content?: string }>;
+      };
+      expect(request?.messages?.[0]?.content).toBe("Hello  world  test");
+    });
+
+    test("handles data without null bytes unchanged", async () => {
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Normal text without null bytes" },
+          ],
+        },
+        response: {
+          id: "test-response",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Normal response",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(interaction.id);
+      const request = found?.request as {
+        messages?: Array<{ content?: string }>;
+      };
+      expect(request?.messages?.[0]?.content).toBe(
+        "Normal text without null bytes",
+      );
+    });
+  });
+
   describe("findById", () => {
     test("returns interaction by id", async () => {
       const created = await InteractionModel.create({

@@ -50,7 +50,7 @@ test("Verify tool calling using dynamic credentials", async ({
   const install = async ({ page, user, team }: (typeof MATRIX_A)[number]) => {
     // Go to MCP Registry page
     await goToPage(page, "/mcp-catalog/registry");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     // Click connect button for the catalog item - wait for it to be visible
     const btn = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
@@ -93,7 +93,7 @@ test("Verify tool calling using dynamic credentials", async ({
     // And this time team credential type should be selected by default for everyone, install using team credential
     await clickButton({ page, options: { name: "Install" } });
     // Wait for installation to complete and pod to be ready
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(1_000); // Additional wait for pod to be ready
   };
 
@@ -114,7 +114,7 @@ test("Verify tool calling using dynamic credentials", async ({
   await adminPage.waitForTimeout(200);
   // Click Save button at the bottom of the McpAssignmentsDialog
   await clickButton({ page: adminPage, options: { name: "Save" } });
-  await adminPage.waitForLoadState("networkidle");
+  await adminPage.waitForLoadState("domcontentloaded");
 
   /**
    * Credentials we have:
@@ -165,7 +165,7 @@ test("Verify tool calling using dynamic credentials", async ({
   await adminPage
     .getByTestId(`${E2eTestId.RevokeCredentialButton}-${EDITOR_EMAIL}`)
     .click();
-  await adminPage.waitForLoadState("networkidle");
+  await adminPage.waitForLoadState("domcontentloaded");
   const MATRIX_C = [
     {
       tokenToUse: "default-team",

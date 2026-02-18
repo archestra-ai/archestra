@@ -16,6 +16,7 @@ import { Cerebras, constructResponseSchema, UuidIdSchema } from "@/types";
 import { cerebrasAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { createProxyPreHandler } from "./proxy-prehandler";
 
 const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/cerebras`;
@@ -23,76 +24,16 @@ const cerebrasProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
   logger.info("[UnifiedProxy] Registering unified Cerebras routes");
 
-  /**
-   * Register HTTP proxy for Cerebras routes
-   * Chat completions are handled separately with full agent support
-   */
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.cerebras.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
-    preHandler: (request, reply, next) => {
-      // Skip chat/completions - handled by custom handler below
-      const urlPath = request.url.split("?")[0];
-      if (
-        request.method === "POST" &&
-        urlPath.endsWith(CHAT_COMPLETIONS_SUFFIX)
-      ) {
-        logger.info(
-          {
-            method: request.method,
-            url: request.url,
-            action: "skip-proxy",
-            reason: "handled-by-custom-handler",
-          },
-          "Cerebras proxy preHandler: skipping chat/completions route",
-        );
-        reply.code(400).send({
-          error: {
-            message:
-              "Chat completions requests should use the dedicated endpoint",
-            type: "invalid_request_error",
-          },
-        });
-        return;
-      }
-
-      // Check if URL has UUID segment that needs stripping
-      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
-      const uuidMatch = pathAfterPrefix.match(
-        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
-      );
-
-      if (uuidMatch) {
-        // Strip UUID: /v1/cerebras/:uuid/path -> /v1/cerebras/path
-        const remainingPath = uuidMatch[2] || "";
-        const originalUrl = request.raw.url;
-        request.raw.url = `${API_PREFIX}${remainingPath}`;
-
-        logger.info(
-          {
-            method: request.method,
-            originalUrl,
-            rewrittenUrl: request.raw.url,
-            upstream: config.llm.cerebras.baseUrl,
-            finalProxyUrl: `${config.llm.cerebras.baseUrl}${remainingPath}`,
-          },
-          "Cerebras proxy preHandler: URL rewritten (UUID stripped)",
-        );
-      } else {
-        logger.info(
-          {
-            method: request.method,
-            url: request.url,
-            upstream: config.llm.cerebras.baseUrl,
-            finalProxyUrl: `${config.llm.cerebras.baseUrl}${pathAfterPrefix}`,
-          },
-          "Cerebras proxy preHandler: proxying request",
-        );
-      }
-
-      next();
-    },
+    preHandler: createProxyPreHandler({
+      apiPrefix: API_PREFIX,
+      endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
+      upstream: config.llm.cerebras.baseUrl,
+      providerName: "Cerebras",
+    }),
   });
 
   /**

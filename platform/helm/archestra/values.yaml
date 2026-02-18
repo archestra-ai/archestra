@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.0.45" # x-release-please-version
+  imageTag: "1.0.46" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -43,6 +43,21 @@ archestra:
   #     kubernetes.io/os: linux
   #     node.kubernetes.io/instance-type: m5.large
   nodeSelector: {}
+
+  # Tolerations for scheduling pods on nodes with specific taints
+  # This is useful for running pods on dedicated or specialized nodes (e.g., GPU nodes, spot instances)
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  # Example:
+  #   tolerations:
+  #     - key: "foo.bar.com/role"
+  #       operator: "Equal"
+  #       value: "master"
+  #       effect: "NoSchedule"
+  #     - key: "node.kubernetes.io/not-ready"
+  #       operator: "Exists"
+  #       effect: "NoExecute"
+  #       tolerationSeconds: 300
+  tolerations: []
 
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)

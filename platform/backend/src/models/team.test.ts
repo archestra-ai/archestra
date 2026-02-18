@@ -63,6 +63,51 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("findByName", () => {
+    test("should find a team by name and organization", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeTeam(org.id, user.id, { name: "Engineering" });
+
+      const found = await TeamModel.findByName("Engineering", org.id);
+
+      expect(found).not.toBeNull();
+      expect(found?.name).toBe("Engineering");
+      expect(found?.organizationId).toBe(org.id);
+    });
+
+    test("should return null when team does not exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const found = await TeamModel.findByName("Non-existent", org.id);
+
+      expect(found).toBeNull();
+    });
+
+    test("should only find teams in the specified organization", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org1 = await makeOrganization({ name: "Org 1" });
+      const org2 = await makeOrganization({ name: "Org 2" });
+      await makeTeam(org1.id, user.id, { name: "Shared Name" });
+
+      const foundInOrg1 = await TeamModel.findByName("Shared Name", org1.id);
+      const foundInOrg2 = await TeamModel.findByName("Shared Name", org2.id);
+
+      expect(foundInOrg1).not.toBeNull();
+      expect(foundInOrg2).toBeNull();
+    });
+  });
+
   describe("findByIds", () => {
     test("should find multiple teams by IDs", async ({
       makeUser,

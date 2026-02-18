@@ -144,6 +144,10 @@ Combine roles with team-based access control for fine-grained resource access:
 2. **Assign profiles and MCP servers** to specific teams
 3. **Add members to teams** based on their role and responsibilities
 
+#### Default Team
+
+New members are automatically added to the "Default Team" when they accept an invitation. This ensures all users have immediate access to Archestra resources assigned to this team.
+
 #### Team Access Control Rules
 
 **For Profiles:**

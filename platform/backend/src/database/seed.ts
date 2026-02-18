@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_TEAM_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
   type PredefinedRoleName,
@@ -301,11 +302,11 @@ async function seedDefaultTeam(): Promise<void> {
 
   // Check if default team already exists
   const existingTeams = await TeamModel.findByOrganization(org.id);
-  let defaultTeam = existingTeams.find((t) => t.name === "Default Team");
+  let defaultTeam = existingTeams.find((t) => t.name === DEFAULT_TEAM_NAME);
 
   if (!defaultTeam) {
     defaultTeam = await TeamModel.create({
-      name: "Default Team",
+      name: DEFAULT_TEAM_NAME,
       description: "Default team for all users",
       organizationId: org.id,
       createdBy: user.id,

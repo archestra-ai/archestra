@@ -525,9 +525,6 @@ export async function loginViaApi(
       continue;
     }
 
-    if (!response.ok()) {
-    }
-
     return false;
   }
 

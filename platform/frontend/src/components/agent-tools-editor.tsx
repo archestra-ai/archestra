@@ -234,19 +234,23 @@ const AgentToolsEditorContent = forwardRef<
         }
 
         // Add tools (skip invalidation, will do it once at the end)
+        const useDynamicCredential =
+          isPlaywrightCatalogItem(changes.catalogItem.id) ||
+          changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
+
         for (const toolId of toAdd) {
           await assignTool.mutateAsync({
             agentId: targetAgentId,
             toolId,
-            credentialSourceMcpServerId: !isLocal
-              ? changes.credentialSourceId
-              : undefined,
-            executionSourceMcpServerId: isLocal
-              ? changes.credentialSourceId
-              : undefined,
-            useDynamicTeamCredential:
-              isPlaywrightCatalogItem(changes.catalogItem.id) ||
-              changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
+            credentialSourceMcpServerId:
+              !isLocal && !useDynamicCredential
+                ? changes.credentialSourceId
+                : undefined,
+            executionSourceMcpServerId:
+              isLocal && !useDynamicCredential
+                ? changes.credentialSourceId
+                : undefined,
+            useDynamicTeamCredential: useDynamicCredential,
             skipInvalidation: true,
           });
         }
@@ -437,11 +441,12 @@ function McpServerPill({
   const mcpServers = credentials?.[catalogItem.id] ?? [];
 
   // Get current credential source (from first assigned tool or first available credential)
-  const currentCredentialSource =
-    assignedTools[0]?.credentialSourceMcpServerId ??
-    assignedTools[0]?.executionSourceMcpServerId ??
-    mcpServers[0]?.id ??
-    null;
+  const currentCredentialSource = assignedTools[0]?.useDynamicTeamCredential
+    ? DYNAMIC_CREDENTIAL_VALUE
+    : (assignedTools[0]?.credentialSourceMcpServerId ??
+      assignedTools[0]?.executionSourceMcpServerId ??
+      mcpServers[0]?.id ??
+      null);
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(

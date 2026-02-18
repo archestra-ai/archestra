@@ -54,7 +54,8 @@ test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
 
       // Wait for React to hydrate before triggering the fetch.
       // The sign-in form must be rendered so React's window.fetch interceptor is active.
-      await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible({
+      // The better-auth-ui library uses "Login" as the button text (SIGN_IN_ACTION localization).
+      await expect(page.getByRole("button", { name: /login/i })).toBeVisible({
         timeout: 15_000,
       });
 

@@ -292,7 +292,9 @@ const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
+const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
 const OTEL_TRACES_PATH = "/v1/traces";
+const OTEL_LOGS_PATH = "/v1/logs";
 
 /**
  * Get OTEL exporter endpoint for traces.
@@ -335,12 +337,62 @@ export const getOtelExporterOtlpEndpoint = (
   return `${normalizedUrl}${OTEL_TRACES_PATH}`;
 };
 
+/**
+ * Get OTEL exporter endpoint for logs.
+ * Reuses the same base ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT env var, but appends /v1/logs.
+ *
+ * @param envValue - The environment variable value (for testing)
+ * @returns The full OTEL endpoint URL with /v1/logs suffix
+ */
+export const getOtelExporterOtlpLogEndpoint = (
+  envValue?: string | undefined,
+): string => {
+  const rawValue =
+    envValue ?? process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+  const value = rawValue?.trim();
+
+  if (!value) {
+    return `${DEFAULT_OTEL_ENDPOINT}${OTEL_LOGS_PATH}`;
+  }
+
+  const normalizedUrl = value.replace(/\/+$/, "");
+
+  if (normalizedUrl.endsWith(OTEL_LOGS_PATH)) {
+    return normalizedUrl;
+  }
+
+  if (normalizedUrl.endsWith("/v1")) {
+    return `${normalizedUrl}/logs`;
+  }
+
+  return `${normalizedUrl}${OTEL_LOGS_PATH}`;
+};
+
+export const parseContentMaxLength = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "${value}", using default ${DEFAULT_OTEL_CONTENT_MAX_LENGTH}`,
+    );
+    return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  return parsed;
+};
+
 export default {
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
-    name: "Archestra Platform API",
+    name: "Archestra",
     version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
@@ -575,8 +627,17 @@ export default {
   },
   observability: {
     otel: {
+      captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
+      contentMaxLength: parseContentMaxLength(
+        process.env.ARCHESTRA_OTEL_CONTENT_MAX_LENGTH,
+      ),
+      verboseTracing: process.env.ARCHESTRA_OTEL_VERBOSE_TRACING === "true",
       traceExporter: {
         url: getOtelExporterOtlpEndpoint(),
+        headers: getOtlpAuthHeaders(),
+      } satisfies Partial<OTLPExporterNodeConfigBase>,
+      logExporter: {
+        url: getOtelExporterOtlpLogEndpoint(),
         headers: getOtlpAuthHeaders(),
       } satisfies Partial<OTLPExporterNodeConfigBase>,
     },

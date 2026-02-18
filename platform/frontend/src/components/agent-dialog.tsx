@@ -12,12 +12,10 @@ import {
   Bot,
   Building2,
   CheckIcon,
-  ExternalLink,
   Globe,
   Key,
   Loader2,
   Lock,
-  Search,
   User,
   Users,
   X,
@@ -36,8 +34,11 @@ import {
 import { ModelSelector } from "@/components/chat/model-selector";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AssignmentCombobox,
+  type AssignmentComboboxItem,
+} from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -88,7 +89,7 @@ import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { cn } from "@/lib/utils";
 
 const { useIdentityProviders } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -144,19 +145,32 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
-      <PopoverTrigger asChild>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 px-3 gap-1.5 text-xs max-w-[200px] rounded-r-none border-r-0",
+              !isSelected && "border-dashed opacity-50",
+            )}
+          >
+            {isSelected && (
+              <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+            )}
+            <Bot className="h-3 w-3 shrink-0" />
+            <span className="font-medium truncate">{agent.name}</span>
+          </Button>
+        </PopoverTrigger>
         <Button
           variant="outline"
           size="sm"
-          className={`h-8 px-3 gap-1.5 text-xs max-w-[200px] ${!isSelected ? "border-dashed opacity-50" : ""}`}
+          className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
+          onClick={() => onToggle(agent.id)}
         >
-          {isSelected && (
-            <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-          )}
-          <Bot className="h-3 w-3 shrink-0" />
-          <span className="font-medium truncate">{agent.name}</span>
+          <X className="h-3 w-3" />
         </Button>
-      </PopoverTrigger>
+      </div>
       <PopoverContent
         className="w-[350px] p-0"
         side="bottom"
@@ -185,22 +199,6 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
           </Button>
         </div>
 
-        <div className="p-4 border-b">
-          <label
-            htmlFor={`subagent-toggle-${agent.id}`}
-            className="flex items-center gap-3 cursor-pointer"
-          >
-            <Checkbox
-              id={`subagent-toggle-${agent.id}`}
-              checked={isSelected}
-              onCheckedChange={() => onToggle(agent.id)}
-            />
-            <span className="text-sm font-medium">
-              {isSelected ? "Enabled as subagent" : "Enable as subagent"}
-            </span>
-          </label>
-        </div>
-
         <div className="p-4">
           <AgentToolsList agentId={agent.id} />
         </div>
@@ -215,9 +213,6 @@ interface SubagentsEditorProps {
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   currentAgentId?: string;
-  searchQuery: string;
-  showAll: boolean;
-  onShowMore: () => void;
 }
 
 function SubagentsEditor({
@@ -225,27 +220,9 @@ function SubagentsEditor({
   selectedAgentIds,
   onSelectionChange,
   currentAgentId,
-  searchQuery,
-  showAll,
-  onShowMore,
 }: SubagentsEditorProps) {
   // Filter out current agent from available agents
   const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
-
-  // Filter by search query
-  const searchFilteredAgents = searchQuery.trim()
-    ? filteredAgents.filter((a) =>
-        a.name.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : filteredAgents;
-
-  // Apply show more limit (show all when searching)
-  const shouldShowAll = showAll || !!searchQuery.trim();
-  const visibleAgents =
-    shouldShowAll || searchFilteredAgents.length <= 10
-      ? searchFilteredAgents
-      : searchFilteredAgents.slice(0, 10);
-  const hiddenCount = searchFilteredAgents.length - 10;
 
   const handleToggle = (agentId: string) => {
     if (selectedAgentIds.includes(agentId)) {
@@ -255,66 +232,38 @@ function SubagentsEditor({
     }
   };
 
-  if (filteredAgents.length === 0) {
-    return (
-      <>
-        <p className="text-sm text-muted-foreground">
-          No other agents available.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-3 gap-1.5 text-xs border-dashed"
-          asChild
-        >
-          <a href="/agents?create=true" target="_blank" rel="noopener">
-            <span className="font-medium">Create a New Agent</span>
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </Button>
-      </>
-    );
-  }
+  const comboboxItems: AssignmentComboboxItem[] = filteredAgents.map((a) => ({
+    id: a.id,
+    name: a.name,
+    description: a.description || undefined,
+  }));
 
-  if (searchFilteredAgents.length === 0) {
-    return <p className="text-sm text-muted-foreground">No matching agents.</p>;
-  }
+  const selectedAgents = filteredAgents.filter((a) =>
+    selectedAgentIds.includes(a.id),
+  );
 
   return (
-    <>
-      {visibleAgents.map((agent) => (
+    <div className="flex flex-wrap gap-2">
+      {selectedAgents.map((agent) => (
         <SubagentPill
           key={agent.id}
           agent={agent}
-          isSelected={selectedAgentIds.includes(agent.id)}
+          isSelected={true}
           onToggle={handleToggle}
         />
       ))}
-      {!shouldShowAll && hiddenCount > 0 && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-3 text-xs border-dashed"
-          onClick={onShowMore}
-        >
-          +{hiddenCount} more
-        </Button>
-      )}
-      {/* Show "Create a New Agent" when there's no "+N more" button */}
-      {(shouldShowAll || hiddenCount <= 0) && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-3 gap-1.5 text-xs border-dashed"
-          asChild
-        >
-          <a href="/agents?create=true" target="_blank" rel="noopener">
-            <span className="font-medium">Create a New Agent</span>
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </Button>
-      )}
-    </>
+      <AssignmentCombobox
+        items={comboboxItems}
+        selectedIds={selectedAgentIds}
+        onToggle={handleToggle}
+        placeholder="Search agents..."
+        emptyMessage="No agents found."
+        createAction={{
+          label: "Create a New Agent",
+          href: "/agents?create=true",
+        }}
+      />
+    </div>
   );
 }
 
@@ -391,7 +340,6 @@ export function AgentDialog({
   onCreated,
 }: AgentDialogProps) {
   const { data: allInternalAgents = [] } = useInternalAgents();
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
@@ -441,12 +389,6 @@ export function AgentDialog({
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
-  const [subagentsSearch, setSubagentsSearch] = useState("");
-  const [subagentsSearchOpen, setSubagentsSearchOpen] = useState(false);
-  const [subagentsShowAll, setSubagentsShowAll] = useState(false);
-  const [toolsSearch, setToolsSearch] = useState("");
-  const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
-  const [toolsShowAll, setToolsShowAll] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   const [identityProviderId, setIdentityProviderId] = useState<string | null>(
     null,
@@ -525,13 +467,7 @@ export function AgentDialog({
         setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
       }
-      // Reset search and counts when dialog opens
-      setSubagentsSearch("");
-      setSubagentsSearchOpen(false);
-      setSubagentsShowAll(false);
-      setToolsSearch("");
-      setToolsSearchOpen(false);
-      setToolsShowAll(false);
+      // Reset counts when dialog opens
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
@@ -1028,96 +964,25 @@ export function AgentDialog({
             {/* Tools (MCP Gateway and Agent only) */}
             {showToolsAndSubagents && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label>Tools ({selectedToolsCount})</Label>
-                  {catalogItems.length > 10 &&
-                    (toolsSearchOpen ? (
-                      <div className="relative flex-1 max-w-[200px]">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                        <Input
-                          placeholder="Search..."
-                          value={toolsSearch}
-                          onChange={(e) => setToolsSearch(e.target.value)}
-                          className="h-7 pl-7 text-xs"
-                          autoFocus
-                          onBlur={() => {
-                            if (!toolsSearch) {
-                              setToolsSearchOpen(false);
-                            }
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => setToolsSearchOpen(true)}
-                      >
-                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <AgentToolsEditor
-                    ref={agentToolsEditorRef}
-                    agentId={agent?.id}
-                    searchQuery={toolsSearch}
-                    showAll={toolsShowAll}
-                    onShowMore={() => setToolsShowAll(true)}
-                    onSelectedCountChange={setSelectedToolsCount}
-                  />
-                </div>
+                <Label>Tools ({selectedToolsCount})</Label>
+                <AgentToolsEditor
+                  ref={agentToolsEditorRef}
+                  agentId={agent?.id}
+                  onSelectedCountChange={setSelectedToolsCount}
+                />
               </div>
             )}
 
             {/* Subagents (MCP Gateway and Agent only) */}
             {showToolsAndSubagents && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label>
-                    Subagents ({selectedDelegationTargetIds.length})
-                  </Label>
-                  {allInternalAgents.filter((a) => a.id !== agent?.id).length >
-                    10 &&
-                    (subagentsSearchOpen ? (
-                      <div className="relative flex-1 max-w-[200px]">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                        <Input
-                          placeholder="Search..."
-                          value={subagentsSearch}
-                          onChange={(e) => setSubagentsSearch(e.target.value)}
-                          className="h-7 pl-7 text-xs"
-                          autoFocus
-                          onBlur={() => {
-                            if (!subagentsSearch) {
-                              setSubagentsSearchOpen(false);
-                            }
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => setSubagentsSearchOpen(true)}
-                      >
-                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <SubagentsEditor
-                    availableAgents={allInternalAgents}
-                    selectedAgentIds={selectedDelegationTargetIds}
-                    onSelectionChange={setSelectedDelegationTargetIds}
-                    currentAgentId={agent?.id}
-                    searchQuery={subagentsSearch}
-                    showAll={subagentsShowAll}
-                    onShowMore={() => setSubagentsShowAll(true)}
-                  />
-                </div>
+                <Label>Subagents ({selectedDelegationTargetIds.length})</Label>
+                <SubagentsEditor
+                  availableAgents={allInternalAgents}
+                  selectedAgentIds={selectedDelegationTargetIds}
+                  onSelectionChange={setSelectedDelegationTargetIds}
+                  currentAgentId={agent?.id}
+                />
               </div>
             )}
 

@@ -74,7 +74,9 @@ describe("reportMcpToolCall", () => {
 
   test("reports successful tool call with duration", () => {
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 1.5,
@@ -82,26 +84,37 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
-      mcp_server_name: "github",
-      tool_name: "github__list_repos",
-      status: "success",
-    });
-
-    expect(histogramObserve).toHaveBeenCalledWith(
-      {
-        profile_name: "My Profile",
+      labels: {
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
         mcp_server_name: "github",
         tool_name: "github__list_repos",
         status: "success",
       },
-      1.5,
-    );
+      value: 1,
+      exemplarLabels: expect.any(Object),
+    });
+
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: {
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
+        mcp_server_name: "github",
+        tool_name: "github__list_repos",
+        status: "success",
+      },
+      value: 1.5,
+      exemplarLabels: expect.any(Object),
+    });
   });
 
   test("reports failed tool call", () => {
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "slack",
       toolName: "slack__send_message",
       durationSeconds: 0.3,
@@ -109,26 +122,37 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
-      mcp_server_name: "slack",
-      tool_name: "slack__send_message",
-      status: "error",
-    });
-
-    expect(histogramObserve).toHaveBeenCalledWith(
-      {
-        profile_name: "My Profile",
+      labels: {
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
         mcp_server_name: "slack",
         tool_name: "slack__send_message",
         status: "error",
       },
-      0.3,
-    );
+      value: 1,
+      exemplarLabels: expect.any(Object),
+    });
+
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: {
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
+        mcp_server_name: "slack",
+        tool_name: "slack__send_message",
+        status: "error",
+      },
+      value: 0.3,
+      exemplarLabels: expect.any(Object),
+    });
   });
 
   test("skips duration observation for zero duration", () => {
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 0,
@@ -139,46 +163,135 @@ describe("reportMcpToolCall", () => {
     expect(histogramObserve).not.toHaveBeenCalled();
   });
 
-  test("includes profile labels in metrics", () => {
+  test("includes agent labels in metrics", () => {
     initializeMcpMetrics(["environment"]);
 
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 2.0,
       isError: false,
-      profileLabels: [{ key: "environment", value: "production" }],
+      agentLabels: [{ key: "environment", value: "production" }],
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
-      mcp_server_name: "github",
-      tool_name: "github__list_repos",
-      status: "success",
-      environment: "production",
+      labels: {
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
+        mcp_server_name: "github",
+        tool_name: "github__list_repos",
+        status: "success",
+        environment: "production",
+      },
+      value: 1,
+      exemplarLabels: expect.any(Object),
     });
   });
 
-  test("sets empty string for missing profile labels", () => {
+  test("sets empty string for missing agent labels", () => {
     initializeMcpMetrics(["environment", "team"]);
 
     reportMcpToolCall({
-      profileName: "My Profile",
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
       mcpServerName: "github",
       toolName: "github__list_repos",
       durationSeconds: 1.0,
       isError: false,
-      profileLabels: [{ key: "environment", value: "staging" }],
+      agentLabels: [{ key: "environment", value: "staging" }],
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_name: "My Profile",
+      labels: {
+        agent_id: "agent-1",
+        agent_name: "My Agent",
+        agent_type: "mcp_gateway",
+        mcp_server_name: "github",
+        tool_name: "github__list_repos",
+        status: "success",
+        environment: "staging",
+        team: "",
+      },
+      value: 1,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("observes request and response size bytes", () => {
+    reportMcpToolCall({
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
+      mcpServerName: "github",
+      toolName: "github__list_repos",
+      durationSeconds: 1.0,
+      isError: false,
+      requestSizeBytes: 256,
+      responseSizeBytes: 4096,
+    });
+
+    const expectedLabels = {
+      agent_id: "agent-1",
+      agent_name: "My Agent",
+      agent_type: "mcp_gateway",
       mcp_server_name: "github",
       tool_name: "github__list_repos",
       status: "success",
-      environment: "staging",
-      team: "",
+    };
+
+    // duration (with exemplar) + request size + response size = 3 histogram observations
+    expect(histogramObserve).toHaveBeenCalledTimes(3);
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 1.0,
+      exemplarLabels: expect.any(Object),
     });
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 256,
+      exemplarLabels: expect.any(Object),
+    });
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: expectedLabels,
+      value: 4096,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("skips size observation when values are undefined", () => {
+    reportMcpToolCall({
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
+      mcpServerName: "github",
+      toolName: "github__list_repos",
+      durationSeconds: 1.0,
+      isError: false,
+    });
+
+    // Only duration histogram should be observed
+    expect(histogramObserve).toHaveBeenCalledTimes(1);
+  });
+
+  test("skips size observation when values are zero", () => {
+    reportMcpToolCall({
+      agentId: "agent-1",
+      agentName: "My Agent",
+      agentType: "mcp_gateway",
+      mcpServerName: "github",
+      toolName: "github__list_repos",
+      durationSeconds: 1.0,
+      isError: false,
+      requestSizeBytes: 0,
+      responseSizeBytes: 0,
+    });
+
+    // Only duration histogram should be observed
+    expect(histogramObserve).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,6 @@
 # Reusable workflow for core team Claude PR review.
-# Called by claude-pr-review.yml with user-specific OAuth tokens.
-name: Claude PR Review (Implementation)
+# Called by claude-coreteam-review.yml with user-specific OAuth tokens.
+name: Claude Core Team Review (Shared)
 
 on:
   workflow_call:

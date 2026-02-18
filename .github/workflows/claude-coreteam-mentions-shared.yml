@@ -1,4 +1,4 @@
-name: Claude Code
+name: Claude Core Team Mentions (Shared)
 
 on:
   workflow_call:

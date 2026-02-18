@@ -2,7 +2,7 @@
 # Phase 1 (triage): Checks for spam, low-quality PRs, missing demo videos, and applies labels.
 # Phase 2 (review): If triage passes, performs a code review on the PR.
 #
-# Uses claude-bot-impl.yml reusable workflow for common boilerplate.
+# Uses claude-community-shared.yml reusable workflow for common boilerplate.
 # Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
 name: Claude PR Triage
 
@@ -26,7 +26,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: ./.github/workflows/claude-bot-impl.yml
+    uses: ./.github/workflows/claude-community-shared.yml
     with:
       prompt: "/triage-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
       allowed_tools: "mcp__github__get_pull_request,mcp__github__list_pull_requests,mcp__github__search_issues,mcp__github__create_pull_request_review,mcp__github__add_issue_comment,mcp__github__update_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files"
@@ -74,7 +74,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: ./.github/workflows/claude-bot-impl.yml
+    uses: ./.github/workflows/claude-community-shared.yml
     with:
       prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
       allowed_tools: "Read,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),mcp__github__create_pull_request_review,mcp__github__get_pull_request_files,mcp__github__get_pull_request_diff,mcp__github__get_pull_request"

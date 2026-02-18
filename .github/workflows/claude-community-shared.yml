@@ -1,9 +1,9 @@
 # Reusable workflow for bot-initiated Claude actions.
 # Wraps the common pattern: GitHub App token + checkout + run-claude composite action.
-# Called by claude-pr-triage.yml and claude-issue-triage.yml.
+# Called by claude-community-pr-triage.yml and claude-community-issue-triage.yml.
 #
 # Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
-name: Claude Bot Action (Implementation)
+name: Claude Community Bot (Shared)
 
 on:
   workflow_call:

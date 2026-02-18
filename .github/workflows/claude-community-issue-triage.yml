@@ -1,7 +1,7 @@
 # Automatically triage new issues using Claude.
 # Checks for low-quality issues, duplicates, and applies labels.
 #
-# Uses claude-bot-impl.yml reusable workflow for common boilerplate.
+# Uses claude-community-shared.yml reusable workflow for common boilerplate.
 # Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
 name: Claude Issue Triage
 
@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    uses: ./.github/workflows/claude-bot-impl.yml
+    uses: ./.github/workflows/claude-community-shared.yml
     with:
       prompt: "/triage-issue REPO: ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
       allowed_tools: "mcp__github__get_issue,mcp__github__search_issues,mcp__github__list_issues,mcp__github__add_issue_comment,mcp__github__update_issue,mcp__github__get_issue_comments"

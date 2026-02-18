@@ -17,6 +17,7 @@ import { useState } from "react";
 import { AgentDialog } from "@/components/agent-dialog";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
+import { SlackAgentSetupDialog } from "@/components/slack-agent-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -40,7 +41,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 export default function SlackPage() {
   const [slackSetupOpen, setSlackSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
+  const [slackAgentDialogOpen, setSlackAgentDialogOpen] = useState(false);
 
   const { data: features } = useFeatures();
   const { data: chatOpsProviders } = useChatOpsStatus();
@@ -82,7 +83,10 @@ export default function SlackPage() {
   );
   const hasBindings =
     !!bindings &&
-    bindings.some((b) => b.agentId && slackAgentIds.has(b.agentId));
+    bindings.some(
+      (b) =>
+        b.provider === "slack" && b.agentId && slackAgentIds.has(b.agentId),
+    );
 
   const localDevOrQuickstartFirstStep = (
     <SetupStep
@@ -173,10 +177,13 @@ export default function SlackPage() {
           </div>
         </SetupStep>
         <SetupStep
-          title="Enable Slack on agents"
-          description="Toggle Slack on agents so they can receive messages from Slack channels"
-          done={slackAgentIds.size > 0}
-          ctaLabel="Enable"
+          title="Connect Agents to Slack channels"
+          description="Map your agents to Slack channels — each channel gets its own dedicated agent"
+          done={hasBindings}
+          ctaLabel="Connect"
+          onAction={() => setSlackAgentDialogOpen(true)}
+          doneActionLabel="Connect more"
+          onDoneAction={() => setSlackAgentDialogOpen(true)}
         />
       </section>
 
@@ -192,6 +199,10 @@ export default function SlackPage() {
       <NgrokSetupDialog
         open={ngrokDialogOpen}
         onOpenChange={setNgrokDialogOpen}
+      />
+      <SlackAgentSetupDialog
+        open={slackAgentDialogOpen}
+        onOpenChange={setSlackAgentDialogOpen}
       />
     </div>
   );
@@ -215,12 +226,7 @@ function ChannelBindingsSection() {
     (typeof slackAgents)[number] | null
   >(null);
 
-  // Filter bindings to only Slack ones
-  const slackBindings = bindings?.filter((b) => {
-    // Bindings don't have a provider field exposed — use agent matching
-    // or we show all bindings. For now, show all and let multi-select handle it.
-    return true;
-  });
+  const slackBindings = bindings?.filter((b) => b.provider === "slack");
 
   // Map agentId -> list of bindings
   const bindingsByAgentId = new Map<string, typeof bindings>();

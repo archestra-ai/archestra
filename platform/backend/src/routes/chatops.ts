@@ -30,6 +30,19 @@ import {
   UpdateChatOpsChannelBindingSchema,
 } from "@/types/chatops-channel-binding";
 
+/**
+ * Short-lived dedup cache for Slack events.
+ * Slack fires both `message` and `app_mention` for @mention messages
+ * with the same event ts, causing duplicate processing.
+ * Entries auto-expire after 30 seconds.
+ */
+const recentlyProcessedSlackEvents = new Map<string, true>();
+
+function markSlackEventProcessed(eventTs: string): void {
+  recentlyProcessedSlackEvents.set(eventTs, true);
+  setTimeout(() => recentlyProcessedSlackEvents.delete(eventTs), 30_000);
+}
+
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * MS Teams webhook endpoint
@@ -352,7 +365,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
               // Send agent selection card
-              await sendAgentSelectionCard(context, message);
+              await sendAgentSelectionCard({
+                provider,
+                message,
+                isWelcome: false,
+                providerContext: context,
+              });
               return;
             }
 
@@ -366,7 +384,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!binding || !binding.agentId) {
               // No binding, or discovered channel without agent assigned — show agent selection
               await awaitDiscovery(provider, context);
-              await sendAgentSelectionCard(context, message);
+              await sendAgentSelectionCard({
+                provider,
+                message,
+                isWelcome: true,
+                providerContext: context,
+              });
               return;
             }
 
@@ -499,6 +522,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             return reply.send({ ok: true });
           }
 
+          // Deduplicate: Slack fires both `message` and `app_mention` events
+          // for the same @mention with identical ts. Skip if already processed.
+          if (recentlyProcessedSlackEvents.has(message.messageId)) {
+            return reply.send({ ok: true });
+          }
+          markSlackEventProcessed(message.messageId);
+
           // Discover channels in background (fire-and-forget — no TurnContext to expire)
           if (message.workspaceId) {
             chatOpsManager
@@ -518,9 +548,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Verify sender is a registered user
           if (!message.senderEmail) {
-            logger.warn(
-              "[ChatOps] Could not resolve Slack user email",
-            );
+            logger.warn("[ChatOps] Could not resolve Slack user email");
             await provider.sendReply({
               originalMessage: message,
               text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
@@ -545,7 +573,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (trimmedText === CHATOPS_COMMANDS.HELP) {
             await provider.sendReply({
               originalMessage: message,
-              text: "*Available commands:*\n" +
+              text:
+                "*Available commands:*\n" +
                 "`/select-agent` — Change the default agent\n" +
                 "`/status` — Show current agent binding\n" +
                 "`/help` — Show this help message\n\n" +
@@ -565,7 +594,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               const agent = await AgentModel.findById(binding.agentId);
               await provider.sendReply({
                 originalMessage: message,
-                text: `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
+                text:
+                  `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
                   "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
                   "Use `/select-agent` to change the default agent.",
               });
@@ -579,7 +609,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
-            await sendSlackAgentSelectionMessage(provider, message);
+            await sendAgentSelectionCard({
+              provider,
+              message,
+              isWelcome: false,
+            });
             return reply.send({ ok: true });
           }
 
@@ -591,7 +625,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           if (!binding || !binding.agentId) {
-            await sendSlackAgentSelectionMessage(provider, message);
+            await sendAgentSelectionCard({
+              provider,
+              message,
+              isWelcome: true,
+            });
             return reply.send({ ok: true });
           }
 
@@ -1044,144 +1082,33 @@ function maskValue(value: string): string {
 }
 
 /**
- * Send an Adaptive Card for agent selection
+ * Shared helper: get accessible agents and send agent selection card via the provider.
+ * Both MS Teams and Slack handlers call this instead of provider-specific functions.
  */
-async function sendAgentSelectionCard(
-  context: TurnContext,
-  message: IncomingChatMessage,
-): Promise<void> {
-  // Get available agents for MS Teams, filtered by user access
+async function sendAgentSelectionCard(params: {
+  provider: ChatOpsProvider;
+  message: IncomingChatMessage;
+  isWelcome: boolean;
+  providerContext?: unknown;
+}): Promise<void> {
   const agents = await chatOpsManager.getAccessibleChatopsAgents({
-    provider: "ms-teams",
-    senderEmail: message.senderEmail,
+    provider: params.provider.providerId,
+    senderEmail: params.message.senderEmail,
   });
 
   if (agents.length === 0) {
-    await context.sendActivity(
-      "No agents are available for you in Microsoft Teams.\n" +
-        "Contact your administrator to get access to an agent with Teams enabled.",
-    );
+    await params.provider.sendReply({
+      originalMessage: params.message,
+      text: `No agents are available for you in ${params.provider.displayName}.\nContact your administrator to get access to an agent with ${params.provider.displayName} enabled.`,
+    });
     return;
   }
 
-  // Build choices for the dropdown
-  const choices = agents.map((agent) => ({
-    title: agent.name,
-    value: agent.id,
-  }));
-
-  // Check for existing binding to pre-select
-  const existingBinding = await ChatOpsChannelBindingModel.findByChannel({
-    provider: "ms-teams",
-    channelId: message.channelId,
-    workspaceId: message.workspaceId,
-  });
-
-  // Build card body based on whether this is first-time setup or changing agent
-  const cardBody = existingBinding
-    ? [
-        {
-          type: "TextBlock",
-          size: "Medium",
-          weight: "Bolder",
-          text: "Change Default Agent",
-        },
-        {
-          type: "TextBlock",
-          text: "Select a different agent to handle messages in this channel:",
-          wrap: true,
-        },
-        {
-          type: "Input.ChoiceSet",
-          id: "agentId",
-          style: "compact",
-          value: existingBinding.agentId,
-          choices,
-        },
-      ]
-    : [
-        {
-          type: "TextBlock",
-          weight: "Bolder",
-          text: "Welcome to Archestra!",
-        },
-        {
-          type: "TextBlock",
-          text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
-          wrap: true,
-          spacing: "Small",
-        },
-        {
-          type: "TextBlock",
-          text: "**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).",
-          wrap: true,
-          spacing: "Small",
-        },
-        {
-          type: "TextBlock",
-          text: "**Available commands:**",
-          wrap: true,
-          spacing: "Medium",
-        },
-        {
-          type: "FactSet",
-          spacing: "Small",
-          facts: [
-            {
-              title: "/select-agent",
-              value:
-                "Change the default agent handling requests in the channel",
-            },
-            {
-              title: "/status",
-              value: "Check the current agent handling requests in the channel",
-            },
-            { title: "/help", value: "Show available commands" },
-          ],
-        },
-        {
-          type: "TextBlock",
-          text: "**Let's set the default agent for this channel:**",
-          wrap: true,
-          spacing: "Medium",
-        },
-        {
-          type: "Input.ChoiceSet",
-          id: "agentId",
-          style: "compact",
-          value: choices[0]?.value || "",
-          choices,
-        },
-      ];
-
-  // Send Adaptive Card
-  const card = {
-    type: "AdaptiveCard",
-    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-    version: "1.4",
-    body: cardBody,
-    actions: [
-      {
-        type: "Action.Submit",
-        title: "Confirm Selection",
-        data: {
-          action: "selectAgent",
-          channelId: message.channelId,
-          workspaceId: message.workspaceId,
-          // Include original message so we can process it after binding
-          originalMessageText: message.text || undefined,
-        },
-      },
-    ],
-  };
-
-  await context.sendActivity({
-    attachments: [
-      {
-        contentType: "application/vnd.microsoft.card.adaptive",
-        content: card,
-      },
-    ],
+  await params.provider.sendAgentSelectionCard({
+    message: params.message,
+    agents,
+    isWelcome: params.isWelcome,
+    providerContext: params.providerContext,
   });
 }
 
@@ -1535,36 +1462,4 @@ const UUID_REGEX =
 
 function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value);
-}
-
-/**
- * Send agent selection message in Slack using Block Kit buttons
- */
-async function sendSlackAgentSelectionMessage(
-  provider: ReturnType<typeof chatOpsManager.getSlackProvider>,
-  message: IncomingChatMessage,
-): Promise<void> {
-  if (!provider) return;
-
-  const agents = await chatOpsManager.getAccessibleChatopsAgents({
-    provider: "slack",
-    senderEmail: message.senderEmail,
-  });
-
-  if (agents.length === 0) {
-    await provider.sendReply({
-      originalMessage: message,
-      text: "No agents are available for you in Slack.\n" +
-        "Contact your administrator to get access to an agent with Slack enabled.",
-    });
-    return;
-  }
-
-  await provider.sendAgentSelectionMessage({
-    channelId: message.channelId,
-    threadTs: message.threadId,
-    agents,
-    title: "Select an Agent",
-    description: "Choose an agent to handle messages in this channel:",
-  });
 }

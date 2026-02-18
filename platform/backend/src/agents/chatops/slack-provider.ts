@@ -1,5 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { WebClient } from "@slack/web-api";
 import config from "@/config";
 import logger from "@/logging";
@@ -146,6 +145,20 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const text = event.text || "";
+    const isThreadReply = Boolean(event.thread_ts);
+    const isDM = event.channel_type === "im";
+
+    // In channels (including thread replies), only respond when the bot is
+    // @mentioned (app_mention event or message text containing <@BOT_ID>).
+    // DMs are always processed without requiring a mention.
+    if (!isDM) {
+      const hasBotMention =
+        this.botUserId && text.includes(`<@${this.botUserId}>`);
+      if (event.type !== "app_mention" && !hasBotMention) {
+        return null;
+      }
+    }
+
     const cleanedText = this.cleanBotMention(text);
 
     if (!cleanedText.trim()) {
@@ -153,7 +166,6 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const threadTs = event.thread_ts || event.ts;
-    const isThreadReply = Boolean(event.thread_ts);
 
     return {
       messageId: event.ts,
@@ -192,17 +204,11 @@ class SlackProvider implements ChatOpsProvider {
     return (result.ts as string) || "";
   }
 
-  /**
-   * Send an agent selection message with interactive buttons.
-   * Uses Block Kit with button actions for agent selection.
-   */
-  async sendAgentSelectionMessage(params: {
-    channelId: string;
-    threadTs?: string;
+  async sendAgentSelectionCard(params: {
+    message: IncomingChatMessage;
     agents: { id: string; name: string }[];
-    title: string;
-    description: string;
-  }): Promise<string> {
+    isWelcome: boolean;
+  }): Promise<void> {
     if (!this.client) {
       throw new Error("SlackProvider not initialized");
     }
@@ -218,7 +224,7 @@ class SlackProvider implements ChatOpsProvider {
     }));
 
     // Slack allows max 5 elements per actions block, split if needed
-    const actionBlocks = [];
+    const actionBlocks: Record<string, unknown>[] = [];
     for (let i = 0; i < agentButtons.length; i += 5) {
       actionBlocks.push({
         type: "actions" as const,
@@ -226,26 +232,57 @@ class SlackProvider implements ChatOpsProvider {
       });
     }
 
-    const blocks = [
-      {
-        type: "section" as const,
-        text: {
-          type: "mrkdwn" as const,
-          text: `*${params.title}*\n${params.description}`,
-        },
-      },
-      ...actionBlocks,
-    ];
+    const blocks: Record<string, unknown>[] = params.isWelcome
+      ? [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Welcome to Archestra!*\nEach Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
+            },
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).",
+            },
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Available commands:*\n`/select-agent` — Change the default agent handling requests in the channel\n`/status` — Check the current agent handling requests in the channel\n`/help` — Show available commands",
+            },
+          },
+          { type: "divider" },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Let's set the default agent for this channel:*",
+            },
+          },
+          ...actionBlocks,
+        ]
+      : [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Change Default Agent*\nSelect a different agent to handle messages in this channel:",
+            },
+          },
+          ...actionBlocks,
+        ];
 
-    const result = await this.client.chat.postMessage({
-      channel: params.channelId,
-      thread_ts: params.threadTs,
-      text: params.title,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Block Kit types are complex; shape is correct
+    await this.client.chat.postMessage({
+      channel: params.message.channelId,
+      thread_ts: params.message.threadId,
+      text: params.isWelcome ? "Welcome to Archestra!" : "Change Default Agent",
+      // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
       blocks: blocks as any,
     });
-
-    return (result.ts as string) || "";
   }
 
   async getThreadHistory(

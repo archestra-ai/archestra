@@ -197,6 +197,21 @@ export interface ChatOpsProvider {
   getUserEmail(userId: string): Promise<string | null>;
 
   /**
+   * Send an agent selection card/message to a channel.
+   * Each provider renders the card in its native format (Adaptive Card for MS Teams, Block Kit for Slack).
+   * @param params.message - The incoming message that triggered the selection
+   * @param params.agents - Available agents to choose from
+   * @param params.isWelcome - Whether this is a first-time welcome (true) or a change-agent request (false)
+   * @param params.providerContext - Provider-specific context (e.g., TurnContext for MS Teams)
+   */
+  sendAgentSelectionCard(params: {
+    message: IncomingChatMessage;
+    agents: { id: string; name: string }[];
+    isWelcome: boolean;
+    providerContext?: unknown;
+  }): Promise<void>;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)

@@ -89,7 +89,12 @@ export default function MsTeamsPage() {
   );
   const hasBindings =
     !!bindings &&
-    bindings.some((b) => b.agentId && msTeamsAgentIds.has(b.agentId));
+    bindings.some(
+      (b) =>
+        b.provider === "ms-teams" &&
+        b.agentId &&
+        msTeamsAgentIds.has(b.agentId),
+    );
 
   const localDevOrQuickstartFirstStep = (
     <SetupStep
@@ -238,9 +243,11 @@ function ChannelBindingsSection() {
     (typeof msTeamsAgents)[number] | null
   >(null);
 
+  const msTeamsBindings = bindings?.filter((b) => b.provider === "ms-teams");
+
   // Map agentId → list of bindings
   const bindingsByAgentId = new Map<string, typeof bindings>();
-  for (const b of bindings ?? []) {
+  for (const b of msTeamsBindings ?? []) {
     if (!b.agentId) continue;
     const list = bindingsByAgentId.get(b.agentId) ?? [];
     list.push(b);
@@ -249,13 +256,13 @@ function ChannelBindingsSection() {
 
   // All known channels as MultiSelect items
   const channelItems =
-    bindings?.map((b) => ({
+    msTeamsBindings?.map((b) => ({
       value: b.id,
       label: `${b.channelName ?? b.channelId}${b.workspaceName ? ` (${b.workspaceName})` : ""}`,
     })) ?? [];
 
   const handleChannelsChange = (agentId: string, selectedIds: string[]) => {
-    if (!bindings) return;
+    if (!msTeamsBindings) return;
 
     const currentBindingIds = new Set(
       (bindingsByAgentId.get(agentId) ?? []).map((b) => b.id),

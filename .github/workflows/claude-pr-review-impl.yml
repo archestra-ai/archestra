@@ -36,24 +36,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
           use_sticky_comment: true
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR_NUMBER: ${{ inputs.pr_number }}
-
-            Perform a code review with the following focus areas:
-
-            1. **Code Quality** — Clean code, error handling, edge cases, readability
-            2. **Security** — Injection vulnerabilities, input sanitization, auth/authz, secrets exposure
-            3. **Performance** — N+1 queries, unnecessary computation, memory leaks
-            4. **Testing** — Adequate coverage, edge cases, test quality
-            5. **Project conventions** — Check CLAUDE.md for coding standards
-
-            Guidelines:
-            - Be concise. No filler praise.
-            - Use inline review comments for specific issues.
-            - If the PR is clean, approve with a one-line summary.
-            - Flag blocking issues as REQUEST_CHANGES. Use COMMENT for suggestions.
-            - Group related issues.
+          prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ inputs.pr_number }}"
           claude_args: |
             --model claude-opus-4-5-20251101
-            --allowedTools Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)
+            --allowedTools Read,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)

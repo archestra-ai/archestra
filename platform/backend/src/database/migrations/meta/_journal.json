@@ -1023,6 +1023,13 @@
       "when": 1771103708795,
       "tag": "0145_little_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1771253193156,
+      "tag": "0146_blue_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

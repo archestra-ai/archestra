@@ -668,6 +668,11 @@ class CerebrasResponseAdapter implements LLMResponseAdapter<CerebrasResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): CerebrasResponse {
     return this.response;
   }
@@ -1087,9 +1092,7 @@ export const cerebrasAdapterFactory: LLMProvider<
     return config.llm.cerebras.baseUrl;
   },
 
-  getSpanName(_streaming: boolean): string {
-    return "cerebras.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

@@ -8,6 +8,10 @@ import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription
 import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
+import {
+  RouteCategory,
+  startActiveChatSpan,
+} from "@/routes/proxy/utils/tracing";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -785,15 +789,31 @@ ${formattedHistory}
     "[IncomingEmail] Invoking agent with email content",
   );
 
-  // Execute using the shared A2A service
+  // Resolve user for span attributes (skip when userId is "system")
+  const emailUser =
+    userId !== "system" ? await UserModel.getById(userId) : null;
+
+  // Execute using the shared A2A service, wrapped in a parent span so all
+  // LLM and MCP tool calls appear as children of a single unified trace.
   // userId is determined by security mode:
   // - private: actual user ID from email lookup
   // - internal/public: "system" (anonymous)
-  const result = await executeA2AMessage({
+  const result = await startActiveChatSpan({
+    agentName: agent.name,
     agentId,
-    message,
-    organizationId: organization,
-    userId,
+    routeCategory: RouteCategory.EMAIL,
+    triggerSource: "email",
+    user: emailUser
+      ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
+      : null,
+    callback: async () => {
+      return executeA2AMessage({
+        agentId,
+        message,
+        organizationId: organization,
+        userId,
+      });
+    },
   });
 
   logger.info(

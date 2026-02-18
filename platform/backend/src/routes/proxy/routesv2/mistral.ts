@@ -16,7 +16,6 @@ import { constructResponseSchema, Mistral, UuidIdSchema } from "@/types";
 import { mistralAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/mistral`;
@@ -113,23 +112,11 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Mistral request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         mistralAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -161,23 +148,11 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Mistral request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         mistralAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );

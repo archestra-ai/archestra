@@ -14,7 +14,6 @@ import { Cohere, constructResponseSchema, UuidIdSchema } from "@/types";
 import { cohereAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const COHERE_PREFIX = `${PROXY_API_PREFIX}/cohere`;
@@ -114,24 +113,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Cohere request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-      return handleLLMProxy(
-        request.body,
-        request.headers,
-        reply,
-        cohereAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
-      );
+      return handleLLMProxy(request.body, request, reply, cohereAdapterFactory);
     },
   );
 
@@ -156,24 +138,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Cohere request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-      return handleLLMProxy(
-        request.body,
-        request.headers,
-        reply,
-        cohereAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
-      );
+      return handleLLMProxy(request.body, request, reply, cohereAdapterFactory);
     },
   );
 };

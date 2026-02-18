@@ -8,7 +8,6 @@ import { constructResponseSchema, UuidIdSchema, Zhipuai } from "@/types";
 import { zhipuaiAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/zhipuai`;
@@ -95,23 +94,11 @@ const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Zhipu AI request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         zhipuaiAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -140,23 +127,11 @@ const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Zhipu AI request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         zhipuaiAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );

@@ -1,8 +1,5 @@
 export { default as accountsTable } from "./account";
-export {
-  type AgentHistoryEntry,
-  default as agentsTable,
-} from "./agent";
+export { default as agentsTable } from "./agent";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";

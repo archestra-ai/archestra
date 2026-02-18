@@ -14,7 +14,6 @@ import { constructResponseSchema, Ollama, UuidIdSchema } from "@/types";
 import { ollamaAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 const UUID_PATTERN =
   /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i;
@@ -141,24 +140,7 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Ollama request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-      return handleLLMProxy(
-        request.body,
-        request.headers,
-        reply,
-        ollamaAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
-      );
+      return handleLLMProxy(request.body, request, reply, ollamaAdapterFactory);
     },
   );
 
@@ -195,24 +177,7 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Ollama request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-      return handleLLMProxy(
-        request.body,
-        request.headers,
-        reply,
-        ollamaAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
-      );
+      return handleLLMProxy(request.body, request, reply, ollamaAdapterFactory);
     },
   );
 };

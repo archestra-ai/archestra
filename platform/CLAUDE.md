@@ -181,6 +181,10 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=  # Username for OTLP basic auth (req
 ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=  # Password for OTLP basic auth (requires username)
 ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes precedence over basic auth)
 
+# OpenTelemetry Tracing
+ARCHESTRA_OTEL_VERBOSE_TRACING=false  # Set to true to include Fastify/HTTP/fetch infrastructure spans (default: false, only GenAI spans)
+ARCHESTRA_OTEL_CONTENT_MAX_LENGTH=10000  # Max characters for captured content in span events (default: 10000)
+
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
@@ -248,9 +252,9 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 ## Observability
 
-**Tracing**: LLM proxy routes add profile data via `startActiveLlmSpan()`. Traces include `agent.id`, `agent.name` and dynamic `agent.<label>` attributes. Profile label keys are fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo.
+**Tracing**: Follows [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/). LLM spans use `gen_ai.agent.id`, `gen_ai.agent.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.operation.name`, and `archestra.label.<key>` for dynamic labels. MCP spans use `gen_ai.tool.name`, `mcp.server.name`. Session tracking via `gen_ai.conversation.id` (from `X-Archestra-Session-Id` header). Span names: `chat {model}`, `generate_content {model}`, `execute_tool {tool_name}`. Agent label keys fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo. User identity tracked via `archestra.user.id`, `archestra.user.email`, `archestra.user.name` (when available). LLM spans include `archestra.cost` (USD) and `gen_ai.usage.total_tokens`.
 
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name`, `agent_id` and dynamic profile labels as dimensions. Metrics are reinitialized on startup with current label keys from database.
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_id` (internal), `agent_name`, `agent_type`, `external_agent_id` (from header), and dynamic agent labels as dimensions. MCP metrics include `agent_id`, `agent_name`, `agent_type`. Agent execution metrics use `external_agent_id` for the client-provided ID. Metrics are reinitialized on startup with current label keys from database.
 
 **Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 

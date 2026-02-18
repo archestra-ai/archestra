@@ -4,7 +4,7 @@
   "changelog-type": "default",
   "pull-request-footer": "",
   "include-v-in-tag": true,
-  "draft": false,
+  "draft": true,
   "separate-pull-requests": true,
   "changelog-sections": [
     {

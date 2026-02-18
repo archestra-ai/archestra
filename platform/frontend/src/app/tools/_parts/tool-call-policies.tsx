@@ -226,6 +226,10 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                       value: "block_when_context_is_untrusted",
                       label: "Allow in trusted context",
                     },
+                    {
+                      value: "require_approval",
+                      label: "Require approval",
+                    },
                     { value: "block_always", label: "Block always" },
                   ].map(({ value, label }) => (
                     <SelectItem key={label} value={value}>

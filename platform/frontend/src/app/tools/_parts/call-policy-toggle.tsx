@@ -1,4 +1,4 @@
-import { Ban, Check, Handshake } from "lucide-react";
+import { Ban, Check, Handshake, ShieldQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -78,6 +78,32 @@ export function CallPolicyToggle({
             {isSmall
               ? "Allow in trusted context"
               : "Allow only when context contains no untrusted data"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={getButtonClassName("require_approval")}
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (value !== "require_approval") {
+                  onChange("require_approval");
+                }
+              }}
+            >
+              <ShieldQuestion className="h-3.5 w-3.5" />
+              {!isSmall && "Require approval"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isSmall
+              ? "Require approval in chat"
+              : "Requires user confirmation before executing in chat"}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

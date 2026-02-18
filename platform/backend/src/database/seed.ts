@@ -164,12 +164,21 @@ async function seedChatAssistantAgent(): Promise<void> {
 
   const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
 
-  await db.insert(schema.agentsTable).values({
-    organizationId: org.id,
-    name: "Chat Assistant",
-    agentType: "agent",
-    systemPrompt,
-  });
+  const [inserted] = await db
+    .insert(schema.agentsTable)
+    .values({
+      organizationId: org.id,
+      name: "Chat Assistant",
+      agentType: "agent",
+      systemPrompt,
+    })
+    .returning({ id: schema.agentsTable.id });
+
+  // Assign to Default Team so all members have access
+  const defaultTeam = await TeamModel.findByName(DEFAULT_TEAM_NAME, org.id);
+  if (defaultTeam && inserted) {
+    await AgentTeamModel.assignTeamsToAgent(inserted.id, [defaultTeam.id]);
+  }
 
   logger.info("Seeded Chat Assistant internal agent");
 }
@@ -328,6 +337,24 @@ async function seedDefaultTeam(): Promise<void> {
     defaultTeam.id,
   ]);
   await AgentTeamModel.assignTeamsToAgent(defaultLlmProxy.id, [defaultTeam.id]);
+
+  // Assign team to Chat Assistant agent if it exists
+  const chatAssistant = await db
+    .select({ id: schema.agentsTable.id })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        eq(schema.agentsTable.organizationId, org.id),
+        eq(schema.agentsTable.name, "Chat Assistant"),
+      ),
+    )
+    .limit(1);
+  if (chatAssistant.length > 0) {
+    await AgentTeamModel.assignTeamsToAgent(chatAssistant[0].id, [
+      defaultTeam.id,
+    ]);
+  }
+
   logger.info("Assigned default team to default agents");
 }
 

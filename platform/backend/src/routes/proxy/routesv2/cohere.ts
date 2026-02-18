@@ -38,7 +38,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     upstream: cohereBaseUrl,
     prefix: COHERE_PREFIX,
     rewritePrefix: "",
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       // Only skip the dedicated /chat endpoints (not compatibility routes)
       const urlPath = request.url.split("?")[0];
       const isChatEndpoint =
@@ -54,7 +54,12 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Cohere's proxy preHandler: Skipping the chat route",
         );
-        next(new Error("skip"));
+        reply.code(400).send({
+          error: {
+            message: "Chat requests should use the dedicated endpoint",
+            type: "invalid_request_error",
+          },
+        });
         return;
       }
 

@@ -27,9 +27,12 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.anthropic.baseUrl,
     prefix: ANTHROPIC_PREFIX,
     rewritePrefix: "/v1",
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       // Skip messages route (we handle it specially below with full agent support)
-      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+      // Use endsWith on the path portion (before query string) to avoid blocking
+      // sub-paths like /messages/count_tokens or /messages/batches
+      const urlPath = request.url.split("?")[0];
+      if (request.method === "POST" && urlPath.endsWith(MESSAGES_SUFFIX)) {
         logger.info(
           {
             method: request.method,
@@ -39,7 +42,16 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Anthropic proxy preHandler: skipping messages route",
         );
-        next(new Error("skip"));
+        // Send a 400 response instead of throwing an Error to avoid flooding Sentry.
+        // The dedicated messages routes (/v1/anthropic/v1/messages) handle these requests.
+        reply.code(400).send({
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message:
+              "Messages requests should use the dedicated endpoint: POST /v1/anthropic/v1/messages",
+          },
+        });
         return;
       }
 

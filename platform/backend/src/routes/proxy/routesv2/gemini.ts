@@ -36,14 +36,21 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     /**
      * Exclude generateContent and streamGenerateContent routes since we handle them below
      */
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
           request.url.includes(":streamGenerateContent"))
       ) {
         // Skip proxy for these routes - we handle them below
-        next(new Error("skip"));
+        reply.code(400).send({
+          error: {
+            code: 400,
+            message:
+              "generateContent requests should use the dedicated endpoint",
+            status: "INVALID_ARGUMENT",
+          },
+        });
       } else {
         next();
       }
@@ -57,14 +64,21 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     /**
      * Exclude generateContent and streamGenerateContent routes since we handle them below
      */
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
           request.url.includes(":streamGenerateContent"))
       ) {
         // Skip proxy for these routes - we handle them below
-        next(new Error("skip"));
+        reply.code(400).send({
+          error: {
+            code: 400,
+            message:
+              "generateContent requests should use the dedicated endpoint",
+            status: "INVALID_ARGUMENT",
+          },
+        });
       } else {
         next();
       }

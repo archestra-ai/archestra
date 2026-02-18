@@ -144,7 +144,7 @@ for (const config of testConfigs) {
 
       // Navigate to chat page
       await goToPage(page, "/chat");
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
 
       // Skip onboarding if it appears
       if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {

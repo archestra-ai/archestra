@@ -227,12 +227,9 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     name: /^\+\d+ more$/,
   });
 
-  // The "Add" button in the MCP Gateways section (AssignmentCombobox trigger)
-  const mcpGatewaysLabel = dialog.getByText("MCP Gateways");
-  const addButton = mcpGatewaysLabel
-    .locator("..")
-    .locator("..")
-    .getByRole("button", { name: "Add" });
+  // The first "Add" button in the dialog belongs to the MCP Gateways section
+  // (MCP Gateways renders before Agents in the dialog layout)
+  const addButton = dialog.getByRole("button", { name: "Add" }).first();
 
   await expect(async () => {
     if (!(await profilePill.isVisible().catch(() => false))) {
@@ -718,7 +715,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   });
 
   // Wait for Keycloak login form to be ready
-  await ssoPage.waitForLoadState("networkidle");
+  await ssoPage.waitForLoadState("domcontentloaded");
 
   // Fill in Keycloak login form
   const usernameField = ssoPage.getByLabel("Username or email");
@@ -736,7 +733,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 60000 });
 
   // Wait for page to settle
-  await ssoPage.waitForLoadState("networkidle");
+  await ssoPage.waitForLoadState("domcontentloaded");
 
   // Check if we landed on a logged-in page (not sign-in)
   const finalUrl = ssoPage.url();

@@ -50,7 +50,7 @@ test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
       });
 
       await page.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
 
       // Trigger the 403 through window.fetch to activate the React error detection.
       // The React wrapper intercepts window.fetch calls and detects origin errors,

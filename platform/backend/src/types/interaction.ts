@@ -13,6 +13,7 @@ import {
   OpenAi,
   Vllm,
   Zhipuai,
+  OpenRouter,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
@@ -36,6 +37,7 @@ export const InteractionRequestSchema = z.union([
   Ollama.API.ChatCompletionRequestSchema,
   Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
+  OpenRouter.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -49,6 +51,7 @@ export const InteractionResponseSchema = z.union([
   Ollama.API.ChatCompletionResponseSchema,
   Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
+  OpenRouter.API.ChatCompletionResponseSchema,
 ]);
 
 /**
@@ -160,6 +163,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     response: Zhipuai.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["openrouter:chatCompletions"]),
+    request: OpenRouter.API.ChatCompletionRequestSchema,
+    processedRequest:
+      OpenRouter.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: OpenRouter.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);

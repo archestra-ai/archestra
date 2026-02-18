@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.46](https://github.com/archestra-ai/archestra/compare/platform-v1.0.45...platform-v1.0.46) (2026-02-18)
+
+
+### Features
+
+* observability overhaul - unified tracing, log-trace correlation, and Grafana dashboards ([#2727](https://github.com/archestra-ai/archestra/issues/2727)) ([d1cf779](https://github.com/archestra-ai/archestra/commit/d1cf779be379dfc0efd7a31ec925daa5a72950b2))
+
+
+### Bug Fixes
+
+* dual error/success messages on API key operations ([#2865](https://github.com/archestra-ai/archestra/issues/2865)) ([a2ec618](https://github.com/archestra-ai/archestra/commit/a2ec618ca2bac709732364c8ac46716b47103805)), closes [#2850](https://github.com/archestra-ai/archestra/issues/2850)
+* Fix detection of the MCP tools ([#2840](https://github.com/archestra-ai/archestra/issues/2840)) ([7e436b8](https://github.com/archestra-ai/archestra/commit/7e436b8d659ef7d3295a34beef20c685ad495831))
+* improve e2e test stability and patch Sentry low-hanging-fruit issues ([#2855](https://github.com/archestra-ai/archestra/issues/2855)) ([a223ccd](https://github.com/archestra-ai/archestra/commit/a223ccd91250552c17231643d82564d6f3344e42))
+* improve UX around tool assignment ([#2846](https://github.com/archestra-ai/archestra/issues/2846)) ([869d7be](https://github.com/archestra-ai/archestra/commit/869d7bed26555dd8f6786c551e364bf1cb9d9ed0))
+
+
+### Miscellaneous Chores
+
+* add e2e tests readme ([#2866](https://github.com/archestra-ai/archestra/issues/2866)) ([4b8f13c](https://github.com/archestra-ai/archestra/commit/4b8f13c7ae6f0f6de76b77e3ec49478659aa657b))
+* **deps:** bump ajv from 8.17.1 to 8.18.0 in /platform/mcp_server_docker_image ([#2853](https://github.com/archestra-ai/archestra/issues/2853)) ([ba2cd8f](https://github.com/archestra-ai/archestra/commit/ba2cd8fda804edb083f65eec4d67894897ea2e44))
+* use "connection" keyword instead of "credential" ([#2868](https://github.com/archestra-ai/archestra/issues/2868)) ([4612b4b](https://github.com/archestra-ai/archestra/commit/4612b4b8f2e4667bf16294c51cf0183c86777d1e))
+
 ## [1.0.45](https://github.com/archestra-ai/archestra/compare/platform-v1.0.44...platform-v1.0.45) (2026-02-17)
 
 

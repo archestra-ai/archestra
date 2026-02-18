@@ -183,7 +183,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   return (
     <div className="space-y-2">
-      <Label>Installation Type</Label>
+      <Label>Connect MCP Server for</Label>
       <Select
         value={selectedValue}
         onValueChange={handleValueChange}

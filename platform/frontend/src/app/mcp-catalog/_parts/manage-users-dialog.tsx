@@ -179,13 +179,13 @@ export function ManageUsersDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage credentials
+            Manage connections
             <span className="text-muted-foreground font-normal">
               {label || firstServer.name}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage credentials for this MCP Registry item.
+            Manage connections for this MCP Registry item.
           </DialogDescription>
         </DialogHeader>
 

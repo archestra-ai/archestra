@@ -76,7 +76,7 @@ export function OAuthConfirmationDialog({
           <DialogDescription className="pt-4 space-y-3 text-sm">
             You'll be redirected to {serverName}'s authorization page to grant
             access. After authentication, you'll be brought back here and the
-            server will be installed with your credentials.
+            server will be connected with your credentials.
           </DialogDescription>
         </DialogHeader>
 

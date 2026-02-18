@@ -1091,6 +1091,82 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(container?.args).toEqual(["/new/path"]);
   });
 
+  test("generates deploymentSpec with $ENV argument interpolation", () => {
+    const mcpServer: McpServer = {
+      id: "env-var-plain-id",
+      name: "env-var-plain-server",
+      catalogId: "catalog-env-var-plain",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const environmentValues = {
+      API_TOKEN: "token-123",
+    };
+
+    const k8sDeployment = createMockK8sDeployment(
+      mcpServer,
+      undefined,
+      environmentValues,
+    );
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["script.js", "--token", "$API_TOKEN"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.args).toEqual(["script.js", "--token", "token-123"]);
+  });
+
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: test name intentionally includes placeholder syntax
+  test("generates deploymentSpec with ${ENV} argument interpolation", () => {
+    const mcpServer: McpServer = {
+      id: "env-var-braced-id",
+      name: "env-var-braced-server",
+      catalogId: "catalog-env-var-braced",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const environmentValues = {
+      WORKSPACE_PATH: "/workspace/data",
+    };
+
+    const k8sDeployment = createMockK8sDeployment(
+      mcpServer,
+      undefined,
+      environmentValues,
+    );
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: [
+        "script.js",
+        "--path",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of env placeholders in arguments
+        "${WORKSPACE_PATH}",
+      ],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.args).toEqual(["script.js", "--path", "/workspace/data"]);
+  });
+
   test("generates deploymentSpec with custom HTTP port", () => {
     const mcpServer: McpServer = {
       id: "custom-port-id",

@@ -613,23 +613,9 @@ export default class K8sDeployment {
                 command: [localConfig.command],
               }
             : {}),
-          args: (localConfig.arguments || []).map((arg) => {
-            // Interpolate ${user_config.xxx} placeholders with actual values
-            // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
-            if (this.environmentValues || this.userConfigValues) {
-              return arg.replace(
-                /\$\{user_config\.([^}]+)\}/g,
-                (match, configKey) => {
-                  return (
-                    this.environmentValues?.[configKey] ||
-                    this.userConfigValues?.[configKey] ||
-                    match
-                  );
-                },
-              );
-            }
-            return arg;
-          }),
+          args: (localConfig.arguments || []).map((arg) =>
+            this.interpolateArgument(arg),
+          ),
           // For stdio-based MCP servers, we use stdin/stdout
           // For HTTP-based MCP servers, expose port instead
           ...(needsHttp
@@ -883,21 +869,9 @@ export default class K8sDeployment {
 
       if (localConfig.arguments && localConfig.arguments.length > 0) {
         // Process arguments with placeholder replacement
-        const processedArgs = localConfig.arguments.map((arg) => {
-          if (this.environmentValues || this.userConfigValues) {
-            return arg.replace(
-              /\$\{user_config\.([^}]+)\}/g,
-              (match, configKey) => {
-                return (
-                  this.environmentValues?.[configKey] ||
-                  this.userConfigValues?.[configKey] ||
-                  match
-                );
-              },
-            );
-          }
-          return arg;
-        });
+        const processedArgs = localConfig.arguments.map((arg) =>
+          this.interpolateArgument(arg),
+        );
 
         if (!container.args || container.args.length === 0) {
           container.args = processedArgs;
@@ -936,6 +910,88 @@ export default class K8sDeployment {
     );
 
     return deployment;
+  }
+
+  /**
+   * Build a map of argument interpolation variables.
+   *
+   * Supports:
+   * - user_config placeholders (e.g. ${user_config.path})
+   * - container env var placeholders in arguments (e.g. $API_KEY, ${API_KEY})
+   */
+  private buildArgumentVariableMap(): Record<string, string> {
+    const variables: Record<string, string> = {};
+
+    if (this.catalogItem?.localConfig?.environment) {
+      for (const envDef of this.catalogItem.localConfig.environment) {
+        let value: string | undefined;
+
+        if (envDef.promptOnInstallation) {
+          const rawValue = this.environmentValues?.[envDef.key];
+          value = rawValue != null ? String(rawValue) : undefined;
+        } else {
+          value = envDef.value != null ? String(envDef.value) : undefined;
+
+          if (value && (this.environmentValues || this.userConfigValues)) {
+            value = value.replace(
+              /\$\{user_config\.([^}]+)\}/g,
+              (match, configKey) => {
+                const configValue =
+                  this.environmentValues?.[configKey] ??
+                  this.userConfigValues?.[configKey];
+                return configValue != null ? String(configValue) : match;
+              },
+            );
+          }
+        }
+
+        if (value != null) {
+          variables[envDef.key] = value;
+        }
+      }
+    }
+
+    if (this.environmentValues) {
+      for (const [key, value] of Object.entries(this.environmentValues)) {
+        variables[key] = String(value);
+      }
+    }
+
+    if (this.userConfigValues) {
+      for (const [key, value] of Object.entries(this.userConfigValues)) {
+        variables[key.toUpperCase().replace(/[^A-Z0-9]/g, "_")] = String(value);
+      }
+    }
+
+    return variables;
+  }
+
+  private interpolateArgument(arg: string): string {
+    let interpolated = arg;
+
+    if (this.environmentValues || this.userConfigValues) {
+      interpolated = interpolated.replace(
+        /\$\{user_config\.([^}]+)\}/g,
+        (match, configKey) => {
+          const configValue =
+            this.environmentValues?.[configKey] ??
+            this.userConfigValues?.[configKey];
+          return configValue != null ? String(configValue) : match;
+        },
+      );
+    }
+
+    const variables = this.buildArgumentVariableMap();
+    interpolated = interpolated.replace(
+      /\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g,
+      (match, bracedVar, plainVar) => {
+        const variableName = (bracedVar || plainVar) as string;
+        const value = variables[variableName];
+        return value != null ? value : match;
+      },
+    );
+
+    return interpolated;
   }
 
   /**

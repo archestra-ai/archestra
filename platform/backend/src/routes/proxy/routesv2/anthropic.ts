@@ -25,6 +25,7 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: MESSAGES_SUFFIX,
       upstream: config.llm.anthropic.baseUrl,
       providerName: "Anthropic",
+      rewritePrefix: "/v1",
       skipErrorResponse: {
         type: "error",
         error: {

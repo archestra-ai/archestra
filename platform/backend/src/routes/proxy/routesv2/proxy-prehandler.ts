@@ -19,9 +19,11 @@ export function createProxyPreHandler(params: {
   endpointSuffix: string;
   upstream: string;
   providerName: string;
+  rewritePrefix?: string;
   skipErrorResponse?: Record<string, unknown>;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
+  const rewritePrefix = params.rewritePrefix ?? "";
   const skipErrorResponse = params.skipErrorResponse ?? {
     error: {
       message: "Chat completions requests should use the dedicated endpoint",
@@ -63,7 +65,7 @@ export function createProxyPreHandler(params: {
           originalUrl,
           rewrittenUrl: request.raw.url,
           upstream,
-          finalProxyUrl: `${upstream}${remainingPath}`,
+          finalProxyUrl: `${upstream}${rewritePrefix}${remainingPath}`,
         },
         `${providerName} proxy preHandler: URL rewritten (UUID stripped)`,
       );
@@ -73,7 +75,7 @@ export function createProxyPreHandler(params: {
           method: request.method,
           url: request.url,
           upstream,
-          finalProxyUrl: `${upstream}${pathAfterPrefix}`,
+          finalProxyUrl: `${upstream}${rewritePrefix}${pathAfterPrefix}`,
         },
         `${providerName} proxy preHandler: proxying request`,
       );

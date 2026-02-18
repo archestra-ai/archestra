@@ -71,6 +71,7 @@ describe("createProxyPreHandler", () => {
         endpointSuffix,
         upstream,
         providerName,
+        rewritePrefix,
         skipErrorResponse,
       }),
     });

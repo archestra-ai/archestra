@@ -61,9 +61,11 @@ export function DataTable<TData, TValue>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
-  hideSelectedCount = false,
+  hideSelectedCount,
   getRowId,
 }: DataTableProps<TData, TValue>) {
+  const shouldHideSelectedCount =
+    hideSelectedCount ?? onRowSelectionChange === undefined;
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [internalPagination, setInternalPagination] = useState({
     pageIndex: 0,
@@ -211,7 +213,7 @@ export function DataTable<TData, TValue>({
         <DataTablePagination
           table={table}
           totalRows={pagination?.total}
-          hideSelectedCount={hideSelectedCount}
+          hideSelectedCount={shouldHideSelectedCount}
         />
       )}
     </div>

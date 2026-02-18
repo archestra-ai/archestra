@@ -54,7 +54,7 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   // Navigate directly to identity providers page
   // The API login should have set session cookies that persist
   await page.goto(`${UI_BASE_URL}/settings/identity-providers`);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Wait briefly for any redirects to complete
   await page.waitForTimeout(1000);
@@ -68,7 +68,7 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
     await page.getByLabel("Email").fill(ADMIN_EMAIL);
     await page.getByLabel("Password").fill(ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Login" }).click();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Check for error toast or message on the sign-in page
     const errorToast = page.locator('[role="alert"]').first();
@@ -92,13 +92,13 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
         "Still on sign-in after login, attempting reload to check session...",
       );
       await page.reload();
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
       await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 15000 });
     }
 
     // Navigate to identity providers after UI login
     await page.goto(`${UI_BASE_URL}/settings/identity-providers`);
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   }
 
   await expect(page).toHaveURL(/\/settings\/identity-providers/, {
@@ -191,7 +191,7 @@ async function deleteExistingProviderIfExists(
 
     // Reload and wait for page to update
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Wait for card to be visible again after reload, then click to open create dialog
     await providerCard.waitFor({ state: "visible" });
@@ -219,7 +219,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     // users to the wrong team
     await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/teams");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Find and delete any existing SyncTeam-* teams
     const orphanTeams = page.locator(".rounded-lg.border.p-4").filter({
@@ -248,12 +248,12 @@ test.describe("Identity Provider Team Sync E2E", () => {
       await expect(page.getByRole("dialog")).not.toBeVisible({
         timeout: 10000,
       });
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
     }
 
     // STEP 1: Authenticate and create OIDC provider
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await deleteExistingProviderIfExists(page, "Generic OIDC");
     await fillOidcProviderForm(page, providerName);
     await clickButton({ page, options: { name: "Create Provider" } });
@@ -263,7 +263,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     // Re-authenticate in case session was invalidated during identity provider creation
     await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/teams");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Wait for page to fully load and Create Team button to be enabled
     // The button may be disabled while permissions/data are loading
@@ -339,7 +339,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // Wait for SSO button to appear (provider was just created)
       const ssoButton = ssoPage.getByRole("button", {
@@ -369,7 +369,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
       // Navigate to teams page
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // Find the team row helper
       const getTeamRow = () =>
@@ -379,9 +379,9 @@ test.describe("Identity Provider Team Sync E2E", () => {
       await expect(async () => {
         // Force a fresh page load by navigating away and back
         await ssoPage.goto(`${UI_BASE_URL}/`);
-        await ssoPage.waitForLoadState("networkidle");
+        await ssoPage.waitForLoadState("domcontentloaded");
         await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-        await ssoPage.waitForLoadState("networkidle");
+        await ssoPage.waitForLoadState("domcontentloaded");
 
         const teamRow = getTeamRow();
         await expect(teamRow).toBeVisible({ timeout: 5000 });
@@ -419,7 +419,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     // STEP 6: Cleanup
     // Delete the team
     await goToPage(page, "/settings/teams");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Find the team card by name and click the delete button
     const teamCard = page
@@ -439,7 +439,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     // Delete the identity provider
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await deleteProviderViaDialog(page);
@@ -470,7 +470,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     // Verify the provider is now shown as "Enabled"
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // STEP 3: Verify SSO button appears on login page and test SSO login
     // Use a fresh browser context (not logged in) to test the SSO flow
@@ -481,7 +481,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // Verify SSO button for our provider appears
       await expect(
@@ -512,7 +512,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
     // STEP 5: Use the original admin page context to update the provider
     // (the original page context is still logged in as admin)
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Click on Generic OIDC card to edit (our provider)
     await page.getByText("Generic OIDC", { exact: true }).click();
@@ -542,7 +542,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     try {
       await verifyPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await verifyPage.waitForLoadState("networkidle");
+      await verifyPage.waitForLoadState("domcontentloaded");
 
       // SSO button for our provider should no longer be visible
       await expect(
@@ -578,7 +578,7 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       const ssoButton = ssoPage.getByRole("button", {
         name: new RegExp(providerName, "i"),
@@ -605,7 +605,7 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
       // Archestra sign-out -> Keycloak end_session_endpoint -> post_logout_redirect_uri (/auth/sign-in)
       // The URL should eventually land back on the sign-in page
       await ssoPage.waitForURL(/\/auth\/sign-in/, { timeout: 30000 });
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // STEP 4: Verify IdP session was terminated
       // Click SSO button again - Keycloak should require re-authentication (not auto-login)
@@ -622,7 +622,7 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
       await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
         timeout: 30000,
       });
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // Verify Keycloak is showing the login form (not auto-redirecting)
       const usernameField = ssoPage.getByLabel("Username or email");
@@ -635,7 +635,7 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
 
     // STEP 5: Cleanup - delete the identity provider
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await deleteProviderViaDialog(page);
@@ -706,7 +706,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       const ssoButton = ssoPage.getByRole("button", {
         name: new RegExp(providerName, "i"),
@@ -728,7 +728,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       // STEP 5: Verify the user has admin role (from second rule, not editor from first)
       // The Roles settings page is only accessible to admins
       await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // If user has admin role, they should see the Roles page
       // If they got editor role (from rule 1) or member role (default), they would not see this
@@ -743,7 +743,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
 
     // STEP 6: Cleanup - delete the provider
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await deleteProviderViaDialog(page);
@@ -808,7 +808,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // Wait for SSO button to appear (provider was just created)
       const ssoButton = ssoPage.getByRole("button", {
@@ -834,7 +834,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       // Verify the user has admin role by checking they can access admin-only pages
       // The Roles settings page is only accessible to admins
       await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // If user has admin role, they should see the Roles page
       // If not, they would be redirected or see an error
@@ -850,7 +850,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
 
     // STEP 4: Cleanup - delete the provider
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await deleteProviderViaDialog(page);
@@ -927,11 +927,11 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
     // Wait for dialog to close and provider to be created
     // Also wait for network to be idle to ensure the provider is fully created
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Verify the provider is now shown as "Enabled"
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // STEP 3: Verify SSO button appears on login page and test SSO login
     // NOTE: SAML account linking works because the backend automatically sets
@@ -944,7 +944,7 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
+      await ssoPage.waitForLoadState("domcontentloaded");
 
       // Verify SSO button for our provider appears
       const ssoButton = ssoPage.getByRole("button", {
@@ -977,7 +977,7 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
     // STEP 5: Use the original admin page context to update the provider
     // (the original page context is still logged in as admin)
     await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Click on Generic SAML card to edit (our provider)
     const samlCard = page.getByText("Generic SAML", { exact: true });
@@ -992,7 +992,7 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
     // Save changes
     await clickButton({ page, options: { name: "Update Provider" } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // STEP 6: Delete the provider
     const samlCardForDelete = page.getByText("Generic SAML", { exact: true });
@@ -1000,7 +1000,7 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
     await samlCardForDelete.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
     await deleteProviderViaDialog(page);
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // STEP 7: Verify SSO button no longer appears on login page
     // Use a fresh context to check the sign-in page
@@ -1011,7 +1011,7 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
 
     try {
       await verifyPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await verifyPage.waitForLoadState("networkidle");
+      await verifyPage.waitForLoadState("domcontentloaded");
 
       // SSO button for our provider should no longer be visible
       await expect(

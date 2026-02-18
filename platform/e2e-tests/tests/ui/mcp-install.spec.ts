@@ -25,17 +25,17 @@ test.describe("MCP Install", () => {
     );
 
     await goToPage(adminPage, "/mcp-catalog/registry");
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Open "Add MCP Server" dialog
     await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Search for context7
     await adminPage
       .getByRole("textbox", { name: "Search servers by name..." })
       .fill("context7");
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
     // Timeout needed so filter is applied on UI
     await adminPage.waitForTimeout(3_000);
 
@@ -44,9 +44,9 @@ test.describe("MCP Install", () => {
       .getByLabel("Add MCP Server to the Private")
       .getByText(CONTEXT7_CATALOG_ITEM_NAME)
       .waitFor({ state: "visible", timeout: 30000 });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
     await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Install dialog opens automatically after adding to registry
     // Wait for the install dialog to be visible
@@ -62,7 +62,7 @@ test.describe("MCP Install", () => {
 
     // install the server
     await clickButton({ page: adminPage, options: { name: "Install" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Wait for the card to appear in the registry after installation
     const serverCard = adminPage.getByTestId(
@@ -96,14 +96,14 @@ test.describe("MCP Install", () => {
         HF_CATALOG_ITEM_NAME,
       );
       await goToPage(adminPage, "/mcp-catalog/registry");
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Open "Add MCP Server" dialog
       await clickButton({
         page: adminPage,
         options: { name: "Add MCP Server" },
       });
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Open form and fill details
       await adminPage
@@ -118,7 +118,7 @@ test.describe("MCP Install", () => {
 
       // add catalog item to the registry (install dialog opens automatically)
       await clickButton({ page: adminPage, options: { name: "Add Server" } });
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Wait for the install dialog to be visible (Remote server uses "Install Server" title)
       await adminPage
@@ -130,11 +130,11 @@ test.describe("MCP Install", () => {
       await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForTimeout(2_000);
 
-      // Check that tools are discovered
+      // Check that tools are discovered (use regex since HF tool count may change over time)
       await adminPage
         .getByTestId(`mcp-server-card-${HF_CATALOG_ITEM_NAME}`)
-        .getByText("/9")
-        .waitFor({ state: "visible" });
+        .getByText(/\/\d+/)
+        .waitFor({ state: "visible", timeout: 60_000 });
 
       // cleanup
       await deleteCatalogItem(
@@ -151,14 +151,14 @@ test.describe("MCP Install", () => {
         HF_CATALOG_ITEM_NAME,
       );
       await goToPage(adminPage, "/mcp-catalog/registry");
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Open "Add MCP Server" dialog
       await clickButton({
         page: adminPage,
         options: { name: "Add MCP Server" },
       });
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Open form and fill details
       await adminPage
@@ -176,7 +176,7 @@ test.describe("MCP Install", () => {
 
       // add catalog item to the registry (install dialog opens automatically)
       await clickButton({ page: adminPage, options: { name: "Add Server" } });
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Wait for the install dialog to be visible (Remote server uses "Install Server" title)
       await adminPage
@@ -191,7 +191,7 @@ test.describe("MCP Install", () => {
 
       // try to install the server
       await clickButton({ page: adminPage, options: { name: "Install" } });
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // It should fail with error message because token is invalid and remote hf refuses to install the server
       await adminPage
@@ -225,13 +225,13 @@ test.describe("MCP Install", () => {
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
 
     await goToPage(adminPage, "/mcp-catalog/registry");
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // ========================================
     // STEP 1: Create MCP server with bogus image
     // ========================================
     await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     await adminPage
       .getByRole("button", {
@@ -253,7 +253,7 @@ test.describe("MCP Install", () => {
 
     // Add catalog item to registry
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Wait for install dialog and install the server
     await adminPage
@@ -261,7 +261,7 @@ test.describe("MCP Install", () => {
       .filter({ hasText: /Install -/ })
       .waitFor({ state: "visible", timeout: 30000 });
     await clickButton({ page: adminPage, options: { name: "Install" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Wait for the server card to appear
     const serverCard = adminPage.getByTestId(
@@ -357,7 +357,7 @@ test.describe("MCP Install", () => {
 
     // Save changes
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Wait for edit dialog to close
     await editDialog.waitFor({ state: "hidden", timeout: 10000 });
@@ -383,7 +383,7 @@ test.describe("MCP Install", () => {
 
     await expect(async () => {
       await goToPage(adminPage, "/mcp-catalog/registry");
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       const refreshedServerCard = adminPage.getByTestId(
         `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,

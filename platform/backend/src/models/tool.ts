@@ -681,7 +681,6 @@ class ToolModel {
     Array<{
       toolName: string;
       responseModifierTemplate: string | null;
-      mcpServerName: string | null;
       credentialSourceMcpServerId: string | null;
       executionSourceMcpServerId: string | null;
       useDynamicTeamCredential: boolean;
@@ -698,7 +697,6 @@ class ToolModel {
         toolName: schema.toolsTable.name,
         responseModifierTemplate:
           schema.agentToolsTable.responseModifierTemplate,
-        mcpServerName: schema.mcpServersTable.name,
         credentialSourceMcpServerId:
           schema.agentToolsTable.credentialSourceMcpServerId,
         executionSourceMcpServerId:
@@ -712,13 +710,6 @@ class ToolModel {
       .innerJoin(
         schema.agentToolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(
-          schema.mcpServersTable.id,
-          sql`COALESCE(${schema.agentToolsTable.executionSourceMcpServerId}, ${schema.agentToolsTable.credentialSourceMcpServerId})`,
-        ),
       )
       .leftJoin(
         schema.internalMcpCatalogTable,

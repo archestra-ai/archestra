@@ -935,6 +935,7 @@ export function AssignedToolsTable({
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}
             onRowSelectionChange={handleRowSelectionChange}
+            hideSelectedCount={true}
           />
         )}
       </div>

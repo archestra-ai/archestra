@@ -200,6 +200,49 @@ describe("TeamTokenModel", () => {
       expect(validated).toBeNull();
     });
 
+    test("validates correct token among multiple tokens (batch fetch)", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team A" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team B" });
+
+      // Create multiple tokens to verify batch secret fetching
+      await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Org Token",
+        teamId: null,
+      });
+
+      const { value: value2 } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Team A Token",
+        teamId: team1.id,
+      });
+
+      await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Team B Token",
+        teamId: team2.id,
+      });
+
+      // Validate the middle token - should find it via batch secret lookup
+      const validated = await TeamTokenModel.validateToken(value2);
+      expect(validated).not.toBeNull();
+      expect(validated?.name).toBe("Team A Token");
+      expect(validated?.teamId).toBe(team1.id);
+    });
+
+    test("returns null when no tokens exist", async () => {
+      const validated = await TeamTokenModel.validateToken(
+        "archestra_nonexistent0000000000000",
+      );
+      expect(validated).toBeNull();
+    });
+
     test("updates lastUsedAt on validation", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 

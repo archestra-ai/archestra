@@ -15,7 +15,6 @@ import {
 } from "../adapterV2/gemini";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -37,14 +36,21 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     /**
      * Exclude generateContent and streamGenerateContent routes since we handle them below
      */
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
           request.url.includes(":streamGenerateContent"))
       ) {
         // Skip proxy for these routes - we handle them below
-        next(new Error("skip"));
+        reply.code(400).send({
+          error: {
+            code: 400,
+            message:
+              "generateContent requests should use the dedicated endpoint",
+            status: "INVALID_ARGUMENT",
+          },
+        });
       } else {
         next();
       }
@@ -58,14 +64,21 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     /**
      * Exclude generateContent and streamGenerateContent routes since we handle them below
      */
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
           request.url.includes(":streamGenerateContent"))
       ) {
         // Skip proxy for these routes - we handle them below
-        next(new Error("skip"));
+        reply.code(400).send({
+          error: {
+            code: 400,
+            message:
+              "generateContent requests should use the dedicated endpoint",
+            status: "INVALID_ARGUMENT",
+          },
+        });
       } else {
         next();
       }
@@ -108,12 +121,6 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, model: request.params.model },
         "[UnifiedProxy] Handling Gemini request (default agent, non-streaming)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
         ...request.body,
@@ -123,16 +130,9 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
       return handleLLMProxy(
         requestWithModel,
-        request.headers,
+        request,
         reply,
         geminiAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -162,12 +162,6 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, model: request.params.model },
         "[UnifiedProxy] Handling Gemini request (default agent, streaming)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
         ...request.body,
@@ -177,16 +171,9 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
       return handleLLMProxy(
         requestWithModel,
-        request.headers,
+        request,
         reply,
         geminiAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -222,11 +209,6 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         },
         "[UnifiedProxy] Handling Gemini request (with agent, non-streaming)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
@@ -237,16 +219,9 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
       return handleLLMProxy(
         requestWithModel,
-        request.headers,
+        request,
         reply,
         geminiAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -282,11 +257,6 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         },
         "[UnifiedProxy] Handling Gemini request (with agent, streaming)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
@@ -297,16 +267,9 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
       return handleLLMProxy(
         requestWithModel,
-        request.headers,
+        request,
         reply,
         geminiAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );

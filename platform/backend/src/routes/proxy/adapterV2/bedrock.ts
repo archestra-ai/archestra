@@ -591,6 +591,11 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     return this.response;
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.stopReason;
+    return reason ? [reason] : [];
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -1278,9 +1283,7 @@ export const bedrockAdapterFactory: LLMProvider<
     return config.llm.bedrock.baseUrl || undefined;
   },
 
-  getSpanName(streaming: boolean): string {
-    return streaming ? "bedrock.converse.stream" : "bedrock.converse";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

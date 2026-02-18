@@ -34,6 +34,14 @@ import type {
 } from "@shared";
 
 import type { Agent } from "./agent";
+
+/**
+ * GenAI operation names for tracing span names.
+ * Follows OTEL GenAI Semantic Conventions.
+ * Span names are constructed as `{operationName} {model}`.
+ */
+export type GenAiOperationName = "chat" | "generate_content";
+
 import type {
   CommonMcpToolDefinition,
   CommonMessage,
@@ -187,6 +195,9 @@ export interface LLMResponseAdapter<TResponse> {
 
   /** Get original response */
   getOriginalResponse(): TResponse;
+
+  /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
+  getFinishReasons(): string[];
 
   // ---------------------------------------------------------------------------
   // Build Responses
@@ -360,8 +371,8 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Get base URL for the provider (from config), undefined means use SDK default */
   getBaseUrl(): string | undefined;
 
-  /** Get span name for tracing (e.g., "openai.chat.completions", "anthropic.messages") */
-  getSpanName(streaming: boolean): string;
+  /** GenAI operation name for tracing (e.g., "chat", "generate_content"). The span name is constructed as `{operationName} {model}` by startActiveLlmSpan. */
+  readonly spanName: GenAiOperationName;
 
   /**
    * Create provider client with observability.

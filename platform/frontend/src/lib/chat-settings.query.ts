@@ -71,7 +71,7 @@ export function useCreateChatApiKey() {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return responseData;
     },
@@ -102,7 +102,7 @@ export function useUpdateChatApiKey() {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return responseData;
     },
@@ -124,7 +124,7 @@ export function useDeleteChatApiKey() {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return responseData;
     },
@@ -146,7 +146,7 @@ export function useSyncChatModels() {
       const { data: responseData, error } = await syncChatModels();
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return responseData;
     },

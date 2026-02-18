@@ -133,6 +133,9 @@ class MistralResponseAdapter implements LLMResponseAdapter<MistralResponse> {
   getUsage() {
     return this.delegate.getUsage();
   }
+  getFinishReasons() {
+    return this.delegate.getFinishReasons();
+  }
   getOriginalResponse() {
     return this.delegate.getOriginalResponse();
   }
@@ -219,9 +222,7 @@ export const mistralAdapterFactory: LLMProvider<
     return config.llm.mistral.baseUrl;
   },
 
-  getSpanName(): string {
-    return "mistral.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,

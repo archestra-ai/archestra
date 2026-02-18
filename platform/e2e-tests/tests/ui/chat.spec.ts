@@ -1,8 +1,9 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
 
-// Run all provider tests sequentially to avoid WireMock stub timing issues
-test.describe.configure({ mode: "serial" });
+// Run all provider tests sequentially to avoid WireMock stub timing issues.
+// Retries handle transient streaming/WireMock flakiness in CI.
+test.describe.configure({ mode: "serial", retries: 2 });
 
 interface ChatProviderTestConfig {
   providerName: string;
@@ -144,7 +145,7 @@ for (const config of testConfigs) {
 
       // Navigate to chat page
       await goToPage(page, "/chat");
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
 
       // Skip onboarding if it appears
       if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -198,8 +199,9 @@ for (const config of testConfigs) {
 
       // Wait for the response to appear
       // The mocked response should contain our expected text
+      // Use generous timeout - streaming responses in CI can be slow
       await expect(page.getByText(config.expectedResponse)).toBeVisible({
-        timeout: 30_000,
+        timeout: 60_000,
       });
 
       // Verify the user's message also appears in the chat

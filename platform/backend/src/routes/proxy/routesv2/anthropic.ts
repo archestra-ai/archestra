@@ -8,7 +8,6 @@ import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
@@ -28,9 +27,12 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.anthropic.baseUrl,
     prefix: ANTHROPIC_PREFIX,
     rewritePrefix: "/v1",
-    preHandler: (request, _reply, next) => {
+    preHandler: (request, reply, next) => {
       // Skip messages route (we handle it specially below with full agent support)
-      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+      // Use endsWith on the path portion (before query string) to avoid blocking
+      // sub-paths like /messages/count_tokens or /messages/batches
+      const urlPath = request.url.split("?")[0];
+      if (request.method === "POST" && urlPath.endsWith(MESSAGES_SUFFIX)) {
         logger.info(
           {
             method: request.method,
@@ -40,7 +42,16 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Anthropic proxy preHandler: skipping messages route",
         );
-        next(new Error("skip"));
+        // Send a 400 response instead of throwing an Error to avoid flooding Sentry.
+        // The dedicated messages routes (/v1/anthropic/v1/messages) handle these requests.
+        reply.code(400).send({
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message:
+              "Messages requests should use the dedicated endpoint: POST /v1/anthropic/v1/messages",
+          },
+        });
         return;
       }
 
@@ -108,23 +119,11 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         },
         "[UnifiedProxy] Handling Anthropic request (default agent) - FULL REQUEST DEBUG",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         anthropicAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -162,23 +161,11 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         },
         "[UnifiedProxy] Handling Anthropic request (with agent) - FULL REQUEST DEBUG",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         anthropicAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );

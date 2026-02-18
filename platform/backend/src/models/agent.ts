@@ -17,13 +17,13 @@ import {
 } from "drizzle-orm";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
-import type { AgentHistoryEntry } from "@/database/schemas/agent";
 import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type {
   Agent,
+  AgentHistoryEntry,
   AgentVersionsResponse,
   InsertAgent,
   PaginationQuery,

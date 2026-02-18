@@ -40,7 +40,8 @@ import {
   MessageModel,
   TeamModel,
 } from "@/models";
-import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
+import { getExternalAgentId } from "@/routes/proxy/utils/headers/external-agent-id";
+import { startActiveChatSpan } from "@/routes/proxy/utils/tracing";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
@@ -218,10 +219,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Use agent ID as external agent ID if available, otherwise use header value
-      // This allows agent names to be displayed in LLM proxy logs
-      const headerExternalAgentId = getExternalAgentId(headers);
-      const externalAgentId = conversation.agentId ?? headerExternalAgentId;
+      const externalAgentId = getExternalAgentId(headers);
 
       // Fetch enabled tool IDs and custom selection status in parallel
       const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -245,6 +243,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Pass agentId as initial delegation chain (will be extended by delegated agents)
         delegationChain: conversation.agentId,
         abortSignal: chatAbortController.signal,
+        user: { id: user.id, email: user.email, name: user.name },
       });
 
       // Build system prompt from agent's systemPrompt and userPrompt fields
@@ -293,230 +292,244 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Create LLM model using shared service
-      // Pass conversationId as sessionId to group all requests in this chat session
-      // Pass agent's llmApiKeyId so it can be used without user access check
-      const { model } = await createLLMModelForAgent({
-        organizationId,
-        userId: user.id,
+      // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
+      // and MCP tool executions appear as children of a single trace.
+      return startActiveChatSpan({
+        agentName: conversation.agent.name,
         agentId: conversation.agentId,
-        model: conversation.selectedModel,
-        provider,
-        conversationId,
-        externalAgentId,
         sessionId: conversationId,
-        agentLlmApiKeyId: conversation.agent.llmApiKeyId,
-      });
+        user: { id: user.id, email: user.email, name: user.name },
+        callback: async () => {
+          // Create LLM model using shared service
+          // Pass conversationId as sessionId to group all requests in this chat session
+          // Pass agent's llmApiKeyId so it can be used without user access check
+          const { model } = await createLLMModelForAgent({
+            organizationId,
+            userId: user.id,
+            agentId: conversation.agentId,
+            model: conversation.selectedModel,
+            provider,
+            conversationId,
+            externalAgentId,
+            sessionId: conversationId,
+            agentLlmApiKeyId: conversation.agent.llmApiKeyId,
+          });
 
-      // Strip images and large browser tool results from messages before sending to LLM
-      // This prevents context limit issues from accumulated screenshots and page snapshots
-      const strippedMessagesForLLM = config.features.browserStreamingEnabled
-        ? stripImagesFromMessages(messages as UiMessage[])
-        : (messages as UiMessage[]);
+          // Strip images and large browser tool results from messages before sending to LLM
+          // This prevents context limit issues from accumulated screenshots and page snapshots
+          const strippedMessagesForLLM = config.features.browserStreamingEnabled
+            ? stripImagesFromMessages(messages as UiMessage[])
+            : (messages as UiMessage[]);
 
-      // Stream with AI SDK
-      // Build streamText config conditionally
-      // Cast to UIMessage[] - UiMessage is structurally compatible at runtime
-      const modelMessages = await convertToModelMessages(
-        strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
-      );
-      const streamTextConfig: Parameters<typeof streamText>[0] = {
-        model,
-        messages: modelMessages,
-        tools: mcpTools,
-        stopWhen: stepCountIs(500),
-        abortSignal: chatAbortController.signal,
-        onFinish: async ({ usage, finishReason }) => {
-          removeAbortListeners();
-          logger.info(
-            {
-              conversationId,
-              usage,
-              finishReason,
-            },
-            "Chat stream finished",
+          // Stream with AI SDK
+          // Build streamText config conditionally
+          // Cast to UIMessage[] - UiMessage is structurally compatible at runtime
+          const modelMessages = await convertToModelMessages(
+            strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
           );
-        },
-      };
-
-      // Only include system property if we have actual content
-      if (systemPrompt) {
-        streamTextConfig.system = systemPrompt;
-      }
-
-      // For Gemini image generation models, enable image output via responseModalities
-      // Known image-capable model patterns:
-      // - gemini-2.0-flash-exp-image-generation
-      // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
-      // - Any model with "image-generation" in the name
-      const modelLower = conversation.selectedModel.toLowerCase();
-      const isGeminiImageModel =
-        provider === "gemini" &&
-        (modelLower.includes("image-generation") ||
-          modelLower.includes("native-audio-dialog") ||
-          modelLower === "gemini-2.5-flash-image");
-      if (isGeminiImageModel) {
-        streamTextConfig.providerOptions = {
-          google: {
-            responseModalities: ["TEXT", "IMAGE"],
-          },
-        };
-      }
-
-      // Create stream with token usage data support
-      const response = createUIMessageStreamResponse({
-        headers: {
-          // Prevent compression middleware from buffering the stream
-          // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
-          "Content-Encoding": "none",
-        },
-        stream: createUIMessageStream({
-          execute: async ({ writer }) => {
-            const result = streamText(streamTextConfig);
-
-            // Merge the stream text result into the UI message stream
-            writer.merge(
-              result.toUIMessageStream({
-                originalMessages: messages as UIMessage[],
-                onError: (error) => {
-                  // Use an async IIFE to handle async operations within the sync onError handler
-                  (async () => {
-                    logger.error(
-                      { error, conversationId, agentId: conversation.agentId },
-                      "Chat stream error occurred",
-                    );
-
-                    // Persist messages despite error so they have a valid ID for editing
-                    // Only persist if not already persisted by onFinish
-                    if (!messagesPersisted && conversationId) {
-                      try {
-                        await persistNewMessages(
-                          conversationId,
-                          messages,
-                          "onError",
-                        );
-                        messagesPersisted = true;
-                      } catch (persistError) {
-                        // Log persistence error but don't prevent the error response
-                        logger.error(
-                          { persistError, conversationId },
-                          "Failed to persist messages during error handling",
-                        );
-                      }
-                    }
-                  })().catch((err) => {
-                    // Log any errors from the async IIFE but don't crash
-                    logger.error(
-                      { err },
-                      "Unexpected error in onError async handler",
-                    );
-                  });
-
-                  // Use pre-built error from subagent if available (preserves correct provider),
-                  // otherwise map the error with the current provider
-                  const mappedError: ChatErrorResponse =
-                    error instanceof ProviderError
-                      ? error.chatErrorResponse
-                      : mapProviderError(error, provider);
-
-                  logger.info(
-                    {
-                      mappedError,
-                      originalErrorType:
-                        error instanceof Error ? error.name : typeof error,
-                      willBeSentToFrontend: true,
-                    },
-                    "Returning mapped error to frontend via stream",
-                  );
-
-                  // mapProviderError safely serializes raw errors, but add defensive try-catch
-                  try {
-                    return JSON.stringify(mappedError);
-                  } catch (stringifyError) {
-                    logger.error(
-                      { stringifyError, errorCode: mappedError.code },
-                      "Failed to stringify mapped error, returning minimal error",
-                    );
-                    // Return a minimal error response without the raw error
-                    return JSON.stringify({
-                      code: mappedError.code,
-                      message: mappedError.message,
-                      isRetryable: mappedError.isRetryable,
-                    });
-                  }
-                },
-                onFinish: async ({ messages: finalMessages }) => {
-                  removeAbortListeners();
-
-                  // Only persist if not already persisted by onError
-                  if (!messagesPersisted && conversationId) {
-                    try {
-                      await persistNewMessages(
-                        conversationId,
-                        finalMessages,
-                        "onFinish",
-                      );
-                      messagesPersisted = true;
-                    } catch (error) {
-                      logger.error(
-                        { error, conversationId },
-                        "Failed to persist messages during onFinish",
-                      );
-                    }
-                  }
-                },
-              }),
-            );
-
-            // Wait for the stream to complete and get usage data
-            const usage = await result.usage;
-
-            // Write token usage data to the stream as a custom data part
-            if (usage) {
+          const streamTextConfig: Parameters<typeof streamText>[0] = {
+            model,
+            messages: modelMessages,
+            tools: mcpTools,
+            stopWhen: stepCountIs(500),
+            abortSignal: chatAbortController.signal,
+            onFinish: async ({ usage, finishReason }) => {
+              removeAbortListeners();
               logger.info(
                 {
                   conversationId,
                   usage,
+                  finishReason,
                 },
-                "Chat stream finished with usage data",
+                "Chat stream finished",
               );
+            },
+          };
 
-              // Send usage data as a custom data part
-              // The type must be 'data-<name>' format for the AI SDK to recognize it
-              writer.write({
-                type: "data-token-usage",
-                data: {
-                  inputTokens: usage.inputTokens,
-                  outputTokens: usage.outputTokens,
-                  totalTokens: usage.totalTokens,
-                } satisfies TokenUsage,
-              });
-            }
-          },
-        }),
-      });
+          // Only include system property if we have actual content
+          if (systemPrompt) {
+            streamTextConfig.system = systemPrompt;
+          }
 
-      // Log response headers for debugging
-      logger.info(
-        {
-          conversationId,
-          headers: Object.fromEntries(response.headers.entries()),
-          hasBody: !!response.body,
+          // For Gemini image generation models, enable image output via responseModalities
+          // Known image-capable model patterns:
+          // - gemini-2.0-flash-exp-image-generation
+          // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
+          // - Any model with "image-generation" in the name
+          const modelLower = conversation.selectedModel.toLowerCase();
+          const isGeminiImageModel =
+            provider === "gemini" &&
+            (modelLower.includes("image-generation") ||
+              modelLower.includes("native-audio-dialog") ||
+              modelLower === "gemini-2.5-flash-image");
+          if (isGeminiImageModel) {
+            streamTextConfig.providerOptions = {
+              google: {
+                responseModalities: ["TEXT", "IMAGE"],
+              },
+            };
+          }
+
+          // Create stream with token usage data support
+          const response = createUIMessageStreamResponse({
+            headers: {
+              // Prevent compression middleware from buffering the stream
+              // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
+              "Content-Encoding": "none",
+            },
+            stream: createUIMessageStream({
+              execute: async ({ writer }) => {
+                const result = streamText(streamTextConfig);
+
+                // Merge the stream text result into the UI message stream
+                writer.merge(
+                  result.toUIMessageStream({
+                    originalMessages: messages as UIMessage[],
+                    onError: (error) => {
+                      // Use an async IIFE to handle async operations within the sync onError handler
+                      (async () => {
+                        logger.error(
+                          {
+                            error,
+                            conversationId,
+                            agentId: conversation.agentId,
+                          },
+                          "Chat stream error occurred",
+                        );
+
+                        // Persist messages despite error so they have a valid ID for editing
+                        // Only persist if not already persisted by onFinish
+                        if (!messagesPersisted && conversationId) {
+                          try {
+                            await persistNewMessages(
+                              conversationId,
+                              messages,
+                              "onError",
+                            );
+                            messagesPersisted = true;
+                          } catch (persistError) {
+                            // Log persistence error but don't prevent the error response
+                            logger.error(
+                              { persistError, conversationId },
+                              "Failed to persist messages during error handling",
+                            );
+                          }
+                        }
+                      })().catch((err) => {
+                        // Log any errors from the async IIFE but don't crash
+                        logger.error(
+                          { err },
+                          "Unexpected error in onError async handler",
+                        );
+                      });
+
+                      // Use pre-built error from subagent if available (preserves correct provider),
+                      // otherwise map the error with the current provider
+                      const mappedError: ChatErrorResponse =
+                        error instanceof ProviderError
+                          ? error.chatErrorResponse
+                          : mapProviderError(error, provider);
+
+                      logger.info(
+                        {
+                          mappedError,
+                          originalErrorType:
+                            error instanceof Error ? error.name : typeof error,
+                          willBeSentToFrontend: true,
+                        },
+                        "Returning mapped error to frontend via stream",
+                      );
+
+                      // mapProviderError safely serializes raw errors, but add defensive try-catch
+                      try {
+                        return JSON.stringify(mappedError);
+                      } catch (stringifyError) {
+                        logger.error(
+                          { stringifyError, errorCode: mappedError.code },
+                          "Failed to stringify mapped error, returning minimal error",
+                        );
+                        // Return a minimal error response without the raw error
+                        return JSON.stringify({
+                          code: mappedError.code,
+                          message: mappedError.message,
+                          isRetryable: mappedError.isRetryable,
+                        });
+                      }
+                    },
+                    onFinish: async ({ messages: finalMessages }) => {
+                      removeAbortListeners();
+
+                      // Only persist if not already persisted by onError
+                      if (!messagesPersisted && conversationId) {
+                        try {
+                          await persistNewMessages(
+                            conversationId,
+                            finalMessages,
+                            "onFinish",
+                          );
+                          messagesPersisted = true;
+                        } catch (error) {
+                          logger.error(
+                            { error, conversationId },
+                            "Failed to persist messages during onFinish",
+                          );
+                        }
+                      }
+                    },
+                  }),
+                );
+
+                // Wait for the stream to complete and get usage data
+                const usage = await result.usage;
+
+                // Write token usage data to the stream as a custom data part
+                if (usage) {
+                  logger.info(
+                    {
+                      conversationId,
+                      usage,
+                    },
+                    "Chat stream finished with usage data",
+                  );
+
+                  // Send usage data as a custom data part
+                  // The type must be 'data-<name>' format for the AI SDK to recognize it
+                  writer.write({
+                    type: "data-token-usage",
+                    data: {
+                      inputTokens: usage.inputTokens,
+                      outputTokens: usage.outputTokens,
+                      totalTokens: usage.totalTokens,
+                    } satisfies TokenUsage,
+                  });
+                }
+              },
+            }),
+          });
+
+          // Log response headers for debugging
+          logger.info(
+            {
+              conversationId,
+              headers: Object.fromEntries(response.headers.entries()),
+              hasBody: !!response.body,
+            },
+            "Streaming chat response",
+          );
+
+          // Copy headers from Response to Fastify reply
+          for (const [key, value] of response.headers.entries()) {
+            reply.header(key, value);
+          }
+
+          // Send the Response body stream directly
+          if (!response.body) {
+            throw new ApiError(400, "No response body");
+          }
+          // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
+          return reply.send(response.body as any);
         },
-        "Streaming chat response",
-      );
-
-      // Copy headers from Response to Fastify reply
-      for (const [key, value] of response.headers.entries()) {
-        reply.header(key, value);
-      }
-
-      // Send the Response body stream directly
-      if (!response.body) {
-        throw new ApiError(400, "No response body");
-      }
-      // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-      return reply.send(response.body as any);
+      });
     },
   );
 

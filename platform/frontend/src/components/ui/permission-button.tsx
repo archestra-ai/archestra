@@ -11,6 +11,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
   tooltip?: string;
+  noPermissionHandle?: "tooltip" | "hide";
 };
 
 /**
@@ -38,6 +39,7 @@ export function PermissionButton({
   permissions,
   tooltip,
   children,
+  noPermissionHandle = "tooltip",
   ...props
 }: PermissionButtonProps) {
   const { data: hasPermission } = useHasPermissions(permissions);
@@ -55,6 +57,10 @@ export function PermissionButton({
     );
   } else if (hasPermission) {
     return <Button {...props}>{children}</Button>;
+  }
+
+  if (noPermissionHandle === "hide") {
+    return null;
   }
 
   return (

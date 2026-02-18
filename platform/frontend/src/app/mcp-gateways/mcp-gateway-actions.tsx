@@ -1,5 +1,6 @@
 import { E2eTestId } from "@shared";
 import { Pencil, Plug, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -24,8 +25,7 @@ export function McpGatewayActions({
 }: McpGatewayActionsProps) {
   return (
     <ButtonGroup>
-      <PermissionButton
-        permissions={{ profile: ["update"] }}
+      <Button
         aria-label="Connect"
         variant="outline"
         size="icon-sm"
@@ -36,7 +36,7 @@ export function McpGatewayActions({
         }}
       >
         <Plug className="h-4 w-4" />
-      </PermissionButton>
+      </Button>
       <PermissionButton
         permissions={{ profile: ["update"] }}
         aria-label="Edit"

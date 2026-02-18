@@ -7,7 +7,7 @@
 name: Claude PR Triage
 
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] safe: checks out base repo (not PR code), Claude restricted to GitHub MCP tools and specific gh CLI subcommands only
+  pull_request_target: # zizmor: ignore[dangerous-triggers] safe: checks out base repo (not PR code), Claude restricted to Read (base repo only), GitHub MCP tools, and specific gh CLI subcommands
     types: [opened]
 
 permissions: {}
@@ -56,9 +56,11 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          PR_STATE=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json state --jq '.state')
-          HAS_LABEL=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels --jq '[.labels[].name] | any(. == "ready for review")')
+          PR_STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state --jq '.state')
+          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name] | any(. == "ready for review")')
 
           if [[ "$PR_STATE" == "OPEN" && "$HAS_LABEL" == "true" ]]; then
             echo "should_review=true" >> "$GITHUB_OUTPUT"

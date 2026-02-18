@@ -13,7 +13,7 @@ $ARGUMENTS
 ## Rule 1: Spam detection
 
 Use `mcp__github__list_pull_requests` to check the author's recent activity. **Close without further evaluation** if ANY of these apply:
-- Author has 3+ PRs opened in the last 24 hours
+- Author has 3+ PRs opened in the last 24 hours with none merged
 - Author has multiple PRs targeting the same issue
 - PR body is AI-generated boilerplate with no project-specific content (e.g., generic "I improved the code quality" with no specifics)
 - Changes are clearly unrelated to the project (self-promotion, spam links, random files)
@@ -33,13 +33,14 @@ If closing, comment:
 
 ## Rule 3: Demo video requirement
 
-Determine if the PR is **trivial**. A PR is trivial ONLY if ALL of these are true:
-- Total lines changed (additions + deletions) is under 10
-- Changes are limited to: typo fixes, small documentation edits, or comment-only changes
-- No functional code changes
+Determine if the PR is **exempt** from demo video. A PR is exempt if ANY of these are true:
+- Total lines changed (additions + deletions) is under 10 AND changes are typo fixes, small doc edits, or comment-only
+- Changes are test-only (only adds or modifies test files)
+- Changes are backend/API-only with no UI impact (no frontend file changes)
+- Pure refactoring that maintains existing behavior with no new features
 
-**If the PR is non-trivial and does not include a demo video** (a link to a video, gif, Loom, or screen recording in the PR description), close it with this comment:
-"All non-trivial PRs require a demo video (screen recording, gif, or Loom link) showing the change in action. Please reopen this PR with a demo attached to the description. Typo fixes and small doc edits (under 10 lines) are exempt."
+**If the PR is not exempt and does not include a demo video** (a link to a video, gif, Loom, or screen recording in the PR description), close it with this comment:
+"PRs with UI or functional changes require a demo video (screen recording, gif, or Loom link) showing the change in action. Please reopen this PR with a demo attached to the description. Test-only, backend-only, and small doc/typo fixes are exempt."
 
 **If the PR is a bounty claim** (title or description contains "bounty", or has a bounty-related label) and missing a demo video, close with:
 "Bounty claims require a demo video showing the feature or fix working. Please reopen with a video, gif, or screen recording attached to the PR description."

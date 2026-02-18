@@ -242,6 +242,9 @@ const AgentToolsEditorContent = forwardRef<
           await assignTool.mutateAsync({
             agentId: targetAgentId,
             toolId,
+            // When using dynamic credentials, omit server IDs — they are mutually
+            // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
+            // field based on whether the server is local (execution) or remote (credential).
             credentialSourceMcpServerId:
               !isLocal && !useDynamicCredential
                 ? changes.credentialSourceId
@@ -440,7 +443,9 @@ function McpServerPill({
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
 
-  // Get current credential source (from first assigned tool or first available credential)
+  // Resolve which credential to show as selected in the dropdown. Dynamic credentials
+  // store no server ID, so we must check the flag first to avoid falling through to a
+  // static server and misrepresenting the saved state.
   const currentCredentialSource = assignedTools[0]?.useDynamicTeamCredential
     ? DYNAMIC_CREDENTIAL_VALUE
     : (assignedTools[0]?.credentialSourceMcpServerId ??

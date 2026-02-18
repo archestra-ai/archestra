@@ -316,20 +316,26 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
 
   vllm: ({ apiKey, modelName }) => {
     // vLLM uses OpenAI-compatible API
+    // Use client.chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses) which many
+    // OpenAI-compatible providers don't support
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY",
       baseURL: config.llm.vllm.baseUrl,
     });
-    return client(modelName);
+    return client.chat(modelName);
   },
 
   ollama: ({ apiKey, modelName }) => {
     // Ollama uses OpenAI-compatible API
+    // Use client.chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses) which Ollama doesn't
+    // fully support (especially streaming tool calls)
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY",
       baseURL: config.llm.ollama.baseUrl,
     });
-    return client(modelName);
+    return client.chat(modelName);
   },
 
   zhipuai: ({ apiKey, modelName }) => {
@@ -340,11 +346,13 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       );
     }
     // Zhipu AI uses OpenAI-compatible API
+    // Use client.chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses)
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
     });
-    return client(modelName);
+    return client.chat(modelName);
   },
 
   bedrock: ({ apiKey, modelName }) => {

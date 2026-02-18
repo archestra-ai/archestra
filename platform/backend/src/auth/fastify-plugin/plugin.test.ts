@@ -276,6 +276,11 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
 
       const mockRequest = {
         url: "/api/agents",

@@ -53,6 +53,24 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    const existingKeys = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/chat-api-keys",
+    });
+    const existingKeysData = await existingKeys.json();
+    for (const key of existingKeysData) {
+      if (key.name === "Org Wide Test Key") {
+        await makeApiRequest({
+          request,
+          method: "delete",
+          urlSuffix: `/api/chat-api-keys/${key.id}`,
+          ignoreStatusCheck: true,
+        });
+      }
+    }
+
     // Use bedrock provider - the only one without env var in CI (all others are seeded)
     const response = await makeApiRequest({
       request,
@@ -463,6 +481,24 @@ test.describe("Chat API Keys Scope Update", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    const existingKeys = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/chat-api-keys",
+    });
+    const existingKeysData = await existingKeys.json();
+    for (const key of existingKeysData) {
+      if (key.name === "Scope Update Test Key") {
+        await makeApiRequest({
+          request,
+          method: "delete",
+          urlSuffix: `/api/chat-api-keys/${key.id}`,
+          ignoreStatusCheck: true,
+        });
+      }
+    }
+
     // Create a personal key first
     // Use bedrock provider - the only one without env var in CI (all others are seeded with org_wide keys)
     const createResponse = await makeApiRequest({

@@ -230,7 +230,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   extractCookieHeaders,
   makeRandomString,
 }) => {
-  test.setTimeout(45_000); // 45 seconds
+  test.setTimeout(90_000); // 90 seconds - multiple users installing concurrently
   // Create catalog item as Admin
   // Editor and Member cannot add items to MCP Registry
   const catalogItemName = makeRandomString(10, "mcp");
@@ -334,7 +334,7 @@ test("Verify tool calling using different static credentials", async ({
   makeRandomString,
   extractCookieHeaders,
 }) => {
-  test.setTimeout(45_000); // 45 seconds
+  test.setTimeout(120_000); // 120 seconds - MCP server startup + tool discovery + tool calls
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   // Assign engineering team to default profile

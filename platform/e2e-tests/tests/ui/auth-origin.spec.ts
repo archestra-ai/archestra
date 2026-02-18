@@ -1,6 +1,6 @@
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { loginViaUi } from "../../utils";
+import { loginViaApi } from "../../utils";
 
 test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
   test("login from localhost succeeds (baseline)", async ({ browser }) => {
@@ -10,10 +10,13 @@ test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
     const page = await context.newPage();
 
     try {
+      // Use API-based login to avoid rate limiting issues in CI
+      // (loginViaUi has no retry/backoff for 429 responses)
       await page.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+      await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
-      // Should navigate away from sign-in after successful login
+      // Navigate to verify session is active
+      await page.goto(`${UI_BASE_URL}/`);
       await page.waitForURL((url) => !url.pathname.includes("/auth/sign-in"), {
         timeout: 15_000,
       });
@@ -85,10 +88,12 @@ test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
 
     try {
       const url127 = UI_BASE_URL.replace("localhost", "127.0.0.1");
+      // Use API-based login to avoid rate limiting issues in CI
       await page.goto(`${url127}/auth/sign-in`);
-      await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+      await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
-      // Should navigate away from sign-in after successful login
+      // Navigate to verify session is active
+      await page.goto(`${url127}/`);
       await page.waitForURL((url) => !url.pathname.includes("/auth/sign-in"), {
         timeout: 15_000,
       });

@@ -43,8 +43,11 @@ export async function addCustomSelfHostedCatalogItem({
   };
 }) {
   await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Add MCP Server" }).click();
+  await page.waitForLoadState("domcontentloaded");
+  // Wait for the Add MCP Server button to be visible (page fully rendered)
+  const addButton = page.getByRole("button", { name: "Add MCP Server" });
+  await addButton.waitFor({ state: "visible", timeout: 30_000 });
+  await addButton.click();
 
   await page
     .getByRole("button", { name: "Self-hosted (orchestrated by" })
@@ -88,7 +91,7 @@ export async function addCustomSelfHostedCatalogItem({
     }
   }
   await page.getByRole("button", { name: "Add Server" }).click();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // After adding a server, the install dialog opens automatically.
   // Close it so the calling test can control when to open it.
@@ -96,7 +99,7 @@ export async function addCustomSelfHostedCatalogItem({
   await page
     .getByRole("dialog")
     .filter({ hasText: /Install -/ })
-    .waitFor({ state: "visible", timeout: 10000 });
+    .waitFor({ state: "visible", timeout: 30_000 });
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
 
@@ -176,7 +179,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 }) {
   const waitTimeoutMs = timeoutMs ?? 60_000;
   await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Verify we're actually on the registry page (handle redirect issues)
   await expect(page).toHaveURL(/\/mcp-catalog\/registry/, { timeout: 10000 });
@@ -190,7 +193,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await expect(async () => {
     // Re-navigate in case the page got stale
     await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Fail fast if error message is present
     const errorElement = page.getByTestId(
@@ -210,9 +213,10 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 
   // Wait for dialog to open
   await page.getByRole("dialog").waitFor({ state: "visible", timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover
+  // Use polling because the dialog content may still be loading (profiles fetched async)
   const dialog = page.getByRole("dialog");
   const profilePill = dialog.getByRole("button", {
     name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
@@ -222,14 +226,16 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     name: /^\+\d+ more$/,
   });
 
-  if (!(await profilePill.isVisible().catch(() => false))) {
-    if (await showMoreButton.isVisible().catch(() => false)) {
-      await showMoreButton.click();
-      await page.waitForTimeout(200);
+  await expect(async () => {
+    if (!(await profilePill.isVisible().catch(() => false))) {
+      if (await showMoreButton.isVisible().catch(() => false)) {
+        await showMoreButton.click();
+        await page.waitForTimeout(200);
+      }
     }
-  }
+    await expect(profilePill).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
 
-  await profilePill.waitFor({ state: "visible", timeout: 30_000 });
   await profilePill.click();
 
   // Wait for the popover to open - it contains the credential selector and tool checkboxes

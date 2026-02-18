@@ -130,11 +130,11 @@ test.describe("MCP Install", () => {
       await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForTimeout(2_000);
 
-      // Check that tools are discovered
+      // Check that tools are discovered (use regex since HF tool count may change over time)
       await adminPage
         .getByTestId(`mcp-server-card-${HF_CATALOG_ITEM_NAME}`)
-        .getByText("/9")
-        .waitFor({ state: "visible" });
+        .getByText(/\/\d+/)
+        .waitFor({ state: "visible", timeout: 60_000 });
 
       // cleanup
       await deleteCatalogItem(

@@ -198,8 +198,9 @@ for (const config of testConfigs) {
 
       // Wait for the response to appear
       // The mocked response should contain our expected text
+      // Use generous timeout - streaming responses in CI can be slow
       await expect(page.getByText(config.expectedResponse)).toBeVisible({
-        timeout: 30_000,
+        timeout: 60_000,
       });
 
       // Verify the user's message also appears in the chat

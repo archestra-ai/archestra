@@ -226,6 +226,29 @@ function buildExternalAgentDisplayName(
   return externalAgentId;
 }
 
+/**
+ * Strips null bytes (\u0000) from JSON-serializable data.
+ * PostgreSQL JSONB rejects null byte unicode escape sequences, which can appear
+ * in LLM responses (e.g., Gemini's thoughtSignature fields).
+ */
+function stripNullBytes<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    return value.replaceAll("\u0000", "") as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripNullBytes) as T;
+  }
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = stripNullBytes(v);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 class InteractionModel {
   static async existsByExecutionId(executionId: string): Promise<boolean> {
     const [result] = await db
@@ -237,9 +260,16 @@ class InteractionModel {
   }
 
   static async create(data: InsertInteraction) {
+    // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
+    const sanitized = {
+      ...data,
+      request: stripNullBytes(data.request),
+      response: stripNullBytes(data.response),
+    };
+
     const [interaction] = await db
       .insert(schema.interactionsTable)
-      .values(data)
+      .values(sanitized)
       .returning();
 
     // Update usage tracking after interaction is created

@@ -273,6 +273,33 @@ const cohereConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const bedrockConfig: TokenCostLimitTestConfig = {
+  providerName: "Bedrock",
+
+  endpoint: (profileId) => `/v1/bedrock/${profileId}/converse`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    modelId: "test-bedrock-cost-limit",
+    messages: [{ role: "user", content: [{ text: content }] }],
+  }),
+
+  modelName: "test-bedrock-cost-limit",
+
+  // WireMock returns: inputTokens: 100, outputTokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  tokenPrice: {
+    provider: "bedrock",
+    model: "test-bedrock-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -288,12 +315,10 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
-  bedrock: null, // TODO: Add bedrock tests when wiremock stubs are available
-} satisfies Record<SupportedProvider, TokenCostLimitTestConfig | null>;
+  bedrock: bedrockConfig,
+} satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
 
-const testConfigs = Object.values(testConfigsMap).filter(
-  (c): c is TokenCostLimitTestConfig => c !== null,
-);
+const testConfigs = Object.values(testConfigsMap);
 
 for (const config of testConfigs) {
   test.describe(

@@ -275,6 +275,31 @@ const cohereConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const bedrockConfig: ToolPersistenceTestConfig = {
+  providerName: "Bedrock",
+
+  endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+    messages: [{ role: "user", content: [{ text: content }] }],
+    toolConfig: {
+      tools: tools.map((t) => ({
+        toolSpec: {
+          name: t.name,
+          description: t.description,
+          inputSchema: { json: t.parameters },
+        },
+      })),
+    },
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -290,12 +315,10 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
-  bedrock: null, // TODO: Add bedrock tests when wiremock stubs are available
-} satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;
+  bedrock: bedrockConfig,
+} satisfies Record<SupportedProvider, ToolPersistenceTestConfig>;
 
-const testConfigs = Object.values(testConfigsMap).filter(
-  (c): c is ToolPersistenceTestConfig => c !== null,
-);
+const testConfigs = Object.values(testConfigsMap);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolPersistence-${config.providerName}`, () => {

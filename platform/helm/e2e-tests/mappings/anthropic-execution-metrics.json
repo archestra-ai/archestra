@@ -1,0 +1,35 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/anthropic/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-execution-metrics"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg_execution_metrics_test",
+      "type": "message",
+      "role": "assistant",
+      "model": "claude-3-5-sonnet-20241022",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello! I'm here to help."
+        }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 5
+      }
+    }
+  }
+}

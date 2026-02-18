@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/bedrock/model/.*/converse",
+    "headers": {
+      "Authorization": {
+        "contains": "bedrock-blocks-tool-untrusted-data"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "output": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "toolUse": {
+                "toolUseId": "call_bedrock_test_123",
+                "name": "read_file",
+                "input": {
+                  "file_path": "/etc/passwd"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "stopReason": "tool_use",
+      "usage": {
+        "inputTokens": 100,
+        "outputTokens": 20
+      }
+    }
+  }
+}

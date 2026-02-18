@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/bedrock/model/.*/converse",
+    "headers": {
+      "Authorization": {
+        "contains": "bedrock-model-optimization-disabled"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-bedrock-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "output": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "text": "This is a response when optimization rule is disabled."
+            }
+          ]
+        }
+      },
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 1500,
+        "outputTokens": 15
+      }
+    }
+  }
+}

@@ -40,9 +40,52 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 );
+const ALLOWED_LOGO_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+] as const;
+
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+
+/**
+ * Validates that a logo string is a valid data URI with an allowed image MIME type
+ * and does not exceed the maximum size limit.
+ */
+const LogoSchema = z
+  .string()
+  .refine(
+    (val) => {
+      const match = val.match(
+        /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/\n]+=*)$/,
+      );
+      if (!match) return false;
+
+      const mimeType = match[1];
+      if (
+        !ALLOWED_LOGO_MIME_TYPES.includes(
+          mimeType as (typeof ALLOWED_LOGO_MIME_TYPES)[number],
+        )
+      ) {
+        return false;
+      }
+
+      // Validate base64 and check size
+      const base64Data = match[2];
+      const sizeInBytes = Math.ceil((base64Data.length * 3) / 4);
+      return sizeInBytes <= MAX_LOGO_SIZE_BYTES;
+    },
+    {
+      message: `Logo must be a valid base64-encoded data URI with an allowed image type (${ALLOWED_LOGO_MIME_TYPES.join(", ")}) and must not exceed 2MB`,
+    },
+  )
+  .nullable();
+
 export const UpdateOrganizationSchema = z.object({
   ...extendedFields,
-  logo: z.string().nullable(),
+  logo: LogoSchema,
   onboardingComplete: z.boolean(),
   convertToolResultsToToon: z.boolean(),
   compressionScope: OrganizationCompressionScopeSchema,

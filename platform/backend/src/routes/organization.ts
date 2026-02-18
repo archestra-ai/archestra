@@ -48,6 +48,23 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      // Additional SVG sanitization check to prevent stored XSS
+      if (body.logo && body.logo.startsWith("data:image/svg+xml;base64,")) {
+        const base64Data = body.logo.replace(
+          "data:image/svg+xml;base64,",
+          "",
+        );
+        const svgContent = Buffer.from(base64Data, "base64").toString("utf-8");
+        const dangerousPatterns =
+          /<script[\s>]|on\w+\s*=|javascript:|data:\s*text\/html/i;
+        if (dangerousPatterns.test(svgContent)) {
+          throw new ApiError(
+            400,
+            "SVG contains potentially dangerous content",
+          );
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

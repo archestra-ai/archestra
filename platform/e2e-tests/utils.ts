@@ -215,8 +215,9 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await page.getByRole("dialog").waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
 
-  // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover
-  // Use polling because the dialog content may still be loading (profiles fetched async)
+  // The McpAssignmentsDialog shows profile pills only for profiles that already have
+  // tools assigned. For freshly installed servers, the profile needs to be added first
+  // via the "Add" combobox, which pre-selects all tools and creates the pill.
   const dialog = page.getByRole("dialog");
   const profilePill = dialog.getByRole("button", {
     name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
@@ -226,11 +227,39 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     name: /^\+\d+ more$/,
   });
 
+  // The "Add" button in the MCP Gateways section (AssignmentCombobox trigger)
+  const mcpGatewaysLabel = dialog.getByText("MCP Gateways");
+  const addButton = mcpGatewaysLabel
+    .locator("..")
+    .locator("..")
+    .getByRole("button", { name: "Add" });
+
   await expect(async () => {
     if (!(await profilePill.isVisible().catch(() => false))) {
+      // Try clicking "show more" first in case the pill is hidden behind a toggle
       if (await showMoreButton.isVisible().catch(() => false)) {
         await showMoreButton.click();
         await page.waitForTimeout(200);
+      }
+
+      // If pill still not visible, select the profile from the "Add" combobox
+      // This happens for freshly installed servers with no pre-existing assignments
+      if (!(await profilePill.isVisible().catch(() => false))) {
+        if (await addButton.isVisible().catch(() => false)) {
+          await addButton.click();
+          await page.waitForTimeout(300);
+          // Find and check the "Default MCP Gateway" checkbox item in the dropdown
+          const gatewayItem = page.getByRole("menuitemcheckbox", {
+            name: new RegExp(DEFAULT_MCP_GATEWAY_NAME),
+          });
+          if (await gatewayItem.isVisible().catch(() => false)) {
+            await gatewayItem.click();
+            await page.waitForTimeout(200);
+            // Close the dropdown by pressing Escape
+            await page.keyboard.press("Escape");
+            await page.waitForTimeout(200);
+          }
+        }
       }
     }
     await expect(profilePill).toBeVisible({ timeout: 5_000 });
@@ -239,10 +268,8 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await profilePill.click();
 
   // Wait for the popover to open - it contains the credential selector and tool checkboxes
-  // Click the first tool checkbox to select a tool
   const checkbox = page.getByRole("checkbox").first();
   await checkbox.waitFor({ state: "visible", timeout: 10_000 });
-  await checkbox.click();
 
   // The combobox (credential selector) is now in the popover
   const combobox = page.getByRole("combobox");
@@ -349,9 +376,9 @@ export async function openManageCredentialsDialog(
   await manageButton.click();
 
   // Wait for dialog to appear and content to load
-  await expect(
-    page.getByTestId(E2eTestId.ManageCredentialsDialog),
-  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId(E2eTestId.ManageCredentialsDialog)).toBeVisible(
+    { timeout: 10_000 },
+  );
 }
 
 /**

@@ -16,7 +16,8 @@ const toolsTable = pgTable(
   "tools",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // agentId is nullable - null for MCP tools, set for proxy-sniffed tools
+    // agentId identifies which agent discovered this tool via LLM proxy sniffing.
+    // null for MCP tools (installed via catalog), set for proxy-sniffed tools.
     agentId: uuid("agent_id").references(() => agentsTable.id, {
       onDelete: "cascade",
     }),

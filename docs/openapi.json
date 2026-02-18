@@ -27606,18 +27606,6 @@
                               "catalogId": {
                                 "nullable": true,
                                 "type": "string"
-                              },
-                              "mcpServerId": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "mcpServerName": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "mcpServerCatalogId": {
-                                "nullable": true,
-                                "type": "string"
                               }
                             },
                             "required": [
@@ -27626,10 +27614,7 @@
                               "description",
                               "createdAt",
                               "updatedAt",
-                              "catalogId",
-                              "mcpServerId",
-                              "mcpServerName",
-                              "mcpServerCatalogId"
+                              "catalogId"
                             ],
                             "additionalProperties": false
                           }
@@ -95159,7 +95144,7 @@
                         ],
                         "additionalProperties": false
                       },
-                      "mcpServer": {
+                      "catalog": {
                         "nullable": true,
                         "type": "object",
                         "properties": {
@@ -95189,7 +95174,7 @@
                       "createdAt",
                       "updatedAt",
                       "agent",
-                      "mcpServer"
+                      "catalog"
                     ],
                     "additionalProperties": false
                   }
@@ -95529,18 +95514,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "mcpServerName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "mcpServerCatalogId": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -95619,9 +95592,6 @@
                           "name",
                           "description",
                           "catalogId",
-                          "mcpServerId",
-                          "mcpServerName",
-                          "mcpServerCatalogId",
                           "createdAt",
                           "updatedAt",
                           "assignmentCount",

@@ -22,7 +22,7 @@ inputs:
     required: false
     default: ""
   github_token:
-    description: GitHub token for API calls (defaults to GITHUB_TOKEN)
+    description: GitHub token for API calls. Only pass this when NOT using claude_code_oauth_token, otherwise the OIDC flow (which posts as claude[bot]) will be skipped.
     required: false
     default: ""
   allowed_non_write_users:
@@ -63,7 +63,7 @@ runs:
         prompt: ${{ inputs.prompt }}
         anthropic_api_key: ${{ inputs.anthropic_api_key }}
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
-        github_token: ${{ inputs.github_token || github.token }}
+        github_token: ${{ inputs.github_token }}
         allowed_non_write_users: ${{ inputs.allowed_non_write_users }}
         use_sticky_comment: ${{ inputs.use_sticky_comment }}
         track_progress: ${{ inputs.track_progress }}

@@ -60,6 +60,9 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Test Anthropic Key");
+
     const response = await makeApiRequest({
       request,
       method: "post",
@@ -126,6 +129,9 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Get By ID Test Key");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -164,6 +170,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Original Name");
+    await cleanupKeyByName(makeApiRequest, request, "Updated Name");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -201,6 +211,9 @@ test.describe("Chat API Keys CRUD", () => {
   });
 
   test("should delete a chat API key", async ({ request, makeApiRequest }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Delete Test Key");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -254,6 +267,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover keys from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key 1");
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key 2");
+
     // Create first personal key for anthropic
     const key1Response = await makeApiRequest({
       request,
@@ -297,6 +314,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover keys from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key");
+    await cleanupKeyByName(makeApiRequest, request, "Personal OpenAI Key");
+
     // Create personal anthropic key
     const anthropicResponse = await makeApiRequest({
       request,
@@ -349,6 +370,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Available Test Key");
+
     // Create a personal key first
     const createResponse = await makeApiRequest({
       request,
@@ -389,6 +413,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Filter OpenAI Key");
+
     // Create an openai key
     const openaiResponse = await makeApiRequest({
       request,
@@ -434,6 +461,9 @@ test.describe("Chat API Keys Team Scope", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Team Test Key");
+
     // First get a team that the admin user belongs to
     const teamsResponse = await makeApiRequest({
       request,

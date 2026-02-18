@@ -239,13 +239,9 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await profilePill.click();
 
   // Wait for the popover to open - it contains the credential selector and tool checkboxes
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
-
   // Click the first tool checkbox to select a tool
-  // The checkbox is inside the popover, wait for it to be visible
   const checkbox = page.getByRole("checkbox").first();
-  await checkbox.waitFor({ state: "visible", timeout: 5_000 });
+  await checkbox.waitFor({ state: "visible", timeout: 10_000 });
   await checkbox.click();
 
   // The combobox (credential selector) is now in the popover
@@ -345,20 +341,17 @@ export async function openManageCredentialsDialog(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(2_000);
   // Find and click the Manage button for credentials
   const manageButton = page.getByTestId(
     `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`,
   );
-  await expect(manageButton).toBeVisible();
+  await expect(manageButton).toBeVisible({ timeout: 10_000 });
   await manageButton.click();
 
-  // Wait for dialog to appear
+  // Wait for dialog to appear and content to load
   await expect(
     page.getByTestId(E2eTestId.ManageCredentialsDialog),
-  ).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  ).toBeVisible({ timeout: 10_000 });
 }
 
 /**

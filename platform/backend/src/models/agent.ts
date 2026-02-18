@@ -791,9 +791,29 @@ class AgentModel {
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {
+      // For internal agents, track version history on each update
+      let setPayload: typeof agent & {
+        promptVersion?: number;
+        promptHistory?: ReturnType<typeof sql>;
+      } = agent;
+
+      if (existingAgent.agentType === "agent") {
+        const historyEntry: AgentHistoryEntry = {
+          version: existingAgent.promptVersion || 1,
+          userPrompt: existingAgent.userPrompt || null,
+          systemPrompt: existingAgent.systemPrompt || null,
+          createdAt: existingAgent.updatedAt.toISOString(),
+        };
+        setPayload = {
+          ...agent,
+          promptVersion: (existingAgent.promptVersion || 1) + 1,
+          promptHistory: sql`${schema.agentsTable.promptHistory} || ${JSON.stringify([historyEntry])}::jsonb`,
+        };
+      }
+
       [updatedAgent] = await db
         .update(schema.agentsTable)
-        .set(agent)
+        .set(setPayload)
         .where(eq(schema.agentsTable.id, id))
         .returning();
 

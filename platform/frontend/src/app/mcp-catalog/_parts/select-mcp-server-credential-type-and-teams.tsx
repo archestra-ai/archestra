@@ -183,7 +183,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   return (
     <div className="space-y-2">
-      <Label>Installation Type</Label>
+      <Label>Connect MCP Server for</Label>
       <Select
         value={selectedValue}
         onValueChange={handleValueChange}
@@ -236,8 +236,8 @@ export function SelectMcpServerCredentialTypeAndTeams({
       </Select>
       <p className="text-xs text-muted-foreground">
         {selectedValue === PERSONAL_VALUE
-          ? "Only you can use this server installation"
-          : "All members of the selected team can use this server"}
+          ? "Only admins can select this connection when assigning tools to agents and MCP gateways - other users will not see it."
+          : "Any team member can select this connection when assigning tools to agents and MCP gateways."}
       </p>
     </div>
   );

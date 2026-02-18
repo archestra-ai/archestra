@@ -582,7 +582,7 @@ function McpServerPill({
         {/* Credential Selector */}
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
-            <Label className="text-sm font-medium">Credential</Label>
+            <Label className="text-sm font-medium">Connect on behalf of</Label>
             <TokenSelect
               catalogId={catalogItem.id}
               value={selectedCredential}

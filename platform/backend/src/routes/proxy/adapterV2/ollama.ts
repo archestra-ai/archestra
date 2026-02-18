@@ -1197,6 +1197,7 @@ export const ollamaAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
+
     const stream = await ollamaClient.chat.completions.create(ollamaRequest);
 
     return {

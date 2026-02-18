@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { expect, test } from "../fixtures";
 
 // =============================================================================
@@ -278,17 +279,23 @@ const cohereConfig: ToolPersistenceTestConfig = {
 // Test Suite
 // =============================================================================
 
-const testConfigs: ToolPersistenceTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cohereConfig,
-  cerebrasConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: null, // TODO: Add bedrock tests when wiremock stubs are available
+} satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;
+
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is ToolPersistenceTestConfig => c !== null,
+);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolPersistence-${config.providerName}`, () => {

@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { expect, test } from "../fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues
@@ -775,17 +776,23 @@ const zhipuaiConfig: ToolInvocationTestConfig = {
 // Test Suite
 // =============================================================================
 
-const testConfigs: ToolInvocationTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cerebrasConfig,
-  cohereConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: null, // TODO: Add bedrock tests when wiremock stubs are available
+} satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
+
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is ToolInvocationTestConfig => c !== null,
+);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {

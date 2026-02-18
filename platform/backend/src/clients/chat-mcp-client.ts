@@ -710,15 +710,6 @@ export async function getChatMcpTools({
         // Normalize the schema and wrap with jsonSchema() helper
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
 
-        logger.debug(
-          {
-            toolName: mcpTool.name,
-            schemaType: normalizedSchema.type,
-            hasProperties: !!normalizedSchema.properties,
-          },
-          "Converting MCP tool with JSON Schema",
-        );
-
         // Construct Tool using jsonSchema() to wrap JSON Schema
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,

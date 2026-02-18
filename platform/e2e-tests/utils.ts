@@ -43,8 +43,11 @@ export async function addCustomSelfHostedCatalogItem({
   };
 }) {
   await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Add MCP Server" }).click();
+  await page.waitForLoadState("domcontentloaded");
+  // Wait for the Add MCP Server button to be visible (page fully rendered)
+  const addButton = page.getByRole("button", { name: "Add MCP Server" });
+  await addButton.waitFor({ state: "visible", timeout: 30_000 });
+  await addButton.click();
 
   await page
     .getByRole("button", { name: "Self-hosted (orchestrated by" })
@@ -88,7 +91,7 @@ export async function addCustomSelfHostedCatalogItem({
     }
   }
   await page.getByRole("button", { name: "Add Server" }).click();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // After adding a server, the install dialog opens automatically.
   // Close it so the calling test can control when to open it.
@@ -96,7 +99,7 @@ export async function addCustomSelfHostedCatalogItem({
   await page
     .getByRole("dialog")
     .filter({ hasText: /Install -/ })
-    .waitFor({ state: "visible", timeout: 10000 });
+    .waitFor({ state: "visible", timeout: 30_000 });
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
 
@@ -176,7 +179,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 }) {
   const waitTimeoutMs = timeoutMs ?? 60_000;
   await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Verify we're actually on the registry page (handle redirect issues)
   await expect(page).toHaveURL(/\/mcp-catalog\/registry/, { timeout: 10000 });
@@ -190,7 +193,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await expect(async () => {
     // Re-navigate in case the page got stale
     await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Fail fast if error message is present
     const errorElement = page.getByTestId(
@@ -210,9 +213,11 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 
   // Wait for dialog to open
   await page.getByRole("dialog").waitFor({ state: "visible", timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
-  // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover
+  // The McpAssignmentsDialog shows profile pills only for profiles that already have
+  // tools assigned. For freshly installed servers, the profile needs to be added first
+  // via the "Add" combobox, which pre-selects all tools and creates the pill.
   const dialog = page.getByRole("dialog");
   const profilePill = dialog.getByRole("button", {
     name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
@@ -222,25 +227,46 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     name: /^\+\d+ more$/,
   });
 
-  if (!(await profilePill.isVisible().catch(() => false))) {
-    if (await showMoreButton.isVisible().catch(() => false)) {
-      await showMoreButton.click();
-      await page.waitForTimeout(200);
-    }
-  }
+  // The first "Add" button in the dialog belongs to the MCP Gateways section
+  // (MCP Gateways renders before Agents in the dialog layout)
+  const addButton = dialog.getByRole("button", { name: "Add" }).first();
 
-  await profilePill.waitFor({ state: "visible", timeout: 30_000 });
+  await expect(async () => {
+    if (!(await profilePill.isVisible().catch(() => false))) {
+      // Try clicking "show more" first in case the pill is hidden behind a toggle
+      if (await showMoreButton.isVisible().catch(() => false)) {
+        await showMoreButton.click();
+        await page.waitForTimeout(200);
+      }
+
+      // If pill still not visible, select the profile from the "Add" combobox
+      // This happens for freshly installed servers with no pre-existing assignments
+      if (!(await profilePill.isVisible().catch(() => false))) {
+        if (await addButton.isVisible().catch(() => false)) {
+          await addButton.click();
+          await page.waitForTimeout(300);
+          // Find and check the "Default MCP Gateway" checkbox item in the dropdown
+          const gatewayItem = page.getByRole("menuitemcheckbox", {
+            name: new RegExp(DEFAULT_MCP_GATEWAY_NAME),
+          });
+          if (await gatewayItem.isVisible().catch(() => false)) {
+            await gatewayItem.click();
+            await page.waitForTimeout(200);
+            // Close the dropdown by pressing Escape
+            await page.keyboard.press("Escape");
+            await page.waitForTimeout(200);
+          }
+        }
+      }
+    }
+    await expect(profilePill).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
+
   await profilePill.click();
 
   // Wait for the popover to open - it contains the credential selector and tool checkboxes
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
-
-  // Click the first tool checkbox to select a tool
-  // The checkbox is inside the popover, wait for it to be visible
   const checkbox = page.getByRole("checkbox").first();
-  await checkbox.waitFor({ state: "visible", timeout: 5_000 });
-  await checkbox.click();
+  await checkbox.waitFor({ state: "visible", timeout: 10_000 });
 
   // The combobox (credential selector) is now in the popover
   const combobox = page.getByRole("combobox");
@@ -339,20 +365,17 @@ export async function openManageCredentialsDialog(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(2_000);
   // Find and click the Manage button for credentials
   const manageButton = page.getByTestId(
     `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`,
   );
-  await expect(manageButton).toBeVisible();
+  await expect(manageButton).toBeVisible({ timeout: 10_000 });
   await manageButton.click();
 
-  // Wait for dialog to appear
-  await expect(
-    page.getByTestId(E2eTestId.ManageCredentialsDialog),
-  ).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  // Wait for dialog to appear and content to load
+  await expect(page.getByTestId(E2eTestId.ManageCredentialsDialog)).toBeVisible(
+    { timeout: 10_000 },
+  );
 }
 
 /**
@@ -519,9 +542,6 @@ export async function loginViaApi(
       continue;
     }
 
-    if (!response.ok()) {
-    }
-
     return false;
   }
 
@@ -649,13 +669,15 @@ export async function waitForServerInstallation(
 /**
  * Get a JWT access token from Keycloak using the resource owner password
  * credentials grant (direct access grant).
+ * Retries with backoff to handle Keycloak startup delays in CI.
  */
 export async function getKeycloakJwt(): Promise<string> {
   // Use KEYCLOAK_EXTERNAL_URL because this runs from the Playwright test container
   // (outside K8s), not from the backend. KEYCLOAK_OIDC.tokenEndpoint uses K8s internal
   // DNS which is not resolvable from the test container.
   const tokenUrl = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
-  const response = await fetch(tokenUrl, {
+
+  const response = await fetchWithRetry(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -695,7 +717,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   });
 
   // Wait for Keycloak login form to be ready
-  await ssoPage.waitForLoadState("networkidle");
+  await ssoPage.waitForLoadState("domcontentloaded");
 
   // Fill in Keycloak login form
   const usernameField = ssoPage.getByLabel("Username or email");
@@ -713,7 +735,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 60000 });
 
   // Wait for page to settle
-  await ssoPage.waitForLoadState("networkidle");
+  await ssoPage.waitForLoadState("domcontentloaded");
 
   // Check if we landed on a logged-in page (not sign-in)
   const finalUrl = ssoPage.url();
@@ -740,7 +762,7 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
  * Uses external URL since this runs from the test (CI host), not from inside K8s.
  */
 export async function fetchKeycloakSamlMetadata(): Promise<string> {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml/descriptor`,
   );
   if (!response.ok) {
@@ -767,4 +789,37 @@ export function extractCertFromMetadata(metadata: string): string {
     throw new Error("Could not extract certificate from IdP metadata");
   }
   return match[1];
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Fetch with retry and exponential backoff.
+ * Handles transient connection errors (SocketError, ECONNREFUSED, etc.)
+ * that occur when services like Keycloak are still starting up in CI.
+ */
+async function fetchWithRetry(
+  url: string | URL,
+  init?: RequestInit,
+  maxRetries = 5,
+  initialDelayMs = 2000,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        const delay = initialDelayMs * 2 ** attempt;
+        console.log(
+          `fetch ${url} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${error instanceof Error ? error.message : error}. Retrying in ${delay}ms...`,
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
 }

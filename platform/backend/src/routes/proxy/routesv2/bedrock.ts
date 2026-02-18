@@ -6,7 +6,6 @@ import { Bedrock, constructResponseSchema, UuidIdSchema } from "@/types";
 import { bedrockAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
 
 const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const BEDROCK_PREFIX = `${PROXY_API_PREFIX}/bedrock`;
@@ -40,23 +39,11 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Bedrock Converse request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         { ...request.body, _isStreaming: false },
-        request.headers,
+        request,
         reply,
         bedrockAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -88,23 +75,11 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Bedrock Converse request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         { ...request.body, _isStreaming: false },
-        request.headers,
+        request,
         reply,
         bedrockAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -134,24 +109,11 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Bedrock ConverseStream request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-
       return handleLLMProxy(
         { ...request.body, _isStreaming: true },
-        request.headers,
+        request,
         reply,
         bedrockAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -184,24 +146,11 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Bedrock ConverseStream request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-
       return handleLLMProxy(
         { ...request.body, _isStreaming: true },
-        request.headers,
+        request,
         reply,
         bedrockAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -245,11 +194,6 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         },
         "[UnifiedProxy] Handling Bedrock Converse request (AI SDK format)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject modelId from URL into request body if not present
       const bodyWithModel = {
@@ -261,16 +205,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
       return handleLLMProxy(
         bodyWithModel,
-        request.headers,
+        request,
         reply,
         bedrockAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -308,11 +245,6 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         },
         "[UnifiedProxy] Handling Bedrock ConverseStream request (AI SDK format)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject modelId from URL into request body
       const bodyWithModel = {
@@ -324,16 +256,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
       return handleLLMProxy(
         bodyWithModel,
-        request.headers,
+        request,
         reply,
         bedrockAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );

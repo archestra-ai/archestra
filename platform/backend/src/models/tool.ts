@@ -664,7 +664,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
-          isNotNull(schema.toolsTable.mcpServerId), // Only MCP tools
+          isNotNull(schema.toolsTable.catalogId), // Only MCP tools
         ),
       );
 

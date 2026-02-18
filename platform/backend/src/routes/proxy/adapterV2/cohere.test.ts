@@ -958,9 +958,9 @@ describe("cohereAdapterFactory", () => {
     });
   });
 
-  describe("getSpanName", () => {
+  describe("spanName", () => {
     test("returns correct span name", () => {
-      expect(cohereAdapterFactory.getSpanName(false)).toBe("cohere.chat");
+      expect(cohereAdapterFactory.spanName).toBe("chat");
     });
   });
 

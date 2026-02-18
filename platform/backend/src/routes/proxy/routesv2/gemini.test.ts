@@ -345,13 +345,20 @@ describe("Gemini V2 proxy routing", () => {
         upstream: `http://localhost:${upstreamPort}`,
         prefix: `${API_PREFIX}/v1beta`,
         rewritePrefix: "/v1",
-        preHandler: (request, _reply, next) => {
+        preHandler: (request, reply, next) => {
           if (
             request.method === "POST" &&
             (request.url.includes(":generateContent") ||
               request.url.includes(":streamGenerateContent"))
           ) {
-            next(new Error("skip"));
+            reply.code(400).send({
+              error: {
+                code: 400,
+                message:
+                  "generateContent requests should use the dedicated endpoint",
+                status: "INVALID_ARGUMENT",
+              },
+            });
             return;
           }
           next();
@@ -404,8 +411,8 @@ describe("Gemini V2 proxy routing", () => {
       },
     });
 
-    // Should get 404 or 500 because we didn't register the actual generateContent handler
-    expect([404, 500]).toContain(response.statusCode);
+    // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
+    expect(response.statusCode).toBe(400);
   });
 
   test("skips proxy for streamGenerateContent routes", async () => {
@@ -425,8 +432,8 @@ describe("Gemini V2 proxy routing", () => {
       },
     });
 
-    // Should get 404 or 500 because we didn't register the actual streamGenerateContent handler
-    expect([404, 500]).toContain(response.statusCode);
+    // Should get 400 because the preHandler blocks proxy forwarding with a clean error response
+    expect(response.statusCode).toBe(400);
   });
 });
 

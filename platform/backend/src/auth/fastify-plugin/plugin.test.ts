@@ -7,6 +7,7 @@ import {
   type MockedFunction,
   test,
 } from "@/test";
+import { ApiError } from "@/types";
 
 // Mock modules with factory functions to avoid hoisting issues
 vi.mock("@/auth", () => ({
@@ -275,6 +276,11 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
 
       const mockRequest = {
         url: "/api/agents",
@@ -401,7 +407,7 @@ describe("authPlugin integration", () => {
       );
     });
 
-    test("should handle user population errors gracefully", async () => {
+    test("should reject with 401 when user population fails", async () => {
       mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
@@ -426,10 +432,10 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      // Should still succeed even if user population fails
-      expect(mockReply.status).not.toHaveBeenCalled();
+      // Should throw 401 when user info cannot be populated
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        ApiError,
+      );
     });
   });
 

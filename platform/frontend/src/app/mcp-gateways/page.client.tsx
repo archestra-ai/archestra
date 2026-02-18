@@ -197,7 +197,9 @@ function McpGateways({
   type GatewayData =
     archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
+    searchParams.get("create") === "true",
+  );
   const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
     name: string;

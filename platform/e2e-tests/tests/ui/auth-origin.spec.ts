@@ -52,6 +52,12 @@ test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
       await page.goto(`${UI_BASE_URL}/auth/sign-in`);
       await page.waitForLoadState("domcontentloaded");
 
+      // Wait for React to hydrate before triggering the fetch.
+      // The sign-in form must be rendered so React's window.fetch interceptor is active.
+      await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible({
+        timeout: 15_000,
+      });
+
       // Trigger the 403 through window.fetch to activate the React error detection.
       // The React wrapper intercepts window.fetch calls and detects origin errors,
       // but better-auth's internal fetch chain doesn't always propagate through it.

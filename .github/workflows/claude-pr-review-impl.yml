@@ -31,12 +31,10 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: PR Review with Claude
-        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        uses: ./.github/actions/run-claude
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
-          use_sticky_comment: true
           prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ inputs.pr_number }}"
-          claude_args: |
-            --model claude-opus-4-5-20251101
-            --allowedTools Read,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)
+          allowed_tools: "Read,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: "true"
+          track_progress: "true"

@@ -1,5 +1,5 @@
 # Reusable workflow for bot-initiated Claude actions.
-# Wraps the common pattern: GitHub App token + checkout + claude-code-action with API key auth.
+# Wraps the common pattern: GitHub App token + checkout + run-claude composite action.
 # Called by claude-pr-triage.yml and claude-issue-triage.yml.
 #
 # Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
@@ -63,13 +63,12 @@ jobs:
           persist-credentials: false
 
       - name: Run Claude
-        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        uses: ./.github/actions/run-claude
         with:
           prompt: ${{ inputs.prompt }}
+          allowed_tools: ${{ inputs.allowed_tools }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
           allowed_non_write_users: "*"
           use_sticky_comment: ${{ inputs.use_sticky_comment }}
           track_progress: ${{ inputs.track_progress }}
-          claude_args: |
-            --allowedTools "${{ inputs.allowed_tools }}"

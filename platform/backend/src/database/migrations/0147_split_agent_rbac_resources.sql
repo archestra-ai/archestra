@@ -31,3 +31,8 @@ SET "permission" = jsonb_set(
   )
 )::text
 WHERE "permission"::text LIKE '%"agent"%' OR "permission"::text LIKE '%"profile"%';
+
+-- Step 3: Remove stale "prompt" keys (resource was removed)
+UPDATE "organization_role"
+SET "permission" = ("permission"::jsonb - 'prompt')::text
+WHERE "permission"::text LIKE '%"prompt"%';

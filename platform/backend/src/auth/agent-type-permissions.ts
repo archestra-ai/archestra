@@ -1,4 +1,5 @@
 import type { Action, Resource } from "@shared";
+import { UserModel } from "@/models";
 import type { AgentType } from "@/types";
 import { ApiError } from "@/types";
 import { userHasPermission } from "./utils";
@@ -92,15 +93,12 @@ async function hasAnyAgentTypePermission(params: {
   organizationId: string;
   action: Action;
 }): Promise<boolean> {
+  const permissions = await UserModel.getUserPermissions(
+    params.userId,
+    params.organizationId,
+  );
   const resources: Resource[] = ["agent", "mcpGateway", "llmProxy"];
-  for (const resource of resources) {
-    const allowed = await userHasPermission(
-      params.userId,
-      params.organizationId,
-      resource,
-      params.action,
-    );
-    if (allowed) return true;
-  }
-  return false;
+  return resources.some(
+    (r) => permissions[r]?.includes(params.action) ?? false,
+  );
 }

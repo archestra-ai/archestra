@@ -145,33 +145,22 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
-  [RouteId.AssignToolToAgent]: {
-    agent: ["update"],
-  },
-  [RouteId.BulkAssignTools]: {
-    agent: ["update"],
-  },
+  // Tool-assignment routes: agent-type update checked dynamically in handler
+  [RouteId.AssignToolToAgent]: {},
+  [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {
-    agent: ["update"],
     tool: ["update"],
   },
   [RouteId.AutoConfigureAgentToolPolicies]: {
-    agent: ["update"],
     tool: ["update"],
   },
-  [RouteId.UnassignToolFromAgent]: {
-    agent: ["update"],
-  },
+  [RouteId.UnassignToolFromAgent]: {},
   [RouteId.UpdateAgentTool]: {
-    agent: ["update"],
     tool: ["update"],
   },
-  [RouteId.GetLabelKeys]: {
-    agent: ["read"],
-  },
-  [RouteId.GetLabelValues]: {
-    agent: ["read"],
-  },
+  // Labels are cross-type — any agent-type read permission suffices (checked in handler)
+  [RouteId.GetLabelKeys]: {},
+  [RouteId.GetLabelValues]: {},
   [RouteId.GetTokens]: {
     team: ["read"],
   },

@@ -1,7 +1,10 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import {
+  hasAnyAgentTypeAdminPermission,
+  requireAgentTypePermission,
+} from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import {
@@ -121,6 +124,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         useDynamicTeamCredential,
       } = request.body || {};
 
+      // Check agent-type-specific update permission
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        throw new ApiError(404, `Agent with ID ${agentId} not found`);
+      }
+      await requireAgentTypePermission({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        agentType: agent.agentType,
+        action: "update",
+      });
+
       const result = await assignToolToAgent(
         agentId,
         toolId,
@@ -191,6 +206,21 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Extract unique IDs for batch fetching to avoid N+1 queries
       const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
       const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
+
+      // Check agent-type-specific update permission for each unique agent
+      const checkedAgentTypes = new Set<string>();
+      for (const agentId of uniqueAgentIds) {
+        const agent = await AgentModel.findById(agentId);
+        if (agent && !checkedAgentTypes.has(agent.agentType)) {
+          checkedAgentTypes.add(agent.agentType);
+          await requireAgentTypePermission({
+            userId: request.user.id,
+            organizationId: request.organizationId,
+            agentType: agent.agentType,
+            action: "update",
+          });
+        }
+      }
 
       // Batch fetch all required data in parallel
       const [existingAgentIds, tools] = await Promise.all([
@@ -374,7 +404,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { agentId, toolId } }, reply) => {
+    async ({ params: { agentId, toolId }, user, organizationId }, reply) => {
+      // Check agent-type-specific update permission
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        throw new ApiError(404, "Agent tool not found");
+      }
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+        action: "update",
+      });
+
       const success = await AgentToolModel.delete(agentId, toolId);
 
       if (!success) {
@@ -405,12 +447,20 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
-    async ({ params: { agentId }, query }, reply) => {
+    async ({ params: { agentId }, query, user, organizationId }, reply) => {
       // Validate that agent exists
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
         throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
+
+      // Check agent-type-specific read permission
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+        action: "read",
+      });
 
       const tools = query.excludeLlmProxyOrigin
         ? await ToolModel.getMcpToolsByAgent(agentId)
@@ -439,30 +489,37 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       const {
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
         useDynamicTeamCredential,
       } = body;
 
-      // Get the agent-tool relationship for validation (needed for both credential and execution source)
-      let agentToolForValidation:
-        | Awaited<ReturnType<typeof AgentToolModel.findAll>>["data"][number]
-        | undefined;
+      // Fetch the agent-tool relationship (needed for permission check and validation)
+      const agentTools = await AgentToolModel.findAll({
+        skipPagination: true,
+      });
+      const agentToolForValidation = agentTools.data.find((at) => at.id === id);
 
-      if (credentialSourceMcpServerId || executionSourceMcpServerId) {
-        const agentTools = await AgentToolModel.findAll({
-          skipPagination: true,
+      if (!agentToolForValidation) {
+        throw new ApiError(
+          404,
+          `Agent-tool relationship with ID ${id} not found`,
+        );
+      }
+
+      // Check agent-type-specific update permission
+      const agentForPerm = await AgentModel.findById(
+        agentToolForValidation.agent.id,
+      );
+      if (agentForPerm) {
+        await requireAgentTypePermission({
+          userId: user.id,
+          organizationId,
+          agentType: agentForPerm.agentType,
+          action: "update",
         });
-        agentToolForValidation = agentTools.data.find((at) => at.id === id);
-
-        if (!agentToolForValidation) {
-          throw new ApiError(
-            404,
-            `Agent-tool relationship with ID ${id} not found`,
-          );
-        }
       }
 
       // If credentialSourceMcpServerId is being updated, validate it

@@ -134,7 +134,7 @@ export async function executeA2AMessage(
       agentName: agent.name,
       agentId: agent.id,
       userId,
-      userIsProfileAdmin: true, // A2A agents have full access
+      userIsAgentAdmin: true, // A2A agents have full access
       organizationId,
       sessionId,
       delegationChain,
@@ -289,7 +289,7 @@ async function cleanupBrowserTab(params: {
       await browserStreamFeature.closeTab(agentId, isolationKey, {
         userId,
         organizationId,
-        userIsProfileAdmin: true,
+        userIsAgentAdmin: true,
       });
     }
   } catch (error) {

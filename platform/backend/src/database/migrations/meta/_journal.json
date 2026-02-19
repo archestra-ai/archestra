@@ -1030,6 +1030,13 @@
       "when": 1771253193156,
       "tag": "0146_blue_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1771510215318,
+      "tag": "0147_split_agent_rbac_resources",
+      "breakpoints": true
     }
   ]
 }

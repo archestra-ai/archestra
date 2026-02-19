@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import {
   archestraApiSdk,
+  getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
@@ -364,7 +365,10 @@ export function AgentDialog({
       return response.data || [];
     },
   });
-  const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
+  const resource = getResourceForAgentType(agentType);
+  const { data: isAdmin } = useHasPermissions({
+    [resource]: ["admin"],
+  });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
 
@@ -586,7 +590,7 @@ export function AgentDialog({
 
   // Non-admin users must select at least one team for external profiles
   const requiresTeamSelection =
-    !isProfileAdmin && !isInternalAgent && assignedTeamIds.length === 0;
+    !isAdmin && !isInternalAgent && assignedTeamIds.length === 0;
   const hasNoAvailableTeams = !teams || teams.length === 0;
 
   const handleSave = useCallback(async () => {
@@ -600,7 +604,7 @@ export function AgentDialog({
     }
 
     // Non-admin users must select at least one team for external profiles
-    if (!isProfileAdmin && !isInternalAgent && assignedTeamIds.length === 0) {
+    if (!isAdmin && !isInternalAgent && assignedTeamIds.length === 0) {
       toast.error("Please select at least one team");
       return;
     }
@@ -748,7 +752,7 @@ export function AgentDialog({
     agent,
     isInternalAgent,
     showSecurity,
-    isProfileAdmin,
+    isAdmin,
     selectedDelegationTargetIds,
     currentDelegations.length,
     updateAgent,
@@ -1229,7 +1233,7 @@ export function AgentDialog({
             <div className="space-y-2">
               <Label>
                 Team
-                {!isProfileAdmin && !isInternalAgent && (
+                {!isAdmin && !isInternalAgent && (
                   <span className="text-destructive ml-1">(required)</span>
                 )}
               </Label>
@@ -1338,7 +1342,7 @@ export function AgentDialog({
               createAgent.isPending ||
               updateAgent.isPending ||
               requiresTeamSelection ||
-              (!isProfileAdmin && !isInternalAgent && hasNoAvailableTeams)
+              (!isAdmin && !isInternalAgent && hasNoAvailableTeams)
             }
           >
             {(createAgent.isPending || updateAgent.isPending) && (

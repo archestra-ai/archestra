@@ -57,6 +57,18 @@ archestra:
     ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
     ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
 
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        # Enable SSRF protection for e2e testing
+        create: true
+        additionalEgressRules:
+          # Allow MCP server pods to reach Keycloak for JWT validation (e2e tests)
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: keycloak
+
   # Use NodePort service type to expose services on fixed ports
   service:
     type: NodePort

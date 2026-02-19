@@ -29,6 +29,10 @@ archestra:
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
+      networkPolicy:
+        # Enable SSRF protection for MCP server pods
+        create: true
+
       serviceAccount:
         # GKE Workload Identity binding to allow Vertex AI access via ADC
         # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)

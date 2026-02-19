@@ -36,7 +36,7 @@ test.describe("Auth Permissions API - Custom Roles", () => {
     const createResponse = await createRole(request, {
       name: `test_permissions_role_${Date.now()}`,
       permission: {
-        profile: ["read"],
+        agent: ["read"],
         tool: ["read"],
       },
     });

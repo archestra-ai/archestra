@@ -2,6 +2,7 @@ name: Install Kind Cluster
 description: |
   Creates a Kind cluster with a pinned node image for deterministic behavior.
   Wraps helm/kind-action with a known-good kindest/node version.
+  Installs Calico CNI for NetworkPolicy enforcement (SSRF protection).
 
 inputs:
   config:
@@ -26,3 +27,35 @@ runs:
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
         node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
         install_only: false
+
+    - name: Install Calico CNI for NetworkPolicy enforcement
+      shell: bash
+      run: |
+        # Install Calico operator and custom resources for NetworkPolicy support.
+        # Kind's default CNI (kindnet) does NOT enforce NetworkPolicies.
+        # Calico provides full NetworkPolicy enforcement needed for SSRF protection.
+        # See: https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind
+        echo "Installing Calico CNI..."
+        kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/tigera-operator.yaml
+        kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/custom-resources.yaml
+
+        echo "Waiting for Calico pods to be ready..."
+        # Wait for calico-system namespace to be created by the operator
+        for i in $(seq 1 30); do
+          if kubectl get namespace calico-system > /dev/null 2>&1; then
+            echo "calico-system namespace exists"
+            break
+          fi
+          echo "Waiting for calico-system namespace... ($i/30)"
+          sleep 2
+        done
+
+        # Wait for Calico pods to be ready (timeout 120s)
+        kubectl wait --for=condition=Ready pods --all -n calico-system --timeout=120s || {
+          echo "Warning: Some Calico pods not ready, checking status..."
+          kubectl get pods -n calico-system
+          kubectl get pods -n tigera-operator
+        }
+
+        echo "Calico CNI installed successfully"
+        kubectl get pods -n calico-system

@@ -79,7 +79,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       serverUrl: "https://test.com/mcp/",
     });
 
-    const mcpServer = await makeMcpServer({
+    await makeMcpServer({
       name: "test-server",
       catalogId: catalogItem.id,
       ownerId: user.id,
@@ -90,7 +90,6 @@ describe("Archestra Tools Dynamic Assignment", () => {
       description: "Test MCP tool",
       parameters: {},
       catalogId: catalogItem.id,
-      mcpServerId: mcpServer.id,
     });
 
     // Assign MCP tool to agent

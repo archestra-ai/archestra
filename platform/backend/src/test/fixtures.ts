@@ -218,15 +218,7 @@ async function makeInternalAgent(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<
-      Tool,
-      | "name"
-      | "description"
-      | "parameters"
-      | "catalogId"
-      | "mcpServerId"
-      | "agentId"
-    >
+    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
   > = {},
 ): Promise<Tool> {
   const toolData = {

@@ -81,7 +81,7 @@ export function McpAssignmentsDialog({
   const assignmentsForCatalog = useMemo(() => {
     if (!assignedToolsData?.data) return [];
     return assignedToolsData.data.filter((at) => {
-      const toolCatalogId = at.tool.catalogId ?? at.tool.mcpServerCatalogId;
+      const toolCatalogId = at.tool.catalogId;
       return toolCatalogId === catalogId;
     });
   }, [assignedToolsData, catalogId]);

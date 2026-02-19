@@ -376,7 +376,7 @@ describe("ToolModel", () => {
       const _user = await makeUser();
       const agent = await makeAgent();
 
-      // Create a proxy-sniffed tool (no mcpServerId)
+      // Create a proxy-sniffed tool (no catalogId)
       await makeTool({
         agentId: agent.id,
         name: "proxy_tool",
@@ -407,7 +407,7 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP server with GitHub metadata
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-github-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -425,7 +425,6 @@ describe("ToolModel", () => {
           },
         },
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign tool to agent
@@ -439,10 +438,6 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        mcpServerName: `test-github-server`,
-        mcpServerSecretId: null,
-        mcpServerCatalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
         responseModifierTemplate: null,
         credentialSourceMcpServerId: null,
         executionSourceMcpServerId: null,
@@ -468,7 +463,7 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP server
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -480,7 +475,6 @@ describe("ToolModel", () => {
         description: "First tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       const tool2 = await makeTool({
@@ -488,7 +482,6 @@ describe("ToolModel", () => {
         description: "Second tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign both tools to agent
@@ -521,7 +514,7 @@ describe("ToolModel", () => {
         name: "github-mcp-server",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -531,7 +524,7 @@ describe("ToolModel", () => {
         name: "exclusive_tool",
         description: "Exclusive tool",
         parameters: {},
-        mcpServerId: mcpServer.id,
+        catalogId: catalogItem.id,
       });
 
       // Assign tool to agent1 only
@@ -561,7 +554,7 @@ describe("ToolModel", () => {
         name: "github-mcp-server",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -575,13 +568,12 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      // Create an MCP tool (no agentId, linked via mcpServerId)
+      // Create an MCP tool (no agentId, linked via catalogId)
       const mcpTool = await makeTool({
         name: "mcp_tool",
         description: "MCP Tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign MCP tool to agent
@@ -612,7 +604,7 @@ describe("ToolModel", () => {
         name: "github-mcp-server",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const server1 = await makeMcpServer({
+      await makeMcpServer({
         name: "github-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -622,7 +614,7 @@ describe("ToolModel", () => {
         name: "other-mcp-server",
         serverUrl: "https://api.othercopilot.com/mcp/",
       });
-      const server2 = await makeMcpServer({
+      await makeMcpServer({
         name: "other-server",
         catalogId: catalogItem2.id,
       });
@@ -633,7 +625,6 @@ describe("ToolModel", () => {
         description: "List GitHub issues",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: server1.id,
       });
 
       const otherTool = await makeTool({
@@ -641,7 +632,6 @@ describe("ToolModel", () => {
         description: "Other tool",
         parameters: {},
         catalogId: catalogItem2.id,
-        mcpServerId: server2.id,
       });
 
       // Assign both tools to agent
@@ -703,86 +693,6 @@ describe("ToolModel", () => {
     });
   });
 
-  describe("findByMcpServerId", () => {
-    test("returns tools with assigned agents efficiently", async ({
-      makeUser,
-      makeAgent,
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeTool,
-    }) => {
-      const user = await makeUser();
-      const agent1 = await makeAgent({ name: "Agent 1" });
-      const agent2 = await makeAgent({ name: "Agent 2" });
-
-      const catalogItem = await makeInternalMcpCatalog({
-        name: "test-catalog",
-        serverUrl: "https://api.test.com/mcp/",
-      });
-
-      const mcpServer = await makeMcpServer({
-        name: "test-server",
-        catalogId: catalogItem.id,
-        ownerId: user.id,
-      });
-
-      const tool1 = await makeTool({
-        name: "tool1",
-        description: "Tool 1",
-        parameters: {},
-        catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
-      });
-
-      const tool2 = await makeTool({
-        name: "tool2",
-        description: "Tool 2",
-        parameters: {},
-        catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
-      });
-
-      // Assign tools to agents
-      await AgentToolModel.create(agent1.id, tool1.id);
-      await AgentToolModel.create(agent1.id, tool2.id);
-      await AgentToolModel.create(agent2.id, tool1.id);
-
-      const result = await ToolModel.findByMcpServerId(mcpServer.id);
-
-      expect(result).toHaveLength(2);
-
-      const tool1Result = result.find((t) => t.name === "tool1");
-      expect(tool1Result?.assignedAgentCount).toBe(2);
-      expect(tool1Result?.assignedAgents.map((a) => a.id)).toContain(agent1.id);
-      expect(tool1Result?.assignedAgents.map((a) => a.id)).toContain(agent2.id);
-
-      const tool2Result = result.find((t) => t.name === "tool2");
-      expect(tool2Result?.assignedAgentCount).toBe(1);
-      expect(tool2Result?.assignedAgents.map((a) => a.id)).toContain(agent1.id);
-    });
-
-    test("returns empty array when MCP server has no tools", async ({
-      makeUser,
-      makeInternalMcpCatalog,
-      makeMcpServer,
-    }) => {
-      const user = await makeUser();
-      const catalogItem = await makeInternalMcpCatalog({
-        name: "empty-catalog",
-        serverUrl: "https://api.empty.com/mcp/",
-      });
-
-      const mcpServer = await makeMcpServer({
-        name: "empty-server",
-        catalogId: catalogItem.id,
-        ownerId: user.id,
-      });
-
-      const result = await ToolModel.findByMcpServerId(mcpServer.id);
-      expect(result).toHaveLength(0);
-    });
-  });
-
   describe("findByCatalogId", () => {
     test("returns tools with assigned agents for catalog efficiently", async ({
       makeUser,
@@ -801,13 +711,13 @@ describe("ToolModel", () => {
       });
 
       // Create two servers with the same catalog
-      const mcpServer1 = await makeMcpServer({
+      await makeMcpServer({
         name: "server1",
         catalogId: catalogItem.id,
         ownerId: user.id,
       });
 
-      const mcpServer2 = await makeMcpServer({
+      await makeMcpServer({
         name: "server2",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -819,7 +729,6 @@ describe("ToolModel", () => {
         description: "Shared Tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer1.id,
       });
 
       const tool2 = await makeTool({
@@ -827,7 +736,6 @@ describe("ToolModel", () => {
         description: "Another Tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer2.id,
       });
 
       // Assign tools to agents
@@ -874,7 +782,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -884,21 +792,18 @@ describe("ToolModel", () => {
           description: "First tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-2",
           description: "Second tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-3",
           description: "Third tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -910,10 +815,9 @@ describe("ToolModel", () => {
       expect(createdTools.map((t) => t.name)).toContain("tool-2");
       expect(createdTools.map((t) => t.name)).toContain("tool-3");
 
-      // Verify all tools have correct catalogId and mcpServerId
+      // Verify all tools have correct catalogId
       createdTools.forEach((tool) => {
         expect(tool.catalogId).toBe(catalog.id);
-        expect(tool.mcpServerId).toBe(mcpServer.id);
         expect(tool.agentId).toBeNull();
       });
     });
@@ -924,7 +828,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -932,7 +836,6 @@ describe("ToolModel", () => {
       const existingTool = await makeTool({
         name: "tool-1",
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const toolsToCreate = [
@@ -941,21 +844,18 @@ describe("ToolModel", () => {
           description: "First tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-2", // New
           description: "Second tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-3", // New
           description: "Third tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -975,7 +875,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -985,21 +885,18 @@ describe("ToolModel", () => {
           description: "Tool C",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-a",
           description: "Tool A",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-b",
           description: "Tool B",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1023,7 +920,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -1033,7 +930,6 @@ describe("ToolModel", () => {
           description: "Tool that might conflict",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1089,7 +985,6 @@ describe("ToolModel", () => {
       for (const tool of createdTools) {
         expect(tool.agentId).toBe(agent.id);
         expect(tool.catalogId).toBeNull();
-        expect(tool.mcpServerId).toBeNull();
       }
     });
 
@@ -1508,7 +1403,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       const toolsToSync = [
         {
@@ -1516,14 +1411,12 @@ describe("ToolModel", () => {
           description: "First tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-2",
           description: "Second tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1542,7 +1435,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       // Create existing tool
       const existingTool = await makeTool({
@@ -1550,7 +1443,6 @@ describe("ToolModel", () => {
         description: "Original description",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const toolsToSync = [
@@ -1559,7 +1451,6 @@ describe("ToolModel", () => {
           description: "Updated description",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1578,7 +1469,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       // Create existing tool
       const existingTool = await makeTool({
@@ -1586,7 +1477,6 @@ describe("ToolModel", () => {
         description: "Tool description",
         parameters: { type: "object", properties: { a: { type: "string" } } },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const toolsToSync = [
@@ -1598,7 +1488,6 @@ describe("ToolModel", () => {
             properties: { a: { type: "string" }, b: { type: "number" } },
           },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1616,7 +1505,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       // Create existing tool
       const existingTool = await makeTool({
@@ -1624,7 +1513,6 @@ describe("ToolModel", () => {
         description: "Tool description",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const toolsToSync = [
@@ -1633,7 +1521,6 @@ describe("ToolModel", () => {
           description: "Tool description",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1651,7 +1538,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       // Create existing tools
       const unchangedTool = await makeTool({
@@ -1659,7 +1546,6 @@ describe("ToolModel", () => {
         description: "No change",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const updateTool = await makeTool({
@@ -1667,7 +1553,6 @@ describe("ToolModel", () => {
         description: "Old description",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const toolsToSync = [
@@ -1676,21 +1561,18 @@ describe("ToolModel", () => {
           description: "No change",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-update",
           description: "New description",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-new",
           description: "Brand new tool",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1713,7 +1595,7 @@ describe("ToolModel", () => {
       makeAgent,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
       const agent = await makeAgent();
 
       // Create existing tool with policy
@@ -1722,7 +1604,6 @@ describe("ToolModel", () => {
         description: "Has policy",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Create a tool invocation policy for this tool
@@ -1741,7 +1622,6 @@ describe("ToolModel", () => {
           description: "Updated description",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1773,7 +1653,7 @@ describe("ToolModel", () => {
       const catalog = await makeInternalMcpCatalog({
         name: "old-catalog-name",
       });
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
       const agent = await makeAgent();
 
       // Create existing tool with old catalog name prefix
@@ -1782,7 +1662,6 @@ describe("ToolModel", () => {
         description: "Query docs",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign tool to agent
@@ -1795,7 +1674,6 @@ describe("ToolModel", () => {
           description: "Query docs",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1822,7 +1700,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       // Create existing tools
       const tool1 = await makeTool({
@@ -1830,7 +1708,6 @@ describe("ToolModel", () => {
         description: "Tool 1",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       await makeTool({
@@ -1838,7 +1715,6 @@ describe("ToolModel", () => {
         description: "Tool 2 - will be removed",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Sync with only one tool (simulating tool-2 being removed from MCP server)
@@ -1848,7 +1724,6 @@ describe("ToolModel", () => {
           description: "Tool 1",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1867,7 +1742,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       // Create legacy tool with old catalog name prefix
       // This simulates a tool that existed before catalog was renamed
@@ -1876,7 +1751,6 @@ describe("ToolModel", () => {
         description: "Old tool with legacy name",
         parameters: { type: "object" },
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Sync with the new name (after catalog rename)
@@ -1886,7 +1760,6 @@ describe("ToolModel", () => {
           description: "New tool",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
           rawToolName: "query-docs",
         },
       ];
@@ -1909,7 +1782,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
       const toolsToSync = [
         {
@@ -1917,7 +1790,6 @@ describe("ToolModel", () => {
           description: "New tool",
           parameters: { type: "object" },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 

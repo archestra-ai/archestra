@@ -30,11 +30,12 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Upgrade npm to 11.8.0 to get patched bundled dependencies (tar, glob, cross-spawn)
+# Upgrade npm to 11.10.0 to get patched bundled dependencies (tar, glob, cross-spawn)
 # CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960: tar vulnerabilities
 # CVE-2025-64756: glob vulnerability
 # CVE-2024-21538: cross-spawn vulnerability
-RUN npm install -g npm@11.8.0 && \
+# CVE-2026-26996: minimatch ReDoS vulnerability (patched below)
+RUN npm install -g npm@11.10.0 && \
     # Patch tar to 7.5.8 inside npm's bundled node_modules to fix CVE-2026-26960
     TAR_SHA256="5fc7136bf937d640436d13639447d06d44cb6b464188bf7b57fb6ac3ec1be0a2" && \
     NPM_TAR_PATH="/usr/local/lib/node_modules/npm/node_modules/tar" && \
@@ -57,6 +58,18 @@ RUN npm install -g npm@11.8.0 && \
         tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$NPM_BRACE_PATH" --strip-components=1 && \
         rm -rf "$TMP_DIR" && \
         echo "Patched @isaacs/brace-expansion to 5.0.1 in npm"; \
+    fi && \
+    # Patch minimatch to 10.2.1 inside npm's bundled node_modules to fix CVE-2026-26996 (ReDoS)
+    MINIMATCH_SHA256="3762bb590e36988b9f864e8ed6a8903e31659a937d40d6d95591b2bf406957e0" && \
+    NPM_MINIMATCH_PATH="/usr/local/lib/node_modules/npm/node_modules/minimatch" && \
+    if [ -d "$NPM_MINIMATCH_PATH" ]; then \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/minimatch.tgz" https://registry.npmjs.org/minimatch/-/minimatch-10.2.1.tgz && \
+        echo "$MINIMATCH_SHA256  $TMP_DIR/minimatch.tgz" | sha256sum -c - && \
+        rm -rf "$NPM_MINIMATCH_PATH"/* && \
+        tar -xzf "$TMP_DIR/minimatch.tgz" -C "$NPM_MINIMATCH_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR" && \
+        echo "Patched minimatch to 10.2.1 in npm"; \
     fi
 
 WORKDIR /opt/node-deps
@@ -103,7 +116,7 @@ RUN apk add --no-cache \
    # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
    apk upgrade --no-cache nodejs bind openssl go
 
-# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package (CVE-2026-23950)
+# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm
 COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \

@@ -1735,6 +1735,78 @@ tests:
           path: spec.template.spec.nodeSelector["environment"]
           value: production
 
+  # Tolerations tests
+  - it: should not have tolerations when archestra.tolerations is empty
+    documentIndex: 1
+    set:
+      archestra.tolerations: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.tolerations
+
+  - it: should apply single toleration when provided
+    documentIndex: 1
+    set:
+      archestra.tolerations:
+        - key: "foo.bar.com/role"
+          operator: "Equal"
+          value: "master"
+          effect: "NoSchedule"
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "foo.bar.com/role"
+            operator: "Equal"
+            value: "master"
+            effect: "NoSchedule"
+
+  - it: should apply multiple tolerations
+    documentIndex: 1
+    set:
+      archestra.tolerations:
+        - key: "foo.bar.com/role"
+          operator: "Equal"
+          value: "master"
+          effect: "NoSchedule"
+        - key: "node.kubernetes.io/not-ready"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 300
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.tolerations
+          count: 2
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "foo.bar.com/role"
+            operator: "Equal"
+            value: "master"
+            effect: "NoSchedule"
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "node.kubernetes.io/not-ready"
+            operator: "Exists"
+            effect: "NoExecute"
+            tolerationSeconds: 300
+
+  - it: should support toleration with Exists operator (no value)
+    documentIndex: 1
+    set:
+      archestra.tolerations:
+        - key: "dedicated"
+          operator: "Exists"
+          effect: "NoSchedule"
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "dedicated"
+            operator: "Exists"
+            effect: "NoSchedule"
+
   # Kubernetes environment variable expansion tests
   # These tests ensure that $(VAR_NAME) syntax is preserved for K8s env var expansion
   - it: should preserve K8s env var expansion syntax $(VAR_NAME) in env values

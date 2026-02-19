@@ -7997,9 +7997,6 @@ export type GetAllAgentToolsResponses = {
                 createdAt: string;
                 updatedAt: string;
                 catalogId: string | null;
-                mcpServerId: string | null;
-                mcpServerName: string | null;
-                mcpServerCatalogId: string | null;
             };
         }>;
         pagination: {
@@ -24412,88 +24409,6 @@ export type CheckSecretsConnectivityResponses = {
 
 export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
 
-export type InitializeSecretsManagerData = {
-    body: {
-        type: 'DB' | 'Vault' | 'BYOS_VAULT';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/secrets/initialize-secrets-manager';
-};
-
-export type InitializeSecretsManagerErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type InitializeSecretsManagerError = InitializeSecretsManagerErrors[keyof InitializeSecretsManagerErrors];
-
-export type InitializeSecretsManagerResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        type: 'DB' | 'Vault' | 'BYOS_VAULT';
-        meta: {
-            [key: string]: string;
-        };
-    };
-};
-
-export type InitializeSecretsManagerResponse = InitializeSecretsManagerResponses[keyof InitializeSecretsManagerResponses];
-
 export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
@@ -26681,7 +26596,7 @@ export type GetToolsResponses = {
             id: string;
             name: string;
         } | null;
-        mcpServer: {
+        catalog: {
             id: string;
             name: string;
         } | null;
@@ -26795,9 +26710,6 @@ export type GetToolsWithAssignmentsResponses = {
                 [key: string]: unknown;
             };
             catalogId: string | null;
-            mcpServerId: string | null;
-            mcpServerName: string | null;
-            mcpServerCatalogId: string | null;
             createdAt: string;
             updatedAt: string;
             assignmentCount: number;

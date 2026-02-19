@@ -1,4 +1,71 @@
+import type { APIRequestContext } from "@playwright/test";
 import { expect, test } from "./fixtures";
+
+type MakeApiRequest = (args: {
+  request: APIRequestContext;
+  method: "get" | "post" | "put" | "patch" | "delete";
+  urlSuffix: string;
+  data?: unknown;
+  ignoreStatusCheck?: boolean;
+}) => Promise<{
+  json: () => Promise<unknown>;
+  ok: () => boolean;
+  status: () => number;
+  text: () => Promise<string>;
+}>;
+
+async function cleanupKeyByName(
+  makeApiRequest: MakeApiRequest,
+  request: APIRequestContext,
+  name: string,
+) {
+  const existingKeys = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/chat-api-keys",
+  });
+  const existingKeysData = (await existingKeys.json()) as {
+    id: string;
+    name: string;
+  }[];
+  for (const key of existingKeysData) {
+    if (key.name === name) {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat-api-keys/${key.id}`,
+        ignoreStatusCheck: true,
+      });
+    }
+  }
+}
+
+async function cleanupOrgWideKeyByProvider(
+  makeApiRequest: MakeApiRequest,
+  request: APIRequestContext,
+  provider: string,
+) {
+  const existingKeys = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/chat-api-keys",
+  });
+  const existingKeysData = (await existingKeys.json()) as {
+    id: string;
+    provider: string;
+    scope: string;
+  }[];
+  for (const key of existingKeysData) {
+    if (key.provider === provider && key.scope === "org_wide") {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat-api-keys/${key.id}`,
+        ignoreStatusCheck: true,
+      });
+    }
+  }
+}
 
 test.describe("Chat API Keys CRUD", () => {
   test.describe.configure({ mode: "serial" });
@@ -20,6 +87,9 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Test Anthropic Key");
+
     const response = await makeApiRequest({
       request,
       method: "post",
@@ -53,6 +123,11 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Org Wide Test Key");
+    // Also clean up any existing org_wide bedrock key (e.g. from seed data or prior failed run)
+    await cleanupOrgWideKeyByProvider(makeApiRequest, request, "bedrock");
+
     // Use bedrock provider - the only one without env var in CI (all others are seeded)
     const response = await makeApiRequest({
       request,
@@ -83,6 +158,9 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Get By ID Test Key");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -121,6 +199,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Original Name");
+    await cleanupKeyByName(makeApiRequest, request, "Updated Name");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -158,6 +240,9 @@ test.describe("Chat API Keys CRUD", () => {
   });
 
   test("should delete a chat API key", async ({ request, makeApiRequest }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Delete Test Key");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -211,6 +296,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover keys from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key 1");
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key 2");
+
     // Create first personal key for anthropic
     const key1Response = await makeApiRequest({
       request,
@@ -254,6 +343,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover keys from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key");
+    await cleanupKeyByName(makeApiRequest, request, "Personal OpenAI Key");
+
     // Create personal anthropic key
     const anthropicResponse = await makeApiRequest({
       request,
@@ -306,6 +399,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Available Test Key");
+
     // Create a personal key first
     const createResponse = await makeApiRequest({
       request,
@@ -346,6 +442,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Filter OpenAI Key");
+
     // Create an openai key
     const openaiResponse = await makeApiRequest({
       request,
@@ -391,6 +490,9 @@ test.describe("Chat API Keys Team Scope", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Team Test Key");
+
     // First get a team that the admin user belongs to
     const teamsResponse = await makeApiRequest({
       request,
@@ -463,6 +565,9 @@ test.describe("Chat API Keys Scope Update", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Scope Update Test Key");
+
     // Create a personal key first
     // Use bedrock provider - the only one without env var in CI (all others are seeded with org_wide keys)
     const createResponse = await makeApiRequest({

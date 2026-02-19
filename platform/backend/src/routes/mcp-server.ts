@@ -550,7 +550,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   description: tool.description,
                   parameters: tool.inputSchema,
                   catalogId: capturedCatalogId,
-                  mcpServerId: mcpServer.id,
                 }));
 
                 // Bulk create tools to avoid N+1 queries
@@ -638,7 +637,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: tool.description,
           parameters: tool.inputSchema,
           catalogId: catalogItem.id,
-          mcpServerId: mcpServer.id,
         }));
 
         // Bulk create tools to avoid N+1 queries
@@ -948,12 +946,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      // For catalog-based servers (local installations), query tools by catalogId
-      // This ensures all installations of the same catalog show the same tools
-      // For legacy servers without catalogId, fall back to mcpServerId
+      // Query tools by catalogId — all MCP servers have a catalogId
       const tools = mcpServer.catalogId
         ? await ToolModel.findByCatalogId(mcpServer.catalogId)
-        : await ToolModel.findByMcpServerId(id);
+        : [];
 
       return reply.send(tools);
     },

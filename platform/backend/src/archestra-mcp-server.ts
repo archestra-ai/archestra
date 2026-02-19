@@ -1631,12 +1631,10 @@ export async function executeArchestraTool(
         };
       }
 
-      // For catalog-based servers (local installations), query tools by catalogId
-      // This ensures all installations of the same catalog show the same tools
-      // For legacy servers without catalogId, fall back to mcpServerId
+      // Query tools by catalogId — all MCP servers have a catalogId
       const tools = mcpServer.catalogId
         ? await ToolModel.findByCatalogId(mcpServer.catalogId)
-        : await ToolModel.findByMcpServerId(mcpServerId);
+        : [];
 
       return {
         content: [

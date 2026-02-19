@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/bedrock/foundation-models"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "modelSummaries": [
+        {
+          "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+          "modelId": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+          "modelName": "Claude 3.5 Sonnet v2",
+          "providerName": "Anthropic",
+          "inputModalities": ["TEXT"],
+          "outputModalities": ["TEXT"],
+          "modelLifecycle": {
+            "status": "ACTIVE"
+          }
+        }
+      ]
+    }
+  }
+}

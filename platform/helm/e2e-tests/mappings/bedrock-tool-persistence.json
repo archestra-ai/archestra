@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/bedrock/model/.*/converse",
+    "headers": {
+      "Authorization": {
+        "contains": "bedrock-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "output": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "text": "Tool persistence test response."
+            }
+          ]
+        }
+      },
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 50,
+        "outputTokens": 10
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 
@@ -25,6 +25,17 @@ class SecretModel {
       .where(eq(schema.secretsTable.id, id));
 
     return secret ?? null;
+  }
+
+  /**
+   * Find multiple secrets by IDs in a single query
+   */
+  static async findByIds(ids: string[]): Promise<SelectSecret[]> {
+    if (ids.length === 0) return [];
+    return db
+      .select()
+      .from(schema.secretsTable)
+      .where(inArray(schema.secretsTable.id, ids));
   }
 
   /**

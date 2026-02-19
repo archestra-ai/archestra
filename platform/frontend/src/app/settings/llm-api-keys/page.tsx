@@ -143,25 +143,29 @@ function ChatSettingsContent() {
 
   // Submit handlers
   const handleCreate = createForm.handleSubmit(async (values) => {
-    await createMutation.mutateAsync({
-      name: values.name,
-      provider: values.provider,
-      apiKey: values.apiKey ?? undefined,
-      scope: values.scope,
-      teamId:
-        values.scope === "team" && values.teamId ? values.teamId : undefined,
-      vaultSecretPath:
-        byosEnabled && values.vaultSecretPath
-          ? values.vaultSecretPath
-          : undefined,
-      vaultSecretKey:
-        byosEnabled && values.vaultSecretKey
-          ? values.vaultSecretKey
-          : undefined,
-    });
+    try {
+      await createMutation.mutateAsync({
+        name: values.name,
+        provider: values.provider,
+        apiKey: values.apiKey ?? undefined,
+        scope: values.scope,
+        teamId:
+          values.scope === "team" && values.teamId ? values.teamId : undefined,
+        vaultSecretPath:
+          byosEnabled && values.vaultSecretPath
+            ? values.vaultSecretPath
+            : undefined,
+        vaultSecretKey:
+          byosEnabled && values.vaultSecretKey
+            ? values.vaultSecretKey
+            : undefined,
+      });
 
-    createForm.reset(DEFAULT_FORM_VALUES);
-    setIsCreateDialogOpen(false);
+      createForm.reset(DEFAULT_FORM_VALUES);
+      setIsCreateDialogOpen(false);
+    } catch {
+      // Error already handled by mutation's handleApiError
+    }
   });
 
   const handleEdit = editForm.handleSubmit(async (values) => {
@@ -174,39 +178,45 @@ function ChatSettingsContent() {
     const scopeChanged = values.scope !== selectedApiKey.scope;
     const teamIdChanged = values.teamId !== (selectedApiKey.teamId ?? "");
 
-    await updateMutation.mutateAsync({
-      id: selectedApiKey.id,
-      data: {
-        name: values.name || undefined,
-        apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
-        scope: scopeChanged ? values.scope : undefined,
-        teamId:
-          scopeChanged || teamIdChanged
-            ? values.scope === "team"
-              ? values.teamId
-              : null
-            : undefined,
-        vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
-      },
-    });
+    try {
+      await updateMutation.mutateAsync({
+        id: selectedApiKey.id,
+        data: {
+          name: values.name || undefined,
+          apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
+          scope: scopeChanged ? values.scope : undefined,
+          teamId:
+            scopeChanged || teamIdChanged
+              ? values.scope === "team"
+                ? values.teamId
+                : null
+              : undefined,
+          vaultSecretPath:
+            byosEnabled && values.vaultSecretPath
+              ? values.vaultSecretPath
+              : undefined,
+          vaultSecretKey:
+            byosEnabled && values.vaultSecretKey
+              ? values.vaultSecretKey
+              : undefined,
+        },
+      });
 
-    setIsEditDialogOpen(false);
-    setSelectedApiKey(null);
+      setIsEditDialogOpen(false);
+      setSelectedApiKey(null);
+    } catch {
+      // Error already handled by mutation's handleApiError
+    }
   });
 
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey) return;
-    const result = await deleteMutation.mutateAsync(selectedApiKey.id);
-    if (result) {
+    try {
+      await deleteMutation.mutateAsync(selectedApiKey.id);
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);
+    } catch {
+      // Error already handled by mutation's handleApiError
     }
   }, [selectedApiKey, deleteMutation]);
 

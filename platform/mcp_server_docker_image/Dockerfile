@@ -31,21 +31,21 @@ RUN uv pip install --no-cache-dir \
 FROM node:20-alpine AS node-builder
 
 # Upgrade npm to 11.8.0 to get patched bundled dependencies (tar, glob, cross-spawn)
-# CVE-2026-23950, CVE-2026-23745, CVE-2026-24842: tar vulnerabilities
+# CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960: tar vulnerabilities
 # CVE-2025-64756: glob vulnerability
 # CVE-2024-21538: cross-spawn vulnerability
 RUN npm install -g npm@11.8.0 && \
-    # Patch tar to 7.5.7 inside npm's bundled node_modules to fix CVE-2026-24842
-    TAR_SHA256="87355a4cb10e7e7cdb4326e3e3c89232eaf5266d0792b998a396ddf6c11502bb" && \
+    # Patch tar to 7.5.8 inside npm's bundled node_modules to fix CVE-2026-26960
+    TAR_SHA256="5fc7136bf937d640436d13639447d06d44cb6b464188bf7b57fb6ac3ec1be0a2" && \
     NPM_TAR_PATH="/usr/local/lib/node_modules/npm/node_modules/tar" && \
     if [ -d "$NPM_TAR_PATH" ]; then \
         TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.7.tgz && \
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.8.tgz && \
         echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - && \
         rm -rf "$NPM_TAR_PATH"/* && \
         tar -xzf "$TMP_DIR/tar.tgz" -C "$NPM_TAR_PATH" --strip-components=1 && \
         rm -rf "$TMP_DIR" && \
-        echo "Patched tar to 7.5.7 in npm"; \
+        echo "Patched tar to 7.5.8 in npm"; \
     fi && \
     # Patch @isaacs/brace-expansion to 5.0.1 inside npm's bundled node_modules to fix GHSA-7h2j-956f-4vf2 (ReDoS)
     BRACE_SHA256="c908309f6735b002952f2b02563e68d98cba0375322a189ebc4f6f47637ee95b" && \
@@ -67,6 +67,7 @@ WORKDIR /opt/node-deps
 # CVE-2026-23745: Path Traversal in tar <= 7.5.2
 # CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
 # CVE-2026-24842: Path Traversal in tar <= 7.5.6
+# CVE-2026-26960: Path Traversal in tar <= 7.5.7
 COPY package.json package-lock.json ./
 
 RUN npm ci

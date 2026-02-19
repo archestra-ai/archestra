@@ -273,7 +273,7 @@ test.describe("Chat API Keys", () => {
       makeRandomString,
     }) => {
       await goToPage(adminPage, "/settings/llm-api-keys");
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForLoadState("domcontentloaded");
 
       // Find any existing org-wide Anthropic key by looking at the Scope column
       // The scope badge shows "Whole Organization" for org-wide keys
@@ -316,7 +316,7 @@ test.describe("Chat API Keys", () => {
       // Every user can see the org-wide key
       for (const p of [adminPage, editorPage, memberPage]) {
         await goToPage(p, "/settings/llm-api-keys");
-        await p.waitForLoadState("networkidle");
+        await p.waitForLoadState("domcontentloaded");
         await expect(
           p.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
         ).toBeVisible();

@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-execution-metrics"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-cohere-execution-metrics-test",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello! I'm here to help."
+          }
+        ]
+      },
+      "finish_reason": "COMPLETE",
+      "usage": {
+        "billed_units": {
+          "input_tokens": 10,
+          "output_tokens": 5
+        },
+        "tokens": {
+          "input_tokens": 10,
+          "output_tokens": 5
+        }
+      }
+    }
+  }
+}

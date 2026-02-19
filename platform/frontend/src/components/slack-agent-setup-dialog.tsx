@@ -204,7 +204,7 @@ function StepSelectAgentInSlack() {
               Mention the bot (e.g., <strong>@Archestra</strong>) and send any
               message to it or use{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                /select-agent
+                /archestra-select-agent
               </code>{" "}
               command
             </span>

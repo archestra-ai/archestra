@@ -382,7 +382,7 @@ class SlackProvider implements ChatOpsProvider {
         .map((ch) => ({
           channelId: ch.id as string,
           channelName: ch.name || null,
-          workspaceId: ch.shared_team_ids?.[0] || "default",
+          workspaceId: ch.shared_team_ids?.[0] || this.teamId || "default",
           workspaceName: null,
         }));
     } catch (error) {

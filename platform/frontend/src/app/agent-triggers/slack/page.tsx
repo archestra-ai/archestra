@@ -142,7 +142,7 @@ export default function SlackPage() {
       <section className="flex flex-col gap-4">
         <div>
           <h2 className="text-lg font-semibold">Setup</h2>
-          <p className="text-sm text-muted-foreground mt-1 text-xs">
+          <p className="text-xs text-muted-foreground mt-1">
             Connect Slack so agents can receive and respond to messages.{" "}
             <Link
               href="https://archestra.ai/docs/platform-slack"

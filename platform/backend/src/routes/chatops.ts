@@ -32,6 +32,27 @@ import {
 } from "@/types/chatops-channel-binding";
 
 /**
+ * Fastify preParsing hook that captures the raw request body before content-type
+ * parsers (JSON parser, @fastify/formbody) consume the stream.
+ * Required for Slack HMAC signature verification which signs the exact raw bytes.
+ * The raw body is stored on `request.slackRawBody`.
+ */
+const captureSlackRawBody = async (
+  request: { slackRawBody?: string },
+  _reply: unknown,
+  payload: AsyncIterable<Buffer | string>,
+) => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of payload) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  request.slackRawBody = raw;
+  const { Readable } = await import("node:stream");
+  return Readable.from(Buffer.from(raw));
+};
+
+/**
  * Short-lived in-memory dedup cache for Slack events.
  * Slack fires both `message` and `app_mention` for @mention messages
  * with the same event ts, causing duplicate processing.
@@ -45,10 +66,14 @@ const SLACK_DEDUP_MAX_SIZE = 10_000;
 const recentlyProcessedSlackEvents = new Map<string, true>();
 
 function markSlackEventProcessed(eventTs: string): void {
-  // Safety bound: evict oldest entries if the map grows too large
+  // Safety bound: evict oldest 10% when the map grows too large
   if (recentlyProcessedSlackEvents.size >= SLACK_DEDUP_MAX_SIZE) {
-    const firstKey = recentlyProcessedSlackEvents.keys().next().value;
-    if (firstKey) recentlyProcessedSlackEvents.delete(firstKey);
+    const toDelete = Math.ceil(SLACK_DEDUP_MAX_SIZE * 0.1);
+    const iter = recentlyProcessedSlackEvents.keys();
+    for (let i = 0; i < toDelete; i++) {
+      const key = iter.next().value;
+      if (key) recentlyProcessedSlackEvents.delete(key);
+    }
   }
   recentlyProcessedSlackEvents.set(eventTs, true);
   setTimeout(() => recentlyProcessedSlackEvents.delete(eventTs), 30_000);
@@ -451,20 +476,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/webhooks/chatops/slack",
     {
-      // Capture the raw JSON body before Fastify parses it.
-      // Slack HMAC verification requires the exact bytes that were signed.
-      preParsing: [
-        async (request, _reply, payload) => {
-          const chunks: Buffer[] = [];
-          for await (const chunk of payload) {
-            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-          }
-          const raw = Buffer.concat(chunks).toString("utf8");
-          (request as unknown as { slackRawBody: string }).slackRawBody = raw;
-          const { Readable } = await import("node:stream");
-          return Readable.from(Buffer.from(raw));
-        },
-      ],
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
       schema: {
         description: "Slack Events API webhook endpoint",
         tags: ["ChatOps Webhooks"],
@@ -528,15 +541,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const body = request.body;
 
-      // Handle URL verification challenge
-      const challengeResponse = provider.handleValidationChallenge(body) as {
-        challenge: string;
-      } | null;
-      if (challengeResponse) {
-        return reply.send(challengeResponse);
-      }
-
-      // Validate request signature using the captured raw body
+      // Validate request signature FIRST — even url_verification challenges are signed.
       const rawBody = (request as unknown as { slackRawBody?: string })
         .slackRawBody;
       if (!rawBody) {
@@ -546,6 +551,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!isValid) {
         logger.warn("[ChatOps] Invalid Slack webhook signature");
         throw new ApiError(400, "Invalid request signature");
+      }
+
+      // Handle URL verification challenge (after signature is verified)
+      const challengeResponse = provider.handleValidationChallenge(body) as {
+        challenge: string;
+      } | null;
+      if (challengeResponse) {
+        return reply.send(challengeResponse);
       }
 
       try {
@@ -658,20 +671,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/webhooks/chatops/slack/interactive",
     {
-      // Capture the raw form-encoded body before @fastify/formbody parses it.
-      // Slack HMAC (Hash-based Message Authentication Code) verification requires the exact bytes that were signed.
-      preParsing: [
-        async (request, _reply, payload) => {
-          const chunks: Buffer[] = [];
-          for await (const chunk of payload) {
-            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-          }
-          const raw = Buffer.concat(chunks).toString("utf8");
-          (request as unknown as { slackRawBody: string }).slackRawBody = raw;
-          const { Readable } = await import("node:stream");
-          return Readable.from(Buffer.from(raw));
-        },
-      ],
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
       schema: {
         description: "Slack interactive components endpoint",
         tags: ["ChatOps Webhooks"],
@@ -814,20 +815,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/webhooks/chatops/slack/slash-command",
     {
-      // Capture the raw form-encoded body before @fastify/formbody parses it.
-      // Slack HMAC verification requires the exact bytes that were signed.
-      preParsing: [
-        async (request, _reply, payload) => {
-          const chunks: Buffer[] = [];
-          for await (const chunk of payload) {
-            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-          }
-          const raw = Buffer.concat(chunks).toString("utf8");
-          (request as unknown as { slackRawBody: string }).slackRawBody = raw;
-          const { Readable } = await import("node:stream");
-          return Readable.from(Buffer.from(raw));
-        },
-      ],
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
       schema: {
         description: "Slack slash commands endpoint",
         tags: ["ChatOps Webhooks"],
@@ -984,7 +973,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         default: {
           return reply.send({
             response_type: "ephemeral",
-            text: `Unknown command: ${command}`,
+            text: "Unknown command. Use `/archestra-help` to see available commands.",
           });
         }
       }

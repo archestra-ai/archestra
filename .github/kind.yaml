@@ -1,6 +1,15 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: archestra-ci-cluster
+networking:
+  # Disable default CNI (kindnet) so we can install Calico for NetworkPolicy enforcement.
+  # Without this, Kubernetes NetworkPolicy resources are created but NOT enforced,
+  # making SSRF protection via NetworkPolicy ineffective.
+  disableDefaultCNI: true
+  # Calico's default pod CIDR. This falls within the RFC 1918 range blocked by the
+  # SSRF NetworkPolicy, which is intentional — MCP server pods should not reach
+  # other pods via IP. Pod-to-pod DNS (port 53) is still allowed.
+  podSubnet: "192.168.0.0/16"
 nodes:
   - role: control-plane
     extraPortMappings:

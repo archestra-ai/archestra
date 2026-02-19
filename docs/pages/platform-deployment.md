@@ -171,6 +171,9 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
+- `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: true). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
+- `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
+- `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked
 - `archestra.orchestrator.kubernetes.mcpServerRbac.create` - Create MCP server RBAC resources (ServiceAccount, Role, RoleBinding) for Kubernetes MCP server (default: true)
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalClusterRoleBindings` - Additional ClusterRoleBindings to attach to the MCP K8s operator service account for cluster-wide permissions
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalRoleBindings` - Additional RoleBindings to attach to the MCP K8s operator service account for namespace-scoped permissions
@@ -423,6 +426,56 @@ helm upgrade archestra-platform \
 ```
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
+
+#### SSRF Protection for MCP Server Pods
+
+The Helm chart includes a Kubernetes `NetworkPolicy` that prevents MCP server pods from performing Server-Side Request Forgery (SSRF) attacks. This policy is enabled by default and blocks outbound connections to private/internal IP ranges while allowing DNS resolution and public internet access.
+
+**Blocked ranges** (by default):
+
+- `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
+- `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
+- `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
+- `127.0.0.0/8` - Loopback
+
+**Prerequisite**: Your cluster must use a CNI plugin that enforces `NetworkPolicies` (e.g., Calico, Cilium). The default GKE CNI (kubenet) does **not** enforce `NetworkPolicies` unless Dataplane V2 or Calico is enabled.
+
+To disable the policy:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        create: false
+```
+
+To allow MCP servers to reach a specific internal service (e.g., an internal API gateway) that would otherwise be blocked:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        additionalEgressRules:
+          - to:
+              - ipBlock:
+                  cidr: 10.0.50.0/24
+            ports:
+              - protocol: TCP
+                port: 443
+```
+
+To block additional CIDR ranges beyond the defaults:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        additionalDeniedCidrs:
+          - 198.51.100.0/24
+```
 
 ### Accessing the Platform
 

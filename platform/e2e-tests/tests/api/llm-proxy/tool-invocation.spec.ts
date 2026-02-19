@@ -847,9 +847,8 @@ const bedrockConfig: ToolInvocationTestConfig = {
 
   findInteractionByContent: (interactions, content) =>
     interactions.find((i) =>
-      i.request?.messages?.some(
-        (m: { content?: Array<{ text?: string }> }) =>
-          m.content?.some((c) => c.text?.includes(content)),
+      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
+        m.content?.some((c) => c.text?.includes(content)),
       ),
     ),
 };

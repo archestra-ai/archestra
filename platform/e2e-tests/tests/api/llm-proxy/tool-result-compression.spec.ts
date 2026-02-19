@@ -414,9 +414,7 @@ const bedrockConfig: CompressionTestConfig = {
     messages: [
       {
         role: "user",
-        content: [
-          { text: "What files are in the current directory?" },
-        ],
+        content: [{ text: "What files are in the current directory?" }],
       },
       {
         role: "assistant",

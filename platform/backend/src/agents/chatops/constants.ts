@@ -35,7 +35,7 @@ export const CHATOPS_THREAD_HISTORY = {
 };
 
 /**
- * Team ID cache configuration for MS Teams
+ * Channel-to-team mapping cache configuration
  */
 export const CHATOPS_TEAM_CACHE = {
   /** Maximum number of channel-to-team mappings to cache */

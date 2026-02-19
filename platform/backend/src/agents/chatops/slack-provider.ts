@@ -386,7 +386,7 @@ class SlackProvider implements ChatOpsProvider {
       const result = await this.client.conversations.list({
         types: "public_channel,private_channel",
         exclude_archived: true,
-        limit: 200,
+        limit: 999,
       });
 
       const channels = result.channels || [];

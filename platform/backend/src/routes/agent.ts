@@ -4,8 +4,6 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
-  isAgentTypeAdmin,
-  requireAgentTypePermission,
 } from "@/auth";
 import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
 import { metrics } from "@/observability";
@@ -240,21 +238,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, user, organizationId }, reply) => {
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
-      await requireAgentTypePermission({
-        userId: user.id,
-        organizationId,
-        agentType,
-        action: "create",
-      });
 
-      const isTypeAdmin = await isAgentTypeAdmin({
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
-        agentType,
       });
+      checker.require(agentType, "create");
 
       // Validate team assignment for non-admin users
-      if (!isTypeAdmin) {
+      if (!checker.isAdmin(agentType)) {
         const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
         if (body.teams.length === 0) {
@@ -314,26 +307,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Check read permission for this agent's type (return 404 to avoid leaking existence)
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read permission (return 404 to avoid leaking existence)
       try {
-        await requireAgentTypePermission({
-          userId: user.id,
-          organizationId,
-          agentType: agent.agentType,
-          action: "read",
-        });
+        checker.require(agent.agentType, "read");
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Re-check with actual admin status for team filtering
-      const admin = await isAgentTypeAdmin({
-        userId: user.id,
-        organizationId,
-        agentType: agent.agentType,
-      });
-
-      if (!admin) {
+      if (!checker.isAdmin(agent.agentType)) {
         // Re-fetch with team filtering
         const filteredAgent = await AgentModel.findById(id, user.id, false);
         if (!filteredAgent) {
@@ -367,27 +354,22 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Check update permission for this agent's type (return 404 to avoid leaking existence)
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check update permission (return 404 to avoid leaking existence)
       try {
-        await requireAgentTypePermission({
-          userId: user.id,
-          organizationId,
-          agentType: existingAgent.agentType,
-          action: "update",
-        });
+        checker.require(existingAgent.agentType, "update");
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
       // Validate team assignment for non-admin users if teams are being updated
       if (body.teams !== undefined) {
-        const isTypeAdmin = await isAgentTypeAdmin({
-          userId: user.id,
-          organizationId,
-          agentType: existingAgent.agentType,
-        });
-
-        if (!isTypeAdmin) {
+        if (!checker.isAdmin(existingAgent.agentType)) {
           const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
           if (body.teams.length === 0) {
@@ -447,13 +429,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check delete permission for this agent's type (return 404 to avoid leaking existence)
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
       try {
-        await requireAgentTypePermission({
-          userId: user.id,
-          organizationId,
-          agentType: agent.agentType,
-          action: "delete",
-        });
+        checker.require(agent.agentType, "delete");
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -490,25 +471,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Check read permission for this agent's type (return 404 to avoid leaking existence)
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read permission (return 404 to avoid leaking existence)
       try {
-        await requireAgentTypePermission({
-          userId: user.id,
-          organizationId,
-          agentType: agent.agentType,
-          action: "read",
-        });
+        checker.require(agent.agentType, "read");
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      const admin = await isAgentTypeAdmin({
-        userId: user.id,
-        organizationId,
-        agentType: agent.agentType,
-      });
-
-      const versions = await AgentModel.getVersions(id, user.id, admin);
+      const versions = await AgentModel.getVersions(
+        id,
+        user.id,
+        checker.isAdmin(agent.agentType),
+      );
 
       if (!versions) {
         throw new ApiError(
@@ -554,13 +534,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check update permission for this agent's type (return 404 to avoid leaking existence)
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
       try {
-        await requireAgentTypePermission({
-          userId: user.id,
-          organizationId,
-          agentType: agent.agentType,
-          action: "update",
-        });
+        checker.require(agent.agentType, "update");
       } catch {
         throw new ApiError(404, "Agent not found");
       }

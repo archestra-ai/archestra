@@ -499,10 +499,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = body;
 
       // Fetch the agent-tool relationship (needed for permission check and validation)
-      const agentTools = await AgentToolModel.findAll({
-        skipPagination: true,
-      });
-      const agentToolForValidation = agentTools.data.find((at) => at.id === id);
+      const agentToolForValidation = await AgentToolModel.findById(id);
 
       if (!agentToolForValidation) {
         throw new ApiError(

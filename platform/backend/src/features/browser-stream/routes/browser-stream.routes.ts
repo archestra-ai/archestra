@@ -64,14 +64,14 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   async function getUserContext(
     request: FastifyRequest,
   ): Promise<BrowserUserContext> {
-    const { success: userIsProfileAdmin } = await hasPermission(
+    const { success: userIsAgentAdmin } = await hasPermission(
       { agent: ["admin"] },
       request.headers,
     );
     return {
       userId: request.user.id,
       organizationId: request.organizationId,
-      userIsProfileAdmin,
+      userIsAgentAdmin,
     };
   }
 

@@ -204,7 +204,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       });
 
-      const { success: userIsProfileAdmin } = await hasPermission(
+      const { success: userIsAgentAdmin } = await hasPermission(
         { agent: ["admin"] },
         headers,
       );
@@ -235,7 +235,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentName: conversation.agent.name,
         agentId: conversation.agentId,
         userId: user.id,
-        userIsProfileAdmin,
+        userIsAgentAdmin,
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
         conversationId: conversation.id,
         organizationId,
@@ -653,7 +653,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         userId: user.id,
         organizationId,
-        userIsProfileAdmin: isAgentAdmin,
+        userIsAgentAdmin: isAgentAdmin,
         // No conversation context here as this is just fetching available tools
       });
 
@@ -863,7 +863,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await browserStreamFeature.closeTab(conversation.agentId, id, {
             userId: user.id,
             organizationId,
-            userIsProfileAdmin: false,
+            userIsAgentAdmin: false,
           });
         } catch (error) {
           logger.warn(

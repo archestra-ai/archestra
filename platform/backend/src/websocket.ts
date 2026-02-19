@@ -25,7 +25,7 @@ interface McpLogsSubscription {
 interface WebSocketClientContext {
   userId: string;
   organizationId: string;
-  userIsProfileAdmin: boolean;
+  userIsAgentAdmin: boolean;
   userIsMcpServerAdmin: boolean;
 }
 
@@ -424,7 +424,7 @@ class WebSocketService {
   private async authenticateConnection(
     request: IncomingMessage,
   ): Promise<WebSocketClientContext | null> {
-    const [{ success: userIsProfileAdmin }, { success: userIsMcpServerAdmin }] =
+    const [{ success: userIsAgentAdmin }, { success: userIsMcpServerAdmin }] =
       await Promise.all([
         hasPermission({ agent: ["admin"] }, request.headers),
         hasPermission({ mcpServer: ["admin"] }, request.headers),
@@ -444,7 +444,7 @@ class WebSocketService {
         return {
           userId: user.id,
           organizationId,
-          userIsProfileAdmin,
+          userIsAgentAdmin,
           userIsMcpServerAdmin,
         };
       }
@@ -466,7 +466,7 @@ class WebSocketService {
           return {
             userId: user.id,
             organizationId,
-            userIsProfileAdmin,
+            userIsAgentAdmin,
             userIsMcpServerAdmin,
           };
         }

@@ -983,7 +983,7 @@ async function validateCredentialSource(
       status: 400,
       error: {
         message:
-          "The credential owner must be a member of a team that this profile is assigned to",
+          "The credential owner must be a member of a team that this agent is assigned to",
         type: "validation_error",
       },
     };

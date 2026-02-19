@@ -1,3 +1,12 @@
+Preserve providerMetadata (e.g. Gemini thoughtSignature) on file parts.
+
+The ai package drops providerMetadata from file parts at 4 points in the
+streaming pipeline, causing Gemini 3 multi-turn image generation to fail
+with "Image part is missing a thought_signature".
+
+Upstream issue: https://github.com/vercel/ai/issues/10660
+Remove this patch once the issue is resolved.
+
 diff --git a/dist/index.mjs b/dist/index.mjs
 index 1cc3bfa294adccabd72a7b2d9d069b32690d27b0..494497cb8e0e619a69eaa1cc8e6f8848992570a2 100644
 --- a/dist/index.mjs

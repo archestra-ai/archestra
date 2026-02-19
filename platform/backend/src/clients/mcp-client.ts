@@ -157,6 +157,19 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  // Short-lived cache for MCP server secrets to avoid N+1 queries when multiple
+  // tool calls hit the same MCP server within a batch or concurrent request window.
+  // Key: targetMcpServerId, Value: { result, expiresAt }
+  private secretsCache = new Map<
+    string,
+    {
+      result:
+        | { secrets: Record<string, unknown>; secretId?: string }
+        | { error: CommonToolResult };
+      expiresAt: number;
+    }
+  >();
+  private static readonly SECRETS_CACHE_TTL_MS = 30_000;
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -674,7 +687,8 @@ class McpClient {
     return { tool, catalogItem };
   }
 
-  // Gets secrets of a given MCP server
+  // Gets secrets of a given MCP server, with short-lived caching to prevent
+  // N+1 queries when multiple tool calls target the same server.
   private async getSecretsForMcpServer({
     targetMcpServerId,
     toolCall,
@@ -684,6 +698,37 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
+    | { secrets: Record<string, unknown>; secretId?: string }
+    | { error: CommonToolResult }
+  > {
+    const now = Date.now();
+    const cached = this.secretsCache.get(targetMcpServerId);
+    if (cached && cached.expiresAt > now) {
+      return cached.result;
+    }
+
+    const result = await this.fetchSecretsForMcpServer(
+      targetMcpServerId,
+      toolCall,
+      agentId,
+    );
+
+    // Only cache successful results (not errors) so transient failures can be retried
+    if (!("error" in result)) {
+      this.secretsCache.set(targetMcpServerId, {
+        result,
+        expiresAt: now + McpClient.SECRETS_CACHE_TTL_MS,
+      });
+    }
+
+    return result;
+  }
+
+  private async fetchSecretsForMcpServer(
+    targetMcpServerId: string,
+    toolCall: CommonToolCall,
+    agentId: string,
+  ): Promise<
     | { secrets: Record<string, unknown>; secretId?: string }
     | { error: CommonToolResult }
   > {

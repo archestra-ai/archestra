@@ -74,6 +74,11 @@ class OrganizationModel {
       "OrganizationModel.patch: updating organization",
     );
 
+    // Guard against empty updates - Drizzle throws "No values to set" on empty objects
+    if (Object.keys(data).length === 0) {
+      return OrganizationModel.getById(id);
+    }
+
     const [updatedOrganization] = await db
       .update(schema.organizationsTable)
       .set(data)

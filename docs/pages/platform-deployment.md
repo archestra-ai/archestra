@@ -457,7 +457,29 @@ archestra:
         create: false
 ```
 
-To allow MCP servers to reach a specific internal service (e.g., an internal API gateway) that would otherwise be blocked:
+MCP servers that need to connect to internal Kubernetes services (e.g., `grafana.monitoring.svc.cluster.local`) will be blocked by default because ClusterIPs fall within the denied private ranges. Use `additionalEgressRules` to whitelist specific internal services.
+
+By pod/namespace labels (recommended — survives IP changes):
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        additionalEgressRules:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: monitoring
+                podSelector:
+                  matchLabels:
+                    app: grafana
+            ports:
+              - protocol: TCP
+                port: 3000
+```
+
+By IP CIDR:
 
 ```yaml
 archestra:

@@ -281,14 +281,33 @@ archestra:
         #     - 203.0.113.0/24     # Documentation range
         additionalDeniedCidrs: []
 
-        # Additional egress rules to add to the NetworkPolicy
-        # Use this to allow MCP server pods to reach specific internal services
-        # that would otherwise be blocked by the private range deny rules.
-        # Example - allow access to an internal API gateway:
+        # Additional egress rules to add to the NetworkPolicy.
+        # Use this to allow MCP server pods to reach specific internal Kubernetes
+        # services that would otherwise be blocked by the private range deny rules.
+        #
+        # IMPORTANT: MCP servers that need to connect to internal K8s services
+        # (e.g., via grafana.monitoring.svc.cluster.local) will be blocked by default
+        # because ClusterIPs fall within the denied private ranges. You must add
+        # explicit egress rules here to allow those connections.
+        #
+        # Example - allow access to Grafana in the monitoring namespace (by pod labels):
+        #   additionalEgressRules:
+        #     - to:
+        #         - namespaceSelector:
+        #             matchLabels:
+        #               kubernetes.io/metadata.name: monitoring
+        #           podSelector:
+        #             matchLabels:
+        #               app: grafana
+        #       ports:
+        #         - protocol: TCP
+        #           port: 3000
+        #
+        # Example - allow access by IP CIDR (e.g., internal API gateway subnet):
         #   additionalEgressRules:
         #     - to:
         #         - ipBlock:
-        #             cidr: 10.0.50.0/24  # Internal API gateway subnet
+        #             cidr: 10.0.50.0/24
         #       ports:
         #         - protocol: TCP
         #           port: 443

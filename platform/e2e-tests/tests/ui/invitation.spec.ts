@@ -1,6 +1,7 @@
 import { E2eTestId } from "@shared";
+import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
+import { clickButton, loginViaApi } from "../../utils";
 
 test.describe(
   "Invitation functionality",
@@ -23,6 +24,16 @@ test.describe(
       await expect(async () => {
         await goToPage(page, "/settings/members");
         await page.waitForLoadState("domcontentloaded");
+        // WebKit sometimes fails to load session from storageState.
+        // If we detect the sign-in page, re-authenticate via API.
+        const loginButton = page.getByRole("button", { name: /login/i });
+        if (
+          await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)
+        ) {
+          await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+          await goToPage(page, "/settings/members");
+          await page.waitForLoadState("domcontentloaded");
+        }
         await expect(inviteButton).toBeVisible({ timeout: 10_000 });
         await expect(inviteButton).toBeEnabled({ timeout: 5_000 });
       }).toPass({ timeout: 90_000, intervals: [3000, 5000, 10000] });
@@ -64,6 +75,16 @@ test.describe(
       await expect(async () => {
         await goToPage(page, "/settings/members");
         await page.waitForLoadState("domcontentloaded");
+        // WebKit sometimes fails to load session from storageState.
+        // If we detect the sign-in page, re-authenticate via API.
+        const loginButton = page.getByRole("button", { name: /login/i });
+        if (
+          await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)
+        ) {
+          await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+          await goToPage(page, "/settings/members");
+          await page.waitForLoadState("domcontentloaded");
+        }
         await expect(inviteButton).toBeVisible({ timeout: 10_000 });
         await expect(inviteButton).toBeEnabled({ timeout: 5_000 });
       }).toPass({ timeout: 90_000, intervals: [3000, 5000, 10000] });

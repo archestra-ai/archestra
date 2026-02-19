@@ -200,8 +200,9 @@ for (const config of testConfigs) {
       // Wait for the response to appear
       // The mocked response should contain our expected text
       // Use generous timeout - streaming responses in CI can be slow
+      // (WireMock + streaming + CI resource contention can take >60s)
       await expect(page.getByText(config.expectedResponse)).toBeVisible({
-        timeout: 60_000,
+        timeout: 90_000,
       });
 
       // Verify the user's message also appears in the chat

@@ -36,6 +36,7 @@ import type {
   ThreadHistoryParams,
 } from "@/types/chatops";
 import { CHATOPS_TEAM_CACHE, CHATOPS_THREAD_HISTORY } from "./constants";
+import { errorMessage } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -842,23 +843,6 @@ export default MSTeamsProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  // Handle objects that may not convert to string properly (e.g., MS Graph SDK errors)
-  try {
-    return String(error);
-  } catch {
-    // If String() fails, try JSON.stringify or return a generic message
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
-}
 
 function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();

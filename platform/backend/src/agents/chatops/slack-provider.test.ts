@@ -155,14 +155,13 @@ describe("SlackProvider.validateWebhookRequest", () => {
     expect(result).toBe(true);
   });
 
-  test("object payload is JSON-stringified for signature", async () => {
+  test("JSON string payload verifies correctly", async () => {
     const provider = createProvider();
     const timestamp = makeTimestamp();
-    const payload = { type: "event_callback", team_id: "T123" };
-    const body = JSON.stringify(payload);
+    const body = JSON.stringify({ type: "event_callback", team_id: "T123" });
     const signature = computeSignature(timestamp, body);
 
-    const result = await provider.validateWebhookRequest(payload, {
+    const result = await provider.validateWebhookRequest(body, {
       "x-slack-request-timestamp": timestamp,
       "x-slack-signature": signature,
     });

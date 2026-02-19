@@ -27,6 +27,7 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
+import { errorMessage } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
@@ -334,15 +335,12 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const {
-      agentToUse,
-      cleanedMessageText,
-      fallbackMessage,
-    } = await this.resolveInlineAgentMention({
-      messageText: message.text,
-      defaultAgent: agent,
-      provider,
-    });
+    const { agentToUse, cleanedMessageText, fallbackMessage } =
+      await this.resolveInlineAgentMention({
+        messageText: message.text,
+        defaultAgent: agent,
+        provider,
+      });
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -761,22 +759,6 @@ async function getDefaultOrganizationId(): Promise<string> {
     throw new Error("No organizations found");
   }
   return org.id;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  // Handle objects that may not convert to string properly
-  try {
-    return String(error);
-  } catch {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
 }
 
 /**

@@ -32,14 +32,24 @@ import {
 } from "@/types/chatops-channel-binding";
 
 /**
- * Short-lived dedup cache for Slack events.
+ * Short-lived in-memory dedup cache for Slack events.
  * Slack fires both `message` and `app_mention` for @mention messages
  * with the same event ts, causing duplicate processing.
  * Entries auto-expire after 30 seconds.
+ *
+ * This is a fast first-pass filter that saves a DB round-trip for the common
+ * duplicate case. The authoritative dedup is database-level via
+ * ChatOpsProcessedMessageModel.tryMarkAsProcessed() in the manager.
  */
+const SLACK_DEDUP_MAX_SIZE = 10_000;
 const recentlyProcessedSlackEvents = new Map<string, true>();
 
 function markSlackEventProcessed(eventTs: string): void {
+  // Safety bound: evict oldest entries if the map grows too large
+  if (recentlyProcessedSlackEvents.size >= SLACK_DEDUP_MAX_SIZE) {
+    const firstKey = recentlyProcessedSlackEvents.keys().next().value;
+    if (firstKey) recentlyProcessedSlackEvents.delete(firstKey);
+  }
   recentlyProcessedSlackEvents.set(eventTs, true);
   setTimeout(() => recentlyProcessedSlackEvents.delete(eventTs), 30_000);
 }
@@ -67,9 +77,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             z.object({ status: z.string() }),
             z.object({ success: z.boolean() }),
           ]),
-          400: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
-          429: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
-          500: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          429: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          500: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
         },
       },
     },
@@ -441,9 +457,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         async (request, _reply, payload) => {
           const chunks: Buffer[] = [];
           for await (const chunk of payload) {
-            chunks.push(
-              typeof chunk === "string" ? Buffer.from(chunk) : chunk,
-            );
+            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
           }
           const raw = Buffer.concat(chunks).toString("utf8");
           (request as unknown as { slackRawBody: string }).slackRawBody = raw;
@@ -523,9 +537,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Validate request signature using the captured raw body
-      const rawBody = (
-        request as unknown as { slackRawBody?: string }
-      ).slackRawBody;
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
       if (!rawBody) {
         throw new ApiError(400, "Could not read request body for verification");
       }
@@ -645,13 +658,32 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/webhooks/chatops/slack/interactive",
     {
+      // Capture the raw form-encoded body before @fastify/formbody parses it.
+      // Slack HMAC (Hash-based Message Authentication Code) verification requires the exact bytes that were signed.
+      preParsing: [
+        async (request, _reply, payload) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of payload) {
+            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+          }
+          const raw = Buffer.concat(chunks).toString("utf8");
+          (request as unknown as { slackRawBody: string }).slackRawBody = raw;
+          const { Readable } = await import("node:stream");
+          return Readable.from(Buffer.from(raw));
+        },
+      ],
       schema: {
         description: "Slack interactive components endpoint",
         tags: ["ChatOps Webhooks"],
         body: z.unknown(),
         response: {
           200: z.object({ ok: z.boolean() }),
-          400: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          429: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
         },
       },
     },
@@ -661,9 +693,41 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Slack chatops provider not configured");
       }
 
+      // Rate limiting
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-slack-interactive-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        logger.warn(
+          { ip: clientIp },
+          "[ChatOps] Rate limit exceeded for Slack interactive webhook",
+        );
+        throw new ApiError(429, "Too many requests");
+      }
+
+      // Validate request signature using the captured raw body
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid Slack interactive webhook signature");
+        throw new ApiError(400, "Invalid request signature");
+      }
+
       // Slack sends interactive payloads as form-encoded with a "payload" field
-      const rawBody = request.body as { payload?: string };
-      const payloadStr = rawBody.payload;
+      const formBody = request.body as { payload?: string };
+      const payloadStr = formBody.payload;
       if (!payloadStr) {
         throw new ApiError(400, "Missing payload");
       }
@@ -677,6 +741,21 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const selection = provider.parseInteractivePayload(payload);
       if (!selection) {
+        return reply.send({ ok: true });
+      }
+
+      // Verify the user clicking the button is a registered Archestra user
+      const senderEmail = await provider.getUserEmail(selection.userId);
+      if (!senderEmail) {
+        logger.warn("[ChatOps] Could not resolve Slack interactive user email");
+        return reply.send({ ok: true });
+      }
+      const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        logger.warn(
+          { senderEmail },
+          "[ChatOps] Slack interactive user not registered in Archestra",
+        );
         return reply.send({ ok: true });
       }
 
@@ -701,29 +780,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: selection.agentId,
       });
 
-      // Respond via the response URL (acknowledges the interaction)
-      if (provider.isConfigured()) {
-        const slackProvider = chatOpsManager.getSlackProvider();
-        if (slackProvider) {
-          const message: IncomingChatMessage = {
-            messageId: `slack-selection-${Date.now()}`,
-            channelId: selection.channelId,
-            workspaceId: selection.workspaceId,
-            threadId: selection.threadTs,
-            senderId: selection.userId,
-            senderName: selection.userName,
-            text: "",
-            rawText: "",
-            timestamp: new Date(),
-            isThreadReply: false,
-          };
+      // Confirm the selection in the thread
+      const message: IncomingChatMessage = {
+        messageId: `slack-selection-${Date.now()}`,
+        channelId: selection.channelId,
+        workspaceId: selection.workspaceId,
+        threadId: selection.threadTs,
+        senderId: selection.userId,
+        senderName: selection.userName,
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: false,
+      };
 
-          await slackProvider.sendReply({
-            originalMessage: message,
-            text: `Agent *${agent.name}* is now bound to this channel.\nSend a message to start interacting!`,
-          });
-        }
-      }
+      await provider.sendReply({
+        originalMessage: message,
+        text: `Agent *${agent.name}* is now bound to this channel.\nSend a message to start interacting!`,
+      });
 
       return reply.send({ ok: true });
     },
@@ -746,9 +820,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         async (request, _reply, payload) => {
           const chunks: Buffer[] = [];
           for await (const chunk of payload) {
-            chunks.push(
-              typeof chunk === "string" ? Buffer.from(chunk) : chunk,
-            );
+            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
           }
           const raw = Buffer.concat(chunks).toString("utf8");
           (request as unknown as { slackRawBody: string }).slackRawBody = raw;
@@ -800,9 +872,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       for (const [key, value] of Object.entries(request.headers)) {
         headers[key] = value;
       }
-      const rawBody = (
-        request as unknown as { slackRawBody?: string }
-      ).slackRawBody;
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
       if (!rawBody) {
         throw new ApiError(400, "Could not read request body for verification");
       }

@@ -12,6 +12,7 @@ import type {
   ThreadHistoryParams,
 } from "@/types/chatops";
 import { CHATOPS_THREAD_HISTORY } from "./constants";
+import { errorMessage } from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -71,7 +72,7 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async validateWebhookRequest(
-    _payload: unknown,
+    rawBody: string,
     headers: Record<string, string | string[] | undefined>,
   ): Promise<boolean> {
     const timestamp = getHeader(headers, "x-slack-request-timestamp");
@@ -94,9 +95,7 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     // Compute expected signature
-    // The rawBody must be attached to the request by the route handler
-    const rawBody =
-      typeof _payload === "string" ? _payload : JSON.stringify(_payload);
+    // rawBody must be the exact bytes captured by the preParsing hook
     const sigBaseString = `v0:${timestamp}:${rawBody}`;
     const expectedSignature = `v0=${createHmac("sha256", config.chatops.slack.signingSecret).update(sigBaseString).digest("hex")}`;
 
@@ -455,28 +454,16 @@ export default SlackProvider;
 // Internal Helpers
 // =============================================================================
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  try {
-    return String(error);
-  } catch {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
-}
-
 /**
  * Decode Slack's HTML entity encoding.
  * Slack encodes &, <, > as &amp;, &lt;, &gt; in event text outside of special
  * sequences like <@U123>, <#C123>, and <url>.
  */
 function decodeSlackEntities(text: string): string {
-  return text.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+  return text
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
 }
 
 /**

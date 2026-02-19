@@ -436,8 +436,10 @@ export async function executeArchestraTool(
       if (targetAgentType === "agent") {
         const systemPrompt = args?.systemPrompt as string | undefined;
         const userPrompt = args?.userPrompt as string | undefined;
+        const description = args?.description as string | undefined;
         if (systemPrompt) createParams.systemPrompt = systemPrompt;
         if (userPrompt) createParams.userPrompt = userPrompt;
+        if (description) createParams.description = description;
       }
 
       const created = await AgentModel.create(createParams);
@@ -1629,12 +1631,10 @@ export async function executeArchestraTool(
         };
       }
 
-      // For catalog-based servers (local installations), query tools by catalogId
-      // This ensures all installations of the same catalog show the same tools
-      // For legacy servers without catalogId, fall back to mcpServerId
+      // Query tools by catalogId — all MCP servers have a catalogId
       const tools = mcpServer.catalogId
         ? await ToolModel.findByCatalogId(mcpServer.catalogId)
-        : await ToolModel.findByMcpServerId(mcpServerId);
+        : [];
 
       return {
         content: [
@@ -2195,7 +2195,7 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_CREATE_AGENT_FULL_NAME,
       title: "Create Agent",
       description:
-        "Create a new agent with the specified name, optional labels, and optional prompts.",
+        "Create a new agent with the specified name, optional description, optional labels, and optional prompts.",
       inputSchema: {
         type: "object",
         properties: {
@@ -2225,6 +2225,11 @@ export function getArchestraMcpTools(): Tool[] {
           userPrompt: {
             type: "string",
             description: "User prompt for the agent (optional)",
+          },
+          description: {
+            type: "string",
+            description:
+              "A brief description of what this agent does. Helps other agents understand if this agent is relevant for their task (optional)",
           },
         },
         required: ["name"],

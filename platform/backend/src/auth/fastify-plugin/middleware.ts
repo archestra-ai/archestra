@@ -34,10 +34,17 @@ export class Authnz {
     // Populate request.user and request.organizationId after successful authentication
     await this.populateUserInfo(request);
 
-    // Set Sentry user context after successful authentication
-    if (request.user) {
-      this.setSentryUserContext(request.user, request);
+    // Guard: if populateUserInfo silently failed, user info is missing
+    if (!request.user || !request.organizationId) {
+      logger.warn(
+        { requestId, url: request.url },
+        "[Authnz] Authentication succeeded but user info could not be populated",
+      );
+      throw new ApiError(401, "Unauthenticated");
     }
+
+    // Set Sentry user context after successful authentication
+    this.setSentryUserContext(request.user, request);
 
     logger.debug(
       {

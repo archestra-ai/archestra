@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mistral/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "mistral-execution-metrics"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-mistral-execution-metrics-test",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "mistral-large-latest",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Hello! I'm here to help.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+Preserve providerMetadata (e.g. Gemini thoughtSignature) on file parts.
+
+The ai package drops providerMetadata from file parts at 4 points in the
+streaming pipeline, causing Gemini 3 multi-turn image generation to fail
+with "Image part is missing a thought_signature".
+
+Upstream issue: https://github.com/vercel/ai/issues/10660
+Remove this patch once the issue is resolved.
+
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 1cc3bfa294adccabd72a7b2d9d069b32690d27b0..494497cb8e0e619a69eaa1cc8e6f8848992570a2 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -5200,7 +5200,8 @@ function processUIMessageStream({
+               state.message.parts.push({
+                 type: "file",
+                 mediaType: chunk.mediaType,
+-                url: chunk.url
++                url: chunk.url,
++                ...chunk.providerMetadata != null ? { providerMetadata: chunk.providerMetadata } : {}
+               });
+               write();
+               break;
+@@ -5874,7 +5875,8 @@ function runToolsTransformation({
+             file: new DefaultGeneratedFileWithType({
+               data: chunk.data,
+               mediaType: chunk.mediaType
+-            })
++            }),
++            ...chunk.providerMetadata != null ? { providerMetadata: chunk.providerMetadata } : {}
+           });
+           break;
+         }
+@@ -7388,7 +7390,8 @@ var DefaultStreamTextResult = class {
+               controller.enqueue({
+                 type: "file",
+                 mediaType: part.file.mediaType,
+-                url: `data:${part.file.mediaType};base64,${part.file.base64}`
++                url: `data:${part.file.mediaType};base64,${part.file.base64}`,
++                ...part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}
+               });
+               break;
+             }
+@@ -7947,7 +7950,8 @@ async function convertToModelMessages(messages, options) {
+                   type: "file",
+                   mediaType: part.mediaType,
+                   filename: part.filename,
+-                  data: part.url
++                  data: part.url,
++                  ...part.providerMetadata != null ? { providerOptions: part.providerMetadata } : {}
+                 });
+               } else if (isReasoningUIPart(part)) {
+                 content.push({

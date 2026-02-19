@@ -711,6 +711,11 @@ class OllamaResponseAdapter implements LLMResponseAdapter<OllamaResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): OllamaResponse {
     return this.response;
   }
@@ -1140,9 +1145,7 @@ export const ollamaAdapterFactory: LLMProvider<
     return config.llm.ollama.baseUrl;
   },
 
-  getSpanName(): string {
-    return "ollama.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,
@@ -1194,6 +1197,7 @@ export const ollamaAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
+
     const stream = await ollamaClient.chat.completions.create(ollamaRequest);
 
     return {

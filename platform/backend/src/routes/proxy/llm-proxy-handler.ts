@@ -5,7 +5,12 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
-import type { FastifyReply } from "fastify";
+import {
+  type Context,
+  context as otelContext,
+  propagation,
+} from "@opentelemetry/api";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import logger from "@/logging";
@@ -15,8 +20,10 @@ import {
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
+  UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
+import { SESSION_ID_KEY } from "@/observability/request-context";
 import {
   type Agent,
   ApiError,
@@ -28,17 +35,13 @@ import {
   type ToonSkipReason,
 } from "@/types";
 import * as utils from "./utils";
-import type { SessionSource } from "./utils/session-id";
+import type { SessionSource } from "./utils/headers/session-id";
 
-export interface Context {
-  organizationId: string;
-  agentId?: string;
-  externalAgentId?: string;
-  executionId?: string;
-  userId?: string;
-  sessionId?: string | null;
-  sessionSource?: SessionSource;
-}
+const {
+  observability: {
+    otel: { captureContent, contentMaxLength },
+  },
+} = config;
 
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
@@ -66,28 +69,46 @@ export async function handleLLMProxy<
   THeaders,
 >(
   body: TRequest,
-  headers: THeaders,
+  request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
-  context: Context,
 ): Promise<FastifyReply> {
-  const { agentId, externalAgentId, executionId } = context;
+  const headers = request.headers as unknown as THeaders;
+  const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
 
-  // Extract session info if not already provided in context
-  const sessionInfo =
-    context.sessionId !== undefined
-      ? { sessionId: context.sessionId, sessionSource: context.sessionSource }
-      : utils.sessionId.extractSessionInfo(
-          headers as Record<string, string | string[] | undefined>,
-          body as
-            | {
-                metadata?: { user_id?: string | null };
-                user?: string | null;
-              }
-            | undefined,
-        );
-  const { sessionId, sessionSource } = sessionInfo;
+  // Extract header-based context
+  const headersForExtraction = headers as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const externalAgentId =
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+  const executionId =
+    utils.headers.executionId.getExecutionId(headersForExtraction);
+  const userId = (await utils.headers.userId.getUser(headersForExtraction))
+    ?.userId;
+  const resolvedUser = userId ? await UserModel.getById(userId) : null;
+
+  const { sessionId, sessionSource } =
+    utils.headers.sessionId.extractSessionInfo(
+      headersForExtraction,
+      body as
+        | {
+            metadata?: { user_id?: string | null };
+            user?: string | null;
+          }
+        | undefined,
+    );
+
+  // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
+  // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
+  // headers so the LLM span becomes a child of the chat parent span.
+  // For external API calls (no traceparent header), this returns root context (unchanged behavior).
+  const parentContext = propagation.extract(
+    otelContext.active(),
+    request.headers,
+  );
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
@@ -142,11 +163,20 @@ export async function handleLLMProxy<
   if (executionId) {
     const existsInDb = await InteractionModel.existsByExecutionId(executionId);
     if (!existsInDb) {
+      logger.debug(
+        { executionId, agentId: resolvedAgentId, externalAgentId },
+        `[${providerName}Proxy] New execution detected, reporting metric`,
+      );
       metrics.agentExecution.reportAgentExecution({
         executionId,
         profile: resolvedAgent,
         externalAgentId,
       });
+    } else {
+      logger.debug(
+        { executionId, agentId: resolvedAgentId },
+        `[${providerName}Proxy] Execution already exists in DB, skipping metric`,
+      );
     }
   }
 
@@ -422,11 +452,13 @@ export async function handleLLMProxy<
         globalToolPolicy,
         ensureStreamHeaders,
         externalAgentId,
-        context.userId,
+        userId,
         sessionId,
         sessionSource,
         teamIds,
         executionId,
+        parentContext,
+        resolvedUser,
       );
     } else {
       return handleNonStreaming(
@@ -444,11 +476,13 @@ export async function handleLLMProxy<
         enabledToolNames,
         globalToolPolicy,
         externalAgentId,
-        context.userId,
+        userId,
         sessionId,
         sessionSource,
         teamIds,
         executionId,
+        parentContext,
+        resolvedUser,
       );
     }
   } catch (error) {
@@ -493,6 +527,8 @@ async function handleStreaming<
   sessionSource?: SessionSource,
   teamIds?: string[],
   executionId?: string,
+  parentContext?: Context,
+  resolvedUser?: { id: string; email: string; name: string } | null,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -505,47 +541,104 @@ async function handleStreaming<
   );
 
   try {
-    // Execute streaming request with tracing
-    const stream = await utils.tracing.startActiveLlmSpan(
-      provider.getSpanName(true),
-      providerName,
-      actualModel,
-      true,
+    // Execute streaming request with tracing — the span covers the full streaming
+    // operation (request → all chunks consumed) so we can set response attributes
+    await utils.tracing.startActiveLlmSpan({
+      operationName: provider.spanName,
+      provider: providerName,
+      model: actualModel,
+      stream: true,
       agent,
-      async (llmSpan) => {
-        const result = await provider.executeStream(client, request);
-        llmSpan.end();
-        return result;
+      sessionId,
+      executionId,
+      externalAgentId,
+      serverAddress: provider.getBaseUrl(),
+      promptMessages: provider
+        .createRequestAdapter(originalRequest)
+        .getProviderMessages(),
+      parentContext,
+      user: resolvedUser
+        ? {
+            id: resolvedUser.id,
+            email: resolvedUser.email,
+            name: resolvedUser.name,
+          }
+        : null,
+      callback: async (llmSpan) => {
+        const stream = await provider.executeStream(client, request);
+
+        // Process chunks
+        for await (const chunk of stream) {
+          // Track first chunk time
+          if (!firstChunkTime) {
+            firstChunkTime = Date.now();
+            const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+            metrics.llm.reportTimeToFirstToken(
+              providerName,
+              agent,
+              actualModel,
+              ttftSeconds,
+              externalAgentId,
+            );
+          }
+
+          const result = streamAdapter.processChunk(chunk);
+
+          // Stream non-tool-call data immediately
+          if (result.sseData) {
+            ensureStreamHeaders();
+            reply.raw.write(result.sseData);
+          }
+
+          if (result.isFinal) {
+            break;
+          }
+        }
+
+        // Set response attributes on span per OTEL GenAI semconv
+        const { state } = streamAdapter;
+        if (state.model) {
+          llmSpan.setAttribute("gen_ai.response.model", state.model);
+        }
+        if (state.responseId) {
+          llmSpan.setAttribute("gen_ai.response.id", state.responseId);
+        }
+        if (state.usage) {
+          llmSpan.setAttribute(
+            "gen_ai.usage.input_tokens",
+            state.usage.inputTokens,
+          );
+          llmSpan.setAttribute(
+            "gen_ai.usage.output_tokens",
+            state.usage.outputTokens,
+          );
+          llmSpan.setAttribute(
+            "gen_ai.usage.total_tokens",
+            state.usage.inputTokens + state.usage.outputTokens,
+          );
+          const cost = await utils.costOptimization.calculateCost(
+            actualModel,
+            state.usage.inputTokens,
+            state.usage.outputTokens,
+          );
+          if (cost !== undefined) {
+            llmSpan.setAttribute("archestra.cost", cost);
+          }
+        }
+        if (state.stopReason) {
+          llmSpan.setAttribute("gen_ai.response.finish_reasons", [
+            state.stopReason,
+          ]);
+        }
+
+        // Capture streamed completion content
+        if (captureContent && state.text) {
+          llmSpan.addEvent("gen_ai.content.completion", {
+            "gen_ai.completion": state.text.slice(0, contentMaxLength),
+          });
+        }
       },
-    );
-
-    // Process chunks
-    for await (const chunk of stream) {
-      // Track first chunk time
-      if (!firstChunkTime) {
-        firstChunkTime = Date.now();
-        const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
-        metrics.llm.reportTimeToFirstToken(
-          providerName,
-          agent,
-          actualModel,
-          ttftSeconds,
-          externalAgentId,
-        );
-      }
-
-      const result = streamAdapter.processChunk(chunk);
-
-      // Stream non-tool-call data immediately
-      if (result.sseData) {
-        ensureStreamHeaders();
-        reply.raw.write(result.sseData);
-      }
-
-      if (result.isFinal) {
-        break;
-      }
-    }
+    });
 
     logger.info("Stream loop completed, processing final events");
 
@@ -606,12 +699,14 @@ async function handleStreaming<
         reply.raw.write(event);
       }
 
-      metrics.llm.reportBlockedTools(
-        providerName,
-        agent,
-        toolCalls.length,
-        actualModel,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportBlockedTools(
+          providerName,
+          agent,
+          toolCalls.length,
+          actualModel,
+          externalAgentId,
+        ),
       );
     } else if (toolCalls.length > 0) {
       // Tool calls approved - stream raw events
@@ -646,25 +741,27 @@ async function handleStreaming<
 
     const usage = streamAdapter.state.usage;
     if (usage) {
-      metrics.llm.reportLLMTokens(
-        providerName,
-        agent,
-        { input: usage.inputTokens, output: usage.outputTokens },
-        actualModel,
-        externalAgentId,
-      );
-
-      if (usage.outputTokens && firstChunkTime) {
-        const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-        metrics.llm.reportTokensPerSecond(
+      withSessionContext(sessionId, () => {
+        metrics.llm.reportLLMTokens(
           providerName,
           agent,
+          { input: usage.inputTokens, output: usage.outputTokens },
           actualModel,
-          usage.outputTokens,
-          totalDurationSeconds,
           externalAgentId,
         );
-      }
+
+        if (usage.outputTokens && firstChunkTime) {
+          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+          metrics.llm.reportTokensPerSecond(
+            providerName,
+            agent,
+            actualModel,
+            usage.outputTokens,
+            totalDurationSeconds,
+            externalAgentId,
+          );
+        }
+      });
 
       const baselineCost = await utils.costOptimization.calculateCost(
         baselineModel,
@@ -677,12 +774,14 @@ async function handleStreaming<
         usage.outputTokens,
       );
 
-      metrics.llm.reportLLMCost(
-        providerName,
-        agent,
-        actualModel,
-        actualCost,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportLLMCost(
+          providerName,
+          agent,
+          actualModel,
+          actualCost,
+          externalAgentId,
+        ),
       );
 
       await InteractionModel.create({
@@ -743,6 +842,8 @@ async function handleNonStreaming<
   sessionSource?: SessionSource,
   teamIds?: string[],
   executionId?: string,
+  parentContext?: Context,
+  resolvedUser?: { id: string; email: string; name: string } | null,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -752,21 +853,67 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const response = await utils.tracing.startActiveLlmSpan(
-    provider.getSpanName(false),
-    providerName,
-    actualModel,
-    false,
+  const { responseAdapter } = await utils.tracing.startActiveLlmSpan({
+    operationName: provider.spanName,
+    provider: providerName,
+    model: actualModel,
+    stream: false,
     agent,
-    async (llmSpan: { end: () => void }) => {
+    sessionId,
+    executionId,
+    externalAgentId,
+    serverAddress: provider.getBaseUrl(),
+    promptMessages: provider
+      .createRequestAdapter(originalRequest)
+      .getProviderMessages(),
+    parentContext,
+    user: resolvedUser
+      ? {
+          id: resolvedUser.id,
+          email: resolvedUser.email,
+          name: resolvedUser.name,
+        }
+      : null,
+    callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
-      llmSpan.end();
-      return result;
-    },
-  );
+      const adapter = provider.createResponseAdapter(result);
 
-  // Create response adapter
-  const responseAdapter = provider.createResponseAdapter(response);
+      // Set response attributes on span per OTEL GenAI semconv
+      const usage = adapter.getUsage();
+      llmSpan.setAttribute("gen_ai.response.model", adapter.getModel());
+      llmSpan.setAttribute("gen_ai.response.id", adapter.getId());
+      llmSpan.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens);
+      llmSpan.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens);
+      llmSpan.setAttribute(
+        "gen_ai.usage.total_tokens",
+        usage.inputTokens + usage.outputTokens,
+      );
+      const cost = await utils.costOptimization.calculateCost(
+        actualModel,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+      if (cost !== undefined) {
+        llmSpan.setAttribute("archestra.cost", cost);
+      }
+      llmSpan.setAttribute(
+        "gen_ai.response.finish_reasons",
+        adapter.getFinishReasons(),
+      );
+
+      // Capture completion content
+      if (captureContent) {
+        const text = adapter.getText?.();
+        if (text) {
+          llmSpan.addEvent("gen_ai.content.completion", {
+            "gen_ai.completion": text.slice(0, contentMaxLength),
+          });
+        }
+      }
+
+      return { response: result, responseAdapter: adapter };
+    },
+  });
 
   const toolCalls = responseAdapter.getToolCalls();
   logger.debug(
@@ -806,12 +953,14 @@ async function handleNonStreaming<
         contentMessage,
       );
 
-      metrics.llm.reportBlockedTools(
-        providerName,
-        agent,
-        toolCalls.length,
-        actualModel,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportBlockedTools(
+          providerName,
+          agent,
+          toolCalls.length,
+          actualModel,
+          externalAgentId,
+        ),
       );
 
       // Record interaction with refusal
@@ -827,12 +976,14 @@ async function handleNonStreaming<
         usage.outputTokens,
       );
 
-      metrics.llm.reportLLMCost(
-        providerName,
-        agent,
-        actualModel,
-        actualCost,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportLLMCost(
+          providerName,
+          agent,
+          actualModel,
+          actualCost,
+          externalAgentId,
+        ),
       );
 
       await InteractionModel.create({
@@ -889,12 +1040,14 @@ async function handleNonStreaming<
     usage.outputTokens,
   );
 
-  metrics.llm.reportLLMCost(
-    providerName,
-    agent,
-    actualModel,
-    actualCost,
-    externalAgentId,
+  withSessionContext(sessionId, () =>
+    metrics.llm.reportLLMCost(
+      providerName,
+      agent,
+      actualModel,
+      actualCost,
+      externalAgentId,
+    ),
   );
 
   await InteractionModel.create({
@@ -928,6 +1081,20 @@ async function handleNonStreaming<
 // =============================================================================
 // HELPERS
 // =============================================================================
+
+/**
+ * Run a function within the OTEL context that has the session ID set.
+ * Used for metric calls that happen outside the span callback so that
+ * exemplar labels include the sessionID for Grafana correlation.
+ */
+function withSessionContext<T>(
+  sessionId: string | null | undefined,
+  fn: () => T,
+): T {
+  if (!sessionId) return fn();
+  const ctx = otelContext.active().setValue(SESSION_ID_KEY, sessionId);
+  return otelContext.with(ctx, fn);
+}
 
 function handleError(
   error: unknown,

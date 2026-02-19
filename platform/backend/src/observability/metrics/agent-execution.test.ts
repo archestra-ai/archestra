@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { AgentType } from "@/types";
 
 const counterInc = vi.fn();
 const registerRemoveSingleMetric = vi.fn();
@@ -28,11 +29,13 @@ import {
 const makeProfile = (overrides?: {
   id?: string;
   name?: string;
+  agentType?: AgentType;
   labels?: Array<{ key: string; value: string }>;
 }) =>
   ({
     id: overrides?.id ?? "profile-1",
     name: overrides?.name ?? "My Profile",
+    agentType: overrides?.agentType ?? "mcp_gateway",
     labels: overrides?.labels ?? [],
   }) as Parameters<typeof reportAgentExecution>[0]["profile"];
 
@@ -84,9 +87,10 @@ describe("reportAgentExecution", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      agent_id: "",
-      profile_id: "profile-1",
-      profile_name: "My Profile",
+      external_agent_id: "",
+      agent_id: "profile-1",
+      agent_name: "My Profile",
+      agent_type: "mcp_gateway",
     });
   });
 
@@ -112,9 +116,10 @@ describe("reportAgentExecution", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      agent_id: "my-agent",
-      profile_id: "profile-1",
-      profile_name: "My Profile",
+      external_agent_id: "my-agent",
+      agent_id: "profile-1",
+      agent_name: "My Profile",
+      agent_type: "mcp_gateway",
     });
   });
 
@@ -129,9 +134,10 @@ describe("reportAgentExecution", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      agent_id: "",
-      profile_id: "profile-1",
-      profile_name: "My Profile",
+      external_agent_id: "",
+      agent_id: "profile-1",
+      agent_name: "My Profile",
+      agent_type: "mcp_gateway",
       environment: "production",
     });
   });
@@ -147,9 +153,10 @@ describe("reportAgentExecution", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      agent_id: "",
-      profile_id: "profile-1",
-      profile_name: "My Profile",
+      external_agent_id: "",
+      agent_id: "profile-1",
+      agent_name: "My Profile",
+      agent_type: "mcp_gateway",
       environment: "staging",
       team: "",
     });

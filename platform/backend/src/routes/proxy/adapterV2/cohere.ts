@@ -324,6 +324,11 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): CohereResponse {
     return this.response;
   }
@@ -989,7 +994,5 @@ export const cohereAdapterFactory: LLMProvider<
     return config.llm.cohere.baseUrl;
   },
 
-  getSpanName(): string {
-    return "cohere.chat";
-  },
+  spanName: "chat",
 };

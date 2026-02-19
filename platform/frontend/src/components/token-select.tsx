@@ -95,14 +95,12 @@ export function TokenSelect({
         )}
         size="sm"
       >
-        <SelectValue placeholder="Select credentials..." />
+        <SelectValue placeholder="Select connection..." />
       </SelectTrigger>
       <SelectContent>
         {mcpServers.length > 0 && (
           <>
-            <div className="text-xs text-muted-foreground ml-2">
-              Static credentials
-            </div>
+            <div className="text-xs text-muted-foreground ml-2">Static</div>
             {mcpServers.map((server) => (
               <SelectItem
                 key={server.id}

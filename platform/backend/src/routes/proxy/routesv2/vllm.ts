@@ -14,7 +14,7 @@ import { constructResponseSchema, UuidIdSchema, Vllm } from "@/types";
 import { vllmAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
+import { createProxyPreHandler } from "./proxy-prehandler";
 
 const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/vllm`;
@@ -29,58 +29,12 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       upstream: config.llm.vllm.baseUrl as string,
       prefix: API_PREFIX,
       rewritePrefix: "",
-      preHandler: (request, _reply, next) => {
-        if (
-          request.method === "POST" &&
-          request.url.includes(CHAT_COMPLETIONS_SUFFIX)
-        ) {
-          logger.info(
-            {
-              method: request.method,
-              url: request.url,
-              action: "skip-proxy",
-              reason: "handled-by-custom-handler",
-            },
-            "vLLM proxy preHandler: skipping chat/completions route",
-          );
-          next(new Error("skip"));
-          return;
-        }
-
-        const pathAfterPrefix = request.url.replace(API_PREFIX, "");
-        const uuidMatch = pathAfterPrefix.match(
-          /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
-        );
-
-        if (uuidMatch) {
-          const remainingPath = uuidMatch[2] || "";
-          const originalUrl = request.raw.url;
-          request.raw.url = `${API_PREFIX}${remainingPath}`;
-
-          logger.info(
-            {
-              method: request.method,
-              originalUrl,
-              rewrittenUrl: request.raw.url,
-              upstream: config.llm.vllm.baseUrl,
-              finalProxyUrl: `${config.llm.vllm.baseUrl}/v1${remainingPath}`,
-            },
-            "vLLM proxy preHandler: URL rewritten (UUID stripped)",
-          );
-        } else {
-          logger.info(
-            {
-              method: request.method,
-              url: request.url,
-              upstream: config.llm.vllm.baseUrl,
-              finalProxyUrl: `${config.llm.vllm.baseUrl}/v1${pathAfterPrefix}`,
-            },
-            "vLLM proxy preHandler: proxying request",
-          );
-        }
-
-        next();
-      },
+      preHandler: createProxyPreHandler({
+        apiPrefix: API_PREFIX,
+        endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
+        upstream: config.llm.vllm.baseUrl as string,
+        providerName: "vLLM",
+      }),
     });
   } else {
     logger.info(
@@ -117,24 +71,7 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling vLLM request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-      return handleLLMProxy(
-        request.body,
-        request.headers,
-        reply,
-        vllmAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
-      );
+      return handleLLMProxy(request.body, request, reply, vllmAdapterFactory);
     },
   );
 
@@ -170,24 +107,7 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling vLLM request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
-      return handleLLMProxy(
-        request.body,
-        request.headers,
-        reply,
-        vllmAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
-      );
+      return handleLLMProxy(request.body, request, reply, vllmAdapterFactory);
     },
   );
 };

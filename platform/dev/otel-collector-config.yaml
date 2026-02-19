@@ -19,9 +19,15 @@ processors:
         action: upsert
 
 exporters:
-  # Export to Tempo
+  # Export traces to Tempo
   otlp/tempo:
     endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Export logs to Loki (via OTLP — Loki 3.x supports native OTLP ingestion)
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
     tls:
       insecure: true
 
@@ -35,3 +41,7 @@ service:
       receivers: [otlp]
       processors: [batch, resource]
       exporters: [otlp/tempo, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlphttp/loki, debug]

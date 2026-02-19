@@ -24,6 +24,7 @@ import { Response } from "@/components/ai-elements/response";
 import {
   Tool,
   ToolContent,
+  ToolErrorDetails,
   ToolHeader,
   ToolInput,
   ToolOutput,
@@ -467,6 +468,13 @@ export function ChatMessages({
 
                   switch (part.type) {
                     case "text": {
+                      // Skip empty text parts from assistant messages.
+                      // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
+                      // alongside tool calls, which the AI SDK converts into an empty text part.
+                      if (!part.text && message.role === "assistant") {
+                        return null;
+                      }
+
                       const partKey = `${message.id}-${i}`;
 
                       // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
@@ -923,6 +931,7 @@ function MessageTool({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
+      errorText ||
       (toolResultPart && Boolean(toolResultPart.output)) ||
       (!toolResultPart && Boolean(part.output)),
   );
@@ -941,12 +950,12 @@ function MessageTool({
           toolResultPart,
           errorText,
         })}
-        errorText={errorText}
         isCollapsible={hasContent}
         actionButton={logsButton}
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
+        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}

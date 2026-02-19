@@ -1,4 +1,4 @@
-name: Claude Code
+name: Claude Core Team Mentions (Shared)
 
 on:
   workflow_call:
@@ -33,24 +33,12 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        uses: ./.github/actions/run-claude
         with:
-          # Dynamically set the secret based on the user who triggered the workflow
-          # use their oauth token, since otherwise Anthropic will ban accounts for abuse :(
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-          # Use sticky comments to reduce notification clutter by updating one comment
-          use_sticky_comment: true
-
-          # This is an optional setting that allows Claude to read CI results on PRs
-          # See https://github.com/anthropics/claude-code-action?tab=readme-ov-file#additional-permissions-for-cicd-integration
+          use_sticky_comment: "true"
           additional_permissions: |
             actions: read
-
-          # Trigger when specific user is assigned to an issue
           assignee_trigger: "claude-bot"
-
-          claude_args: |
-            --model claude-opus-4-5-20251101
-            --allowedTools Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm typecheck),Bash(pnpm codegen:*),Bash(pnpm prettier:*)
-            --system-prompt "Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested."
+          allowed_tools: 'Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm typecheck),Bash(pnpm codegen:*),Bash(pnpm prettier:*)'
+          additional_claude_args: '--system-prompt "Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested."'

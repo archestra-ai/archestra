@@ -16,7 +16,7 @@ import { constructResponseSchema, Mistral, UuidIdSchema } from "@/types";
 import { mistralAdapterFactory } from "../adapterV2";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import * as utils from "../utils";
+import { createProxyPreHandler } from "./proxy-prehandler";
 
 const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/mistral`;
@@ -24,69 +24,16 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
   logger.info("[UnifiedProxy] Registering unified Mistral routes");
 
-  /**
-   * Register HTTP proxy for Mistral routes
-   * Chat completions are handled separately with full agent support
-   */
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.mistral.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
-    preHandler: (request, _reply, next) => {
-      // Skip chat/completions - handled by custom handler below
-      if (
-        request.method === "POST" &&
-        request.url.includes(CHAT_COMPLETIONS_SUFFIX)
-      ) {
-        logger.info(
-          {
-            method: request.method,
-            url: request.url,
-            action: "skip-proxy",
-            reason: "handled-by-custom-handler",
-          },
-          "Mistral proxy preHandler: skipping chat/completions route",
-        );
-        next(new Error("skip"));
-        return;
-      }
-
-      // Check if URL has UUID segment that needs stripping
-      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
-      const uuidMatch = pathAfterPrefix.match(
-        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
-      );
-
-      if (uuidMatch) {
-        // Strip UUID: /v1/mistral/:uuid/path -> /v1/mistral/path
-        const remainingPath = uuidMatch[2] || "";
-        const originalUrl = request.raw.url;
-        request.raw.url = `${API_PREFIX}${remainingPath}`;
-
-        logger.info(
-          {
-            method: request.method,
-            originalUrl,
-            rewrittenUrl: request.raw.url,
-            upstream: config.llm.mistral.baseUrl,
-            finalProxyUrl: `${config.llm.mistral.baseUrl}${remainingPath}`,
-          },
-          "Mistral proxy preHandler: URL rewritten (UUID stripped)",
-        );
-      } else {
-        logger.info(
-          {
-            method: request.method,
-            url: request.url,
-            upstream: config.llm.mistral.baseUrl,
-            finalProxyUrl: `${config.llm.mistral.baseUrl}${pathAfterPrefix}`,
-          },
-          "Mistral proxy preHandler: proxying request",
-        );
-      }
-
-      next();
-    },
+    preHandler: createProxyPreHandler({
+      apiPrefix: API_PREFIX,
+      endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
+      upstream: config.llm.mistral.baseUrl,
+      providerName: "Mistral",
+    }),
   });
 
   /**
@@ -113,23 +60,11 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Mistral request (default agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         mistralAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: undefined,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );
@@ -161,23 +96,11 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Mistral request (with agent)",
       );
-      const externalAgentId = utils.externalAgentId.getExternalAgentId(
-        request.headers,
-      );
-      const executionId = utils.executionId.getExecutionId(request.headers);
-      const userId = (await utils.user.getUser(request.headers))?.userId;
       return handleLLMProxy(
         request.body,
-        request.headers,
+        request,
         reply,
         mistralAdapterFactory,
-        {
-          organizationId: request.organizationId,
-          agentId: request.params.agentId,
-          externalAgentId,
-          executionId,
-          userId,
-        },
       );
     },
   );

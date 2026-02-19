@@ -16,6 +16,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   notIlike,
   or,
   sql,
@@ -267,9 +268,9 @@ class ToolModel {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
         },
-        mcpServer: {
-          id: schema.mcpServersTable.id,
-          name: schema.mcpServersTable.name,
+        catalog: {
+          id: schema.internalMcpCatalogTable.id,
+          name: schema.internalMcpCatalogTable.name,
         },
       })
       .from(schema.toolsTable)
@@ -278,8 +279,8 @@ class ToolModel {
         eq(schema.toolsTable.agentId, schema.agentsTable.id),
       )
       .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .orderBy(desc(schema.toolsTable.createdAt))
       .$dynamic();
@@ -296,7 +297,7 @@ class ToolModel {
         false,
       );
 
-      const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
+      const mcpServerSourceClause = isNotNull(schema.toolsTable.catalogId);
 
       if (accessibleAgentIds.length === 0) {
         query = query.where(mcpServerSourceClause);
@@ -310,7 +311,8 @@ class ToolModel {
       }
     }
 
-    return query;
+    const results = await query;
+    return ToolModel.filterUnavailableTools(results);
   }
 
   static async findByName(
@@ -366,7 +368,7 @@ class ToolModel {
       .where(or(...conditions))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return tools;
+    return ToolModel.filterUnavailableTools(tools);
   }
 
   /**
@@ -403,7 +405,7 @@ class ToolModel {
       )
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return tools;
+    return ToolModel.filterUnavailableTools(tools);
   }
 
   /**
@@ -417,7 +419,6 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
-      mcpServerId: string;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -456,7 +457,6 @@ class ToolModel {
           description: tool.description,
           parameters: tool.parameters,
           catalogId: tool.catalogId,
-          mcpServerId: tool.mcpServerId,
           agentId: null,
         });
       }
@@ -598,7 +598,9 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.catalogId, catalogId));
 
-    const toolIds = archestraTools.map((t) => t.id);
+    // Filter out unavailable tools (e.g. query_knowledge_graph when KG not configured)
+    const availableTools = ToolModel.filterUnavailableTools(archestraTools);
+    const toolIds = availableTools.map((t) => t.id);
 
     // Assign all tools to agent in bulk to avoid N+1
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -662,7 +664,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
-          isNotNull(schema.toolsTable.mcpServerId), // Only MCP tools
+          isNotNull(schema.toolsTable.catalogId), // Only MCP tools
         ),
       );
 
@@ -679,10 +681,6 @@ class ToolModel {
     Array<{
       toolName: string;
       responseModifierTemplate: string | null;
-      mcpServerSecretId: string | null;
-      mcpServerName: string | null;
-      mcpServerCatalogId: string | null;
-      mcpServerId: string | null;
       credentialSourceMcpServerId: string | null;
       executionSourceMcpServerId: string | null;
       useDynamicTeamCredential: boolean;
@@ -699,16 +697,12 @@ class ToolModel {
         toolName: schema.toolsTable.name,
         responseModifierTemplate:
           schema.agentToolsTable.responseModifierTemplate,
-        mcpServerSecretId: schema.mcpServersTable.secretId,
-        mcpServerName: schema.mcpServersTable.name,
-        mcpServerCatalogId: schema.mcpServersTable.catalogId,
         credentialSourceMcpServerId:
           schema.agentToolsTable.credentialSourceMcpServerId,
         executionSourceMcpServerId:
           schema.agentToolsTable.executionSourceMcpServerId,
         useDynamicTeamCredential:
           schema.agentToolsTable.useDynamicTeamCredential,
-        mcpServerId: schema.mcpServersTable.id,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
       })
@@ -716,10 +710,6 @@ class ToolModel {
       .innerJoin(
         schema.agentToolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
       )
       .leftJoin(
         schema.internalMcpCatalogTable,
@@ -737,82 +727,6 @@ class ToolModel {
   }
 
   /**
-   * Get all tools for a specific MCP server with their assignment counts and assigned agents
-   */
-  static async findByMcpServerId(mcpServerId: string): Promise<
-    Array<{
-      id: string;
-      name: string;
-      description: string | null;
-      parameters: Record<string, unknown>;
-      createdAt: Date;
-      assignedAgentCount: number;
-      assignedAgents: Array<{ id: string; name: string }>;
-    }>
-  > {
-    const tools = await db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        description: schema.toolsTable.description,
-        parameters: schema.toolsTable.parameters,
-        createdAt: schema.toolsTable.createdAt,
-      })
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.mcpServerId, mcpServerId))
-      .orderBy(desc(schema.toolsTable.createdAt));
-
-    const toolIds = tools.map((tool) => tool.id);
-
-    // Get all agent assignments for these tools in one query to avoid N+1
-    const assignments = await db
-      .select({
-        toolId: schema.agentToolsTable.toolId,
-        agentId: schema.agentToolsTable.agentId,
-        agentName: schema.agentsTable.name,
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-      )
-      .where(inArray(schema.agentToolsTable.toolId, toolIds));
-
-    // Group assignments by tool ID
-    const assignmentsByTool = new Map<
-      string,
-      Array<{ id: string; name: string }>
-    >();
-
-    for (const toolId of toolIds) {
-      assignmentsByTool.set(toolId, []);
-    }
-
-    for (const assignment of assignments) {
-      const toolAssignments = assignmentsByTool.get(assignment.toolId) || [];
-      toolAssignments.push({
-        id: assignment.agentId,
-        name: assignment.agentName,
-      });
-      assignmentsByTool.set(assignment.toolId, toolAssignments);
-    }
-
-    // Build tools with their assigned agents
-    const toolsWithAgents = tools.map((tool) => {
-      const assignedAgents = assignmentsByTool.get(tool.id) || [];
-
-      return {
-        ...tool,
-        parameters: tool.parameters ?? {},
-        assignedAgentCount: assignedAgents.length,
-        assignedAgents,
-      };
-    });
-
-    return toolsWithAgents;
-  }
-
-  /**
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
@@ -827,7 +741,7 @@ class ToolModel {
       assignedAgents: Array<{ id: string; name: string }>;
     }>
   > {
-    const tools = await db
+    const allTools = await db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -839,7 +753,12 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, catalogId))
       .orderBy(desc(schema.toolsTable.createdAt));
 
+    const tools = ToolModel.filterUnavailableTools(allTools);
     const toolIds = tools.map((tool) => tool.id);
+
+    if (toolIds.length === 0) {
+      return [];
+    }
 
     // Get all agent assignments for these tools in one query to avoid N+1
     const assignments = await db
@@ -964,7 +883,6 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
-      mcpServerId: string;
       /** The original tool name from the MCP server (e.g., "generate_text") */
       rawToolName?: string;
     }>,
@@ -1102,7 +1020,6 @@ class ToolModel {
           description: tool.description,
           parameters: tool.parameters,
           catalogId: tool.catalogId,
-          mcpServerId: tool.mcpServerId,
           agentId: null,
         });
       }
@@ -1219,16 +1136,13 @@ class ToolModel {
 
   /**
    * Delete a tool by ID.
-   * Only allows deletion of auto-discovered tools (no mcpServerId).
+   * Only allows deletion of proxy-discovered tools (no catalogId).
    */
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.toolsTable)
       .where(
-        and(
-          eq(schema.toolsTable.id, id),
-          isNull(schema.toolsTable.mcpServerId),
-        ),
+        and(eq(schema.toolsTable.id, id), isNull(schema.toolsTable.catalogId)),
       );
 
     return (result.rowCount || 0) > 0;
@@ -1305,7 +1219,6 @@ class ToolModel {
           description: tool.description ?? null,
           parameters: tool.parameters ?? {},
           catalogId: null,
-          mcpServerId: null,
           agentId,
         });
       }
@@ -1397,7 +1310,6 @@ class ToolModel {
         delegateToAgentId: targetAgentId,
         agentId: null,
         catalogId: null,
-        mcpServerId: null,
         parameters: {
           type: "object",
           properties: {
@@ -1562,6 +1474,13 @@ class ToolModel {
       );
     }
 
+    // Hide knowledge graph tool when provider is not configured
+    if (!getKnowledgeGraphProviderType()) {
+      toolWhereConditions.push(
+        ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME),
+      );
+    }
+
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments
     let accessibleAgentIds: string[] | undefined;
@@ -1630,18 +1549,11 @@ class ToolModel {
         description: schema.toolsTable.description,
         parameters: schema.toolsTable.parameters,
         catalogId: schema.toolsTable.catalogId,
-        mcpServerId: schema.toolsTable.mcpServerId,
-        mcpServerName: schema.mcpServersTable.name,
-        mcpServerCatalogId: schema.mcpServersTable.catalogId,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         assignmentCount: assignmentCountSubquery,
       })
       .from(schema.toolsTable)
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-      )
       .where(toolWhereClause)
       .orderBy(orderByClause)
       .limit(pagination.limit ?? 20)
@@ -1787,9 +1699,6 @@ class ToolModel {
       description: tool.description as string | null,
       parameters: (tool.parameters as Record<string, unknown>) ?? {},
       catalogId: tool.catalogId as string | null,
-      mcpServerId: tool.mcpServerId as string | null,
-      mcpServerName: tool.mcpServerName as string | null,
-      mcpServerCatalogId: tool.mcpServerCatalogId as string | null,
       createdAt: tool.createdAt as Date,
       updatedAt: tool.updatedAt as Date,
       assignmentCount: Number(tool.assignmentCount),
@@ -1800,6 +1709,23 @@ class ToolModel {
       limit: pagination.limit ?? 20,
       offset: pagination.offset ?? 0,
     });
+  }
+  // =============================================================================
+  // Private helpers
+  // =============================================================================
+
+  /**
+   * Filter out tools that should not be visible based on current configuration.
+   * Currently filters out the query_knowledge_graph tool when no knowledge graph
+   * provider is configured, since the tool would not be functional.
+   */
+  private static filterUnavailableTools<T extends { name: string }>(
+    tools: T[],
+  ): T[] {
+    if (getKnowledgeGraphProviderType()) {
+      return tools;
+    }
+    return tools.filter((t) => t.name !== TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
   }
 }
 

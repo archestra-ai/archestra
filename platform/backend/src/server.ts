@@ -572,6 +572,13 @@ const start = async () => {
     cacheManager.start();
 
     // Initialize metrics with keys of custom agent labels
+    // Set OpenMetrics content type to enable exemplar support on histograms
+    const promClient = await import("prom-client");
+    // eslint-disable-next-line -- default register is typed as Registry<PrometheusContentType> but setContentType accepts both at runtime
+    (promClient.default.register.setContentType as (ct: string) => void)(
+      promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
+    );
+
     const labelKeys = await AgentLabelModel.getAllKeys();
     metrics.llm.initializeMetrics(labelKeys);
     metrics.mcp.initializeMcpMetrics(labelKeys);

@@ -208,7 +208,7 @@ setup("setup teams and assignments", async ({ page }) => {
 
   // Navigate to establish cookie context
   await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Get organization members to find editor and member user IDs
   const members = await listOrgMembers(page.request);

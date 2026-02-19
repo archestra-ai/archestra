@@ -14,9 +14,9 @@ import {
   MessageCircle,
   MessagesSquare,
   Network,
+  Route,
   Router,
   Settings,
-  Shield,
   Slack,
   Star,
   Wrench,
@@ -74,9 +74,16 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       icon: Bot,
     },
     {
+      title: "Agent Triggers",
+      url: "/agent-triggers/ms-teams",
+      icon: Zap,
+      customIsActive: (pathname: string) =>
+        pathname.startsWith("/agent-triggers"),
+    },
+    {
       title: "MCP Gateways",
       url: "/mcp-gateways",
-      icon: Shield,
+      icon: Route,
     },
     {
       title: "LLM Proxies",
@@ -100,13 +107,6 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       url: "/mcp-catalog/registry",
       icon: Router,
       customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
-    },
-    {
-      title: "Agent Triggers",
-      url: "/agent-triggers/ms-teams",
-      icon: Zap,
-      customIsActive: (pathname: string) =>
-        pathname.startsWith("/agent-triggers"),
     },
     {
       title: "Cost & Limits",

@@ -4,7 +4,7 @@ category: Examples
 order: 3
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -161,12 +161,7 @@ N8N assigns a unique execution ID to every workflow run. To make Archestra aware
 n8n-support-agent/{{ $execution.id }}/
 ```
 
-The header format is `<agent-id>/<execution-id>/<session-id>`:
-
-- **agent-id** — a name you choose for this agent (e.g., `n8n-support-agent`). Used as the `agent_id` label in metrics.
-- **execution-id** — a unique identifier per execution run. Here, `{{ $execution.id }}` is an N8N expression that resolves to the current workflow execution ID.
-- **session-id** — optional, groups multiple executions into a session. Left empty here.
-
+The [`X-Archestra-Meta`](/docs/platform-llm-proxy#custom-headers) header format is `<agent-id>/<execution-id>/<session-id>`. Here, `{{ $execution.id }}` is an N8N expression that resolves to the current workflow execution ID.
 
 Archestra will then export the `agent_executions_total` Prometheus metric — a counter of unique executions grouped by `agent_id`.
 

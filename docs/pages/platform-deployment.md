@@ -181,6 +181,7 @@ openssl rand -base64 32
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types)
+- `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
@@ -715,6 +716,23 @@ The following environment variables can be used to configure Archestra Platform.
 
   - Optional: Takes precedence over basic authentication if provided
   - Example: `your-bearer-token`
+
+- **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
+
+  - Default: `true` (enabled)
+  - Set to `false` to disable content capture for privacy or to reduce span sizes
+
+- **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
+
+  - Default: `10000` (10,000 characters)
+  - Content exceeding this limit is truncated with a `...[truncated]` suffix
+  - Only applies when `ARCHESTRA_OTEL_CAPTURE_CONTENT` is enabled
+
+- **`ARCHESTRA_OTEL_VERBOSE_TRACING`** - Enable verbose infrastructure spans (HTTP routes, outgoing HTTP calls, Node.js fetch, etc).
+
+  - Default: `false` (disabled)
+  - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
+  - Set to `true` to include infrastructure spans for debugging request flows
 
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
 

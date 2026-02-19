@@ -74,9 +74,8 @@ export function OAuthConfirmationDialog({
             </div>
           </DialogTitle>
           <DialogDescription className="pt-4 space-y-3 text-sm">
-            You'll be redirected to {serverName}'s authorization page to grant
-            access. After authentication, you'll be brought back here and the
-            server will be installed with your credentials.
+            We'll redirect you to {serverName} to authorize access, then bring
+            you back once connected.
           </DialogDescription>
         </DialogHeader>
 

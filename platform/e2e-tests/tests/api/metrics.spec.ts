@@ -31,18 +31,24 @@ test.describe("Metrics API", () => {
   test("returns metrics when authentication is provided", async ({
     request,
   }) => {
-    // Make multiple API calls to ensure metrics are generated on all pods
-    // (CI runs with 5 replicas, each with its own metrics registry)
-    const apiCalls = Array.from({ length: 10 }, () =>
-      request.get(`${API_BASE_URL}/openapi.json`),
-    );
-    await Promise.all(apiCalls);
+    // Make multiple API calls to ensure metrics are generated
+    // In CI the metrics endpoint may be on a different pod, so we make many requests
+    // to increase the chance the metrics pod has processed at least one
+    for (let i = 0; i < 3; i++) {
+      const apiCalls = Array.from({ length: 10 }, () =>
+        request.get(`${API_BASE_URL}/openapi.json`),
+      );
+      await Promise.all(apiCalls);
+    }
 
     // Poll metrics until the route appears (handles race condition where metrics might not be immediately available)
+    // Use generous timeout since metrics collection and aggregation can be slow in CI
     let metricsText = "";
     await expect
       .poll(
         async () => {
+          // Make a few more requests each poll to ensure metrics are generated
+          await request.get(`${API_BASE_URL}/openapi.json`);
           const response = await fetchMetrics(
             request,
             METRICS_BASE_URL,
@@ -52,7 +58,7 @@ test.describe("Metrics API", () => {
           metricsText = await response.text();
           return metricsText;
         },
-        { timeout: 10000, intervals: [500, 1000, 2000] },
+        { timeout: 30_000, intervals: [1000, 2000, 3000, 5000] },
       )
       .toContain('route="/openapi.json"');
 

@@ -55,6 +55,173 @@ describe("isBrowserMcpTool", () => {
   });
 });
 
+describe("normalizeJsonSchema", () => {
+  const { normalizeJsonSchema } = chatClient.__test;
+
+  test("returns fallback schema for missing/invalid input", () => {
+    expect(normalizeJsonSchema(null)).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeJsonSchema(undefined)).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeJsonSchema("not-an-object")).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeJsonSchema([])).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+  });
+
+  test("returns fallback schema for invalid type field", () => {
+    expect(normalizeJsonSchema({ type: 123 })).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeJsonSchema({ type: "None" })).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeJsonSchema({ type: "null" })).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+  });
+
+  test("adds additionalProperties: false to simple object schema", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+      required: ["name"],
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    });
+  });
+
+  test("adds additionalProperties: false to empty object schema", () => {
+    const schema = { type: "object", properties: {} };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+  });
+
+  test("preserves existing additionalProperties value", () => {
+    const schema = {
+      type: "object",
+      properties: { name: { type: "string" } },
+      additionalProperties: true,
+    };
+    const result = normalizeJsonSchema(schema);
+    expect(result.additionalProperties).toBe(true);
+  });
+
+  test("recursively adds additionalProperties: false to nested objects", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        address: {
+          type: "object",
+          properties: {
+            street: { type: "string" },
+            city: { type: "string" },
+          },
+        },
+      },
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        address: {
+          type: "object",
+          properties: {
+            street: { type: "string" },
+            city: { type: "string" },
+          },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    });
+  });
+
+  test("recursively handles array items with object schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        labels: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              value: { type: "string" },
+            },
+            required: ["key", "value"],
+          },
+        },
+      },
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        labels: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              value: { type: "string" },
+            },
+            required: ["key", "value"],
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    });
+  });
+
+  test("does not modify non-object schemas", () => {
+    const schema = { type: "string" };
+    expect(normalizeJsonSchema(schema)).toEqual({ type: "string" });
+  });
+
+  test("does not mutate the original schema", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+    };
+    const original = JSON.parse(JSON.stringify(schema));
+    normalizeJsonSchema(schema);
+    expect(schema).toEqual(original);
+  });
+});
+
 describe("chat-mcp-client health check", () => {
   test("discards cached client when ping fails and fetches fresh tools", async ({
     makeAgent,

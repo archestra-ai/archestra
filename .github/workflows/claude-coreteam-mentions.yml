@@ -7,7 +7,7 @@
 #
 # See here for more details:
 # https://github.com/anthropics/claude-code-action/issues/4#issuecomment-3046770474
-name: Claude Code
+name: Claude Core Team Mentions
 
 on:
   issue_comment:
@@ -31,7 +31,7 @@ jobs:
       issues: write
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-code.yml
+    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -46,7 +46,7 @@ jobs:
       issues: write
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-code.yml
+    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -61,6 +61,6 @@ jobs:
       issues: write
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-code.yml
+    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.DOMINIK_CLAUDE_CODE_OAUTH_TOKEN }}

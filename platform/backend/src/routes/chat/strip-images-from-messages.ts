@@ -212,7 +212,10 @@ function convertImageBlocksToText(content: unknown): unknown {
  * - image parts (converts to text parts)
  * - Any deeply nested base64 data in results
  */
-function stripImagesFromParts(parts: UiMessagePart[]): UiMessagePart[] {
+function stripImagesFromParts(
+  parts: UiMessagePart[],
+  preserveDirectImages = false,
+): UiMessagePart[] {
   return parts.map((part) => {
     const partType = part.type;
 
@@ -267,8 +270,10 @@ function stripImagesFromParts(parts: UiMessagePart[]): UiMessagePart[] {
       };
     }
 
-    // Handle direct image parts - convert to text part entirely
-    if (partType === "image") {
+    // Handle direct image parts from tool results - convert to text part entirely.
+    // Images in assistant messages are model-generated (e.g., Gemini image generation)
+    // and must be preserved for multi-turn image editing conversations.
+    if (partType === "image" && !preserveDirectImages) {
       return {
         type: "text",
         text: IMAGE_STRIPPED_PLACEHOLDER,
@@ -301,9 +306,14 @@ export function stripImagesFromMessages(messages: UiMessage[]): UiMessage[] {
       "[stripImagesFromMessages] Processing message with parts",
     );
 
+    // Preserve model-generated images in assistant messages.
+    // These are needed for multi-turn image editing (e.g., Gemini 3 image generation).
+    // Tool result images within assistant messages are still stripped.
+    const preserveDirectImages = msg.role === "assistant";
+
     return {
       ...msg,
-      parts: stripImagesFromParts(msg.parts),
+      parts: stripImagesFromParts(msg.parts, preserveDirectImages),
     };
   });
 }

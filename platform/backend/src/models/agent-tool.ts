@@ -796,9 +796,6 @@ class AgentToolModel {
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
           catalogId: schema.toolsTable.catalogId,
-          mcpServerId: schema.toolsTable.mcpServerId,
-          mcpServerName: schema.mcpServersTable.name,
-          mcpServerCatalogId: schema.mcpServersTable.catalogId,
         },
       })
       .from(schema.agentToolsTable)
@@ -809,10 +806,6 @@ class AgentToolModel {
       .innerJoin(
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
       )
       .where(whereClause)
       .orderBy(orderByClause)
@@ -836,10 +829,6 @@ class AgentToolModel {
         .innerJoin(
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .leftJoin(
-          schema.mcpServersTable,
-          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
         )
         .where(whereClause),
     ]);

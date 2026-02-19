@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/bedrock/model/.*/converse",
+    "headers": {
+      "Authorization": {
+        "contains": "bedrock-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "output": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "text": "I have processed the TOON-compressed tool result."
+            }
+          ]
+        }
+      },
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 100,
+        "outputTokens": 10
+      }
+    }
+  }
+}

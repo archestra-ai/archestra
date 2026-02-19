@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { expect, test } from "../fixtures";
 
 // =============================================================================
@@ -274,21 +275,50 @@ const cohereConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const bedrockConfig: ToolPersistenceTestConfig = {
+  providerName: "Bedrock",
+
+  endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+    messages: [{ role: "user", content: [{ text: content }] }],
+    toolConfig: {
+      tools: tools.map((t) => ({
+        toolSpec: {
+          name: t.name,
+          description: t.description,
+          inputSchema: { json: t.parameters },
+        },
+      })),
+    },
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
 
-const testConfigs: ToolPersistenceTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cohereConfig,
-  cerebrasConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: bedrockConfig,
+} satisfies Record<SupportedProvider, ToolPersistenceTestConfig>;
+
+const testConfigs = Object.values(testConfigsMap);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolPersistence-${config.providerName}`, () => {

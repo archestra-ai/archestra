@@ -468,6 +468,13 @@ export function ChatMessages({
 
                   switch (part.type) {
                     case "text": {
+                      // Skip empty text parts from assistant messages.
+                      // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
+                      // alongside tool calls, which the AI SDK converts into an empty text part.
+                      if (!part.text && message.role === "assistant") {
+                        return null;
+                      }
+
                       const partKey = `${message.id}-${i}`;
 
                       // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)

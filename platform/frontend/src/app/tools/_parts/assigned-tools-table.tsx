@@ -221,8 +221,8 @@ export function AssignedToolsTable({
       setRowSelection(newRowSelection);
 
       const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => tools[Number(index)])
-        .filter(Boolean);
+        .map((rowId) => tools.find((tool) => tool.id === rowId))
+        .filter((tool): tool is ToolWithAssignmentsData => Boolean(tool));
 
       setSelectedTools(newSelectedTools);
     },
@@ -264,8 +264,20 @@ export function AssignedToolsTable({
           sortDirection: newSorting[0].desc ? "desc" : "asc",
         });
       }
+
+      // Preserve selection by tool IDs after sorting
+      const currentSelection = rowSelection;
+      if (Object.keys(currentSelection).length > 0) {
+        const newSelection: RowSelectionState = {};
+        tools.forEach((tool) => {
+          if (currentSelection[tool.id]) {
+            newSelection[tool.id] = true;
+          }
+        });
+        setRowSelection(newSelection);
+      }
     },
-    [updateUrlParams],
+    [updateUrlParams, rowSelection, tools],
   );
 
   const handleBulkAction = useCallback(
@@ -935,6 +947,7 @@ export function AssignedToolsTable({
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}
             onRowSelectionChange={handleRowSelectionChange}
+            getRowId={(row) => row.id}
           />
         )}
       </div>

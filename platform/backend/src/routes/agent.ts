@@ -1,7 +1,12 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import {
+  hasAnyAgentTypeReadPermission,
+  hasPermission,
+  isAgentTypeAdmin,
+  requireAgentTypePermission,
+} from "@/auth";
 import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
 import { metrics } from "@/observability";
 import {
@@ -73,11 +78,38 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection,
         },
         user,
+        organizationId,
         headers,
       },
       reply,
     ) => {
-      const { success: isAgentAdmin } = await hasPermission(
+      // Determine the effective type filter
+      const effectiveTypes =
+        agentTypes || (agentType ? [agentType] : undefined);
+
+      // Check read permission for the requested agent type(s)
+      if (effectiveTypes) {
+        for (const type of effectiveTypes) {
+          await requireAgentTypePermission({
+            userId: user.id,
+            organizationId,
+            agentType: type,
+            action: "read",
+          });
+        }
+      } else {
+        // No type filter — require read on at least one of the three resources
+        // (the model will return all types the user has team access to)
+        const hasAny = await hasAnyAgentTypeReadPermission({
+          userId: user.id,
+          organizationId,
+        });
+        if (!hasAny) {
+          throw new ApiError(403, "Forbidden");
+        }
+      }
+
+      const { success: isAdmin } = await hasPermission(
         { agent: ["admin"] },
         headers,
       );
@@ -92,7 +124,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentTypes,
           },
           user.id,
-          isAgentAdmin,
+          isAdmin,
         ),
       );
     },
@@ -125,13 +157,40 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
-    async ({ query: { agentType, agentTypes }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
+    async (
+      { query: { agentType, agentTypes }, headers, user, organizationId },
+      reply,
+    ) => {
+      // Determine the effective type filter
+      const effectiveTypes =
+        agentTypes || (agentType ? [agentType] : undefined);
+
+      // Check read permission for the requested agent type(s)
+      if (effectiveTypes) {
+        for (const type of effectiveTypes) {
+          await requireAgentTypePermission({
+            userId: user.id,
+            organizationId,
+            agentType: type,
+            action: "read",
+          });
+        }
+      } else {
+        const hasAny = await hasAnyAgentTypeReadPermission({
+          userId: user.id,
+          organizationId,
+        });
+        if (!hasAny) {
+          throw new ApiError(403, "Forbidden");
+        }
+      }
+
+      const { success: isAdmin } = await hasPermission(
         { agent: ["admin"] },
         headers,
       );
       return reply.send(
-        await AgentModel.findAll(user.id, isAgentAdmin, {
+        await AgentModel.findAll(user.id, isAdmin, {
           // agentTypes takes precedence over agentType
           agentType: agentTypes ? undefined : agentType,
           agentTypes,
@@ -185,14 +244,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, headers }, reply) => {
-      const { success: isProfileAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+    async ({ body, user, organizationId, headers }, reply) => {
+      // Check create permission for the specific agent type
+      const agentType = body.agentType ?? "mcp_gateway";
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType,
+        action: "create",
+      });
+
+      const isTypeAdmin = await isAgentTypeAdmin({
+        userId: user.id,
+        organizationId,
+        agentType,
+      });
 
       // Validate team assignment for non-admin users
-      if (!isProfileAdmin) {
+      if (!isTypeAdmin) {
         const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
         if (body.teams.length === 0) {
@@ -246,16 +315,37 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
-
-      const agent = await AgentModel.findById(id, user.id, isAgentAdmin);
+    async ({ params: { id }, headers, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type
+      // Use admin=true for the lookup so we can check type, then enforce type-specific RBAC
+      const agent = await AgentModel.findById(id, user.id, true);
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      // Check read permission for this agent's type
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+        action: "read",
+      });
+
+      // Re-check with actual admin status for team filtering
+      const admin = await isAgentTypeAdmin({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+      });
+
+      if (!admin) {
+        // Re-fetch with team filtering
+        const filteredAgent = await AgentModel.findById(id, user.id, false);
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+        return reply.send(filteredAgent);
       }
 
       return reply.send(agent);
@@ -276,15 +366,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const existingAgent = await AgentModel.findById(id, user.id, true);
+      if (!existingAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check update permission for this agent's type
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: existingAgent.agentType,
+        action: "update",
+      });
+
       // Validate team assignment for non-admin users if teams are being updated
       if (body.teams !== undefined) {
-        const { success: isProfileAdmin } = await hasPermission(
-          { agent: ["admin"] },
-          headers,
-        );
+        const isTypeAdmin = await isAgentTypeAdmin({
+          userId: user.id,
+          organizationId,
+          agentType: existingAgent.agentType,
+        });
 
-        if (!isProfileAdmin) {
+        if (!isTypeAdmin) {
           const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
           if (body.teams.length === 0) {
@@ -339,7 +444,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check delete permission for this agent's type
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+        action: "delete",
+      });
+
       const success = await AgentModel.delete(id);
 
       if (!success) {
@@ -365,13 +484,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(AgentVersionsResponseSchema),
       },
     },
-    async ({ params: { id }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+    async ({ params: { id }, headers, user, organizationId }, reply) => {
+      // Fetch agent to determine its type
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
 
-      const versions = await AgentModel.getVersions(id, user.id, isAgentAdmin);
+      // Check read permission for this agent's type
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+        action: "read",
+      });
+
+      const admin = await isAgentTypeAdmin({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+      });
+
+      const versions = await AgentModel.getVersions(id, user.id, admin);
 
       if (!versions) {
         throw new ApiError(
@@ -406,17 +540,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body: { version }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
-
-      // First verify the user has access to the agent
-      const agent = await AgentModel.findById(id, user.id, isAgentAdmin);
+    async (
+      { params: { id }, body: { version }, headers, user, organizationId },
+      reply,
+    ) => {
+      // Fetch agent to determine its type
+      const agent = await AgentModel.findById(id, user.id, true);
       if (!agent) {
         throw new ApiError(404, "Agent not found");
       }
+
+      // Check update permission for this agent's type
+      await requireAgentTypePermission({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+        action: "update",
+      });
 
       if (agent.agentType !== "agent") {
         throw new ApiError(

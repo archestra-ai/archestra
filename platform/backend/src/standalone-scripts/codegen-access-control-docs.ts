@@ -13,7 +13,9 @@ const __dirname = path.dirname(__filename);
 
 function getResourceDescription(resource: Resource): string {
   const descriptions: Record<Resource, string> = {
-    agent: "Agents including MCP gateways, LLM proxies, and automation agents",
+    agent: "Automation agents with prompts and configurations",
+    mcpGateway: "MCP Gateways that provide unified MCP endpoints for tools",
+    llmProxy: "LLM Proxies for security, observability, and cost management",
     tool: "Individual tools that can be assigned to agents",
     policy: "Tool invocation and trusted data policies for security",
     interaction: "Conversation history and agent interactions",
@@ -32,7 +34,6 @@ function getResourceDescription(resource: Resource): string {
     limit: "Usage limits and quotas",
     tokenPrice: "Token pricing configuration",
     chatSettings: "Chat feature configuration and settings",
-    prompt: "Reusable prompt templates and system prompts",
     ac: "RBAC roles",
   };
   return descriptions[resource] || "";

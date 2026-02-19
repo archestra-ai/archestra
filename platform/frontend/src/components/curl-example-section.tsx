@@ -11,7 +11,7 @@ interface CurlExampleSectionProps {
   code: string;
   tokenForDisplay: string;
   isPersonalTokenSelected: boolean;
-  hasProfileAdminPermission: boolean;
+  hasAdminPermission: boolean;
   selectedTeamToken: TeamToken | null;
   fetchUserTokenMutation: ReturnType<typeof useFetchUserTokenValue>;
   fetchTeamTokenMutation: ReturnType<typeof useFetchTeamTokenValue>;
@@ -21,7 +21,7 @@ export function CurlExampleSection({
   code,
   tokenForDisplay,
   isPersonalTokenSelected,
-  hasProfileAdminPermission,
+  hasAdminPermission,
   selectedTeamToken,
   fetchUserTokenMutation,
   fetchTeamTokenMutation,
@@ -84,7 +84,7 @@ export function CurlExampleSection({
     try {
       let tokenValue = tokenForDisplay;
 
-      if (isPersonalTokenSelected || hasProfileAdminPermission) {
+      if (isPersonalTokenSelected || hasAdminPermission) {
         const fetched = await fetchToken();
         if (fetched) {
           tokenValue = fetched;
@@ -105,7 +105,7 @@ export function CurlExampleSection({
     code,
     tokenForDisplay,
     isPersonalTokenSelected,
-    hasProfileAdminPermission,
+    hasAdminPermission,
     fetchToken,
   ]);
 
@@ -121,8 +121,7 @@ export function CurlExampleSection({
           className="gap-2"
           onClick={handleExposeToken}
           disabled={
-            isLoadingToken ||
-            (!isPersonalTokenSelected && !hasProfileAdminPermission)
+            isLoadingToken || (!isPersonalTokenSelected && !hasAdminPermission)
           }
         >
           {isLoadingToken ? (

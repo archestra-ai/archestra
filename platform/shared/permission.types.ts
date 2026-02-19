@@ -20,6 +20,8 @@ export const actions = [
 
 export const resources = [
   "agent",
+  "mcpGateway",
+  "llmProxy",
   "tool",
   "policy",
   "interaction",
@@ -38,7 +40,6 @@ export const resources = [
   "limit",
   "tokenPrice",
   "chatSettings",
-  "prompt",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809

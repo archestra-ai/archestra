@@ -244,6 +244,75 @@ archestra:
         # Specifies whether RBAC resources should be created
         create: true
 
+      # NetworkPolicy configuration for MCP server pods (SSRF protection)
+      # When enabled, creates a Kubernetes NetworkPolicy that prevents MCP server pods from
+      # accessing private/internal IP ranges, blocking SSRF attacks against cluster services,
+      # cloud metadata endpoints, and other internal infrastructure.
+      #
+      # The policy allows:
+      #   - DNS resolution (UDP/TCP port 53)
+      #   - Egress to the public internet
+      #
+      # The policy blocks (IPv4):
+      #   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918 private ranges)
+      #   - 169.254.0.0/16 (link-local / cloud metadata endpoints like AWS IMDSv1, GCP, Azure)
+      #   - 100.64.0.0/10 (carrier-grade NAT / RFC 6598)
+      #   - 127.0.0.0/8 (loopback)
+      #   - 0.0.0.0/32 (some HTTP libraries treat 0.0.0.0 as localhost)
+      #
+      # The policy also blocks (IPv6, for dual-stack clusters):
+      #   - ::1/128 (IPv6 loopback)
+      #   - fc00::/7 (unique local addresses, equivalent to RFC 1918)
+      #   - fe80::/10 (link-local)
+      #
+      # IMPORTANT: This requires a CNI plugin that supports NetworkPolicies (e.g., Calico, Cilium, Weave).
+      # The default GKE CNI (kubenet) does NOT enforce NetworkPolicies unless Dataplane V2 or Calico is enabled.
+      # See: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+      networkPolicy:
+        # Specifies whether the SSRF protection NetworkPolicy should be created
+        create: false
+
+        # Additional IPv4 CIDR ranges to block (appended to the default private ranges).
+        # Note: These are only added to the IPv4 egress rule. IPv6 private ranges
+        # (::1/128, fc00::/7, fe80::/10) are always blocked and not configurable.
+        # Example:
+        #   additionalDeniedCidrs:
+        #     - 198.51.100.0/24    # Documentation range
+        #     - 203.0.113.0/24     # Documentation range
+        additionalDeniedCidrs: []
+
+        # Additional egress rules to add to the NetworkPolicy.
+        # Use this to allow MCP server pods to reach specific internal Kubernetes
+        # services that would otherwise be blocked by the private range deny rules.
+        #
+        # IMPORTANT: MCP servers that need to connect to internal K8s services
+        # (e.g., via grafana.monitoring.svc.cluster.local) will be blocked by default
+        # because ClusterIPs fall within the denied private ranges. You must add
+        # explicit egress rules here to allow those connections.
+        #
+        # Example - allow access to Grafana in the monitoring namespace (by pod labels):
+        #   additionalEgressRules:
+        #     - to:
+        #         - namespaceSelector:
+        #             matchLabels:
+        #               kubernetes.io/metadata.name: monitoring
+        #           podSelector:
+        #             matchLabels:
+        #               app: grafana
+        #       ports:
+        #         - protocol: TCP
+        #           port: 3000
+        #
+        # Example - allow access by IP CIDR (e.g., internal API gateway subnet):
+        #   additionalEgressRules:
+        #     - to:
+        #         - ipBlock:
+        #             cidr: 10.0.50.0/24
+        #       ports:
+        #         - protocol: TCP
+        #           port: 443
+        additionalEgressRules: []
+
       # RBAC configuration for MCP server pods that need Kubernetes API access
       # Creates a dedicated service account with namespace-scoped permissions for K8s resources
       # Permissions: manage pods, services, deployments, jobs (read-only for secrets removed)

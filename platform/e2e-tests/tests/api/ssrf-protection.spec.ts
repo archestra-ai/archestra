@@ -174,12 +174,12 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
         );
       }
 
-      // Assign tool to profile
+      // Assign tool to profile (local MCP server tools require executionSourceMcpServerId)
       await makeApiRequest({
         request,
         method: "post",
         urlSuffix: `/api/agents/${profileId}/tools/${toolEntity.id}`,
-        data: {},
+        data: { executionSourceMcpServerId: serverId },
       });
 
       // Get an authentication token for tool calls

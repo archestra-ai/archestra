@@ -96,9 +96,13 @@ test("Then we create folder in Vault for Default Team and exemplary secret", asy
 test("Then we configure vault for Default Team", async ({ adminPage }) => {
   test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
   await goToPage(adminPage, "/settings/teams");
-  await adminPage
-    .getByTestId(`${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`)
-    .click();
+  // Wait for the configure button to appear - page may take time to render
+  // team list and vault configuration UI in CI
+  const configureButton = adminPage.getByTestId(
+    `${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`,
+  );
+  await expect(configureButton).toBeVisible({ timeout: 30_000 });
+  await configureButton.click();
   await adminPage
     .getByRole("textbox", { name: "Vault Path" })
     .fill(teamFolderPath);

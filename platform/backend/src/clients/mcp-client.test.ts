@@ -491,6 +491,61 @@ describe("McpClient", () => {
       });
     });
 
+    describe("Secrets caching (N+1 prevention)", () => {
+      test("caches secret lookups across consecutive tool calls to same server", async () => {
+        // Create two tools assigned to the same MCP server (same catalog)
+        const tool1 = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__tool_a",
+          description: "Tool A",
+          parameters: {},
+          catalogId,
+        });
+        const tool2 = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__tool_b",
+          description: "Tool B",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool1.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+        await AgentToolModel.create(agentId, tool2.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockCallTool
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Result A" }],
+            isError: false,
+          })
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Result B" }],
+            isError: false,
+          });
+
+        // Spy on secretManager to count calls
+        const getSecretSpy = vi.spyOn(secretManager(), "getSecret");
+
+        const resultA = await mcpClient.executeToolCall(
+          { id: "call_a", name: "github-mcp-server__tool_a", arguments: {} },
+          agentId,
+        );
+        const resultB = await mcpClient.executeToolCall(
+          { id: "call_b", name: "github-mcp-server__tool_b", arguments: {} },
+          agentId,
+        );
+
+        expect(resultA.isError).toBe(false);
+        expect(resultB.isError).toBe(false);
+
+        // Secret should only be fetched once due to caching
+        expect(getSecretSpy).toHaveBeenCalledTimes(1);
+
+        getSecretSpy.mockRestore();
+      });
+    });
+
     describe("Concurrency limiter", () => {
       test("bypasses limiter when browser streaming is disabled", async () => {
         const originalBrowserStreaming =

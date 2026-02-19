@@ -410,8 +410,9 @@ for (const config of testConfigs) {
         // Usage tracking happens asynchronously after the response is sent
         // We need to wait until the usage is actually recorded before the second request
         // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
-        // Use generous timeouts - in CI, async tracking can be slow due to resource contention
-        const maxPollingAttempts = 60;
+        // Use generous timeouts - in CI, async tracking can be very slow due to resource contention
+        // across parallel test suites and multiple providers running concurrently
+        const maxPollingAttempts = 90;
         const pollingIntervalMs = 1000;
         let usageTracked = false;
 
@@ -431,13 +432,17 @@ for (const config of testConfigs) {
                 modelUsage?: Array<{ model: string; cost: number }>;
               }) => l.id === limitId,
             );
-            // Check if any model has recorded usage (cost > 0)
+            // Check if usage cost has reached the limit value.
+            // Polling for cost > 0 is insufficient because the usage may be partially
+            // tracked (e.g. only input tokens recorded) before the full cost is computed.
+            // We need to wait until the tracked cost actually exceeds the limit ($2)
+            // so the next request will be blocked with 429.
             const totalCost =
               targetLimit?.modelUsage?.reduce(
                 (sum: number, m: { cost: number }) => sum + m.cost,
                 0,
               ) ?? 0;
-            if (totalCost > 0) {
+            if (totalCost >= 2) {
               usageTracked = true;
               break;
             }

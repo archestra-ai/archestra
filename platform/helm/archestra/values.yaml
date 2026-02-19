@@ -258,6 +258,7 @@ archestra:
       #   - 169.254.0.0/16 (link-local / cloud metadata endpoints like AWS IMDSv1, GCP, Azure)
       #   - 100.64.0.0/10 (carrier-grade NAT / RFC 6598)
       #   - 127.0.0.0/8 (loopback)
+      #   - 0.0.0.0/32 (some HTTP libraries treat 0.0.0.0 as localhost)
       #
       # The policy also blocks (IPv6, for dual-stack clusters):
       #   - ::1/128 (IPv6 loopback)
@@ -271,7 +272,9 @@ archestra:
         # Specifies whether the SSRF protection NetworkPolicy should be created
         create: true
 
-        # Additional CIDR ranges to block (added to the default private ranges)
+        # Additional IPv4 CIDR ranges to block (appended to the default private ranges).
+        # Note: These are only added to the IPv4 egress rule. IPv6 private ranges
+        # (::1/128, fc00::/7, fe80::/10) are always blocked and not configurable.
         # Example:
         #   additionalDeniedCidrs:
         #     - 198.51.100.0/24    # Documentation range

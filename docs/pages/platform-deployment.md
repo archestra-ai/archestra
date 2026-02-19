@@ -437,6 +437,7 @@ The Helm chart includes a Kubernetes `NetworkPolicy` that prevents MCP server po
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
 - `127.0.0.0/8` - Loopback
+- `0.0.0.0/32` - Treated as localhost by some HTTP libraries
 
 **Blocked IPv6 ranges** (for dual-stack clusters):
 

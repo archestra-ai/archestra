@@ -24,7 +24,11 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # Rule 1: Allow DNS resolution (required for any outbound connectivity)
+    # Rule 1: Allow DNS resolution (required for any outbound connectivity).
+    # NOTE: This allows DNS to any destination, not just the cluster DNS service (kube-dns).
+    # Restricting to kube-dns would be more secure but adds fragility (custom DNS setups,
+    # CoreDNS label variations, etc.). DNS tunneling is a low-severity risk that can be
+    # mitigated at the DNS server level if needed.
     - ports:
         - protocol: UDP
           port: 53
@@ -41,6 +45,7 @@ spec:
     #   169.254.0.0/16  - Link-local / cloud metadata endpoints (AWS, GCP, Azure)
     #   100.64.0.0/10   - Carrier-grade NAT (RFC 6598)
     #   127.0.0.0/8     - Loopback
+    #   0.0.0.0/32      - Some HTTP libraries treat 0.0.0.0 as localhost
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -51,6 +56,7 @@ spec:
               - 169.254.0.0/16
               - 100.64.0.0/10
               - 127.0.0.0/8
+              - 0.0.0.0/32
               {{- range .Values.archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs }}
               - {{ . }}
               {{- end }}

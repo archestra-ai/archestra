@@ -536,6 +536,10 @@ For production deployments, we strongly recommend using a cloud-hosted PostgreSQ
 
 To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
 
+#### SSRF Protection
+
+Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from accessing private/internal networks. This is especially important when MCP servers execute untrusted code or connect to external services. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods) for configuration details.
+
 ## Infrastructure as Code
 
 ### Terraform

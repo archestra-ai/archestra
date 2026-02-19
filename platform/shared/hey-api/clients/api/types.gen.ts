@@ -14016,19 +14016,28 @@ export type PostApiWebhooksChatopsMsTeamsErrors = {
      * Default Response
      */
     400: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
     };
     /**
      * Default Response
      */
     429: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
     };
     /**
      * Default Response
      */
     500: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
     };
 };
 
@@ -14059,19 +14068,28 @@ export type PostApiWebhooksChatopsSlackErrors = {
      * Default Response
      */
     400: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
     };
     /**
      * Default Response
      */
     429: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
     };
     /**
      * Default Response
      */
     500: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
     };
 };
 
@@ -14102,7 +14120,19 @@ export type PostApiWebhooksChatopsSlackInteractiveErrors = {
      * Default Response
      */
     400: {
-        error: string;
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
     };
 };
 
@@ -14118,6 +14148,43 @@ export type PostApiWebhooksChatopsSlackInteractiveResponses = {
 };
 
 export type PostApiWebhooksChatopsSlackInteractiveResponse = PostApiWebhooksChatopsSlackInteractiveResponses[keyof PostApiWebhooksChatopsSlackInteractiveResponses];
+
+export type PostApiWebhooksChatopsSlackSlashCommandData = {
+    body?: unknown;
+    path?: never;
+    query?: never;
+    url: '/api/webhooks/chatops/slack/slash-command';
+};
+
+export type PostApiWebhooksChatopsSlackSlashCommandErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiWebhooksChatopsSlackSlashCommandError = PostApiWebhooksChatopsSlackSlashCommandErrors[keyof PostApiWebhooksChatopsSlackSlashCommandErrors];
+
+export type PostApiWebhooksChatopsSlackSlashCommandResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type GetChatOpsStatusData = {
     body?: never;

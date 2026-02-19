@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -460,16 +460,20 @@ export function AssignedToolsTable({
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
-        cell: ({ row }) => (
-          <TruncatedText
-            message={row.original.name}
-            className="break-all"
-            maxLength={60}
-          />
-        ),
-        size: 200,
-        minSize: 200,
-        maxSize: 200,
+        cell: ({ row }) => {
+          const displayName =
+            parseFullToolName(row.original.name).toolName || row.original.name;
+          return (
+            <TruncatedText
+              message={displayName}
+              className="break-all"
+              maxLength={60}
+            />
+          );
+        },
+        size: 150,
+        minSize: 150,
+        maxSize: 150,
       },
       {
         id: "origin",
@@ -498,7 +502,7 @@ export function AssignedToolsTable({
                   <TooltipTrigger asChild>
                     <Badge
                       variant="default"
-                      className="bg-indigo-500 max-w-[100px]"
+                      className="bg-indigo-500 max-w-[150px]"
                     >
                       <span className="truncate">{catalogItem.name}</span>
                     </Badge>
@@ -529,7 +533,7 @@ export function AssignedToolsTable({
             </TooltipProvider>
           );
         },
-        size: 100,
+        size: 180,
       },
       {
         id: "assignmentCount",
@@ -695,7 +699,7 @@ export function AssignedToolsTable({
             </WithPermissions>
           );
         },
-        size: 170,
+        size: 140,
       },
       {
         id: "actions",

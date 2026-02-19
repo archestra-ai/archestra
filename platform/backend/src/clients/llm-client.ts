@@ -186,10 +186,11 @@ export function isApiKeyRequired(
 }
 
 /**
- * Fast models for each provider, used for title generation and other quick operations.
+ * Fast models for each provider, used as fallback for title generation and other quick operations.
  * These are optimized for speed and cost rather than capability.
  *
- * TODO: Replace this hardcoded map with fast model values from the models database table.
+ * Primary resolution uses ApiKeyModelModel.getFastestModel() from the database.
+ * This map serves as a fallback when no database result is available.
  */
 export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   anthropic: "claude-3-5-haiku-20241022",

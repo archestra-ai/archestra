@@ -58,8 +58,7 @@
       "axios": ">=1.13.5"
     },
     "patchedDependencies": {
-      "@ai-sdk/google@3.0.21": "patches/@ai-sdk__google@3.0.21.patch",
-      "ai@6.0.72": "patches/ai@6.0.72.patch"
+      "ai@6.0.90": "patches/ai@6.0.90.patch"
     }
   },
   "packageManager": "pnpm@10.29.3"

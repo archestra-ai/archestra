@@ -1,8 +1,8 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index a83591939e7e6d190fa78d3e91b338332b1d1f89..ab400e7368f52dd31a7fac222339c09c1ff3a1cb 100644
+index 1cc3bfa294adccabd72a7b2d9d069b32690d27b0..494497cb8e0e619a69eaa1cc8e6f8848992570a2 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -5167,7 +5167,8 @@ function processUIMessageStream({
+@@ -5200,7 +5200,8 @@ function processUIMessageStream({
                state.message.parts.push({
                  type: "file",
                  mediaType: chunk.mediaType,
@@ -12,7 +12,7 @@ index a83591939e7e6d190fa78d3e91b338332b1d1f89..ab400e7368f52dd31a7fac222339c09c
                });
                write();
                break;
-@@ -5819,7 +5820,8 @@ function runToolsTransformation({
+@@ -5874,7 +5875,8 @@ function runToolsTransformation({
              file: new DefaultGeneratedFileWithType({
                data: chunk.data,
                mediaType: chunk.mediaType
@@ -22,7 +22,7 @@ index a83591939e7e6d190fa78d3e91b338332b1d1f89..ab400e7368f52dd31a7fac222339c09c
            });
            break;
          }
-@@ -7322,7 +7324,8 @@ var DefaultStreamTextResult = class {
+@@ -7388,7 +7390,8 @@ var DefaultStreamTextResult = class {
                controller.enqueue({
                  type: "file",
                  mediaType: part.file.mediaType,
@@ -32,7 +32,7 @@ index a83591939e7e6d190fa78d3e91b338332b1d1f89..ab400e7368f52dd31a7fac222339c09c
                });
                break;
              }
-@@ -7879,7 +7882,8 @@ async function convertToModelMessages(messages, options) {
+@@ -7947,7 +7950,8 @@ async function convertToModelMessages(messages, options) {
                    type: "file",
                    mediaType: part.mediaType,
                    filename: part.filename,

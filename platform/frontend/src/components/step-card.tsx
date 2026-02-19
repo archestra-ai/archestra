@@ -17,11 +17,11 @@ export function StepCard({
   return (
     <div
       className={cn(
-        "relative flex items-start rounded-lg border bg-muted/30 p-2",
+        "relative items-start rounded-lg border bg-muted/30 p-2",
         className,
       )}
     >
-      <div className="flex flex-col gap-4 py-2">
+      <div className="flex flex-col gap-4 p-2">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-xs">
             Step {stepNumber}

@@ -367,7 +367,7 @@ function ChannelBindingsSection() {
                                 <Button
                                   variant="outline"
                                   size="icon-sm"
-                                  aria-label="Open in Teams"
+                                  aria-label="Open in MS Teams"
                                   asChild
                                 >
                                   <a
@@ -383,7 +383,7 @@ function ChannelBindingsSection() {
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open in Teams</TooltipContent>
+                              <TooltipContent>Open in MS Teams</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -396,7 +396,7 @@ function ChannelBindingsSection() {
                                     <Button
                                       variant="outline"
                                       size="icon-sm"
-                                      aria-label="Open in Teams"
+                                      aria-label="Open in MS Teams"
                                     >
                                       <img
                                         src="/icons/ms-teams.png"
@@ -406,7 +406,9 @@ function ChannelBindingsSection() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
-                                <TooltipContent>Open in Teams</TooltipContent>
+                                <TooltipContent>
+                                  Open in MS Teams
+                                </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <DropdownMenuContent align="start">

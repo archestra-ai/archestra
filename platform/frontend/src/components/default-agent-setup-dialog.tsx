@@ -95,7 +95,7 @@ function StepEnableMsTeams() {
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 min-w-0">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium">Agents</h4>
-          <span className="text-sm font-medium">Teams enabled</span>
+          <span className="text-sm font-medium">MS Teams enabled</span>
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -160,7 +160,10 @@ function StepSelectAgentInTeams() {
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <StepCard stepNumber={2} title="Select default Agent for Teams channel">
+      <StepCard
+        stepNumber={2}
+        title="Select default Agent for MS Teams channel"
+      >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">

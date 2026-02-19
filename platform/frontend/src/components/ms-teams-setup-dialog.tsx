@@ -236,7 +236,7 @@ function buildSteps() {
         </>,
         <>
           Accept the terms and save — this enables your bot to communicate with
-          Teams
+          MS Teams
         </>,
       ],
     },
@@ -245,7 +245,7 @@ function buildSteps() {
       component: "manifest" as const,
     },
     {
-      title: "Install in Teams",
+      title: "Install in MS Teams",
       video: "/ms-teams/ms-teams-upload-app.mp4",
       instructions: [
         <>

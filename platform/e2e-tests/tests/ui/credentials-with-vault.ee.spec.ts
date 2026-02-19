@@ -21,9 +21,6 @@ test.describe.configure({ mode: "serial" });
 // Check if BYOS Vault is enabled via the features API.
 // In CI, the Vault job deploys with ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT so all
 // replicas start in BYOS mode. Locally, this may not be configured, so tests skip gracefully.
-// NOTE: We intentionally do NOT call initializeSecretsManager here because with multiple
-// replicas (replicaCount > 1), it only affects one pod's in-memory state, causing getFeatures
-// to return byosEnabled=false when hitting a different replica.
 test("Check if BYOS Vault is enabled", async ({
   adminPage,
   extractCookieHeaders,

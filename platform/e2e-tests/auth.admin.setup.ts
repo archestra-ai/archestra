@@ -22,12 +22,6 @@ setup("authenticate as admin", async ({ page }) => {
     data: { onboardingComplete: true, globalToolPolicy: "restrictive" },
   });
 
-  // NOTE: Do NOT call initializeSecretsManager here. With replicaCount > 1, it only
-  // affects one replica's in-memory state, leaving others inconsistent. The secrets manager
-  // type is controlled via ARCHESTRA_SECRETS_MANAGER env var at deploy time:
-  // - Non-vault jobs: "Vault" (from values-ci.yaml)
-  // - Vault job: "READONLY_VAULT" (from extra-helm-set override)
-
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
   await page.reload({ waitUntil: "domcontentloaded" });
 

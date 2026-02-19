@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { TimeInMs } from "@shared";
 import { WebClient } from "@slack/web-api";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import type {
@@ -351,9 +353,21 @@ class SlackProvider implements ChatOpsProvider {
       return null;
     }
 
+    // Check distributed cache first (avoids Slack API call per message)
+    const cacheKey = `${CacheKey.SlackUserEmail}-${userId}` as AllowedCacheKey;
+    const cached = await cacheManager.get<string>(cacheKey);
+    if (cached) return cached;
+
     try {
       const result = await this.client.users.info({ user: userId });
-      return result.user?.profile?.email || null;
+      const email = result.user?.profile?.email || null;
+      if (email) {
+        // Cache for 5 minutes — email rarely changes
+        await cacheManager
+          .set(cacheKey, email, TimeInMs.Minute * 5)
+          .catch(() => {});
+      }
+      return email;
     } catch (error) {
       logger.warn(
         { error: errorMessage(error), userId },

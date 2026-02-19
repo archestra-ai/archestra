@@ -640,12 +640,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             return reply.send({ ok: true });
           }
 
-          // Process message through bound agent
-          await chatOpsManager.processMessage({
-            message,
-            provider,
-            sendReply: true,
-          });
+          // Process message through bound agent asynchronously.
+          // Return 200 immediately — Slack has a 3-second timeout for event deliveries.
+          // Dedup (in-memory + DB) protects against retries from Slack.
+          chatOpsManager
+            .processMessage({
+              message,
+              provider,
+              sendReply: true,
+            })
+            .catch((error) => {
+              logger.error(
+                {
+                  messageId: message.messageId,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                "[ChatOps] Error processing Slack message (async)",
+              );
+            });
         }
 
         return reply.send({ ok: true });

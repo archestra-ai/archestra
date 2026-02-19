@@ -624,9 +624,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CheckSecretsConnectivity]: {
     organization: ["update"],
   },
-  [RouteId.InitializeSecretsManager]: {
-    organization: ["update"],
-  },
   [RouteId.GetSecret]: {
     organization: ["read"],
   },

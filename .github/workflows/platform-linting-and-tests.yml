@@ -330,12 +330,15 @@ jobs:
             extra_args: "--grep '@webkit' --workers=1"
             artifact: blob-report-ui-webkit
           # Vault tests - isolated to avoid race conditions with secrets manager switching
+          # Uses READONLY_VAULT so all replicas start in BYOS mode (in-memory initializeSecretsManager
+          # only affects one replica, which fails with replicaCount > 1)
           - name: Vault
             runner: e2e-runner-16cpu
             projects: credentials-with-vault
             shard: ""
             extra_args: ""
             artifact: blob-report-vault
+            extra_helm_set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -377,6 +380,7 @@ jobs:
           platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
+          extra-helm-set: ${{ matrix.extra_helm_set }}
 
       - name: Run E2E tests
         id: e2e

@@ -73,8 +73,8 @@ export function McpConnectionInstructions({
   const { data: mcpServers = [] } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
-  const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ["admin"],
+  const { data: hasAdminPermission } = useHasPermissions({
+    mcpGateway: ["admin"],
   });
 
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -260,7 +260,7 @@ export function McpConnectionInstructions({
         ? userToken
           ? `${userToken.tokenStart}***`
           : "ask-admin-for-access-token"
-        : hasProfileAdminPermission && selectedTeamToken
+        : hasAdminPermission && selectedTeamToken
           ? `${selectedTeamToken.tokenStart}***`
           : "ask-admin-for-access-token";
 
@@ -598,7 +598,7 @@ export function McpConnectionInstructions({
                   onClick={handleExposeToken}
                   disabled={
                     isLoadingToken ||
-                    (!isPersonalTokenSelected && !hasProfileAdminPermission)
+                    (!isPersonalTokenSelected && !hasAdminPermission)
                   }
                 >
                   {isLoadingToken ? (
@@ -623,7 +623,7 @@ export function McpConnectionInstructions({
                   size="sm"
                   className="gap-2 bg-transparent"
                   onClick={
-                    isPersonalTokenSelected || hasProfileAdminPermission
+                    isPersonalTokenSelected || hasAdminPermission
                       ? handleCopyConfig
                       : handleCopyConfigWithoutRealToken
                   }

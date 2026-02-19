@@ -13,10 +13,12 @@ const __dirname = path.dirname(__filename);
 
 function getResourceDescription(resource: Resource): string {
   const descriptions: Record<Resource, string> = {
-    profile: "Profiles that can use tools and interact with users",
-    tool: "Individual tools that can be assigned to profiles",
+    agent: "Automation agents with prompts and configurations",
+    mcpGateway: "MCP Gateways that provide unified MCP endpoints for tools",
+    llmProxy: "LLM Proxies for security, observability, and cost management",
+    tool: "Individual tools that can be assigned to agents",
     policy: "Tool invocation and trusted data policies for security",
-    interaction: "Conversation history and profile interactions",
+    interaction: "Conversation history and agent interactions",
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
     organization: "Organization settings",
@@ -32,7 +34,6 @@ function getResourceDescription(resource: Resource): string {
     limit: "Usage limits and quotas",
     tokenPrice: "Token pricing configuration",
     chatSettings: "Chat feature configuration and settings",
-    prompt: "Reusable prompt templates and system prompts",
     ac: "RBAC roles",
   };
   return descriptions[resource] || "";
@@ -139,10 +140,10 @@ Archestra uses a role-based access control (RBAC) system to manage user permissi
 
 Permissions in Archestra are defined using a \`resource:action\` format, where:
 
-- **Resource**: The type of object or feature being accessed (e.g., \`profile\`, \`tool\`, \`organization\`)
+- **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`tool\`, \`organization\`)
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
-For example, the permission \`profile:create\` allows creating new profiles, while \`organization:read\` allows viewing organization information.
+For example, the permission \`agent:create\` allows creating new automation agents, \`mcpGateway:create\` allows creating MCP gateways, \`llmProxy:create\` allows creating LLM proxies, and \`organization:read\` allows viewing organization information.
 
 ## Predefined Roles
 
@@ -177,16 +178,16 @@ Grant users only the minimum permissions necessary for their role. Start with th
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign profiles and MCP servers** to specific teams
+2. **Assign agents and MCP servers** to specific teams
 3. **Add members to teams** based on their role and responsibilities
 
 #### Team Access Control Rules
 
-**For Profiles:**
+**For Agents (MCP Gateways, LLM Proxies, Automation Agents):**
 
-- Team members can only see profiles assigned to teams they belong to
-- Exception: Users with \`profile:admin\` permission can see all profiles
-- Exception: Profiles with no team assignment are visible to all organization members
+- Team members can only see agents assigned to teams they belong to
+- Exception: Users with \`agent:admin\` permission can see all agents
+- Exception: Agents with no team assignment are visible to all organization members
 
 **For MCP Servers:**
 
@@ -196,7 +197,7 @@ Combine roles with team-based access control for fine-grained resource access:
 
 **Associated Artifacts:**
 
-Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for profiles and MCP servers they have access to.
+Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for agents and MCP servers they have access to.
 
 ### Regular Review
 
@@ -204,7 +205,7 @@ Periodically review custom roles and member assignments to ensure they align wit
 
 ### Role Naming
 
-Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Profile-Manager", "Read-Only-Analyst", "Tool-Developer").
+Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Agent-Manager", "Read-Only-Analyst", "Tool-Developer").
 `;
 }
 

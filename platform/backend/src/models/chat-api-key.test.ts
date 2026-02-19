@@ -382,7 +382,7 @@ describe("ChatApiKeyModel", () => {
         org.id,
         admin.id,
         [],
-        true, // isProfileAdmin
+        true, // isAgentAdmin
       );
 
       // Admin sees own personal key, all team keys, all org-wide keys, but not other users' personal keys

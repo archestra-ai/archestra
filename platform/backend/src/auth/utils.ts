@@ -67,7 +67,7 @@ export const hasPermission = async (
  * Check if a user has a specific permission based on their role
  * @param userId - The user's ID
  * @param organizationId - The organization ID
- * @param resource - The resource to check (e.g., "profile", "mcpServer")
+ * @param resource - The resource to check (e.g., "agent", "mcpServer")
  * @param action - The action to check (e.g., "admin", "read", "write")
  */
 export const userHasPermission = async (

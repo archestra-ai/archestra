@@ -870,7 +870,7 @@ export function AssignedToolsTable({
             <Tooltip>
               <TooltipTrigger asChild>
                 <PermissionButton
-                  permissions={{ profile: ["update"], tool: ["update"] }}
+                  permissions={{ agent: ["update"], tool: ["update"] }}
                   size="sm"
                   variant="outline"
                   onClick={handleAutoConfigurePolicies}

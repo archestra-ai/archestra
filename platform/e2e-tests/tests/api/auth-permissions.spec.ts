@@ -46,7 +46,7 @@ test.describe("Auth Permissions API", () => {
     expect(permissions.organization).toContain("read");
     expect(permissions.organization).toContain("update");
     expect(permissions.organization).toContain("delete");
-    expect(permissions.profile).toBeDefined();
+    expect(permissions.agent).toBeDefined();
     expect(permissions.tool).toBeDefined();
   });
 

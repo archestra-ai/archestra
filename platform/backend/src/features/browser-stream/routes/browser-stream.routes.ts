@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { ConversationModel } from "@/models";
@@ -64,14 +64,14 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   async function getUserContext(
     request: FastifyRequest,
   ): Promise<BrowserUserContext> {
-    const { success: userIsProfileAdmin } = await hasPermission(
-      { profile: ["admin"] },
-      request.headers,
-    );
+    const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      userId: request.user.id,
+      organizationId: request.organizationId,
+    });
     return {
       userId: request.user.id,
       organizationId: request.organizationId,
-      userIsProfileAdmin,
+      userIsAgentAdmin,
     };
   }
 

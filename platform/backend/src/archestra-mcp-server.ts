@@ -203,15 +203,15 @@ export async function executeArchestraTool(
     // Check user has access if user token is being used
     const userId = tokenAuth?.userId;
     if (userId && organizationId) {
-      const isProfileAdmin = await userHasPermission(
+      const isAgentAdmin = await userHasPermission(
         userId,
         organizationId,
-        "profile",
+        "agent",
         "admin",
       );
 
       const userAccessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, isProfileAdmin);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
       if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
         return {
           content: [
@@ -2960,11 +2960,11 @@ export async function getAgentTools(context: {
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
   if (userId && !skipAccessCheck) {
-    // Check if user has profile admin permission directly (don't trust caller)
+    // Check if user has agent admin permission directly (don't trust caller)
     const isAgentAdmin = await userHasPermission(
       userId,
       organizationId,
-      "profile",
+      "agent",
       "admin",
     );
 

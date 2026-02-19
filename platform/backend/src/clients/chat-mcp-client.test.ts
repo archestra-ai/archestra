@@ -262,7 +262,7 @@ describe("chat-mcp-client health check", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsProfileAdmin: false,
+      userIsAgentAdmin: false,
     });
 
     // Ping should have been called on the dead client
@@ -331,7 +331,7 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsProfileAdmin: false,
+      userIsAgentAdmin: false,
     });
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
@@ -340,7 +340,7 @@ describe("chat-mcp-client tool caching", () => {
       agentId: agent.id,
       userId: user.id,
       organizationId: org.id,
-      userIsProfileAdmin: false,
+      userIsAgentAdmin: false,
     });
 
     // Check that second call returns the same tool names

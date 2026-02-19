@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { expect, test } from "../fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues
@@ -771,21 +772,106 @@ const zhipuaiConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const bedrockConfig: ToolInvocationTestConfig = {
+  providerName: "Bedrock",
+
+  endpoint: (agentId) => `/v1/bedrock/${agentId}/converse`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+    messages: [{ role: "user", content: [{ text: content }] }],
+    toolConfig: {
+      tools: tools.map((t) => ({
+        toolSpec: {
+          name: t.name,
+          description: t.description,
+          inputSchema: { json: t.parameters },
+        },
+      })),
+    },
+  }),
+
+  trustedDataPolicyAttributePath: "$.content[0].text",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.output).toBeDefined();
+    expect(response.output.message).toBeDefined();
+
+    const content = response.output.message.content;
+    const textBlock = content.find(
+      (c: { text?: string }) => "text" in c && c.text,
+    );
+    expect(textBlock).toBeDefined();
+    expect(textBlock.text).toContain("read_file");
+    expect(textBlock.text).toContain("denied");
+
+    const toolUseBlocks = content.filter(
+      (c: { toolUse?: unknown }) => "toolUse" in c,
+    );
+    expect(toolUseBlocks.length).toBe(0);
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.output).toBeDefined();
+    expect(response.output.message).toBeDefined();
+
+    const content = response.output.message.content;
+    const toolUseBlocks = content.filter(
+      (c: { toolUse?: unknown }) => "toolUse" in c,
+    );
+    expect(toolUseBlocks.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolUseBlocks.find(
+        (c: { toolUse: { name: string } }) => c.toolUse.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const content = response.output.message.content;
+    const toolUseBlocks = content.filter(
+      (c: { toolUse?: unknown }) => "toolUse" in c,
+    );
+    const toolCall = toolUseBlocks.find(
+      (c: { toolUse: { name: string } }) => c.toolUse.name === toolName,
+    );
+    matcher(toolCall.toolUse.input[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
+        m.content?.some((c) => c.text?.includes(content)),
+      ),
+    ),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
 
-const testConfigs: ToolInvocationTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cerebrasConfig,
-  cohereConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: bedrockConfig,
+} satisfies Record<SupportedProvider, ToolInvocationTestConfig>;
+
+const testConfigs = Object.values(testConfigsMap);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {

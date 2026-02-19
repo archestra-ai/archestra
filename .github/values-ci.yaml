@@ -24,6 +24,7 @@ archestra:
     ARCHESTRA_OLLAMA_BASE_URL: "http://e2e-tests-wiremock:8080/ollama/v1"
     ARCHESTRA_ZHIPUAI_BASE_URL: "http://e2e-tests-wiremock:8080/zhipuai/v4"
     ARCHESTRA_MISTRAL_BASE_URL: "http://e2e-tests-wiremock:8080/mistral/v1"
+    ARCHESTRA_BEDROCK_BASE_URL: "http://e2e-tests-wiremock:8080/bedrock"
     # Chat API keys (for e2e testing)
     ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
     ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key

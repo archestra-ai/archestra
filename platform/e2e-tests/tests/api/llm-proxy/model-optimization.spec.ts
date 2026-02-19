@@ -402,17 +402,23 @@ function generateLongMessage(): string {
 // Test Suite
 // =============================================================================
 
-const testConfigs: ModelOptimizationTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cohereConfig,
-  cerebrasConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: null, // Bedrock messages use nested content arrays that the tokenizer doesn't count correctly
+} satisfies Record<SupportedProvider, ModelOptimizationTestConfig | null>;
+
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is ModelOptimizationTestConfig => c !== null,
+);
 
 test.describe("LLMProxy-ModelOptimization", () => {
   for (const config of testConfigs) {

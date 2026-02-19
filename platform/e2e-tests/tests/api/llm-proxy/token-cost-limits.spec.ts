@@ -273,21 +273,52 @@ const cohereConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const bedrockConfig: TokenCostLimitTestConfig = {
+  providerName: "Bedrock",
+
+  endpoint: (profileId) => `/v1/bedrock/${profileId}/converse`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    modelId: "test-bedrock-cost-limit",
+    messages: [{ role: "user", content: [{ text: content }] }],
+  }),
+
+  modelName: "test-bedrock-cost-limit",
+
+  // WireMock returns: inputTokens: 100, outputTokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  tokenPrice: {
+    provider: "bedrock",
+    model: "test-bedrock-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
 
-const testConfigs: TokenCostLimitTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cohereConfig,
-  cerebrasConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: bedrockConfig,
+} satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
+
+const testConfigs = Object.values(testConfigsMap);
 
 for (const config of testConfigs) {
   test.describe(

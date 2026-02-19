@@ -610,7 +610,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       workspaceId: params.message.workspaceId,
     });
 
-    const cardBody = existingBinding
+    const cardBody = existingBinding?.agentId
       ? [
           {
             type: "TextBlock",

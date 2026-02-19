@@ -784,30 +784,37 @@ async function handleStreaming<
         ),
       );
 
-      await InteractionModel.create({
-        profileId: agent.id,
-        externalAgentId,
-        executionId,
-        userId,
-        sessionId,
-        sessionSource,
-        type: provider.interactionType,
-        // Cast generic types to interaction types - valid at runtime
-        request: originalRequest as unknown as InteractionRequest,
-        processedRequest: request as unknown as InteractionRequest,
-        response:
-          streamAdapter.toProviderResponse() as unknown as InteractionResponse,
-        model: actualModel,
-        baselineModel,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cost: actualCost?.toFixed(10) ?? null,
-        baselineCost: baselineCost?.toFixed(10) ?? null,
-        toonTokensBefore: toonStats.tokensBefore,
-        toonTokensAfter: toonStats.tokensAfter,
-        toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-        toonSkipReason,
-      });
+      try {
+        await InteractionModel.create({
+          profileId: agent.id,
+          externalAgentId,
+          executionId,
+          userId,
+          sessionId,
+          sessionSource,
+          type: provider.interactionType,
+          // Cast generic types to interaction types - valid at runtime
+          request: originalRequest as unknown as InteractionRequest,
+          processedRequest: request as unknown as InteractionRequest,
+          response:
+            streamAdapter.toProviderResponse() as unknown as InteractionResponse,
+          model: actualModel,
+          baselineModel,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cost: actualCost?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore: toonStats.tokensBefore,
+          toonTokensAfter: toonStats.tokensAfter,
+          toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+          toonSkipReason,
+        });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create interaction record (agent may have been deleted)",
+        );
+      }
     }
   }
 }
@@ -1050,30 +1057,37 @@ async function handleNonStreaming<
     ),
   );
 
-  await InteractionModel.create({
-    profileId: agent.id,
-    externalAgentId,
-    executionId,
-    userId,
-    sessionId,
-    sessionSource,
-    type: provider.interactionType,
-    // Cast generic types to interaction types - valid at runtime
-    request: originalRequest as unknown as InteractionRequest,
-    processedRequest: request as unknown as InteractionRequest,
-    response:
-      responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
-    model: actualModel,
-    baselineModel,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cost: actualCost?.toFixed(10) ?? null,
-    baselineCost: baselineCost?.toFixed(10) ?? null,
-    toonTokensBefore: toonStats.tokensBefore,
-    toonTokensAfter: toonStats.tokensAfter,
-    toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-    toonSkipReason,
-  });
+  try {
+    await InteractionModel.create({
+      profileId: agent.id,
+      externalAgentId,
+      executionId,
+      userId,
+      sessionId,
+      sessionSource,
+      type: provider.interactionType,
+      // Cast generic types to interaction types - valid at runtime
+      request: originalRequest as unknown as InteractionRequest,
+      processedRequest: request as unknown as InteractionRequest,
+      response:
+        responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
+      model: actualModel,
+      baselineModel,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cost: actualCost?.toFixed(10) ?? null,
+      baselineCost: baselineCost?.toFixed(10) ?? null,
+      toonTokensBefore: toonStats.tokensBefore,
+      toonTokensAfter: toonStats.tokensAfter,
+      toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+      toonSkipReason,
+    });
+  } catch (interactionError) {
+    logger.error(
+      { err: interactionError, profileId: agent.id },
+      "Failed to create interaction record (agent may have been deleted)",
+    );
+  }
 
   return reply.send(responseAdapter.getOriginalResponse());
 }

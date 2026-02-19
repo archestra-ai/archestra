@@ -187,6 +187,25 @@ describe("OrganizationModel", () => {
 
       expect(updated).toBeNull();
     });
+
+    test("should return unchanged organization when data is empty", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // Patch with empty object should not throw "No values to set"
+      const updated = await OrganizationModel.patch(org.id, {});
+
+      expect(updated).not.toBeNull();
+      expect(updated?.id).toBe(org.id);
+      expect(updated?.theme).toBe(org.theme);
+    });
+
+    test("should return null when patching non-existent org with empty data", async () => {
+      const updated = await OrganizationModel.patch("non-existent-id", {});
+
+      expect(updated).toBeNull();
+    });
   });
 
   describe("patch logo validation (via UpdateOrganizationSchema)", () => {

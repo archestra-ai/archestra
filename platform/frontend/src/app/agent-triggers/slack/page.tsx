@@ -10,6 +10,7 @@ import {
   Loader2,
   MessageSquare,
   Pencil,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import Image from "next/image";
@@ -18,6 +19,7 @@ import { useState } from "react";
 import { AgentDialog } from "@/components/agent-dialog";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
+import { EnableAgentsDialog } from "@/components/enable-agents-dialog";
 import { SlackAgentSetupDialog } from "@/components/slack-agent-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
@@ -217,6 +219,7 @@ function ChannelBindingsSection() {
   const updateMutation = useUpdateChatOpsBinding();
   const queryClient = useQueryClient();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
+  const [enableDialogOpen, setEnableDialogOpen] = useState(false);
 
   const slackAgents =
     agents?.filter((a) =>
@@ -273,7 +276,18 @@ function ChannelBindingsSection() {
   return (
     <section className="flex flex-col gap-4 -mt-2">
       <div>
-        <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEnableDialogOpen(true)}
+            className="text-xs ml-2"
+          >
+            <Plus className="h-2 w-2" />
+            Add more
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           Assign agents to Slack channels using the dropdown below or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
@@ -486,6 +500,12 @@ function ChannelBindingsSection() {
           </CardContent>
         </Card>
       )}
+
+      <EnableAgentsDialog
+        open={enableDialogOpen}
+        onOpenChange={setEnableDialogOpen}
+        provider="slack"
+      />
 
       <AgentDialog
         open={!!editingAgent}

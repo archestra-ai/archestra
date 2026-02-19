@@ -10,6 +10,7 @@ import {
   Loader2,
   MessageSquare,
   Pencil,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +19,7 @@ import { AgentDialog } from "@/components/agent-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { DefaultAgentSetupDialog } from "@/components/default-agent-setup-dialog";
 import Divider from "@/components/divider";
+import { EnableAgentsDialog } from "@/components/enable-agents-dialog";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -195,7 +197,7 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
         <SetupStep
-          title="Enable Slack for your Agents and assign channels to them"
+          title="Enable MS Teams for your Agents and assign channels to them"
           description="Agents with enabled MS Teams will appear in the table below. Then you can assign channels to them."
           done={hasBindings}
           ctaLabel="Configure"
@@ -229,6 +231,7 @@ function ChannelBindingsSection() {
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const updateMutation = useUpdateChatOpsBinding();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
+  const [enableDialogOpen, setEnableDialogOpen] = useState(false);
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
   const msTeamsAgents =
@@ -286,7 +289,18 @@ function ChannelBindingsSection() {
   return (
     <section className="flex flex-col gap-4 -mt-2">
       <div>
-        <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs ml-2"
+            onClick={() => setEnableDialogOpen(true)}
+          >
+            <Plus className="h-2 w-2" />
+            Add more
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           Assign agents to Teams channels using the dropdown below or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
@@ -496,6 +510,12 @@ function ChannelBindingsSection() {
           </CardContent>
         </Card>
       )}
+
+      <EnableAgentsDialog
+        open={enableDialogOpen}
+        onOpenChange={setEnableDialogOpen}
+        provider="ms-teams"
+      />
 
       <RefreshChannelsDialog
         open={refreshDialogOpen}

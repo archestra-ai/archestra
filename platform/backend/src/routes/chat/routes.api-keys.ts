@@ -44,8 +44,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      // Check if user is a profile admin
-      const { success: isProfileAdmin } = await hasPermission(
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
         { agent: ["admin"] },
         headers,
       );
@@ -54,7 +54,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         user.id,
         userTeamIds,
-        isProfileAdmin,
+        isAgentAdmin,
       );
       return reply.send(apiKeys);
     },
@@ -291,7 +291,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const { success: isProfileAdmin } = await hasPermission(
+      const { success: isAgentAdmin } = await hasPermission(
         { agent: ["admin"] },
         headers,
       );
@@ -302,7 +302,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Team keys: visible to team members or admins
-      if (apiKey.scope === "team" && !isProfileAdmin) {
+      if (apiKey.scope === "team" && !isAgentAdmin) {
         if (!apiKey.teamId || !userTeamIds.includes(apiKey.teamId)) {
           throw new ApiError(404, "Chat API key not found");
         }
@@ -567,13 +567,13 @@ async function validateScopeAndAuthorization(params: {
     }
   }
 
-  // For org-wide keys, require profile admin permission
+  // For org-wide keys, require agent admin permission
   if (scope === "org_wide") {
-    const { success: isProfileAdmin } = await hasPermission(
+    const { success: isAgentAdmin } = await hasPermission(
       { agent: ["admin"] },
       headers,
     );
-    if (!isProfileAdmin) {
+    if (!isAgentAdmin) {
       throw new ApiError(403, "Only admins can use organization-wide scope");
     }
   }
@@ -614,13 +614,13 @@ async function authorizeApiKeyAccess(
     return;
   }
 
-  // Org-wide keys: require profile admin
+  // Org-wide keys: require agent admin
   if (apiKey.scope === "org_wide") {
-    const { success: isProfileAdmin } = await hasPermission(
+    const { success: isAgentAdmin } = await hasPermission(
       { agent: ["admin"] },
       headers,
     );
-    if (!isProfileAdmin) {
+    if (!isAgentAdmin) {
       throw new ApiError(
         403,
         "Only admins can modify organization-wide API keys",

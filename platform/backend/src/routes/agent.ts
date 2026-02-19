@@ -2,8 +2,8 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
+  hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
-  hasPermission,
   isAgentTypeAdmin,
   requireAgentTypePermission,
 } from "@/auth";
@@ -79,7 +79,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         user,
         organizationId,
-        headers,
       },
       reply,
     ) => {
@@ -109,10 +108,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const { success: isAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      // Check admin for the specific type(s) being queried, or any type if unfiltered
+      const isAdmin = effectiveTypes
+        ? effectiveTypes.length === 1
+          ? await isAgentTypeAdmin({
+              userId: user.id,
+              organizationId,
+              agentType: effectiveTypes[0],
+            })
+          : await hasAnyAgentTypeAdminPermission({
+              userId: user.id,
+              organizationId,
+            })
+        : await hasAnyAgentTypeAdminPermission({
+            userId: user.id,
+            organizationId,
+          });
+
       return reply.send(
         await AgentModel.findAllPaginated(
           { limit, offset },
@@ -158,7 +170,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { agentType, agentTypes }, headers, user, organizationId },
+      { query: { agentType, agentTypes }, user, organizationId },
       reply,
     ) => {
       // Determine the effective type filter
@@ -185,10 +197,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const { success: isAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      // Check admin for the specific type(s) being queried, or any type if unfiltered
+      const isAdmin = effectiveTypes
+        ? effectiveTypes.length === 1
+          ? await isAgentTypeAdmin({
+              userId: user.id,
+              organizationId,
+              agentType: effectiveTypes[0],
+            })
+          : await hasAnyAgentTypeAdminPermission({
+              userId: user.id,
+              organizationId,
+            })
+        : await hasAnyAgentTypeAdminPermission({
+            userId: user.id,
+            organizationId,
+          });
+
       return reply.send(
         await AgentModel.findAll(user.id, isAdmin, {
           // agentTypes takes precedence over agentType
@@ -269,13 +294,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (userTeamIds.length === 0) {
             throw new ApiError(
               403,
-              "You must be a member of at least one team to create a profile",
+              "You must be a member of at least one team to create an agent",
             );
           }
-          throw new ApiError(
-            400,
-            "You must assign at least one team to the profile",
-          );
+          throw new ApiError(400, "You must assign at least one team");
         }
 
         // Verify user is a member of all specified teams
@@ -284,7 +306,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (invalidTeams.length > 0) {
           throw new ApiError(
             403,
-            "You can only assign profiles to teams you are a member of",
+            "You can only assign teams you are a member of",
           );
         }
       }
@@ -394,10 +416,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           if (body.teams.length === 0) {
             // Non-admin users must assign at least one team
-            throw new ApiError(
-              400,
-              "You must assign at least one team to the profile",
-            );
+            throw new ApiError(400, "You must assign at least one team");
           }
 
           // Verify user is a member of all specified teams
@@ -408,7 +427,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (invalidTeams.length > 0) {
             throw new ApiError(
               403,
-              "You can only assign profiles to teams you are a member of",
+              "You can only assign teams you are a member of",
             );
           }
         }

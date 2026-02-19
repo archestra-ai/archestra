@@ -70,13 +70,35 @@ export async function hasAnyAgentTypeReadPermission(params: {
   userId: string;
   organizationId: string;
 }): Promise<boolean> {
+  return hasAnyAgentTypePermission({ ...params, action: "read" });
+}
+
+/**
+ * Returns true if the user has admin permission on ANY of the three agent-type resources.
+ * Used when no agentType filter is provided on list endpoints to determine
+ * whether to bypass team-based access filtering.
+ */
+export async function hasAnyAgentTypeAdminPermission(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  return hasAnyAgentTypePermission({ ...params, action: "admin" });
+}
+
+// ===== Internal helpers =====
+
+async function hasAnyAgentTypePermission(params: {
+  userId: string;
+  organizationId: string;
+  action: Action;
+}): Promise<boolean> {
   const resources: Resource[] = ["agent", "mcpGateway", "llmProxy"];
   for (const resource of resources) {
     const allowed = await userHasPermission(
       params.userId,
       params.organizationId,
       resource,
-      "read",
+      params.action,
     );
     if (allowed) return true;
   }

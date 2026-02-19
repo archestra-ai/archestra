@@ -62,20 +62,20 @@ class ChatApiKeyModel {
    *
    * Visibility rules:
    * - Users see: their personal keys + team keys for their teams + org-wide keys
-   * - Users with profile:admin: see all keys EXCEPT personal keys of other users
+   * - Users with agent:admin: see all keys EXCEPT personal keys of other users
    */
   static async getVisibleKeys(
     organizationId: string,
     userId: string,
     userTeamIds: string[],
-    isProfileAdmin: boolean,
+    isAgentAdmin: boolean,
   ): Promise<ChatApiKeyWithScopeInfo[]> {
     // Build conditions based on visibility rules
     const conditions = [
       eq(schema.chatApiKeysTable.organizationId, organizationId),
     ];
 
-    if (isProfileAdmin) {
+    if (isAgentAdmin) {
       // Admins see all keys except other users' personal keys
       const adminConditions = [
         // Own personal keys

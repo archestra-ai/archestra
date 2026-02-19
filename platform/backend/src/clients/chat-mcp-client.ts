@@ -148,7 +148,7 @@ export const __test = {
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
- * @param userIsProfileAdmin - Whether the user has profile admin permission
+ * @param userIsProfileAdmin - Whether the user has agent:admin permission
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
@@ -199,7 +199,7 @@ export async function selectMCPGatewayToken(
   // Get all team tokens
   const tokens = await TeamTokenModel.findAll();
 
-  // 2. If user is profile admin, use organization token (teamId is null)
+  // 2. If user is agent admin, use organization token (teamId is null)
   if (userIsProfileAdmin) {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
@@ -374,7 +374,7 @@ export function closeChatMcpClient(
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
  * @param organizationId - The organization ID for token creation
- * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param userIsProfileAdmin - Whether the user has agent:admin permission
  * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
@@ -586,7 +586,7 @@ function addAdditionalPropertiesFalse(
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
  * @param organizationId - The organization ID for token creation
- * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param userIsProfileAdmin - Whether the user has agent:admin permission
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object

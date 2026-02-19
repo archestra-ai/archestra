@@ -635,7 +635,7 @@ describe("validateExternalIdpToken", () => {
     expect(result).toBeNull();
   });
 
-  test("grants access when user has profile:admin permission", async ({
+  test("grants access when user has mcpGateway:admin permission", async ({
     makeOrganization,
     makeUser,
     makeMember,

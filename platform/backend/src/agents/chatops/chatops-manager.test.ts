@@ -650,7 +650,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
   }) => {
     const adminUser = await makeUser({ email: "fulladmin@example.com" });
     const org = await makeOrganization();
-    // Make user an admin (admins have all permissions including profile:admin)
+    // Make user an admin (admins have all permissions including agent:admin)
     await makeMember(adminUser.id, org.id, { role: "admin" });
 
     // Agent NOT in any of admin's teams

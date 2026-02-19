@@ -479,7 +479,7 @@ export async function validateTeamToken(
  * Validates that:
  * 1. The token is valid (exists and matches)
  * 2. The profile is accessible via this token:
- *    - User has profile:admin permission (can access all profiles), OR
+ *    - User has mcpGateway:admin permission (can access all gateways), OR
  *    - User is a member of at least one team that the profile is assigned to
  */
 export async function validateUserToken(

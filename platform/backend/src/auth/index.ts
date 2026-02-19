@@ -1,5 +1,6 @@
 export {
   getResourceForAgentType,
+  hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
   isAgentTypeAdmin,
   requireAgentTypePermission,

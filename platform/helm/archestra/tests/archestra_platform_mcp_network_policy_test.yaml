@@ -90,8 +90,8 @@ tests:
             protocol: TCP
             port: 53
 
-  # Public internet egress rule tests
-  - it: should allow egress to 0.0.0.0/0 with private range exceptions
+  # IPv4 egress rule tests
+  - it: should allow IPv4 egress to 0.0.0.0/0 with private range exceptions
     asserts:
       - equal:
           path: spec.egress[1].to[0].ipBlock.cidr
@@ -133,13 +133,44 @@ tests:
           path: spec.egress[1].to[0].ipBlock.except
           content: 127.0.0.0/8
 
-  - it: should have exactly 6 default denied CIDRs when no additional CIDRs configured
+  - it: should have exactly 6 default denied IPv4 CIDRs when no additional CIDRs configured
     asserts:
       - lengthEqual:
           path: spec.egress[1].to[0].ipBlock.except
           count: 6
 
-  # additionalDeniedCidrs tests
+  # IPv6 egress rule tests
+  - it: should allow IPv6 egress to ::/0 with private range exceptions
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].ipBlock.cidr
+          value: "::/0"
+
+  - it: should block IPv6 loopback ::1/128
+    asserts:
+      - contains:
+          path: spec.egress[2].to[0].ipBlock.except
+          content: "::1/128"
+
+  - it: should block IPv6 unique local addresses fc00::/7
+    asserts:
+      - contains:
+          path: spec.egress[2].to[0].ipBlock.except
+          content: "fc00::/7"
+
+  - it: should block IPv6 link-local fe80::/10
+    asserts:
+      - contains:
+          path: spec.egress[2].to[0].ipBlock.except
+          content: "fe80::/10"
+
+  - it: should have exactly 3 denied IPv6 CIDRs
+    asserts:
+      - lengthEqual:
+          path: spec.egress[2].to[0].ipBlock.except
+          count: 3
+
+  # additionalDeniedCidrs tests (IPv4 only)
   - it: should include additional denied CIDRs when configured
     set:
       archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs:
@@ -153,7 +184,7 @@ tests:
           path: spec.egress[1].to[0].ipBlock.except
           content: 203.0.113.0/24
 
-  - it: should have 8 denied CIDRs when 2 additional CIDRs are configured
+  - it: should have 8 denied IPv4 CIDRs when 2 additional CIDRs are configured
     set:
       archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs:
         - 198.51.100.0/24
@@ -164,11 +195,11 @@ tests:
           count: 8
 
   # additionalEgressRules tests
-  - it: should have exactly 2 egress rules by default (DNS + public internet)
+  - it: should have exactly 3 egress rules by default (DNS + IPv4 + IPv6)
     asserts:
       - lengthEqual:
           path: spec.egress
-          count: 2
+          count: 3
 
   - it: should include additional egress rules when configured
     set:
@@ -182,14 +213,14 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.egress
-          count: 3
+          count: 4
       - contains:
-          path: spec.egress[2].to
+          path: spec.egress[3].to
           content:
             ipBlock:
               cidr: 10.0.50.0/24
       - contains:
-          path: spec.egress[2].ports
+          path: spec.egress[3].ports
           content:
             protocol: TCP
             port: 443
@@ -212,4 +243,4 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.egress
-          count: 4
+          count: 5

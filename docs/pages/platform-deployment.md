@@ -431,12 +431,18 @@ If you don't specify `postgresql.external_database_url`, the chart will deploy a
 
 The Helm chart includes a Kubernetes `NetworkPolicy` that prevents MCP server pods from performing Server-Side Request Forgery (SSRF) attacks. This policy is enabled by default and blocks outbound connections to private/internal IP ranges while allowing DNS resolution and public internet access.
 
-**Blocked ranges** (by default):
+**Blocked IPv4 ranges** (by default):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
 - `127.0.0.0/8` - Loopback
+
+**Blocked IPv6 ranges** (for dual-stack clusters):
+
+- `::1/128` - IPv6 loopback
+- `fc00::/7` - Unique local addresses (equivalent to RFC 1918)
+- `fe80::/10` - Link-local
 
 **Prerequisite**: Your cluster must use a CNI plugin that enforces `NetworkPolicies` (e.g., Calico, Cilium). The default GKE CNI (kubenet) does **not** enforce `NetworkPolicies` unless Dataplane V2 or Calico is enabled.
 

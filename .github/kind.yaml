@@ -6,7 +6,9 @@ networking:
   # Without this, Kubernetes NetworkPolicy resources are created but NOT enforced,
   # making SSRF protection via NetworkPolicy ineffective.
   disableDefaultCNI: true
-  # Calico requires an explicit pod subnet to function correctly with Kind
+  # Calico's default pod CIDR. This falls within the RFC 1918 range blocked by the
+  # SSRF NetworkPolicy, which is intentional — MCP server pods should not reach
+  # other pods via IP. Pod-to-pod DNS (port 53) is still allowed.
   podSubnet: "192.168.0.0/16"
 nodes:
   - role: control-plane

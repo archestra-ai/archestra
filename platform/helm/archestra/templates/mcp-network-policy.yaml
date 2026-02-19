@@ -1,8 +1,8 @@
 {{- if .Values.archestra.orchestrator.kubernetes.networkPolicy.create }}
 ---
 # NetworkPolicy to prevent MCP server pods from performing SSRF attacks.
-# Blocks egress traffic to private/internal IP ranges (RFC 1918, link-local, cloud metadata endpoints)
-# while allowing DNS resolution and outbound connections to the public internet.
+# Blocks egress traffic to private/internal IP ranges (IPv4 and IPv6) while
+# allowing DNS resolution and outbound connections to the public internet.
 #
 # This policy targets all pods with the label "app: mcp-server", which is applied
 # to all MCP server deployments by the Archestra orchestrator.
@@ -30,11 +30,11 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Rule 2: Allow traffic to the public internet, but block private/internal ranges.
+    # Rule 2: Allow IPv4 traffic to the public internet, but block private/internal ranges.
     # Kubernetes NetworkPolicy does not support "deny" rules, so we allow 0.0.0.0/0
     # with exceptions for private/reserved ranges.
     #
-    # Blocked ranges:
+    # Blocked IPv4 ranges:
     #   10.0.0.0/8      - RFC 1918 private (cluster pods, services, nodes)
     #   172.16.0.0/12   - RFC 1918 private
     #   192.168.0.0/16  - RFC 1918 private
@@ -54,6 +54,19 @@ spec:
               {{- range .Values.archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs }}
               - {{ . }}
               {{- end }}
+    # Rule 3: Block IPv6 private/internal ranges on dual-stack clusters.
+    #
+    # Blocked IPv6 ranges:
+    #   ::1/128         - IPv6 loopback
+    #   fc00::/7        - IPv6 unique local addresses (equivalent to RFC 1918)
+    #   fe80::/10       - IPv6 link-local
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fc00::/7
+              - fe80::/10
     {{- with .Values.archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules }}
     # Additional user-configured egress rules (e.g., to allow specific internal services)
     {{- toYaml . | nindent 4 }}

@@ -253,11 +253,16 @@ archestra:
       #   - DNS resolution (UDP/TCP port 53)
       #   - Egress to the public internet
       #
-      # The policy blocks:
+      # The policy blocks (IPv4):
       #   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918 private ranges)
       #   - 169.254.0.0/16 (link-local / cloud metadata endpoints like AWS IMDSv1, GCP, Azure)
       #   - 100.64.0.0/10 (carrier-grade NAT / RFC 6598)
       #   - 127.0.0.0/8 (loopback)
+      #
+      # The policy also blocks (IPv6, for dual-stack clusters):
+      #   - ::1/128 (IPv6 loopback)
+      #   - fc00::/7 (unique local addresses, equivalent to RFC 1918)
+      #   - fe80::/10 (link-local)
       #
       # IMPORTANT: This requires a CNI plugin that supports NetworkPolicies (e.g., Calico, Cilium, Weave).
       # The default GKE CNI (kubenet) does NOT enforce NetworkPolicies unless Dataplane V2 or Calico is enabled.

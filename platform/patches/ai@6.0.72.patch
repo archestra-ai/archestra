@@ -1,0 +1,44 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a83591939e7e6d190fa78d3e91b338332b1d1f89..ab400e7368f52dd31a7fac222339c09c1ff3a1cb 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -5167,7 +5167,8 @@ function processUIMessageStream({
+               state.message.parts.push({
+                 type: "file",
+                 mediaType: chunk.mediaType,
+-                url: chunk.url
++                url: chunk.url,
++                ...chunk.providerMetadata != null ? { providerMetadata: chunk.providerMetadata } : {}
+               });
+               write();
+               break;
+@@ -5819,7 +5820,8 @@ function runToolsTransformation({
+             file: new DefaultGeneratedFileWithType({
+               data: chunk.data,
+               mediaType: chunk.mediaType
+-            })
++            }),
++            ...chunk.providerMetadata != null ? { providerMetadata: chunk.providerMetadata } : {}
+           });
+           break;
+         }
+@@ -7322,7 +7324,8 @@ var DefaultStreamTextResult = class {
+               controller.enqueue({
+                 type: "file",
+                 mediaType: part.file.mediaType,
+-                url: `data:${part.file.mediaType};base64,${part.file.base64}`
++                url: `data:${part.file.mediaType};base64,${part.file.base64}`,
++                ...part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}
+               });
+               break;
+             }
+@@ -7879,7 +7882,8 @@ async function convertToModelMessages(messages, options) {
+                   type: "file",
+                   mediaType: part.mediaType,
+                   filename: part.filename,
+-                  data: part.url
++                  data: part.url,
++                  ...part.providerMetadata != null ? { providerOptions: part.providerMetadata } : {}
+                 });
+               } else if (isReasoningUIPart(part)) {
+                 content.push({

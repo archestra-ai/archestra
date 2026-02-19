@@ -9,7 +9,7 @@
     },
     "bodyPatterns": [
       {
-        "contains": "{\"files\":[{\"name\":\"README.md\",\"size\":1024"
+        "contains": "{\\\"files\\\":[{\\\"name\\\":\\\"README.md\\\",\\\"size\\\":1024"
       }
     ]
   },

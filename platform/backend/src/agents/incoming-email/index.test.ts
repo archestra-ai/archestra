@@ -1319,7 +1319,7 @@ describe("processIncomingEmail security modes", () => {
     expect(vi.mocked(userHasPermission)).toHaveBeenCalledWith(
       adminUser.id,
       org.id,
-      "profile",
+      "agent",
       "admin",
     );
   });

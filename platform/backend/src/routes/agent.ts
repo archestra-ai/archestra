@@ -244,7 +244,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, organizationId, headers }, reply) => {
+    async ({ body, user, organizationId }, reply) => {
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
       await requireAgentTypePermission({
@@ -315,7 +315,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, headers, user, organizationId }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
       // Fetch agent first to determine its type
       // Use admin=true for the lookup so we can check type, then enforce type-specific RBAC
       const agent = await AgentModel.findById(id, user.id, true);
@@ -366,7 +366,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // Fetch agent to determine its type for permission check
       const existingAgent = await AgentModel.findById(id, user.id, true);
       if (!existingAgent) {
@@ -484,7 +484,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(AgentVersionsResponseSchema),
       },
     },
-    async ({ params: { id }, headers, user, organizationId }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
       // Fetch agent to determine its type
       const agent = await AgentModel.findById(id, user.id, true);
       if (!agent) {
@@ -541,7 +541,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id }, body: { version }, headers, user, organizationId },
+      { params: { id }, body: { version }, user, organizationId },
       reply,
     ) => {
       // Fetch agent to determine its type

@@ -57,6 +57,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
+COPY patches/ patches/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -192,6 +193,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY patches/ patches/
 COPY docker-banner.sh ./
 
 # Install production dependencies for both workspaces

@@ -50,7 +50,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@uidotdev/usehooks": "^2.4.1",
     "@xyflow/react": "^12.10.0",
-    "ai": "^6.0.72",
+    "ai": "^6.0.82",
     "better-auth": "1.4.17",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

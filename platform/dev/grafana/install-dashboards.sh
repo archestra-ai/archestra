@@ -47,6 +47,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
+GRAFANA_URL="${GRAFANA_URL%/}"  # strip trailing slash to avoid double-slash in API paths
 GRAFANA_TOKEN="${GRAFANA_TOKEN:-}"
 GRAFANA_USER="${GRAFANA_USER:-}"
 GRAFANA_PASS="${GRAFANA_PASS:-}"

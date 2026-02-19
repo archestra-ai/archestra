@@ -494,8 +494,9 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
       }
 
       // Find the test tool (may need to wait for tool discovery)
+      // In CI, tool discovery can be slow due to resource contention and pod startup time
       let testTool: { id: string; name: string } | undefined;
-      for (let attempt = 0; attempt < 14; attempt++) {
+      for (let attempt = 0; attempt < 30; attempt++) {
         const toolsResponse = await makeApiRequest({
           request,
           method: "get",

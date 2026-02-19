@@ -47,9 +47,10 @@ archestra:
     # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)
     # Includes both the internal K8s service name and the NodePort URL that appears in OIDC discovery
     ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
-    # Secrets manager configuration for BYOS tests
+    # Secrets manager configuration - "Vault" mode for standard Vault read/write
+    # The BYOS (READONLY_VAULT) mode is set via extra-helm-set in the Vault e2e job
+    # to ensure all replicas start in BYOS mode (avoids in-memory state issues with replicaCount > 1)
     ARCHESTRA_SECRETS_MANAGER: "Vault"
-    # Vault configuration for BYOS tests
     # Vault runs as a Kubernetes service in the cluster
     # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200
     ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"

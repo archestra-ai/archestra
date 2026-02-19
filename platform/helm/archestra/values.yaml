@@ -270,7 +270,7 @@ archestra:
       # See: https://kubernetes.io/docs/concepts/services-networking/network-policies/
       networkPolicy:
         # Specifies whether the SSRF protection NetworkPolicy should be created
-        create: true
+        create: false
 
         # Additional IPv4 CIDR ranges to block (appended to the default private ranges).
         # Note: These are only added to the IPv4 egress rule. IPv6 private ranges

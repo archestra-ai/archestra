@@ -60,6 +60,8 @@ archestra:
   orchestrator:
     kubernetes:
       networkPolicy:
+        # Enable SSRF protection for e2e testing
+        create: true
         additionalEgressRules:
           # Allow MCP server pods to reach Keycloak for JWT validation (e2e tests)
           - to:

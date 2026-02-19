@@ -217,7 +217,7 @@ function StepSlide({
   instructions?: React.ReactNode[];
 }) {
   return (
-    <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr" }}>
+    <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
       <StepCard stepNumber={stepNumber} title={title}>
         {instructions && (
           <ol className="space-y-3">
@@ -233,6 +233,15 @@ function StepSlide({
           </ol>
         )}
       </StepCard>
+      <video
+        src="/slack/slack-display-settings.mp4"
+        controls
+        muted
+        autoPlay
+        loop
+        playsInline
+        className="rounded-md w-full"
+      />
     </div>
   );
 }
@@ -247,7 +256,7 @@ function StepInstall({
   onBotTokenChange: (v: string) => void;
 }) {
   return (
-    <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr" }}>
+    <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
       <StepCard stepNumber={stepNumber} title="Install App to Workspace">
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -291,6 +300,15 @@ function StepInstall({
           </li>
         </ol>
       </StepCard>
+      <video
+        src="/slack/add-slack-app.mp4"
+        controls
+        muted
+        autoPlay
+        loop
+        playsInline
+        className="rounded-md w-full"
+      />
     </div>
   );
 }

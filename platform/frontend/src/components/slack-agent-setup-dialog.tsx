@@ -195,7 +195,7 @@ function StepSelectAgentInSlack() {
       </StepCard>
 
       <video
-        src="/slack/agent-bound.mp4"
+        src="/slack/slack-agent-bind.mp4"
         controls
         muted
         autoPlay

@@ -22,12 +22,10 @@ import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -212,8 +210,8 @@ function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const updateMutation = useUpdateChatOpsBinding();
+  const queryClient = useQueryClient();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
-  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
   const slackAgents =
     agents?.filter((a) =>
@@ -302,7 +300,10 @@ function ChannelBindingsSection() {
                             disabled={refreshMutation.isPending}
                             onClick={() =>
                               refreshMutation.mutate("slack", {
-                                onSuccess: () => setRefreshDialogOpen(true),
+                                onSuccess: () =>
+                                  queryClient.invalidateQueries({
+                                    queryKey: ["chatops", "bindings"],
+                                  }),
                               })
                             }
                           >
@@ -412,11 +413,6 @@ function ChannelBindingsSection() {
         </Card>
       )}
 
-      <RefreshChannelsDialog
-        open={refreshDialogOpen}
-        onOpenChange={setRefreshDialogOpen}
-      />
-
       <AgentDialog
         open={!!editingAgent}
         onOpenChange={(open) => !open && setEditingAgent(null)}
@@ -424,62 +420,6 @@ function ChannelBindingsSection() {
         agentType="agent"
       />
     </section>
-  );
-}
-
-function RefreshChannelsDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [confirmed, setConfirmed] = useState(false);
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) setConfirmed(false);
-      }}
-    >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Channel discovery cache cleared</DialogTitle>
-          <DialogDescription>
-            The list of channels will be refreshed on the next interaction with
-            the Slack bot. Send a message to the bot, then come back and click
-            Done.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="refresh-confirm"
-            checked={confirmed}
-            onCheckedChange={(v) => setConfirmed(v === true)}
-          />
-          <label htmlFor="refresh-confirm" className="text-sm cursor-pointer">
-            I have sent a message to the Slack bot
-          </label>
-        </div>
-        <DialogFooter>
-          <Button
-            disabled={!confirmed}
-            onClick={() => {
-              queryClient.invalidateQueries({
-                queryKey: ["chatops", "bindings"],
-              });
-              onOpenChange(false);
-              setConfirmed(false);
-            }}
-          >
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

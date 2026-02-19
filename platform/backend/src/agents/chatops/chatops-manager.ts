@@ -218,6 +218,25 @@ export class ChatOpsManager {
       }
     }
 
+    // Eager channel discovery for providers that support it (fire-and-forget).
+    // Providers that can determine their workspace ID without an incoming message
+    // (e.g., Slack via auth.test) get channels discovered immediately on startup.
+    for (const { name, provider } of providers) {
+      const workspaceId = provider?.getWorkspaceId();
+      if (provider && workspaceId) {
+        this.discoverChannels({
+          provider,
+          context: null,
+          workspaceId,
+        }).catch((error) => {
+          logger.warn(
+            { error: errorMessage(error) },
+            `[ChatOps] Initial ${name} channel discovery failed`,
+          );
+        });
+      }
+    }
+
     this.startProcessedMessageCleanup();
   }
 

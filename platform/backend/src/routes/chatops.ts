@@ -990,8 +990,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Refresh channel discovery cache for a provider.
-   * Invalidates the TTL cache so channels are re-discovered on the next bot interaction.
+   * Refresh channel discovery for a provider.
+   * Clears the TTL cache, then triggers immediate discovery if the provider
+   * supports it (e.g., Slack). Otherwise channels are re-discovered on the
+   * next bot interaction (e.g., MS Teams).
    */
   fastify.post(
     "/api/chatops/channel-discovery/refresh",
@@ -1007,10 +1009,22 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { provider } = request.body;
+      const { provider: providerType } = request.body;
       const prefix =
-        `${CacheKey.ChannelDiscovery}-${provider}` as AllowedCacheKey;
+        `${CacheKey.ChannelDiscovery}-${providerType}` as AllowedCacheKey;
       await cacheManager.deleteByPrefix(prefix);
+
+      // If the provider can discover channels eagerly, do it now
+      const provider = chatOpsManager.getChatOpsProvider(providerType);
+      const workspaceId = provider?.getWorkspaceId();
+      if (provider && workspaceId) {
+        await chatOpsManager.discoverChannels({
+          provider,
+          context: null,
+          workspaceId,
+        });
+      }
+
       return reply.send({ success: true });
     },
   );

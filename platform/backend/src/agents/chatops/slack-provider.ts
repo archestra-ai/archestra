@@ -26,6 +26,7 @@ class SlackProvider implements ChatOpsProvider {
 
   private client: WebClient | null = null;
   private botUserId: string | null = null;
+  private teamId: string | null = null;
 
   isConfigured(): boolean {
     const { enabled, botToken, signingSecret } = config.chatops.slack;
@@ -44,8 +45,9 @@ class SlackProvider implements ChatOpsProvider {
     try {
       const authResult = await this.client.auth.test();
       this.botUserId = (authResult.user_id as string) || null;
+      this.teamId = (authResult.team_id as string) || null;
       logger.info(
-        { botUserId: this.botUserId },
+        { botUserId: this.botUserId, teamId: this.teamId },
         "[SlackProvider] Authenticated successfully",
       );
     } catch (error) {
@@ -57,9 +59,14 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  getWorkspaceId(): string | null {
+    return this.teamId;
+  }
+
   async cleanup(): Promise<void> {
     this.client = null;
     this.botUserId = null;
+    this.teamId = null;
     logger.info("[SlackProvider] Cleaned up");
   }
 

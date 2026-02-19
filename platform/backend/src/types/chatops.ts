@@ -212,6 +212,14 @@ export interface ChatOpsProvider {
   }): Promise<void>;
 
   /**
+   * Get the workspace/team ID for this provider, if known without an incoming message.
+   * Used for eager channel discovery on startup.
+   * Returns null if the workspace ID can only be determined from incoming messages
+   * (e.g., MS Teams requires a TurnContext to know which team).
+   */
+  getWorkspaceId(): string | null;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)

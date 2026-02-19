@@ -493,6 +493,11 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  getWorkspaceId(): string | null {
+    // MS Teams requires a TurnContext to determine the team — no eager discovery
+    return null;
+  }
+
   async discoverChannels(
     context: unknown,
   ): Promise<DiscoveredChannel[] | null> {

@@ -175,13 +175,11 @@ export default function SlackPage() {
           </div>
         </SetupStep>
         <SetupStep
-          title="Connect Agents to Slack channels"
-          description="Map your agents to Slack channels — each channel gets its own dedicated agent"
+          title="Enable Slack for your Agents and assign channels to them"
+          description="Agents with enabled Slack will appear in the table below. Then you can assign channels to them."
           done={hasBindings}
-          ctaLabel="Connect"
+          ctaLabel="Configure"
           onAction={() => setSlackAgentDialogOpen(true)}
-          doneActionLabel="Connect more"
-          onDoneAction={() => setSlackAgentDialogOpen(true)}
         />
       </section>
 

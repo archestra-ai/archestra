@@ -132,7 +132,7 @@ Only agents with **Slack enabled** will appear in the channel selection dropdown
 
 ### First Message
 
-When you **first mention the bot** in a channel with no binding:
+When you **first mention the bot** in a channel:
 
 ```
 @BotName what's the status of service X?

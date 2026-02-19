@@ -195,13 +195,11 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
         <SetupStep
-          title="Connect Agents to MS Teams channels"
-          description="Map your agents to Teams channels — each channel gets its own dedicated agent"
+          title="Enable Slack for your Agents and assign channels to them"
+          description="Agents with enabled MS Teams will appear in the table below. Then you can assign channels to them."
           done={hasBindings}
-          ctaLabel="Connect"
+          ctaLabel="Configure"
           onAction={() => setDefaultAgentDialogOpen(true)}
-          doneActionLabel="Connect more"
-          onDoneAction={() => setDefaultAgentDialogOpen(true)}
         />
       </section>
 

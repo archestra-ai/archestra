@@ -6,10 +6,6 @@ description: Connect Archestra agents to Slack channels
 lastUpdated: 2026-02-16
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 Archestra can connect directly to Slack channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Slack threads.
 
 ## Prerequisites
@@ -22,7 +18,7 @@ Archestra can connect directly to Slack channels. When users mention the bot in 
 ### Create Slack App
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**
-2. Select your workspace, then choose **YAML** and paste the manifest below
+2. Select your workspace, then choose **JSON** and paste the manifest below
 3. Click **Create**
 4. Go to **Basic Information** → **Display Information** and upload an app icon ([download Archestra logo](/docs/color.png))
 5. Go to **Install App** → **Install to Workspace** and authorize
@@ -32,43 +28,78 @@ Archestra can connect directly to Slack channels. When users mention the bot in 
 
 The manifest pre-configures all required scopes, event subscriptions, and interactivity settings. Replace the two URLs with your Archestra domain.
 
-```yaml
-display_information:
-  name: "Archestra"
-  description: "Archestra AI Agent"
-features:
-  bot_user:
-    display_name: "Archestra"
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - groups:history
-      - groups:read
-      - im:history
-      - users:read
-      - users:read.email
-settings:
-  event_subscriptions:
-    request_url: "https://your-archestra-domain/api/webhooks/chatops/slack"
-    bot_events:
-      - app_mention
-      - message.channels
-      - message.groups
-      - message.im
-  interactivity:
-    is_enabled: true
-    request_url: "https://your-archestra-domain/api/webhooks/chatops/slack/interactive"
-  org_deploy_enabled: false
-  socket_mode_enabled: false
-  token_rotation_enabled: false
+```json
+{
+  "display_information": {
+    "name": "Archestra",
+    "description": "Archestra AI Agent"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Archestra",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/archestra-select-agent",
+        "description": "Change which agent handles this channel",
+        "usage_hint": "/archestra-select-agent",
+        "url": "https://your-archestra-domain/api/webhooks/chatops/slack/slash-command"
+      },
+      {
+        "command": "/archestra-status",
+        "description": "Show current agent for this channel",
+        "usage_hint": "/archestra-status",
+        "url": "https://your-archestra-domain/api/webhooks/chatops/slack/slash-command"
+      },
+      {
+        "command": "/archestra-help",
+        "description": "Show available commands",
+        "usage_hint": "/archestra-help",
+        "url": "https://your-archestra-domain/api/webhooks/chatops/slack/slash-command"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "commands",
+        "app_mentions:read",
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://your-archestra-domain/api/webhooks/chatops/slack",
+      "bot_events": [
+        "app_mention",
+        "message.channels",
+        "message.groups",
+        "message.im"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://your-archestra-domain/api/webhooks/chatops/slack/interactive"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
 ```
 
 > The setup wizard in Archestra generates this manifest with your webhook URLs pre-filled. Go to **Agent Triggers** → **Slack** → **Setup Slack** to use it.
+
+> If updating from a previous manifest (before slash commands), update the manifest in your Slack app settings and **reinstall the app** to your workspace for the new slash commands to take effect.
 
 ### Configure Archestra
 
@@ -107,21 +138,23 @@ When you **first mention the bot** in a channel with no binding:
 @BotName what's the status of service X?
 ```
 
-The bot responds with a **dropdown** to select which agent handles this channel. After selection, the bot processes your message and **all future messages** in that channel.
+The bot responds with a list of options to choose which agent will handle messages in this channel. After selection, the bot processes your message and **all future messages** in that channel.
 
 ### Commands
 
+Archestra uses native Slack slash commands — type them directly in the message box without mentioning the bot.
+
 | Command | Description |
 |---------|-------------|
-| `@BotName /select-agent` | Change which agent handles this channel by default |
-| `@BotName /status` | Show currently set default agent for the channel |
-| `@BotName /help` | Show available commands |
+| `/archestra-select-agent` | Change which agent handles this channel by default |
+| `/archestra-status` | Show currently set default agent for the channel |
+| `/archestra-help` | Show available commands |
 
 ### Default Agent
 
 Each Slack channel requires a **default agent** to be bound to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
-Once set, the default agent processes all subsequent messages in that channel until you change it with `/select-agent`.
+Once set, the default agent processes all subsequent messages in that channel until you change it with `/archestra-select-agent`.
 
 ### Switching Agents Inline
 

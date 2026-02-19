@@ -197,14 +197,25 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
-    let replyText = options.text;
+    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+    const blocks: any[] = [
+      { type: "section", text: { type: "mrkdwn", text: options.text } },
+    ];
+
     if (options.footer) {
-      replyText += `\n\n---\n_${options.footer}_`;
+      blocks.push(
+        { type: "divider" },
+        {
+          type: "context",
+          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
+        },
+      );
     }
 
     const result = await this.client.chat.postMessage({
       channel: options.originalMessage.channelId,
-      text: replyText,
+      text: options.text,
+      blocks,
       thread_ts: options.originalMessage.threadId,
     });
 
@@ -259,7 +270,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Available commands:*\n`/select-agent` — Change the default agent handling requests in the channel\n`/status` — Check the current agent handling requests in the channel\n`/help` — Show available commands",
+              text: "*Available commands:*\n`/archestra-select-agent` — Change the default agent handling requests in the channel\n`/archestra-status` — Check the current agent handling requests in the channel\n`/archestra-help` — Show available commands",
             },
           },
           { type: "divider" },
@@ -428,7 +439,13 @@ class SlackProvider implements ChatOpsProvider {
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
     // Slack mentions are formatted as <@U12345678>
-    return text.replace(new RegExp(`<@${this.botUserId}>`, "g"), "").trim();
+    let cleaned = text
+      .replace(new RegExp(`<@${this.botUserId}>`, "g"), "")
+      .trim();
+    // Slack HTML-encodes &, <, > outside of special sequences (<@U...>, <#C...>, <url>).
+    // Decode so downstream logic (e.g., inline agent "AgentName > msg") sees literal chars.
+    cleaned = decodeSlackEntities(cleaned);
+    return cleaned;
   }
 }
 
@@ -451,6 +468,15 @@ function errorMessage(error: unknown): string {
       return "Unknown error (could not serialize)";
     }
   }
+}
+
+/**
+ * Decode Slack's HTML entity encoding.
+ * Slack encodes &, <, > as &amp;, &lt;, &gt; in event text outside of special
+ * sequences like <@U123>, <#C123>, and <url>.
+ */
+function decodeSlackEntities(text: string): string {
+  return text.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
 }
 
 /**

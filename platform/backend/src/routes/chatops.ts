@@ -6,6 +6,7 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
+  SLACK_SLASH_COMMANDS,
 } from "@/agents/chatops/constants";
 import type { SlackInteractivePayload } from "@/agents/chatops/slack-provider";
 import { isRateLimited } from "@/agents/utils";
@@ -66,9 +67,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             z.object({ status: z.string() }),
             z.object({ success: z.boolean() }),
           ]),
-          400: z.object({ error: z.string() }),
-          429: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
+          400: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
+          429: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
+          500: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
         },
       },
     },
@@ -434,9 +435,22 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/webhooks/chatops/slack",
     {
-      config: {
-        rawBody: true,
-      },
+      // Capture the raw JSON body before Fastify parses it.
+      // Slack HMAC verification requires the exact bytes that were signed.
+      preParsing: [
+        async (request, _reply, payload) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of payload) {
+            chunks.push(
+              typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+            );
+          }
+          const raw = Buffer.concat(chunks).toString("utf8");
+          (request as unknown as { slackRawBody: string }).slackRawBody = raw;
+          const { Readable } = await import("node:stream");
+          return Readable.from(Buffer.from(raw));
+        },
+      ],
       schema: {
         description: "Slack Events API webhook endpoint",
         tags: ["ChatOps Webhooks"],
@@ -446,9 +460,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             z.object({ challenge: z.string() }),
             z.object({ ok: z.boolean() }),
           ]),
-          400: z.object({ error: z.string() }),
-          429: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
+          400: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          429: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          500: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
         },
       },
     },
@@ -493,11 +522,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(challengeResponse);
       }
 
-      // Validate request signature — rawBody is available via `config.rawBody: true`
-      const rawBody =
-        typeof (request as unknown as { rawBody?: string }).rawBody === "string"
-          ? (request as unknown as { rawBody: string }).rawBody
-          : JSON.stringify(body);
+      // Validate request signature using the captured raw body
+      const rawBody = (
+        request as unknown as { slackRawBody?: string }
+      ).slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
       const isValid = await provider.validateWebhookRequest(rawBody, headers);
       if (!isValid) {
         logger.warn("[ChatOps] Invalid Slack webhook signature");
@@ -567,56 +598,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             return reply.send({ ok: true });
           }
 
-          // Check for commands
-          const trimmedText = message.text.trim().toLowerCase();
-
-          if (trimmedText === CHATOPS_COMMANDS.HELP) {
-            await provider.sendReply({
-              originalMessage: message,
-              text:
-                "*Available commands:*\n" +
-                "`/select-agent` — Change the default agent\n" +
-                "`/status` — Show current agent binding\n" +
-                "`/help` — Show this help message\n\n" +
-                "Or just send a message to interact with the bound agent.",
-            });
-            return reply.send({ ok: true });
-          }
-
-          if (trimmedText === CHATOPS_COMMANDS.STATUS) {
-            const binding = await ChatOpsChannelBindingModel.findByChannel({
-              provider: "slack",
-              channelId: message.channelId,
-              workspaceId: message.workspaceId,
-            });
-
-            if (binding?.agentId) {
-              const agent = await AgentModel.findById(binding.agentId);
-              await provider.sendReply({
-                originalMessage: message,
-                text:
-                  `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
-                  "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
-                  "Use `/select-agent` to change the default agent.",
-              });
-            } else {
-              await provider.sendReply({
-                originalMessage: message,
-                text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
-              });
-            }
-            return reply.send({ ok: true });
-          }
-
-          if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
-            await sendAgentSelectionCard({
-              provider,
-              message,
-              isWelcome: false,
-            });
-            return reply.send({ ok: true });
-          }
-
           // Check for existing binding
           const binding = await ChatOpsChannelBindingModel.findByChannel({
             provider: "slack",
@@ -670,7 +651,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.unknown(),
         response: {
           200: z.object({ ok: z.boolean() }),
-          400: z.object({ error: z.string() }),
+          400: z.object({ error: z.object({ message: z.string(), type: z.string() }) }),
         },
       },
     },
@@ -745,6 +726,197 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ ok: true });
+    },
+  );
+
+  /**
+   * Slack slash command endpoint
+   *
+   * Receives native slash command payloads from Slack.
+   * Slack sends form-encoded body with: command, text, user_id, channel_id,
+   * team_id, response_url, trigger_id.
+   * All three commands share this single endpoint — `command` field distinguishes them.
+   */
+  fastify.post(
+    "/api/webhooks/chatops/slack/slash-command",
+    {
+      // Capture the raw form-encoded body before @fastify/formbody parses it.
+      // Slack HMAC verification requires the exact bytes that were signed.
+      preParsing: [
+        async (request, _reply, payload) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of payload) {
+            chunks.push(
+              typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+            );
+          }
+          const raw = Buffer.concat(chunks).toString("utf8");
+          (request as unknown as { slackRawBody: string }).slackRawBody = raw;
+          const { Readable } = await import("node:stream");
+          return Readable.from(Buffer.from(raw));
+        },
+      ],
+      schema: {
+        description: "Slack slash commands endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.unknown(),
+          400: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          429: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getSlackProvider();
+      if (!provider) {
+        throw new ApiError(400, "Slack chatops provider not configured");
+      }
+
+      // Rate limiting
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-slack-slash-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        throw new ApiError(429, "Too many requests");
+      }
+
+      // Validate request signature using the raw form-encoded body
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+      const rawBody = (
+        request as unknown as { slackRawBody?: string }
+      ).slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid Slack slash command signature");
+        throw new ApiError(400, "Invalid request signature");
+      }
+
+      // Slack sends slash commands as form-encoded with these fields
+      const body = request.body as {
+        command?: string;
+        text?: string;
+        user_id?: string;
+        user_name?: string;
+        channel_id?: string;
+        channel_name?: string;
+        team_id?: string;
+        response_url?: string;
+        trigger_id?: string;
+      };
+
+      const command = body.command;
+      const channelId = body.channel_id || "";
+      const workspaceId = body.team_id || null;
+      const userId = body.user_id || "unknown";
+
+      // Resolve sender email and verify user
+      const senderEmail = await provider.getUserEmail(userId);
+      if (!senderEmail) {
+        return reply.send({
+          response_type: "ephemeral",
+          text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
+        });
+      }
+
+      const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        return reply.send({
+          response_type: "ephemeral",
+          text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+        });
+      }
+
+      // Build an IncomingChatMessage for reuse with existing helpers
+      const message: IncomingChatMessage = {
+        messageId: `slack-slash-${Date.now()}`,
+        channelId,
+        workspaceId,
+        threadId: undefined,
+        senderId: userId,
+        senderName: body.user_name || "Unknown User",
+        senderEmail,
+        text: body.text || "",
+        rawText: body.text || "",
+        timestamp: new Date(),
+        isThreadReply: false,
+      };
+
+      switch (command) {
+        case SLACK_SLASH_COMMANDS.HELP: {
+          return reply.send({
+            response_type: "ephemeral",
+            text:
+              "*Available commands:*\n" +
+              "`/archestra-select-agent` — Change the default agent\n" +
+              "`/archestra-status` — Show current agent binding\n" +
+              "`/archestra-help` — Show this help message\n\n" +
+              "Or just send a message to interact with the bound agent.",
+          });
+        }
+        case SLACK_SLASH_COMMANDS.STATUS: {
+          const binding = await ChatOpsChannelBindingModel.findByChannel({
+            provider: "slack",
+            channelId,
+            workspaceId,
+          });
+
+          if (binding?.agentId) {
+            const agent = await AgentModel.findById(binding.agentId);
+            return reply.send({
+              response_type: "ephemeral",
+              text:
+                `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
+                "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
+                "Use `/archestra-select-agent` to change the default agent.",
+            });
+          }
+
+          return reply.send({
+            response_type: "ephemeral",
+            text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
+          });
+        }
+        case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
+          // Send agent selection card (visible to all in channel)
+          await sendAgentSelectionCard({
+            provider,
+            message,
+            isWelcome: false,
+          });
+          // Acknowledge the slash command with an empty 200
+          return reply.send({
+            response_type: "in_channel",
+            text: "",
+          });
+        }
+        default: {
+          return reply.send({
+            response_type: "ephemeral",
+            text: `Unknown command: ${command}`,
+          });
+        }
+      }
     },
   );
 

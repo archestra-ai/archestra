@@ -336,7 +336,7 @@ export class ChatOpsManager {
     // Resolve inline agent mention
     const {
       agentToUse,
-      cleanedMessageText: _cleanedMessageText,
+      cleanedMessageText,
       fallbackMessage,
     } = await this.resolveInlineAgentMention({
       messageText: message.text,
@@ -370,10 +370,11 @@ export class ChatOpsManager {
     // Build context from thread history
     const contextMessages = await this.fetchThreadHistory(message, provider);
 
-    // Build the full message with context
-    let fullMessage = message.text;
+    // Build the full message with context — use cleanedMessageText so
+    // the "AgentName >" prefix is stripped from what the LLM sees
+    let fullMessage = cleanedMessageText;
     if (contextMessages.length > 0) {
-      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${message.text}`;
+      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
     // Execute the A2A message using the agent

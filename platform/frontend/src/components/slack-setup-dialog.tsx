@@ -60,6 +60,9 @@ export function SlackSetupDialog({
   const interactiveUrl = ngrokDomain
     ? `https://${ngrokDomain}/api/webhooks/chatops/slack/interactive`
     : "<archestra-url>/api/webhooks/chatops/slack/interactive";
+  const slashCommandUrl = ngrokDomain
+    ? `https://${ngrokDomain}/api/webhooks/chatops/slack/slash-command`
+    : "<archestra-url>/api/webhooks/chatops/slack/slash-command";
 
   const steps = React.useMemo(() => {
     const slides: React.ReactNode[] = [
@@ -69,6 +72,7 @@ export function SlackSetupDialog({
         stepNumber={1}
         webhookUrl={webhookUrl}
         interactiveUrl={interactiveUrl}
+        slashCommandUrl={slashCommandUrl}
         ngrokDomain={ngrokDomain}
         appId={sharedAppId}
         signingSecret={sharedSigningSecret}
@@ -144,6 +148,7 @@ export function SlackSetupDialog({
     creds,
     webhookUrl,
     interactiveUrl,
+    slashCommandUrl,
   ]);
 
   const lastStepAction = isLocalEnvOrQuickstart
@@ -300,47 +305,80 @@ function buildSlackManifest(params: {
   appName: string;
   webhookUrl: string;
   interactiveUrl: string;
+  slashCommandUrl: string;
 }): string {
-  const { appName, webhookUrl, interactiveUrl } = params;
-  return `display_information:
-  name: "${appName}"
-  description: "Archestra AI Agent"
-features:
-  bot_user:
-    display_name: "${appName}"
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - groups:history
-      - groups:read
-      - im:history
-      - users:read
-      - users:read.email
-settings:
-  event_subscriptions:
-    request_url: "${webhookUrl}"
-    bot_events:
-      - app_mention
-      - message.channels
-      - message.groups
-      - message.im
-  interactivity:
-    is_enabled: true
-    request_url: "${interactiveUrl}"
-  org_deploy_enabled: false
-  socket_mode_enabled: false
-  token_rotation_enabled: false`;
+  const { appName, webhookUrl, interactiveUrl, slashCommandUrl } = params;
+  const manifest = {
+    display_information: {
+      name: appName,
+      description: "Archestra AI Agent",
+    },
+    features: {
+      bot_user: {
+        display_name: appName,
+        always_online: true,
+      },
+      slash_commands: [
+        {
+          command: "/archestra-select-agent",
+          description: "Change which agent handles this channel",
+          url: slashCommandUrl,
+        },
+        {
+          command: "/archestra-status",
+          description: "Show current agent for this channel",
+          url: slashCommandUrl,
+        },
+        {
+          command: "/archestra-help",
+          description: "Show available commands",
+          url: slashCommandUrl,
+        },
+      ],
+    },
+    oauth_config: {
+      scopes: {
+        bot: [
+          "commands",
+          "app_mentions:read",
+          "channels:history",
+          "channels:read",
+          "chat:write",
+          "groups:history",
+          "groups:read",
+          "im:history",
+          "users:read",
+          "users:read.email",
+        ],
+      },
+    },
+    settings: {
+      event_subscriptions: {
+        request_url: webhookUrl,
+        bot_events: [
+          "app_mention",
+          "message.channels",
+          "message.groups",
+          "message.im",
+        ],
+      },
+      interactivity: {
+        is_enabled: true,
+        request_url: interactiveUrl,
+      },
+      org_deploy_enabled: false,
+      socket_mode_enabled: false,
+      token_rotation_enabled: false,
+    },
+  };
+  return JSON.stringify(manifest, null, 2);
 }
 
 function StepManifest({
   stepNumber,
   webhookUrl,
   interactiveUrl,
+  slashCommandUrl,
   ngrokDomain,
   appId,
   signingSecret,
@@ -350,6 +388,7 @@ function StepManifest({
   stepNumber: number;
   webhookUrl: string;
   interactiveUrl: string;
+  slashCommandUrl: string;
   ngrokDomain: string;
   appId: string;
   signingSecret: string;
@@ -358,7 +397,12 @@ function StepManifest({
 }) {
   const [appName, setAppName] = useState("Archestra");
 
-  const manifest = buildSlackManifest({ appName, webhookUrl, interactiveUrl });
+  const manifest = buildSlackManifest({
+    appName,
+    webhookUrl,
+    interactiveUrl,
+    slashCommandUrl,
+  });
 
   return (
     <div
@@ -368,7 +412,7 @@ function StepManifest({
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 overflow-x-auto">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">
-            App Manifest (YAML)
+            App Manifest (JSON)
           </span>
           <CopyButton text={manifest} />
         </div>
@@ -424,8 +468,8 @@ function StepManifest({
               3
             </span>
             <span className="pt-0.5">
-              Select <strong>YAML</strong>, paste the manifest from the left,
-              and click <strong>Create</strong>
+              Paste the manifest from the left, and click{" "}
+              <strong>Create</strong>
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">

@@ -63,3 +63,14 @@ export const CHATOPS_COMMANDS = {
   STATUS: "/status",
   HELP: "/help",
 } as const;
+
+/**
+ * Native Slack slash commands.
+ * These are registered in the Slack app manifest and handled by a dedicated endpoint.
+ * All three share one backend endpoint — the `command` field distinguishes them.
+ */
+export const SLACK_SLASH_COMMANDS = {
+  SELECT_AGENT: "/archestra-select-agent",
+  STATUS: "/archestra-status",
+  HELP: "/archestra-help",
+} as const;

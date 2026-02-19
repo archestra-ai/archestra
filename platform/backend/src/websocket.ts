@@ -9,7 +9,11 @@ import {
 } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
-import { betterAuth, hasPermission } from "@/auth";
+import {
+  betterAuth,
+  hasAnyAgentTypeAdminPermission,
+  hasPermission,
+} from "@/auth";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import logger from "@/logging";
@@ -424,11 +428,10 @@ class WebSocketService {
   private async authenticateConnection(
     request: IncomingMessage,
   ): Promise<WebSocketClientContext | null> {
-    const [{ success: userIsAgentAdmin }, { success: userIsMcpServerAdmin }] =
-      await Promise.all([
-        hasPermission({ agent: ["admin"] }, request.headers),
-        hasPermission({ mcpServer: ["admin"] }, request.headers),
-      ]);
+    const { success: userIsMcpServerAdmin } = await hasPermission(
+      { mcpServer: ["admin"] },
+      request.headers,
+    );
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
@@ -441,6 +444,10 @@ class WebSocketService {
         const { organizationId, ...user } = await UserModel.getById(
           session.user.id,
         );
+        const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        });
         return {
           userId: user.id,
           organizationId,
@@ -463,6 +470,10 @@ class WebSocketService {
           const { organizationId, ...user } = await UserModel.getById(
             apiKeyResult.key.userId,
           );
+          const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+            userId: user.id,
+            organizationId,
+          });
           return {
             userId: user.id,
             organizationId,

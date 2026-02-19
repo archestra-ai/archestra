@@ -3,7 +3,7 @@ import { PROVIDERS_WITH_OPTIONAL_API_KEY, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, TeamModel } from "@/models";
@@ -40,15 +40,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId, user, headers }, reply) => {
+    async ({ organizationId, user }, reply) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
       // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const apiKeys = await ChatApiKeyModel.getVisibleKeys(
         organizationId,
@@ -161,6 +161,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: body.scope,
         teamId: body.teamId,
         userId: user.id,
+        organizationId,
         headers,
       });
 
@@ -282,7 +283,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ChatApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ params, organizationId, user, headers }, reply) => {
+    async ({ params, organizationId, user }, reply) => {
       const apiKey = await ChatApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
@@ -291,10 +292,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Personal keys: only visible to owner
       if (apiKey.scope === "personal" && apiKey.userId !== user.id) {
@@ -369,7 +370,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check authorization based on current scope
-      await authorizeApiKeyAccess(apiKeyFromDB, user.id, headers);
+      await authorizeApiKeyAccess({
+        apiKey: apiKeyFromDB,
+        userId: user.id,
+        organizationId,
+        headers,
+      });
 
       // If scope is changing, validate the new scope
       const newScope = body.scope ?? apiKeyFromDB.scope;
@@ -382,6 +388,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope: newScope,
           teamId: newTeamId,
           userId: user.id,
+          organizationId,
           headers,
         });
       }
@@ -504,7 +511,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check authorization based on scope
-      await authorizeApiKeyAccess(apiKey, user.id, headers);
+      await authorizeApiKeyAccess({
+        apiKey,
+        userId: user.id,
+        organizationId,
+        headers,
+      });
 
       // Delete the associated secret
       if (apiKey.secretId) {
@@ -526,9 +538,10 @@ async function validateScopeAndAuthorization(params: {
   scope: "personal" | "team" | "org_wide";
   teamId: string | null | undefined;
   userId: string;
+  organizationId: string;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { scope, teamId, userId, headers } = params;
+  const { scope, teamId, userId, organizationId, headers } = params;
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {
@@ -569,10 +582,10 @@ async function validateScopeAndAuthorization(params: {
 
   // For org-wide keys, require agent admin permission
   if (scope === "org_wide") {
-    const { success: isAgentAdmin } = await hasPermission(
-      { agent: ["admin"] },
-      headers,
-    );
+    const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      userId,
+      organizationId,
+    });
     if (!isAgentAdmin) {
       throw new ApiError(403, "Only admins can use organization-wide scope");
     }
@@ -582,11 +595,14 @@ async function validateScopeAndAuthorization(params: {
 /**
  * Helper to check if a user is authorized to modify an API key based on scope
  */
-async function authorizeApiKeyAccess(
-  apiKey: { scope: string; userId: string | null; teamId: string | null },
-  userId: string,
-  headers: IncomingHttpHeaders,
-): Promise<void> {
+async function authorizeApiKeyAccess(params: {
+  apiKey: { scope: string; userId: string | null; teamId: string | null };
+  userId: string;
+  organizationId: string;
+  headers: IncomingHttpHeaders;
+}): Promise<void> {
+  const { apiKey, userId, organizationId, headers } = params;
+
   // Personal keys: only owner can modify
   if (apiKey.scope === "personal") {
     if (apiKey.userId !== userId) {
@@ -616,10 +632,10 @@ async function authorizeApiKeyAccess(
 
   // Org-wide keys: require agent admin
   if (apiKey.scope === "org_wide") {
-    const { success: isAgentAdmin } = await hasPermission(
-      { agent: ["admin"] },
-      headers,
-    );
+    const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      userId,
+      organizationId,
+    });
     if (!isAgentAdmin) {
       throw new ApiError(
         403,

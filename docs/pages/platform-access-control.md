@@ -18,7 +18,7 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., `agent`, `tool`, `organization`)
 - **Action**: The operation being performed (`create`, `read`, `update`, `delete`, `admin`)
 
-For example, the permission `agent:create` allows creating new agents (MCP gateways, LLM proxies, or automation agents), while `organization:read` allows viewing organization information.
+For example, the permission `agent:create` allows creating new automation agents, `mcpGateway:create` allows creating MCP gateways, `llmProxy:create` allows creating LLM proxies, and `organization:read` allows viewing organization information.
 
 ## Predefined Roles
 

@@ -16,7 +16,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -160,7 +160,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: { id: conversationId, messages },
         user,
         organizationId,
-        headers,
       } = request;
       const chatAbortController = new AbortController();
 
@@ -204,10 +203,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       });
 
-      const { success: userIsAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Get conversation
       const conversation = await ConversationModel.findById({
@@ -220,7 +219,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      const externalAgentId = getExternalAgentId(headers);
+      const externalAgentId = getExternalAgentId(request.headers);
 
       // Fetch enabled tool IDs and custom selection status in parallel
       const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -633,12 +632,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { agentId }, user, organizationId, headers }, reply) => {
+    async ({ params: { agentId }, user, organizationId }, reply) => {
       // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Verify agent exists and user has access
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
@@ -699,15 +698,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: { agentId, title, selectedModel, selectedProvider, chatApiKeyId },
         user,
         organizationId,
-        headers,
       },
       reply,
     ) => {
       // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Validate that the agent exists and user has access to it
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
@@ -784,7 +782,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (body.chatApiKeyId) {
@@ -808,10 +806,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate agentId if provided
       if (body.agentId) {
-        const { success: isAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
-          headers,
-        );
+        const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        });
 
         const agent = await AgentModel.findById(
           body.agentId,

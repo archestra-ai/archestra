@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import {
@@ -63,15 +63,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeArchestraTools,
           skipPagination,
         },
-        headers,
+        organizationId,
         user,
       },
       reply,
     ) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const result = await AgentToolModel.findAll({
         pagination: { limit, offset },
@@ -577,11 +577,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { agentId }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+    async ({ params: { agentId }, organizationId, user }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Validate agent exists and is accessible
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
@@ -628,11 +628,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { agentId }, body, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+    async ({ params: { agentId }, body, organizationId, user }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Validate agent exists and is accessible
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
@@ -693,11 +693,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { agentId, targetAgentId }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        headers,
-      );
+    async (
+      { params: { agentId, targetAgentId }, organizationId, user },
+      reply,
+    ) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Validate agent exists and is accessible
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);

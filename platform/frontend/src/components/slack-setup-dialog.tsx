@@ -5,7 +5,7 @@ import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { SetupDialog } from "@/components/setup-dialog";
-import { Badge } from "@/components/ui/badge";
+import { StepCard } from "@/components/step-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
@@ -218,29 +218,21 @@ function StepSlide({
 }) {
   return (
     <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr" }}>
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">{title}</h3>
-          </div>
-          {instructions && (
-            <ol className="space-y-3">
-              {instructions.map((instruction, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: items are static
-                <li key={i} className="flex gap-3 text-sm leading-relaxed">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {i + 1}
-                  </span>
-                  <span className="pt-0.5">{instruction}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      </div>
+      <StepCard stepNumber={stepNumber} title={title}>
+        {instructions && (
+          <ol className="space-y-3">
+            {instructions.map((instruction, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: items are static
+              <li key={i} className="flex gap-3 text-sm leading-relaxed">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                  {i + 1}
+                </span>
+                <span className="pt-0.5">{instruction}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </StepCard>
     </div>
   );
 }
@@ -256,57 +248,49 @@ function StepInstall({
 }) {
   return (
     <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr" }}>
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">Install App to Workspace</h3>
-          </div>
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5">
-                Go to <strong>Install App</strong> in the left sidebar
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5">
-                Click{" "}
-                <strong>
-                  Install to <i>Your Workspace</i>
-                </strong>{" "}
-                and authorize the requested permissions
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5 flex-1">
-                Copy the <strong>Bot User OAuth Token</strong> (starts with{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  xoxb-
-                </code>
-                ) and paste it here
-                <Input
-                  type="password"
-                  value={botToken}
-                  onChange={(e) => onBotTokenChange(e.target.value)}
-                  placeholder="Paste your Bot User OAuth Token"
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
+      <StepCard stepNumber={stepNumber} title="Install App to Workspace">
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5">
+              Go to <strong>Install App</strong> in the left sidebar
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5">
+              Click{" "}
+              <strong>
+                Install to <i>Your Workspace</i>
+              </strong>{" "}
+              and authorize the requested permissions
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5 flex-1">
+              Copy the <strong>Bot User OAuth Token</strong> (starts with{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                xoxb-
+              </code>
+              ) and paste it here
+              <Input
+                type="password"
+                value={botToken}
+                onChange={(e) => onBotTokenChange(e.target.value)}
+                placeholder="Paste your Bot User OAuth Token"
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+        </ol>
+      </StepCard>
     </div>
   );
 }
@@ -419,104 +403,94 @@ function StepManifest({
       className="grid min-h-0 flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">Create Slack App</h3>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="manifest-app-name">App Name</Label>
-            <Input
-              id="manifest-app-name"
-              value={appName}
-              onChange={(e) => setAppName(e.target.value)}
-              placeholder="Archestra"
-            />
-            <p className="text-xs text-muted-foreground">
-              The name will be injected into the manifest automatically.
-            </p>
-          </div>
-
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5">
-                Go to{" "}
-                <StepLink href="https://api.slack.com/apps">
-                  api.slack.com/apps
-                </StepLink>{" "}
-                and click <strong>Create New App</strong>
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5">
-                Choose <strong>From a manifest</strong> and select your
-                workspace
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5">
-                Paste the manifest from the right, and click{" "}
-                <strong>Create</strong>
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                4
-              </span>
-              <span className="pt-0.5 flex-1">
-                From <strong>Basic Information &rarr; App Credentials</strong>,
-                copy the <strong>App ID</strong> and paste it here
-                <Input
-                  value={appId}
-                  onChange={(e) => onAppIdChange(e.target.value)}
-                  placeholder="Paste your App ID"
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                5
-              </span>
-              <span className="pt-0.5 flex-1">
-                From <strong>Basic Information &rarr; App Credentials</strong>,
-                copy the <strong>Signing Secret</strong> and paste it here
-                <Input
-                  type="password"
-                  value={signingSecret}
-                  onChange={(e) => onSigningSecretChange(e.target.value)}
-                  placeholder="Paste your Signing Secret"
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-          </ol>
-
-          {!ngrokDomain && (
-            <span className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                The manifest uses placeholder URLs. After creating the app,
-                update the Event Subscriptions and Interactivity URLs with your
-                actual Archestra URL.
-              </span>
-            </span>
-          )}
+      <StepCard stepNumber={stepNumber} title="Create Slack App">
+        <div className="space-y-2">
+          <Label htmlFor="manifest-app-name">App Name</Label>
+          <Input
+            id="manifest-app-name"
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            placeholder="Archestra"
+          />
+          <p className="text-xs text-muted-foreground">
+            The name will be injected into the manifest automatically.
+          </p>
         </div>
-      </div>
+
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5">
+              Go to{" "}
+              <StepLink href="https://api.slack.com/apps">
+                api.slack.com/apps
+              </StepLink>{" "}
+              and click <strong>Create New App</strong>
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5">
+              Choose <strong>From a manifest</strong> and select your workspace
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5">
+              Paste the manifest from the right, and click{" "}
+              <strong>Create</strong>
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              4
+            </span>
+            <span className="pt-0.5 flex-1">
+              From <strong>Basic Information &rarr; App Credentials</strong>,
+              copy the <strong>App ID</strong> and paste it here
+              <Input
+                value={appId}
+                onChange={(e) => onAppIdChange(e.target.value)}
+                placeholder="Paste your App ID"
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              5
+            </span>
+            <span className="pt-0.5 flex-1">
+              From <strong>Basic Information &rarr; App Credentials</strong>,
+              copy the <strong>Signing Secret</strong> and paste it here
+              <Input
+                type="password"
+                value={signingSecret}
+                onChange={(e) => onSigningSecretChange(e.target.value)}
+                placeholder="Paste your Signing Secret"
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+        </ol>
+
+        {!ngrokDomain && (
+          <span className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">
+            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              The manifest uses placeholder URLs. After creating the app, update
+              the Event Subscriptions and Interactivity URLs with your actual
+              Archestra URL.
+            </span>
+          </span>
+        )}
+      </StepCard>
 
       <div className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-lg border bg-muted/30 p-4">
         <div className="shrink-0 flex items-center justify-between">
@@ -557,80 +531,72 @@ function StepConfigForm({
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">Connect to Archestra</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Enter the credentials from your Slack App.
-          </p>
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5 flex-1">
-                <strong>Bot Token</strong> — from OAuth &amp; Permissions
-                (starts with xoxb-)
-                <Input
-                  id="setup-bot-token"
-                  type="password"
-                  value={botToken}
-                  onChange={(e) => onBotTokenChange(e.target.value)}
-                  placeholder={
-                    creds?.botToken
-                      ? `Current: ${creds.botToken}`
-                      : "xoxb-your-bot-token"
-                  }
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5 flex-1">
-                <strong>Signing Secret</strong> — from Basic Information &rarr;
-                App Credentials
-                <Input
-                  id="setup-signing-secret"
-                  type="password"
-                  value={signingSecret}
-                  onChange={(e) => onSigningSecretChange(e.target.value)}
-                  placeholder={
-                    creds?.signingSecret
-                      ? `Current: ${creds.signingSecret}`
-                      : "Your Signing Secret"
-                  }
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5 flex-1">
-                <strong>App ID</strong> — from Basic Information
-                <Input
-                  id="setup-app-id"
-                  value={appId}
-                  onChange={(e) => onAppIdChange(e.target.value)}
-                  placeholder={
-                    creds?.appId ? `Current: ${creds.appId}` : "Slack App ID"
-                  }
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
+      <StepCard stepNumber={stepNumber} title="Connect to Archestra">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Enter the credentials from your Slack App.
+        </p>
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5 flex-1">
+              <strong>Bot Token</strong> — from OAuth &amp; Permissions (starts
+              with xoxb-)
+              <Input
+                id="setup-bot-token"
+                type="password"
+                value={botToken}
+                onChange={(e) => onBotTokenChange(e.target.value)}
+                placeholder={
+                  creds?.botToken
+                    ? `Current: ${creds.botToken}`
+                    : "xoxb-your-bot-token"
+                }
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5 flex-1">
+              <strong>Signing Secret</strong> — from Basic Information &rarr;
+              App Credentials
+              <Input
+                id="setup-signing-secret"
+                type="password"
+                value={signingSecret}
+                onChange={(e) => onSigningSecretChange(e.target.value)}
+                placeholder={
+                  creds?.signingSecret
+                    ? `Current: ${creds.signingSecret}`
+                    : "Your Signing Secret"
+                }
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5 flex-1">
+              <strong>App ID</strong> — from Basic Information
+              <Input
+                id="setup-app-id"
+                value={appId}
+                onChange={(e) => onAppIdChange(e.target.value)}
+                placeholder={
+                  creds?.appId ? `Current: ${creds.appId}` : "Slack App ID"
+                }
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+        </ol>
+      </StepCard>
 
       <EnvVarsInfo
         botToken={botToken}
@@ -714,13 +680,7 @@ function StepEnvVarsInfo({
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex flex-col gap-4 py-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            Step 4
-          </Badge>
-          <h3 className="text-lg font-semibold">Configure Archestra</h3>
-        </div>
+      <StepCard stepNumber={4} title="Configure Archestra">
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -747,7 +707,7 @@ function StepEnvVarsInfo({
             </span>
           </li>
         </ol>
-      </div>
+      </StepCard>
 
       <div className="flex flex-col justify-center gap-5 rounded-lg border bg-muted/30 p-6">
         <p className="text-sm text-muted-foreground leading-relaxed">

@@ -12,7 +12,7 @@ import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { SetupDialog } from "@/components/setup-dialog";
-import { Badge } from "@/components/ui/badge";
+import { StepCard } from "@/components/step-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -284,29 +284,21 @@ function StepSlide({
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">{title}</h3>
-          </div>
-          {instructions && (
-            <ol className="space-y-3">
-              {instructions.map((instruction, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: items are static
-                <li key={i} className="flex gap-3 text-sm leading-relaxed">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {i + 1}
-                  </span>
-                  <span className="pt-0.5">{instruction}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      </div>
+      <StepCard stepNumber={stepNumber} title={title}>
+        {instructions && (
+          <ol className="space-y-3">
+            {instructions.map((instruction, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: items are static
+              <li key={i} className="flex gap-3 text-sm leading-relaxed">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                  {i + 1}
+                </span>
+                <span className="pt-0.5">{instruction}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </StepCard>
 
       {video && (
         <video
@@ -350,84 +342,74 @@ function StepBotSettings({
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">Configure Bot Settings</h3>
-          </div>
-
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5">
-                After creation, go to newly created <strong>resource</strong>{" "}
-                and then to <strong>Settings</strong> →{" "}
-                <strong>Configuration</strong>
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5">
-                <WebhookUrlInstruction ngrokDomain={ngrokDomain} />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5 flex-1">
-                Copy the <strong>Microsoft App ID</strong> and paste it here
-                <Input
-                  value={appId}
-                  onChange={(e) => onAppIdChange(e.target.value)}
-                  placeholder="Paste your Microsoft App ID"
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                4
-              </span>
-              <span className="pt-0.5 flex-1">
-                Copy <strong>App Tenant ID</strong>{" "}
-                <span className="text-muted-foreground">(optional)</span> — for
-                single-tenant bots
-                <Input
-                  value={tenantId}
-                  onChange={(e) => onTenantIdChange(e.target.value)}
-                  placeholder="Paste your Tenant ID"
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                5
-              </span>
-              <span className="pt-0.5 flex-1">
-                Click <strong>Manage Password</strong> →{" "}
-                <strong>New client secret</strong> → copy the secret value and
-                paste it here
-                <Input
-                  type="password"
-                  value={appSecret}
-                  onChange={(e) => onAppSecretChange(e.target.value)}
-                  placeholder="Paste your client secret"
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
+      <StepCard stepNumber={stepNumber} title="Configure Bot Settings">
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5">
+              After creation, go to newly created <strong>resource</strong> and
+              then to <strong>Settings</strong> → <strong>Configuration</strong>
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5">
+              <WebhookUrlInstruction ngrokDomain={ngrokDomain} />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5 flex-1">
+              Copy the <strong>Microsoft App ID</strong> and paste it here
+              <Input
+                value={appId}
+                onChange={(e) => onAppIdChange(e.target.value)}
+                placeholder="Paste your Microsoft App ID"
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              4
+            </span>
+            <span className="pt-0.5 flex-1">
+              Copy <strong>App Tenant ID</strong>{" "}
+              <span className="text-muted-foreground">(optional)</span> — for
+              single-tenant bots
+              <Input
+                value={tenantId}
+                onChange={(e) => onTenantIdChange(e.target.value)}
+                placeholder="Paste your Tenant ID"
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              5
+            </span>
+            <span className="pt-0.5 flex-1">
+              Click <strong>Manage Password</strong> →{" "}
+              <strong>New client secret</strong> → copy the secret value and
+              paste it here
+              <Input
+                type="password"
+                value={appSecret}
+                onChange={(e) => onAppSecretChange(e.target.value)}
+                placeholder="Paste your client secret"
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+        </ol>
+      </StepCard>
 
       {video && (
         <video
@@ -466,81 +448,71 @@ function StepConfigForm({
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step 6
-            </Badge>
-            <h3 className="text-lg font-semibold">Connect to Archestra</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Enter the credentials you copied from the Azure Bot resource.
-          </p>
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5 flex-1">
-                <strong>App ID</strong> — from the Azure Bot Configuration page
-                <Input
-                  id="setup-app-id"
-                  value={appId}
-                  onChange={(e) => onAppIdChange(e.target.value)}
-                  placeholder={
-                    creds?.appId
-                      ? `Current: ${creds.appId}`
-                      : "Azure Bot App ID"
-                  }
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5 flex-1">
-                <strong>App Secret</strong> — the client secret you created
-                <Input
-                  id="setup-app-secret"
-                  type="password"
-                  value={appSecret}
-                  onChange={(e) => onAppSecretChange(e.target.value)}
-                  placeholder={
-                    creds?.appSecret
-                      ? `Current: ${creds.appSecret}`
-                      : "Azure Bot App Secret"
-                  }
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5 flex-1">
-                <strong>Tenant ID</strong>{" "}
-                <span className="text-muted-foreground">(optional)</span> — only
-                needed for single-tenant bots
-                <Input
-                  id="setup-tenant-id"
-                  value={tenantId}
-                  onChange={(e) => onTenantIdChange(e.target.value)}
-                  placeholder={
-                    creds?.tenantId
-                      ? `Current: ${creds.tenantId}`
-                      : "Azure AD Tenant ID"
-                  }
-                  className="mt-1.5"
-                />
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
+      <StepCard stepNumber={6} title="Connect to Archestra">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Enter the credentials you copied from the Azure Bot resource.
+        </p>
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5 flex-1">
+              <strong>App ID</strong> — from the Azure Bot Configuration page
+              <Input
+                id="setup-app-id"
+                value={appId}
+                onChange={(e) => onAppIdChange(e.target.value)}
+                placeholder={
+                  creds?.appId ? `Current: ${creds.appId}` : "Azure Bot App ID"
+                }
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5 flex-1">
+              <strong>App Secret</strong> — the client secret you created
+              <Input
+                id="setup-app-secret"
+                type="password"
+                value={appSecret}
+                onChange={(e) => onAppSecretChange(e.target.value)}
+                placeholder={
+                  creds?.appSecret
+                    ? `Current: ${creds.appSecret}`
+                    : "Azure Bot App Secret"
+                }
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5 flex-1">
+              <strong>Tenant ID</strong>{" "}
+              <span className="text-muted-foreground">(optional)</span> — only
+              needed for single-tenant bots
+              <Input
+                id="setup-tenant-id"
+                value={tenantId}
+                onChange={(e) => onTenantIdChange(e.target.value)}
+                placeholder={
+                  creds?.tenantId
+                    ? `Current: ${creds.tenantId}`
+                    : "Azure AD Tenant ID"
+                }
+                className="mt-1.5"
+              />
+            </span>
+          </li>
+        </ol>
+      </StepCard>
 
       <EnvVarsInfo appId={appId} appSecret={appSecret} tenantId={tenantId} />
     </div>
@@ -624,43 +596,35 @@ function StepEnvVarsInfo({
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step 6
-            </Badge>
-            <h3 className="text-lg font-semibold">Configure Archestra</h3>
-          </div>
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5">
-                Set the environment variables shown on the right
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5">
-                <strong>Restart Archestra</strong> for changes to take effect
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5">
-                Edit an agent and enable the <strong>Microsoft Teams</strong>{" "}
-                toggle
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
+      <StepCard stepNumber={6} title="Configure Archestra">
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5">
+              Set the environment variables shown on the right
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5">
+              <strong>Restart Archestra</strong> for changes to take effect
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5">
+              Edit an agent and enable the <strong>Microsoft Teams</strong>{" "}
+              toggle
+            </span>
+          </li>
+        </ol>
+      </StepCard>
 
       <div className="flex flex-col justify-center gap-5 rounded-lg border bg-muted/30 p-6">
         <p className="text-sm text-muted-foreground leading-relaxed">
@@ -800,76 +764,67 @@ function StepManifest({
       className="grid min-h-0 flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step {stepNumber}
-            </Badge>
-            <h3 className="text-lg font-semibold">Create App Manifest</h3>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="manifest-bot-id">Microsoft App ID</Label>
-            <Input
-              id="manifest-bot-id"
-              value={effectiveAppId}
-              onChange={(e) => setBotAppId(e.target.value)}
-              placeholder={
-                prefillAppId
-                  ? `From Step 2: ${prefillAppId}`
-                  : "Paste your Microsoft App ID"
-              }
-            />
-            <p className="text-xs text-muted-foreground">
-              {effectiveAppId
-                ? "App ID will be injected into the manifest automatically."
-                : "The App ID from Step 2. It will be injected into the manifest automatically."}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="manifest-name-short">Name (short)</Label>
-              <Input
-                id="manifest-name-short"
-                value={nameShort}
-                onChange={(e) => setNameShort(e.target.value)}
-                placeholder="Archestra"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="manifest-name-full">Name (full)</Label>
-              <Input
-                id="manifest-name-full"
-                value={nameFull}
-                onChange={(e) => setNameFull(e.target.value)}
-                placeholder="Archestra Bot"
-              />
-            </div>
-          </div>
-
-          <Button
-            onClick={handleDownload}
-            disabled={!effectiveAppId || downloading}
-            className="w-full"
-          >
-            {downloading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="mr-2 h-4 w-4" />
-            )}
-            Download archestra-teams-app.zip
-          </Button>
-
-          {!effectiveAppId && (
-            <span className="flex items-center gap-1 text-xs text-amber-500">
-              <TriangleAlert className="h-3 w-3 shrink-0" />
-              Enter your Microsoft App ID to generate the manifest
-            </span>
-          )}
+      <StepCard stepNumber={stepNumber} title="Create App Manifest">
+        <div className="space-y-2">
+          <Label htmlFor="manifest-bot-id">Microsoft App ID</Label>
+          <Input
+            id="manifest-bot-id"
+            value={effectiveAppId}
+            onChange={(e) => setBotAppId(e.target.value)}
+            placeholder={
+              prefillAppId
+                ? `From Step 2: ${prefillAppId}`
+                : "Paste your Microsoft App ID"
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            {effectiveAppId
+              ? "App ID will be injected into the manifest automatically."
+              : "The App ID from Step 2. It will be injected into the manifest automatically."}
+          </p>
         </div>
-      </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="manifest-name-short">Name (short)</Label>
+            <Input
+              id="manifest-name-short"
+              value={nameShort}
+              onChange={(e) => setNameShort(e.target.value)}
+              placeholder="Archestra"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="manifest-name-full">Name (full)</Label>
+            <Input
+              id="manifest-name-full"
+              value={nameFull}
+              onChange={(e) => setNameFull(e.target.value)}
+              placeholder="Archestra Bot"
+            />
+          </div>
+        </div>
+
+        <Button
+          onClick={handleDownload}
+          disabled={!effectiveAppId || downloading}
+          className="w-full"
+        >
+          {downloading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="mr-2 h-4 w-4" />
+          )}
+          Download archestra-teams-app.zip
+        </Button>
+
+        {!effectiveAppId && (
+          <span className="flex items-center gap-1 text-xs text-amber-500">
+            <TriangleAlert className="h-3 w-3 shrink-0" />
+            Enter your Microsoft App ID to generate the manifest
+          </span>
+        )}
+      </StepCard>
 
       <div className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-lg border bg-muted/30 p-4">
         <div className="shrink-0 flex items-center justify-between">

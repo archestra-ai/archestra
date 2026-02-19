@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { SetupDialog } from "@/components/setup-dialog";
-import { Badge } from "@/components/ui/badge";
+import { StepCard } from "@/components/step-card";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles, useUpdateProfile } from "@/lib/agent.query";
 
@@ -78,27 +78,19 @@ function StepEnableSlack() {
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step 1
-            </Badge>
-            <h3 className="text-lg font-semibold">Enable Slack on Agent</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Toggle Slack on for each agent that should be available in Slack. At
-            least one agent must be enabled to proceed.
-          </p>
-          <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed mt-2">
-            <strong>Access control:</strong> Only users who have access to the
-            agent (via team membership) can interact with it through Slack. Make
-            sure the relevant teams are assigned to the agent. Users are
-            identified by email, so their Slack account email must match their
-            Archestra email.
-          </div>
+      <StepCard stepNumber={1} title="Enable Slack on Agent">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Toggle Slack on for each agent that should be available in Slack. At
+          least one agent must be enabled to proceed.
+        </p>
+        <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed mt-2">
+          <strong>Access control:</strong> Only users who have access to the
+          agent (via team membership) can interact with it through Slack. Make
+          sure the relevant teams are assigned to the agent. Users are
+          identified by email, so their Slack account email must match their
+          Archestra email.
         </div>
-      </div>
+      </StepCard>
 
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 min-w-0">
         <div className="flex items-center justify-between">
@@ -168,50 +160,39 @@ function StepSelectAgentInSlack() {
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex items-start rounded-lg border bg-muted/30 p-2 relative">
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Step 2
-            </Badge>
-            <h3 className="text-lg font-semibold">
-              Select default Agent for Slack channel
-            </h3>
-          </div>
-          <ol className="space-y-3">
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                1
-              </span>
-              <span className="pt-0.5">
-                Open Slack and navigate to the channel where the bot is
-                installed
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                2
-              </span>
-              <span className="pt-0.5">
-                Mention the bot (e.g., <strong>@Archestra</strong>) and send any
-                message to it or use{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  /archestra-select-agent
-                </code>{" "}
-                command
-              </span>
-            </li>
-            <li className="flex gap-3 text-sm leading-relaxed">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                3
-              </span>
-              <span className="pt-0.5">
-                Choose an agent from the selection card that appears
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
+      <StepCard stepNumber={2} title="Select default Agent for Slack channel">
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5">
+              Open Slack and navigate to the channel where the bot is installed
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5">
+              Mention the bot (e.g., <strong>@Archestra</strong>) and send any
+              message to it or use{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                /archestra-select-agent
+              </code>{" "}
+              command
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5">
+              Choose an agent from the selection card that appears
+            </span>
+          </li>
+        </ol>
+      </StepCard>
 
       <video
         src="/slack/agent-bound.mp4"

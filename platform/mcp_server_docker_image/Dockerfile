@@ -60,6 +60,8 @@ RUN npm install -g npm@11.8.0 && \
         echo "Patched @isaacs/brace-expansion to 5.0.1 in npm"; \
     fi && \
     # Patch minimatch to 10.2.1 inside npm's bundled node_modules to fix CVE-2026-26996 (ReDoS)
+    # minimatch 10.2.1 depends on brace-expansion ^5.0.2 (changed from @isaacs/brace-expansion in 10.1.x)
+    # so we must also install brace-expansion 5.0.2 alongside it
     MINIMATCH_SHA256="3762bb590e36988b9f864e8ed6a8903e31659a937d40d6d95591b2bf406957e0" && \
     NPM_MINIMATCH_PATH="/usr/local/lib/node_modules/npm/node_modules/minimatch" && \
     if [ -d "$NPM_MINIMATCH_PATH" ]; then \
@@ -70,7 +72,17 @@ RUN npm install -g npm@11.8.0 && \
         tar -xzf "$TMP_DIR/minimatch.tgz" -C "$NPM_MINIMATCH_PATH" --strip-components=1 && \
         rm -rf "$TMP_DIR" && \
         echo "Patched minimatch to 10.2.1 in npm"; \
-    fi
+    fi && \
+    BRACE_EXP_SHA256="3bb99ab8f78f432f3d83f82112683859d0f84c1f1a83f32bef8535d1663ecb4d" && \
+    NPM_BRACE_EXP_PATH="/usr/local/lib/node_modules/npm/node_modules/brace-expansion" && \
+    mkdir -p "$NPM_BRACE_EXP_PATH" && \
+    TMP_DIR=$(mktemp -d) && \
+    wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.2.tgz && \
+    echo "$BRACE_EXP_SHA256  $TMP_DIR/brace-expansion.tgz" | sha256sum -c - && \
+    rm -rf "$NPM_BRACE_EXP_PATH"/* && \
+    tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$NPM_BRACE_EXP_PATH" --strip-components=1 && \
+    rm -rf "$TMP_DIR" && \
+    echo "Installed brace-expansion 5.0.2 for minimatch 10.2.1 in npm"
 
 WORKDIR /opt/node-deps
 

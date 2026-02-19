@@ -134,7 +134,8 @@ export default function MsTeamsPage() {
         <span className="text-muted-foreground text-xs">
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            POST {`${config.api.externalProxyUrls[0] || window.location.origin}/api/webhooks/chatops/ms-teams`}
+            POST{" "}
+            {`${config.api.externalProxyUrls[0] || window.location.origin}/api/webhooks/chatops/ms-teams`}
           </code>{" "}
           must be publicly accessible so MS Teams can deliver messages to
           Archestra

@@ -217,7 +217,10 @@ function StepSlide({
   instructions?: React.ReactNode[];
 }) {
   return (
-    <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
+    <div
+      className="grid flex-1 gap-6"
+      style={{ gridTemplateColumns: "1fr 1fr" }}
+    >
       <StepCard stepNumber={stepNumber} title={title}>
         {instructions && (
           <ol className="space-y-3">
@@ -256,7 +259,10 @@ function StepInstall({
   onBotTokenChange: (v: string) => void;
 }) {
   return (
-    <div className="grid flex-1 gap-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
+    <div
+      className="grid flex-1 gap-6"
+      style={{ gridTemplateColumns: "1fr 1fr" }}
+    >
       <StepCard stepNumber={stepNumber} title="Install App to Workspace">
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">

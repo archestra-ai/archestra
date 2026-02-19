@@ -58,3 +58,26 @@ export const PermissionsSchema = z.partialRecord(
   z.enum(resources),
   z.array(z.enum(actions)),
 );
+
+/** Database-level agent type discriminator values */
+export type AgentType = "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+
+/**
+ * Maps an agent's `agentType` to the corresponding RBAC resource.
+ *
+ * - "agent" → "agent"
+ * - "mcp_gateway" → "mcpGateway"
+ * - "llm_proxy" → "llmProxy"
+ * - "profile" → "agent" (legacy profiles use the "agent" resource)
+ */
+export function getResourceForAgentType(agentType: AgentType): Resource {
+  switch (agentType) {
+    case "mcp_gateway":
+      return "mcpGateway";
+    case "llm_proxy":
+      return "llmProxy";
+    case "agent":
+    case "profile":
+      return "agent";
+  }
+}

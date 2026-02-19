@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import {
   archestraApiSdk,
+  getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
@@ -265,21 +266,6 @@ function SubagentsEditor({
       />
     </div>
   );
-}
-
-// Maps agentType to the RBAC resource name for permission checks
-function getResourceForAgentType(
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent",
-): "agent" | "mcpGateway" | "llmProxy" {
-  switch (agentType) {
-    case "mcp_gateway":
-      return "mcpGateway";
-    case "llm_proxy":
-      return "llmProxy";
-    case "agent":
-    case "profile":
-      return "agent";
-  }
 }
 
 // Helper functions for type-specific UI text

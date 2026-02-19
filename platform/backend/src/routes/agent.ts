@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  hasAnyAgentTypeAdminPermission,
+  getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   isAgentTypeAdmin,
   requireAgentTypePermission,
@@ -86,44 +86,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
+      // Single DB query for all permission checks
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
       // Check read permission for the requested agent type(s)
       if (effectiveTypes) {
         for (const type of effectiveTypes) {
-          await requireAgentTypePermission({
-            userId: user.id,
-            organizationId,
-            agentType: type,
-            action: "read",
-          });
+          checker.require(type, "read");
         }
-      } else {
-        // No type filter — require read on at least one of the three resources
-        // (the model will return all types the user has team access to)
-        const hasAny = await hasAnyAgentTypeReadPermission({
-          userId: user.id,
-          organizationId,
-        });
-        if (!hasAny) {
-          throw new ApiError(403, "Forbidden");
-        }
+      } else if (!checker.hasAnyReadPermission()) {
+        throw new ApiError(403, "Forbidden");
       }
 
       // Check admin for the specific type(s) being queried, or any type if unfiltered
       const isAdmin = effectiveTypes
         ? effectiveTypes.length === 1
-          ? await isAgentTypeAdmin({
-              userId: user.id,
-              organizationId,
-              agentType: effectiveTypes[0],
-            })
-          : await hasAnyAgentTypeAdminPermission({
-              userId: user.id,
-              organizationId,
-            })
-        : await hasAnyAgentTypeAdminPermission({
-            userId: user.id,
-            organizationId,
-          });
+          ? checker.isAdmin(effectiveTypes[0])
+          : checker.hasAnyAdminPermission()
+        : checker.hasAnyAdminPermission();
 
       return reply.send(
         await AgentModel.findAllPaginated(
@@ -177,42 +160,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
+      // Single DB query for all permission checks
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
       // Check read permission for the requested agent type(s)
       if (effectiveTypes) {
         for (const type of effectiveTypes) {
-          await requireAgentTypePermission({
-            userId: user.id,
-            organizationId,
-            agentType: type,
-            action: "read",
-          });
+          checker.require(type, "read");
         }
-      } else {
-        const hasAny = await hasAnyAgentTypeReadPermission({
-          userId: user.id,
-          organizationId,
-        });
-        if (!hasAny) {
-          throw new ApiError(403, "Forbidden");
-        }
+      } else if (!checker.hasAnyReadPermission()) {
+        throw new ApiError(403, "Forbidden");
       }
 
       // Check admin for the specific type(s) being queried, or any type if unfiltered
       const isAdmin = effectiveTypes
         ? effectiveTypes.length === 1
-          ? await isAgentTypeAdmin({
-              userId: user.id,
-              organizationId,
-              agentType: effectiveTypes[0],
-            })
-          : await hasAnyAgentTypeAdminPermission({
-              userId: user.id,
-              organizationId,
-            })
-        : await hasAnyAgentTypeAdminPermission({
-            userId: user.id,
-            organizationId,
-          });
+          ? checker.isAdmin(effectiveTypes[0])
+          : checker.hasAnyAdminPermission()
+        : checker.hasAnyAdminPermission();
 
       return reply.send(
         await AgentModel.findAll(user.id, isAdmin, {

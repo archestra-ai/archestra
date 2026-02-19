@@ -488,19 +488,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetModelsWithApiKeys]: {
     chatSettings: ["read"],
   },
-  // Agent Delegation Routes (internal agents only)
-  [RouteId.GetAgentDelegations]: {
-    agent: ["read"],
-  },
-  [RouteId.SyncAgentDelegations]: {
-    agent: ["update"],
-  },
-  [RouteId.DeleteAgentDelegation]: {
-    agent: ["update"],
-  },
-  [RouteId.GetAllDelegationConnections]: {
-    agent: ["read"],
-  },
+  // Delegation routes: agent-type permission checked dynamically in handler
+  [RouteId.GetAgentDelegations]: {},
+  [RouteId.SyncAgentDelegations]: {},
+  [RouteId.DeleteAgentDelegation]: {},
+  [RouteId.GetAllDelegationConnections]: {},
   [RouteId.GetLimits]: {
     limit: ["read"],
   },

@@ -1,28 +1,14 @@
-import type { Action, Resource } from "@shared";
+import {
+  type Action,
+  type AgentType,
+  getResourceForAgentType,
+  type Resource,
+} from "@shared";
 import { UserModel } from "@/models";
-import type { AgentType } from "@/types";
 import { ApiError } from "@/types";
 import { userHasPermission } from "./utils";
 
-/**
- * Maps an agent's `agentType` to the corresponding RBAC resource.
- *
- * - "agent" → "agent"
- * - "mcp_gateway" → "mcpGateway"
- * - "llm_proxy" → "llmProxy"
- * - "profile" → "agent" (legacy profiles use the "agent" resource)
- */
-export function getResourceForAgentType(agentType: AgentType): Resource {
-  switch (agentType) {
-    case "mcp_gateway":
-      return "mcpGateway";
-    case "llm_proxy":
-      return "llmProxy";
-    case "agent":
-    case "profile":
-      return "agent";
-  }
-}
+export { getResourceForAgentType };
 
 /**
  * Checks that the user has the given action on the resource corresponding to `agentType`.
@@ -86,7 +72,59 @@ export async function hasAnyAgentTypeAdminPermission(params: {
   return hasAnyAgentTypePermission({ ...params, action: "admin" });
 }
 
+/**
+ * Fetches permissions once and returns check functions for agent-type resources.
+ * Use this to avoid N+1 DB queries when multiple permission checks are needed
+ * in a single request handler.
+ */
+export async function getAgentTypePermissionChecker(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<AgentTypePermissionChecker> {
+  const permissions = await UserModel.getUserPermissions(
+    params.userId,
+    params.organizationId,
+  );
+  return {
+    require(agentType: AgentType, action: Action): void {
+      const resource = getResourceForAgentType(agentType);
+      if (!(permissions[resource]?.includes(action) ?? false)) {
+        throw new ApiError(403, "Forbidden");
+      }
+    },
+    isAdmin(agentType: AgentType): boolean {
+      const resource = getResourceForAgentType(agentType);
+      return permissions[resource]?.includes("admin") ?? false;
+    },
+    hasAnyReadPermission(): boolean {
+      return AGENT_TYPE_RESOURCES.some(
+        (r) => permissions[r]?.includes("read") ?? false,
+      );
+    },
+    hasAnyAdminPermission(): boolean {
+      return AGENT_TYPE_RESOURCES.some(
+        (r) => permissions[r]?.includes("admin") ?? false,
+      );
+    },
+  };
+}
+
+// ===== Types =====
+
+export interface AgentTypePermissionChecker {
+  /** Throws ApiError(403) if the user lacks the action on the agent type's resource. */
+  require(agentType: AgentType, action: Action): void;
+  /** Returns true if the user has admin on the agent type's resource. */
+  isAdmin(agentType: AgentType): boolean;
+  /** Returns true if the user has read on any of the three agent-type resources. */
+  hasAnyReadPermission(): boolean;
+  /** Returns true if the user has admin on any of the three agent-type resources. */
+  hasAnyAdminPermission(): boolean;
+}
+
 // ===== Internal helpers =====
+
+const AGENT_TYPE_RESOURCES: Resource[] = ["agent", "mcpGateway", "llmProxy"];
 
 async function hasAnyAgentTypePermission(params: {
   userId: string;
@@ -97,8 +135,7 @@ async function hasAnyAgentTypePermission(params: {
     params.userId,
     params.organizationId,
   );
-  const resources: Resource[] = ["agent", "mcpGateway", "llmProxy"];
-  return resources.some(
+  return AGENT_TYPE_RESOURCES.some(
     (r) => permissions[r]?.includes(params.action) ?? false,
   );
 }

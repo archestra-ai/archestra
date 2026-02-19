@@ -3,6 +3,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   hasAnyAgentTypeAdminPermission,
+  hasAnyAgentTypeReadPermission,
+  isAgentTypeAdmin,
   requireAgentTypePermission,
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
@@ -635,14 +637,21 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { agentId }, organizationId, user }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Validate agent exists and is accessible
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      // Fetch agent first to determine its type (admin=true to bypass team filter)
+      const agent = await AgentModel.findById(agentId, user.id, true);
       if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check read permission for this agent's type (return 404 to avoid leaking existence)
+      try {
+        await requireAgentTypePermission({
+          userId: user.id,
+          organizationId,
+          agentType: agent.agentType,
+          action: "read",
+        });
+      } catch {
         throw new ApiError(404, "Agent not found");
       }
 
@@ -651,10 +660,28 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "LLM proxies cannot have subagents");
       }
 
+      const admin = await isAgentTypeAdmin({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+      });
+
+      // If not admin, verify team access
+      if (!admin) {
+        const filteredAgent = await AgentModel.findById(
+          agentId,
+          user.id,
+          false,
+        );
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
       const delegations = await AgentToolModel.getDelegationTargets(
         agentId,
         user.id,
-        isAgentAdmin,
+        admin,
       );
       return reply.send(delegations);
     },
@@ -686,20 +713,45 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { agentId }, body, organizationId, user }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Validate agent exists and is accessible
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      // Fetch agent first to determine its type (admin=true to bypass team filter)
+      const agent = await AgentModel.findById(agentId, user.id, true);
       if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check update permission for this agent's type (return 404 to avoid leaking existence)
+      try {
+        await requireAgentTypePermission({
+          userId: user.id,
+          organizationId,
+          agentType: agent.agentType,
+          action: "update",
+        });
+      } catch {
         throw new ApiError(404, "Agent not found");
       }
 
       // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
       if (agent.agentType === "llm_proxy") {
         throw new ApiError(400, "LLM proxies cannot have subagents");
+      }
+
+      const admin = await isAgentTypeAdmin({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+      });
+
+      // If not admin, verify team access
+      if (!admin) {
+        const filteredAgent = await AgentModel.findById(
+          agentId,
+          user.id,
+          false,
+        );
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
       }
 
       // Validate all target agents exist and are internal agents
@@ -754,20 +806,45 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { agentId, targetAgentId }, organizationId, user },
       reply,
     ) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Validate agent exists and is accessible
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      // Fetch agent first to determine its type (admin=true to bypass team filter)
+      const agent = await AgentModel.findById(agentId, user.id, true);
       if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check update permission for this agent's type (return 404 to avoid leaking existence)
+      try {
+        await requireAgentTypePermission({
+          userId: user.id,
+          organizationId,
+          agentType: agent.agentType,
+          action: "update",
+        });
+      } catch {
         throw new ApiError(404, "Agent not found");
       }
 
       // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
       if (agent.agentType === "llm_proxy") {
         throw new ApiError(400, "LLM proxies cannot have subagents");
+      }
+
+      const admin = await isAgentTypeAdmin({
+        userId: user.id,
+        organizationId,
+        agentType: agent.agentType,
+      });
+
+      // If not admin, verify team access
+      if (!admin) {
+        const filteredAgent = await AgentModel.findById(
+          agentId,
+          user.id,
+          false,
+        );
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
       }
 
       const success = await AgentToolModel.removeDelegation(
@@ -824,7 +901,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
+    async ({ organizationId, user }, reply) => {
+      // Require read on at least one agent-type resource
+      const hasRead = await hasAnyAgentTypeReadPermission({
+        userId: user.id,
+        organizationId,
+      });
+      if (!hasRead) {
+        throw new ApiError(403, "Forbidden");
+      }
+
       const [connections, agents] = await Promise.all([
         AgentToolModel.getAllDelegationConnections(organizationId),
         AgentModel.findByOrganizationId(organizationId, { agentType: "agent" }),

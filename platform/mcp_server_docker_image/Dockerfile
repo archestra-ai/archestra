@@ -30,12 +30,12 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Upgrade npm to 11.10.0 to get patched bundled dependencies (tar, glob, cross-spawn)
+# Upgrade npm to 11.8.0 to get patched bundled dependencies (tar, glob, cross-spawn)
 # CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960: tar vulnerabilities
 # CVE-2025-64756: glob vulnerability
 # CVE-2024-21538: cross-spawn vulnerability
 # CVE-2026-26996: minimatch ReDoS vulnerability (patched below)
-RUN npm install -g npm@11.10.0 && \
+RUN npm install -g npm@11.8.0 && \
     # Patch tar to 7.5.8 inside npm's bundled node_modules to fix CVE-2026-26960
     TAR_SHA256="5fc7136bf937d640436d13639447d06d44cb6b464188bf7b57fb6ac3ec1be0a2" && \
     NPM_TAR_PATH="/usr/local/lib/node_modules/npm/node_modules/tar" && \

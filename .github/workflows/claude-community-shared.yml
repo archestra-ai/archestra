@@ -43,13 +43,6 @@ jobs:
   run-claude:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
-    # Both pull-requests and issues write are needed because this shared workflow
-    # serves both PR triage and issue triage callers. The caller's permissions
-    # act as the ceiling, so the unused permission has no effect in practice.
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
 
     steps:
       - name: Generate GitHub App token

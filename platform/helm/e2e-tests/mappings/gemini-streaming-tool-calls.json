@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/gemini/v1beta/models/[^:]+:streamGenerateContent",
+    "headers": {
+      "x-goog-api-key": {
+        "contains": "gemini-streaming-tool-calls"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    },
+    "body": "data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"read_file\",\"args\":{\"file_path\":\"/tmp/test\"}}}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":50,\"candidatesTokenCount\":20,\"totalTokenCount\":70},\"modelVersion\":\"gemini-2.5-pro\"}\n\n"
+  }
+}

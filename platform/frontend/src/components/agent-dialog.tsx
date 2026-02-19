@@ -20,6 +20,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -32,8 +33,6 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
-import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
@@ -763,9 +762,6 @@ export function AgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
-  const [slackSetupOpen, setSlackSetupOpen] = useState(false);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -1024,25 +1020,29 @@ export function AgentDialog({
                 {/* ChatOps */}
                 <div className="space-y-3">
                   {chatopsProviders.map((provider) => (
-                    <div
-                      key={provider.id}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="space-y-0.5">
-                        <label
-                          htmlFor={`chatops-${provider.id}`}
-                          className="text-sm cursor-pointer"
-                        >
-                          {provider.displayName}
-                        </label>
-                        <p className="text-xs text-muted-foreground">
-                          Allow this agent to be triggered via{" "}
-                          {provider.displayName}
-                        </p>
-                      </div>
-                      {provider.configured ? (
+                    <div key={provider.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label
+                            htmlFor={`chatops-${provider.id}`}
+                            className="text-sm cursor-pointer"
+                          >
+                            {provider.displayName}
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            Users can interact with this agent in{" "}
+                            {provider.displayName}, configure channels in{" "}
+                            <Link
+                              href="/agent-triggers"
+                              className="underline hover:text-foreground"
+                            >
+                              Agent Triggers
+                            </Link>
+                          </p>
+                        </div>
                         <Switch
                           id={`chatops-${provider.id}`}
+                          disabled={!provider.configured}
                           checked={allowedChatops.includes(provider.id)}
                           onCheckedChange={(checked) => {
                             if (checked) {
@@ -1059,32 +1059,21 @@ export function AgentDialog({
                             }
                           }}
                         />
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (provider.id === "slack") {
-                              setSlackSetupOpen(true);
-                            } else {
-                              setMsTeamsSetupOpen(true);
-                            }
-                          }}
-                        >
-                          Setup {provider.displayName}
-                        </Button>
+                      </div>
+                      {!provider.configured && (
+                        <p className="text-xs text-muted-foreground">
+                          Not configured.{" "}
+                          <Link
+                            href="/agent-triggers"
+                            className="underline hover:text-foreground"
+                          >
+                            Set up in Agent Triggers
+                          </Link>
+                        </p>
                       )}
                     </div>
                   ))}
                 </div>
-                <MsTeamsSetupDialog
-                  open={msTeamsSetupOpen}
-                  onOpenChange={setMsTeamsSetupOpen}
-                />
-                <SlackSetupDialog
-                  open={slackSetupOpen}
-                  onOpenChange={setSlackSetupOpen}
-                />
 
                 {/* Email */}
                 {features?.incomingEmail?.enabled ? (
@@ -1098,7 +1087,7 @@ export function AgentDialog({
                           Email
                         </label>
                         <p className="text-xs text-muted-foreground">
-                          Allow this agent to be triggered via email
+                          Users can interact with this agent via email
                         </p>
                       </div>
                       <Switch
@@ -1214,21 +1203,23 @@ export function AgentDialog({
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-sm">Email</span>
-                      <p className="text-xs text-muted-foreground">
-                        Allow this agent to be triggered via email
-                      </p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <span className="text-sm">Email</span>
+                        <p className="text-xs text-muted-foreground">
+                          Users can interact with this agent via email, first
+                          run initial set up in{" "}
+                          <Link
+                            href="/agent-triggers"
+                            className="underline hover:text-foreground"
+                          >
+                            Agent Triggers
+                          </Link>
+                        </p>
+                      </div>
+                      <Switch disabled checked={false} />
                     </div>
-                    <a
-                      href="https://archestra.ai/docs/platform-agents#incoming-email"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary underline hover:no-underline"
-                    >
-                      Setup docs
-                    </a>
                   </div>
                 )}
               </div>
@@ -1317,11 +1308,12 @@ export function AgentDialog({
                       htmlFor="consider-context-untrusted"
                       className="text-sm font-medium cursor-pointer"
                     >
-                      Treat user context as untrusted
+                      Treat context as untrusted from the start of chat
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Enable when user prompts may contain untrusted and
-                      sensitive data.
+                      When enabled, the context is always considered untrusted.
+                      Only tools allowed to run in untrusted context will be
+                      permitted.
                     </p>
                   </div>
                   <Switch

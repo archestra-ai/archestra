@@ -129,7 +129,7 @@ const AgentToolsEditorContent = forwardRef<
   const assignedToolsByCatalog = useMemo(() => {
     const map = new Map<string, AgentTool[]>();
     for (const at of assignedToolsData?.data ?? []) {
-      const catalogId = at.tool.catalogId ?? at.tool.mcpServerCatalogId;
+      const catalogId = at.tool.catalogId;
       if (!catalogId) continue;
       if (!map.has(catalogId)) map.set(catalogId, []);
       map.get(catalogId)?.push(at);

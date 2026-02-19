@@ -148,7 +148,7 @@ describe("ToolAutoPolicyService", () => {
 
       // Create MCP server and tool
       const mcpServer = await makeMcpServer({ name: "test-server" });
-      const tool = await makeTool({ mcpServerId: mcpServer.id });
+      const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
       // Mock the subagent analysis
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
@@ -210,7 +210,7 @@ describe("ToolAutoPolicyService", () => {
       });
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
-      const tool = await makeTool({ mcpServerId: mcpServer.id });
+      const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
       // Mock blocking policy response
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
@@ -246,7 +246,7 @@ describe("ToolAutoPolicyService", () => {
       vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
-      const tool = await makeTool({ mcpServerId: mcpServer.id });
+      const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
         toolInvocationAction: "allow_when_context_is_untrusted",
@@ -274,7 +274,7 @@ describe("ToolAutoPolicyService", () => {
       vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
-      const tool = await makeTool({ mcpServerId: mcpServer.id });
+      const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
       vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
         toolInvocationAction: "block_when_context_is_untrusted",

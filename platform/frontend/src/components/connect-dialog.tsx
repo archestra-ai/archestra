@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, Bot, ExternalLink, Network, Shield } from "lucide-react";
+import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,9 +21,9 @@ const AGENT_TYPE_CONFIG: Record<
   { icon: LucideIcon; titlePrefix: string }
 > = {
   agent: { icon: Bot, titlePrefix: "Connect to" },
-  mcp_gateway: { icon: Shield, titlePrefix: "Connect via" },
+  mcp_gateway: { icon: Route, titlePrefix: "Connect via" },
   llm_proxy: { icon: Network, titlePrefix: "Connect via" },
-  profile: { icon: Shield, titlePrefix: "Connect via" },
+  profile: { icon: Route, titlePrefix: "Connect via" },
 };
 
 interface ConnectDialogProps {

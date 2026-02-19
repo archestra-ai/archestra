@@ -170,10 +170,10 @@ export function McpConnectionInstructions({
         return;
       }
 
-      if (tool.mcpServerId) {
-        const server = mcpServers.find((s) => s.id === tool.mcpServerId);
+      if (tool.catalogId) {
+        const server = mcpServers.find((s) => s.catalogId === tool.catalogId);
         if (server) {
-          const existing = groups.get(tool.mcpServerId);
+          const existing = groups.get(tool.catalogId);
           const toolData = {
             id: tool.id,
             name: parseFullToolName(tool.name).toolName || tool.name,
@@ -186,7 +186,7 @@ export function McpConnectionInstructions({
             const credentialSource =
               agentTool.credentialSourceMcpServerId ??
               agentTool.executionSourceMcpServerId;
-            groups.set(tool.mcpServerId, {
+            groups.set(tool.catalogId, {
               server,
               tools: [toolData],
               credentialSourceMcpServerId: credentialSource,
@@ -204,8 +204,10 @@ export function McpConnectionInstructions({
   const getToolsCountForProfile = useCallback(
     (profile: ProfileType) => {
       return profile.tools.reduce((acc: number, curr) => {
-        if (curr.mcpServerId) {
-          const server = mcpServers?.find((s) => s.id === curr.mcpServerId);
+        if (curr.catalogId) {
+          const server = mcpServers?.find(
+            (s) => s.catalogId === curr.catalogId,
+          );
           if (server) {
             acc++;
           }

@@ -136,6 +136,7 @@ export const __test = {
   },
   getCacheKey,
   isBrowserMcpTool,
+  normalizeJsonSchema,
 };
 
 /**
@@ -516,7 +517,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeJsonSchema(schema: unknown): JSONSchema7 {
-  const fallbackSchema: JSONSchema7 = { type: "object", properties: {} };
+  const fallbackSchema: JSONSchema7 = {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+  };
 
   // If schema is missing or invalid, return a minimal valid schema
   if (!isRecord(schema)) {
@@ -532,8 +537,46 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     return fallbackSchema;
   }
 
-  // Return the schema as-is if it's already valid JSON Schema
-  return schema as JSONSchema7;
+  // Add additionalProperties: false to all object-type schemas recursively.
+  // This is required for OpenAI-compatible providers (Ollama, vLLM) to properly
+  // emit streaming tool calls instead of outputting tool calls as text content.
+  // Without it, models hallucinate extra properties and providers may fail to
+  // recognize the output as a tool call in streaming mode.
+  return addAdditionalPropertiesFalse(schema) as JSONSchema7;
+}
+
+/**
+ * Recursively adds `additionalProperties: false` to all object-type schemas.
+ * Traverses properties, array items, and nested schemas.
+ */
+function addAdditionalPropertiesFalse(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...schema };
+
+  if (result.type === "object") {
+    if (!("additionalProperties" in result)) {
+      result.additionalProperties = false;
+    }
+
+    // Recurse into properties
+    if (isRecord(result.properties)) {
+      const newProps: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(result.properties)) {
+        newProps[key] = isRecord(value)
+          ? addAdditionalPropertiesFalse(value)
+          : value;
+      }
+      result.properties = newProps;
+    }
+  }
+
+  // Recurse into array items
+  if (result.type === "array" && isRecord(result.items)) {
+    result.items = addAdditionalPropertiesFalse(result.items);
+  }
+
+  return result;
 }
 
 /**
@@ -666,15 +709,6 @@ export async function getChatMcpTools({
       try {
         // Normalize the schema and wrap with jsonSchema() helper
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
-
-        logger.debug(
-          {
-            toolName: mcpTool.name,
-            schemaType: normalizedSchema.type,
-            hasProperties: !!normalizedSchema.properties,
-          },
-          "Converting MCP tool with JSON Schema",
-        );
 
         // Construct Tool using jsonSchema() to wrap JSON Schema
         aiTools[mcpTool.name] = {

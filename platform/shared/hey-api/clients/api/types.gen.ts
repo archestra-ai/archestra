@@ -7997,9 +7997,6 @@ export type GetAllAgentToolsResponses = {
                 createdAt: string;
                 updatedAt: string;
                 catalogId: string | null;
-                mcpServerId: string | null;
-                mcpServerName: string | null;
-                mcpServerCatalogId: string | null;
             };
         }>;
         pagination: {
@@ -26833,7 +26830,7 @@ export type GetToolsResponses = {
             id: string;
             name: string;
         } | null;
-        mcpServer: {
+        catalog: {
             id: string;
             name: string;
         } | null;
@@ -26947,9 +26944,6 @@ export type GetToolsWithAssignmentsResponses = {
                 [key: string]: unknown;
             };
             catalogId: string | null;
-            mcpServerId: string | null;
-            mcpServerName: string | null;
-            mcpServerCatalogId: string | null;
             createdAt: string;
             updatedAt: string;
             assignmentCount: number;

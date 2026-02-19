@@ -1,5 +1,6 @@
 "use client";
 
+import { parseFullToolName } from "@shared";
 import { ChevronDown, ChevronRight, Layers, User } from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
@@ -45,6 +46,8 @@ export function ToolDetailsDialog({
   const [assignmentsOpen, setAssignmentsOpen] = useState(true);
 
   if (!tool) return null;
+
+  const displayName = parseFullToolName(tool.name).toolName || tool.name;
 
   const catalogItem = internalMcpCatalogItems?.find(
     (item) => item.id === tool.catalogId,
@@ -94,7 +97,7 @@ export function ToolDetailsDialog({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <DialogTitle className="text-xl font-semibold tracking-tight truncate cursor-help">
-                        {tool.name}
+                        {displayName}
                       </DialogTitle>
                     </TooltipTrigger>
                     <TooltipContent
@@ -108,7 +111,7 @@ export function ToolDetailsDialog({
                 </TooltipProvider>
               ) : (
                 <DialogTitle className="text-xl font-semibold tracking-tight truncate">
-                  {tool.name}
+                  {displayName}
                 </DialogTitle>
               )}
               {tool.description && (

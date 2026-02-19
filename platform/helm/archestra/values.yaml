@@ -244,6 +244,48 @@ archestra:
         # Specifies whether RBAC resources should be created
         create: true
 
+      # NetworkPolicy configuration for MCP server pods (SSRF protection)
+      # When enabled, creates a Kubernetes NetworkPolicy that prevents MCP server pods from
+      # accessing private/internal IP ranges, blocking SSRF attacks against cluster services,
+      # cloud metadata endpoints, and other internal infrastructure.
+      #
+      # The policy allows:
+      #   - DNS resolution (UDP/TCP port 53)
+      #   - Egress to the public internet
+      #
+      # The policy blocks:
+      #   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918 private ranges)
+      #   - 169.254.0.0/16 (link-local / cloud metadata endpoints like AWS IMDSv1, GCP, Azure)
+      #   - 100.64.0.0/10 (carrier-grade NAT / RFC 6598)
+      #   - 127.0.0.0/8 (loopback)
+      #
+      # IMPORTANT: This requires a CNI plugin that supports NetworkPolicies (e.g., Calico, Cilium, Weave).
+      # The default GKE CNI (kubenet) does NOT enforce NetworkPolicies unless Dataplane V2 or Calico is enabled.
+      # See: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+      networkPolicy:
+        # Specifies whether the SSRF protection NetworkPolicy should be created
+        create: true
+
+        # Additional CIDR ranges to block (added to the default private ranges)
+        # Example:
+        #   additionalDeniedCidrs:
+        #     - 198.51.100.0/24    # Documentation range
+        #     - 203.0.113.0/24     # Documentation range
+        additionalDeniedCidrs: []
+
+        # Additional egress rules to add to the NetworkPolicy
+        # Use this to allow MCP server pods to reach specific internal services
+        # that would otherwise be blocked by the private range deny rules.
+        # Example - allow access to an internal API gateway:
+        #   additionalEgressRules:
+        #     - to:
+        #         - ipBlock:
+        #             cidr: 10.0.50.0/24  # Internal API gateway subnet
+        #       ports:
+        #         - protocol: TCP
+        #           port: 443
+        additionalEgressRules: []
+
       # RBAC configuration for MCP server pods that need Kubernetes API access
       # Creates a dedicated service account with namespace-scoped permissions for K8s resources
       # Permissions: manage pods, services, deployments, jobs (read-only for secrets removed)

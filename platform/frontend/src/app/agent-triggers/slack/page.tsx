@@ -12,6 +12,7 @@ import {
   Pencil,
   RefreshCw,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -29,6 +30,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -317,7 +324,7 @@ function ChannelBindingsSection() {
                     </TooltipProvider>
                   </div>
                 </TableHead>
-                <TableHead className="w-[120px]">Actions</TableHead>
+                <TableHead className="w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -342,6 +349,75 @@ function ChannelBindingsSection() {
                     </TableCell>
                     <TableCell className="pr-4">
                       <ButtonGroup>
+                        {agentBindings.length === 1 && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label="Open in Slack"
+                                  asChild
+                                >
+                                  <a
+                                    href={buildSlackDeepLink(agentBindings[0])}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <Image
+                                      src="/icons/slack.png"
+                                      alt="Slack"
+                                      width={16}
+                                      height={16}
+                                    />
+                                  </a>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Open in Slack</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {agentBindings.length > 1 && (
+                          <DropdownMenu>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="icon-sm"
+                                      aria-label="Open in Slack"
+                                    >
+                                      <Image
+                                        src="/icons/slack.png"
+                                        alt="Slack"
+                                        width={16}
+                                        height={16}
+                                      />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Open in Slack</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <DropdownMenuContent align="start">
+                              {agentBindings.map((b) => (
+                                <DropdownMenuItem key={b.id} asChild>
+                                  <a
+                                    href={buildSlackDeepLink(b)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {b.channelName ?? b.channelId}
+                                    {b.workspaceName
+                                      ? ` (${b.workspaceName})`
+                                      : ""}
+                                  </a>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -603,6 +679,16 @@ function SetupStep({
       )}
     </Card>
   );
+}
+
+function buildSlackDeepLink(binding: {
+  channelId: string;
+  workspaceId?: string | null;
+}): string {
+  if (binding.workspaceId) {
+    return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;
+  }
+  return `slack://channel?id=${binding.channelId}`;
 }
 
 function CredentialField({ label, value }: { label: string; value?: string }) {

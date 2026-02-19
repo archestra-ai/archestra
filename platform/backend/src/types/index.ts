@@ -17,6 +17,7 @@ export * from "./label";
 export * from "./limit";
 export * from "./llm-provider";
 export * from "./llm-providers";
+export * from "./mcp-apps";
 export * from "./mcp-catalog";
 export * from "./mcp-server";
 export * from "./mcp-server-installation-request";

@@ -27,6 +27,8 @@ export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
 export { default as limitsRoutes } from "./limits";
+export { llmGatewayMcpAppsRoutes } from "./llm-gateway-mcp-apps";
+export { mcpAppsRoutes } from "./mcp-apps";
 export { mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";

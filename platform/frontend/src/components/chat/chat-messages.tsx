@@ -38,6 +38,7 @@ import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import { McpAppRenderer, extractMcpAppResources } from "@/components/mcp-apps";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -928,6 +929,11 @@ function MessageTool({
     );
   }
 
+  // Check if tool result contains MCP App resource
+  const toolOutput = toolResultPart?.output || part.output;
+  const mcpAppResources = toolOutput ? extractMcpAppResources(toolOutput) : [];
+  const hasMcpAppResource = mcpAppResources.length > 0;
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
@@ -956,6 +962,26 @@ function MessageTool({
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+        
+        {/* Render MCP App if present */}
+        {hasMcpAppResource && agentId && (
+          <div className="p-4">
+            <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">
+              Interactive App
+            </h4>
+            {mcpAppResources.map((resource, index) => (
+              <McpAppRenderer
+                key={`${resource.resource.uri}-${index}`}
+                resourceUri={resource.resource.uri}
+                toolInput={part.input as Record<string, unknown> | undefined}
+                toolResult={toolOutput}
+                agentId={agentId}
+                onOpenLink={({ url }) => window.open(url, "_blank")}
+              />
+            ))}
+          </div>
+        )}
+        
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}

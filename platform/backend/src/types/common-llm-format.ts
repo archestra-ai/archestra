@@ -11,6 +11,14 @@ export type CommonMcpToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  /** MCP Apps UI metadata */
+  _meta?: {
+    ui?: {
+      resourceUri: string;
+      permissions?: string[];
+      csp?: Record<string, string[]>;
+    };
+  };
 };
 
 export const CommonToolCallSchema = z

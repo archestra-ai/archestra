@@ -27,6 +27,8 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -36,6 +38,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import { metrics } from "@/observability";
 import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
@@ -110,14 +113,160 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
-      name,
-      title: archestraToolTitles.get(name) || name,
-      description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    }));
+    // Build tools list with _meta support for MCP Apps
+    const toolsList: Array<{
+      name: string;
+      title: string;
+      description: string | null;
+      inputSchema: Record<string, unknown>;
+      annotations: Record<string, unknown>;
+      _meta: {
+        ui?: {
+          resourceUri: string;
+          permissions?: string[];
+          csp?: Record<string, string[]>;
+        };
+      };
+    }> = [];
+
+    // Group tools by catalog to batch fetch tool definitions
+    const toolsByCatalog = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        parameters: Record<string, unknown>;
+      }>
+    >();
+
+    for (const tool of mcpTools) {
+      const catalogId = tool.catalogId;
+      if (!catalogId) {
+        // Archestra built-in tools or delegation tools without catalog
+        toolsList.push({
+          name: tool.name,
+          title: (archestraToolTitles.get(tool.name) as string) || tool.name,
+          description: tool.description,
+          inputSchema: tool.parameters as Record<string, unknown>,
+          annotations: {},
+          _meta: {},
+        });
+        continue;
+      }
+
+      if (!toolsByCatalog.has(catalogId)) {
+        toolsByCatalog.set(catalogId, []);
+      }
+      toolsByCatalog.get(catalogId)!.push({
+        id: tool.id,
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters as Record<string, unknown>,
+      });
+    }
+
+    // Fetch tool definitions from MCP servers to get _meta
+    for (const [catalogId, tools] of toolsByCatalog) {
+      try {
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+        if (!catalogItem) continue;
+
+        // Get MCP server for this catalog
+        const servers = await McpServerModel.findByCatalogId(catalogId);
+        if (servers.length === 0) {
+          // No server available, use basic tool info
+          for (const tool of tools) {
+            toolsList.push({
+              name: tool.name,
+              title: tool.name,
+              description: tool.description,
+              inputSchema: tool.parameters,
+              annotations: {},
+              _meta: {},
+            });
+          }
+          continue;
+        }
+
+        // Use first available server to get tool definitions
+        const targetServer = servers[0];
+        let secrets: Record<string, unknown> = {};
+        if (targetServer.secretId) {
+          const secret = await secretManager().getSecret(targetServer.secretId);
+          if (secret?.secret) {
+            secrets = secret.secret;
+          }
+        }
+
+        // Get tool definitions from MCP server
+        const toolDefinitions = await mcpClient.connectAndGetTools({
+          catalogItem,
+          mcpServerId: targetServer.id,
+          secrets,
+        });
+
+        // Build a map of tool names (without prefix) to their definitions
+        const toolDefMap = new Map<
+          string,
+          {
+            name: string;
+            description?: string;
+            inputSchema: Record<string, unknown>;
+            _meta?: {
+              ui?: {
+                resourceUri: string;
+                permissions?: string[];
+                csp?: Record<string, string[]>;
+              };
+            };
+          }
+        >();
+
+        for (const def of toolDefinitions) {
+          const nameWithoutPrefix = def.name.includes("__")
+            ? def.name.split("__").pop() || def.name
+            : def.name;
+          toolDefMap.set(nameWithoutPrefix, def);
+        }
+
+        // Match tools with their definitions
+        for (const tool of tools) {
+          const toolNameWithoutPrefix = tool.name.includes("__")
+            ? tool.name.split("__").pop() || tool.name
+            : tool.name;
+
+          const toolDef = toolDefMap.get(toolNameWithoutPrefix);
+
+          toolsList.push({
+            name: tool.name,
+            title: toolDef?.name || tool.name,
+            description: tool.description || toolDef?.description || null,
+            inputSchema: (toolDef?.inputSchema as Record<string, unknown>) ||
+              tool.parameters,
+            annotations: {},
+            _meta: toolDef?._meta || {},
+          });
+        }
+      } catch (error) {
+        logger.warn(
+          { catalogId, error },
+          "Failed to fetch tool definitions from MCP server, using basic info",
+        );
+        // Fallback to basic tool info
+        const catalogTools = toolsByCatalog.get(catalogId) || [];
+        for (const tool of catalogTools) {
+          toolsList.push({
+            name: tool.name,
+            title: tool.name,
+            description: tool.description,
+            inputSchema: tool.parameters,
+            annotations: {},
+            _meta: {},
+          });
+        }
+      }
+    }
 
     // Log tools/list request
     try {

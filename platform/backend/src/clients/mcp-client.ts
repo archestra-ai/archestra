@@ -1538,6 +1538,16 @@ class McpClient {
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          // Include MCP Apps _meta if present
+          ...(tool._meta && {
+            _meta: tool._meta as {
+              ui?: {
+                resourceUri: string;
+                permissions?: string[];
+                csp?: Record<string, string[]>;
+              };
+            },
+          }),
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");

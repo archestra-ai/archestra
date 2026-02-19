@@ -16,7 +16,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Start with better-auth defaults
   ...defaultStatements,
   // Override with Archestra-specific actions
-  profile: ["create", "read", "update", "delete", "admin"],
+  agent: ["create", "read", "update", "delete", "admin"],
+  mcpGateway: ["create", "read", "update", "delete", "admin"],
+  llmProxy: ["create", "read", "update", "delete", "admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   dualLlmConfig: ["create", "read", "update", "delete"],
@@ -35,7 +37,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   limit: ["create", "read", "update", "delete"],
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
-  prompt: ["create", "read", "update", "delete"],
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -47,7 +48,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {
-  profile: ["create", "read", "update", "delete"],
+  agent: ["create", "read", "update", "delete"],
+  mcpGateway: ["create", "read", "update", "delete"],
+  llmProxy: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
@@ -63,7 +66,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   limit: ["create", "read", "update", "delete"],
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
-  prompt: ["create", "read", "update", "delete"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
@@ -72,7 +74,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  profile: ["read"],
+  agent: ["read"],
+  mcpGateway: ["read"],
+  llmProxy: ["read"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
@@ -88,7 +92,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   limit: ["read"],
   tokenPrice: ["read"],
   chatSettings: ["read"],
-  prompt: ["read"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
@@ -117,71 +120,47 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
-  [RouteId.GetAgents]: {
-    profile: ["read"],
-  },
-  [RouteId.GetAllAgents]: {
-    profile: ["read"],
-  },
-  [RouteId.GetAgent]: {
-    profile: ["read"],
-  },
+  // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
+  // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
+  [RouteId.GetAgents]: {},
+  [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgent]: {},
+  [RouteId.CreateAgent]: {},
+  [RouteId.UpdateAgent]: {},
+  [RouteId.DeleteAgent]: {},
   [RouteId.GetDefaultMcpGateway]: {
-    profile: ["read"],
+    mcpGateway: ["read"],
   },
   [RouteId.GetDefaultLlmProxy]: {
-    profile: ["read"],
+    llmProxy: ["read"],
   },
-  [RouteId.CreateAgent]: {
-    profile: ["create"],
-  },
-  [RouteId.UpdateAgent]: {
-    profile: ["update"],
-  },
-  [RouteId.DeleteAgent]: {
-    profile: ["delete"],
-  },
+  // Agent-tool routes: tool:read checked statically, agent-type read checked dynamically in handler
   [RouteId.GetAgentTools]: {
-    profile: ["read"],
     tool: ["read"],
   },
   [RouteId.GetAllAgentTools]: {
-    profile: ["read"],
     tool: ["read"],
   },
-  [RouteId.GetAgentAvailableTokens]: {
-    profile: ["read"],
-  },
+  [RouteId.GetAgentAvailableTokens]: {},
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
-  [RouteId.AssignToolToAgent]: {
-    profile: ["update"],
-  },
-  [RouteId.BulkAssignTools]: {
-    profile: ["update"],
-  },
+  // Tool-assignment routes: agent-type update checked dynamically in handler
+  [RouteId.AssignToolToAgent]: {},
+  [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {
-    profile: ["update"],
     tool: ["update"],
   },
   [RouteId.AutoConfigureAgentToolPolicies]: {
-    profile: ["update"],
     tool: ["update"],
   },
-  [RouteId.UnassignToolFromAgent]: {
-    profile: ["update"],
-  },
+  [RouteId.UnassignToolFromAgent]: {},
   [RouteId.UpdateAgentTool]: {
-    profile: ["update"],
     tool: ["update"],
   },
-  [RouteId.GetLabelKeys]: {
-    profile: ["read"],
-  },
-  [RouteId.GetLabelValues]: {
-    profile: ["read"],
-  },
+  // Labels are cross-type — any agent-type read permission suffices (checked in handler)
+  [RouteId.GetLabelKeys]: {},
+  [RouteId.GetLabelValues]: {},
   [RouteId.GetTokens]: {
     team: ["read"],
   },
@@ -453,7 +432,7 @@ export const requiredEndpointPermissionsMap: Partial<
     conversation: ["read"],
   },
   [RouteId.GetChatAgentMcpTools]: {
-    profile: ["read"],
+    agent: ["read"],
   },
   [RouteId.CreateChatConversation]: {
     conversation: ["create"],
@@ -509,67 +488,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetModelsWithApiKeys]: {
     chatSettings: ["read"],
   },
-  [RouteId.GetPrompts]: {
-    prompt: ["read"],
-  },
-  [RouteId.CreatePrompt]: {
-    prompt: ["create"],
-  },
-  [RouteId.GetPrompt]: {
-    prompt: ["read"],
-  },
-  [RouteId.GetPromptVersions]: {
-    prompt: ["read"],
-  },
-  [RouteId.GetPromptTools]: {
-    prompt: ["read"],
-  },
-  [RouteId.RollbackPrompt]: {
-    prompt: ["update"],
-  },
-  [RouteId.UpdatePrompt]: {
-    prompt: ["update"],
-  },
-  [RouteId.DeletePrompt]: {
-    prompt: ["delete"],
-  },
-  [RouteId.GetAllPromptAgentConnections]: {
-    prompt: ["read"],
-  },
-  [RouteId.GetPromptAgents]: {
-    prompt: ["read"],
-  },
-  [RouteId.SyncPromptAgents]: {
-    prompt: ["update"],
-  },
-  [RouteId.DeletePromptAgent]: {
-    prompt: ["update"],
-  },
-  [RouteId.GetAgentPrompts]: {
-    profile: ["read"],
-    prompt: ["read"],
-  },
-  [RouteId.AssignAgentPrompts]: {
-    profile: ["update"],
-    prompt: ["read"],
-  },
-  [RouteId.DeleteAgentPrompt]: {
-    profile: ["update"],
-    prompt: ["read"],
-  },
-  // Agent Delegation Routes (internal agents only)
-  [RouteId.GetAgentDelegations]: {
-    profile: ["read"],
-  },
-  [RouteId.SyncAgentDelegations]: {
-    profile: ["update"],
-  },
-  [RouteId.DeleteAgentDelegation]: {
-    profile: ["update"],
-  },
-  [RouteId.GetAllDelegationConnections]: {
-    profile: ["read"],
-  },
+  // Delegation routes: agent-type permission checked dynamically in handler
+  [RouteId.GetAgentDelegations]: {},
+  [RouteId.SyncAgentDelegations]: {},
+  [RouteId.DeleteAgentDelegation]: {},
+  [RouteId.GetAllDelegationConnections]: {},
   [RouteId.GetLimits]: {
     limit: ["read"],
   },
@@ -663,16 +586,16 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetOptimizationRules]: {
-    profile: ["read"],
+    llmProxy: ["read"],
   },
   [RouteId.CreateOptimizationRule]: {
-    profile: ["create"],
+    llmProxy: ["create"],
   },
   [RouteId.UpdateOptimizationRule]: {
-    profile: ["update"],
+    llmProxy: ["update"],
   },
   [RouteId.DeleteOptimizationRule]: {
-    profile: ["delete"],
+    llmProxy: ["delete"],
   },
 
   // Secrets Routes
@@ -732,13 +655,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
 
   "/mcp-gateways": {
-    profile: ["read"],
+    mcpGateway: ["read"],
   },
   "/llm-proxies": {
-    profile: ["read"],
+    llmProxy: ["read"],
   },
   "/agents": {
-    profile: ["read"],
+    agent: ["read"],
   },
 
   "/logs": {
@@ -820,6 +743,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     tokenPrice: ["read"],
   },
   "/cost/optimization-rules": {
-    profile: ["read"],
+    llmProxy: ["read"],
   },
 };

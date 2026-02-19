@@ -28,7 +28,7 @@ test.describe("Invitation Custom Role Assignment", () => {
     const roleResponse = await createRole(request, {
       name: `invite_role_${Date.now()}`,
       permission: {
-        profile: ["read"],
+        agent: ["read"],
         tool: ["read"],
       },
     });
@@ -170,7 +170,7 @@ test.describe("Invitation Custom Role Assignment", () => {
     const roleResponse = await createRole(request, {
       name: `list_role_${timestamp}`,
       permission: {
-        profile: ["read"],
+        agent: ["read"],
       },
     });
     const customRole = await roleResponse.json();

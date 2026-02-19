@@ -42,8 +42,8 @@ export function A2AConnectionInstructions({
   // Filter tokens by the agent's teams (internal agents are profiles)
   const { data: tokensData } = useTokens({ profileId: agent.id });
   const { data: userToken } = useUserToken();
-  const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ["admin"],
+  const { data: hasAdminPermission } = useHasPermissions({
+    agent: ["admin"],
   });
   const { data: features } = useFeatures();
 
@@ -119,7 +119,7 @@ export function A2AConnectionInstructions({
     ? userToken
       ? `${userToken.tokenStart}***`
       : "ask-admin-for-access-token"
-    : hasProfileAdminPermission && selectedTeamToken
+    : hasAdminPermission && selectedTeamToken
       ? `${selectedTeamToken.tokenStart}***`
       : "ask-admin-for-access-token";
 
@@ -317,7 +317,7 @@ curl -X GET "${agentCardUrl}" \\
           code={curlCode}
           tokenForDisplay={tokenForDisplay}
           isPersonalTokenSelected={isPersonalTokenSelected}
-          hasProfileAdminPermission={hasProfileAdminPermission ?? false}
+          hasAdminPermission={hasAdminPermission ?? false}
           selectedTeamToken={selectedTeamToken ?? null}
           fetchUserTokenMutation={fetchUserTokenMutation}
           fetchTeamTokenMutation={fetchTeamTokenMutation}
@@ -329,7 +329,7 @@ curl -X GET "${agentCardUrl}" \\
           code={agentCardCurlCode}
           tokenForDisplay={tokenForDisplay}
           isPersonalTokenSelected={isPersonalTokenSelected}
-          hasProfileAdminPermission={hasProfileAdminPermission ?? false}
+          hasAdminPermission={hasAdminPermission ?? false}
           selectedTeamToken={selectedTeamToken ?? null}
           fetchUserTokenMutation={fetchUserTokenMutation}
           fetchTeamTokenMutation={fetchTeamTokenMutation}

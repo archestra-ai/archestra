@@ -81,15 +81,15 @@ export class ChatOpsManager {
       return agents;
     }
 
-    const isProfileAdmin = await userHasPermission(
+    const isAgentAdmin = await userHasPermission(
       user.id,
       org.id,
-      "profile",
+      "agent",
       "admin",
     );
     const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
       user.id,
-      isProfileAdmin,
+      isAgentAdmin,
     );
     const accessibleSet = new Set(accessibleIds);
     return agents.filter((a) => accessibleSet.has(a.id));
@@ -548,16 +548,16 @@ export class ChatOpsManager {
     }
 
     // Check if user has access to this specific agent (via team membership or admin)
-    const isProfileAdmin = await userHasPermission(
+    const isAgentAdmin = await userHasPermission(
       user.id,
       organizationId,
-      "profile",
+      "agent",
       "admin",
     );
     const hasAccess = await AgentTeamModel.userHasAgentAccess(
       user.id,
       agentId,
-      isProfileAdmin,
+      isAgentAdmin,
     );
 
     if (!hasAccess) {

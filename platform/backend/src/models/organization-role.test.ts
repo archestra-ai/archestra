@@ -118,7 +118,7 @@ describe("OrganizationRoleModel", () => {
       const customRole = await makeCustomRole(org.id, {
         role: "Custom Role",
         name: "Test Role",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
 
       const result = await OrganizationRoleModel.getById(customRole.id, org.id);
@@ -128,7 +128,7 @@ describe("OrganizationRoleModel", () => {
         role: "Custom Role",
         name: "Test Role",
         organizationId: org.id,
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
         predefined: false,
       });
     });
@@ -165,7 +165,7 @@ describe("OrganizationRoleModel", () => {
       const customRole = await makeCustomRole(org.id, {
         role: "custom_role",
         name: "Test Role",
-        permission: { profile: ["read", "create"] },
+        permission: { agent: ["read", "create"] },
       });
 
       const permissions = await OrganizationRoleModel.getPermissions(
@@ -173,7 +173,7 @@ describe("OrganizationRoleModel", () => {
         org.id,
       );
       expect(permissions).toEqual({
-        profile: ["read", "create"],
+        agent: ["read", "create"],
       });
     });
 
@@ -199,13 +199,13 @@ describe("OrganizationRoleModel", () => {
       const customRole1 = await makeCustomRole(org.id, {
         role: "Custom Role 1",
         name: "Test Role 1",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
 
       await makeCustomRole(org.id, {
         role: "Custom Role 2",
         name: "Test Role 2",
-        permission: { profile: ["create"] },
+        permission: { agent: ["create"] },
       });
 
       const result = await OrganizationRoleModel.getAll(org.id);
@@ -236,7 +236,7 @@ describe("OrganizationRoleModel", () => {
         id: customRole1.id,
         role: "Custom Role 1",
         name: "Test Role 1",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
     });
 
@@ -293,7 +293,7 @@ describe("OrganizationRoleModel", () => {
       const customRole = await makeCustomRole(org.id, {
         role: "Custom Role",
         name: "Test Role",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
 
       const result = await OrganizationRoleModel.canDelete(
@@ -315,7 +315,7 @@ describe("OrganizationRoleModel", () => {
       const customRole = await makeCustomRole(org.id, {
         role: "custom_role_with_members",
         name: "Test Role With Members",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
 
       // Create a user and assign them to this role (using role identifier, not ID)

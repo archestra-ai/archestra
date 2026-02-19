@@ -5,7 +5,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
     const roleData = {
       name: `test_role_${Date.now()}`,
       permission: {
-        profile: ["read"],
+        agent: ["read"],
         tool: ["read", "create"],
       },
     };
@@ -28,7 +28,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
     const roleData = {
       name: roleName,
       permission: {
-        profile: ["read"],
+        agent: ["read"],
       },
     };
 
@@ -56,7 +56,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
     const roleData = {
       name: "admin",
       permission: {
-        profile: ["read"],
+        agent: ["read"],
       },
     };
 
@@ -84,7 +84,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `get_role_test_${Date.now()}`,
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
@@ -113,7 +113,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `update_test_${Date.now()}`,
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
@@ -144,14 +144,14 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `permissions_test_${Date.now()}`,
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
 
     // Update the role permissions
     const newPermissions = {
-      profile: ["read", "create"],
+      agent: ["read", "create"],
       tool: ["read"],
     };
     const updateResponse = await makeApiRequest({
@@ -192,7 +192,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
     // Create a role first
     const createResponse = await createRole(request, {
       name: `delete_test_${Date.now()}`,
-      permission: { profile: ["read"] },
+      permission: { agent: ["read"] },
     });
     const createdRole = await createResponse.json();
 
@@ -233,7 +233,7 @@ test.describe("Organization Roles API - Permission Validation", () => {
     makeApiRequest,
   }) => {
     const complexPermissions = {
-      profile: ["read", "create", "update", "delete"],
+      agent: ["read", "create", "update", "delete"],
       tool: ["read", "create"],
       policy: ["read", "create", "update", "delete"],
       interaction: ["read", "create"],
@@ -279,8 +279,8 @@ test.describe("Organization Roles API - Role Lifecycle", () => {
     makeApiRequest,
   }) => {
     const roleName = `lifecycle_test_${Date.now()}`;
-    const initialPermissions = { profile: ["read"] };
-    const updatedPermissions = { profile: ["read", "create"], tool: ["read"] };
+    const initialPermissions = { agent: ["read"] };
+    const updatedPermissions = { agent: ["read", "create"], tool: ["read"] };
 
     // 1. Create
     const createResponse = await makeApiRequest({

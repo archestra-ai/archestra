@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { InteractionModel } from "@/models";
 import {
   ApiError,
@@ -114,17 +114,17 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection,
         },
         user,
-        headers,
+        organizationId,
       },
       reply,
     ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       fastify.log.info(
         {
@@ -226,16 +226,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
         },
         user,
-        headers,
+        organizationId,
       },
       reply,
     ) => {
       const pagination = { limit, offset };
 
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       fastify.log.info(
         {
@@ -299,11 +299,11 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
         user.id,
@@ -327,11 +327,11 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(UserInfoSchema)),
       },
     },
-    async ({ user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const userIds = await InteractionModel.getUniqueUserIds(
         user.id,
@@ -355,11 +355,11 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInteractionSchema),
       },
     },
-    async ({ params: { interactionId }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ params: { interactionId }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const interaction = await InteractionModel.findById(
         interactionId,

@@ -71,7 +71,7 @@ export class BrowserStreamSocketClientContext {
     clientContext: {
       userId: string;
       organizationId: string;
-      userIsProfileAdmin: boolean;
+      userIsAgentAdmin: boolean;
     },
   ): Promise<boolean> {
     if (!this.isBrowserWebSocketMessage(message.type)) {
@@ -213,7 +213,7 @@ export class BrowserStreamSocketClientContext {
     clientContext: {
       userId: string;
       organizationId: string;
-      userIsProfileAdmin: boolean;
+      userIsAgentAdmin: boolean;
     },
     initialUrl?: string,
   ): Promise<void> {
@@ -272,7 +272,7 @@ export class BrowserStreamSocketClientContext {
     const userContext: BrowserUserContext = {
       userId: clientContext.userId,
       organizationId: clientContext.organizationId,
-      userIsProfileAdmin: clientContext.userIsProfileAdmin,
+      userIsAgentAdmin: clientContext.userIsAgentAdmin,
     };
 
     // Select or create the tab for this conversation

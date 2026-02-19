@@ -1,9 +1,29 @@
 import { E2eTestId } from "@shared";
+import { WIREMOCK_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues.
 // Retries handle transient streaming/WireMock flakiness in CI.
 test.describe.configure({ mode: "serial", retries: 2 });
+
+// Warm up WireMock's SSE streaming pipeline before the first test.
+// The Anthropic test (first in sequence) flakes ~41% of runs because the first
+// streaming request through WireMock takes >90s in CI due to cold-start overhead.
+// This throwaway request primes the connection so the real test succeeds immediately.
+test.beforeAll(async () => {
+  try {
+    await fetch(`${WIREMOCK_BASE_URL}/anthropic/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        messages: [{ role: "user", content: "chat-ui-e2e-test warmup" }],
+      }),
+    });
+  } catch {
+    // Warm-up failure is non-fatal — the test will retry if needed
+  }
+});
 
 interface ChatProviderTestConfig {
   providerName: string;

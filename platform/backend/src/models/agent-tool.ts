@@ -616,6 +616,41 @@ class AgentToolModel {
   }
 
   /**
+   * Find a single agent-tool relationship by ID, including joined agent and tool data.
+   */
+  static async findById(id: string): Promise<AgentTool | undefined> {
+    const [row] = await db
+      .select({
+        ...getTableColumns(schema.agentToolsTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        tool: {
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          description: schema.toolsTable.description,
+          parameters: schema.toolsTable.parameters,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
+        },
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.id, id))
+      .limit(1);
+    return row;
+  }
+
+  /**
    * Find all agent-tool relationships with pagination, sorting, and filtering support.
    * When skipPagination is true, returns all matching records without applying limit/offset.
    */

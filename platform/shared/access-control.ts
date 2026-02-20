@@ -710,10 +710,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     organization: ["read"],
   },
   "/settings/security": {
-    organization: ["update"],
+    organization: ["read"],
   },
   "/settings/appearance": {
-    organization: ["update"],
+    organization: ["read"],
   },
   "/settings/llm-api-keys": {
     chatSettings: ["read"],
@@ -722,7 +722,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     identityProvider: ["read"],
   },
   "/settings/secrets": {
-    organization: ["update"],
+    organization: ["read"],
   },
   // Agent Triggers
   "/agent-triggers/ms-teams": {

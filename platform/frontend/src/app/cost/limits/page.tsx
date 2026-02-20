@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -756,28 +757,35 @@ export default function LimitsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Auto-cleanup interval</CardTitle>
-            <Select
-              value={organizationDetails?.limitCleanupInterval || "1h"}
-              onValueChange={(value) => {
-                updateCleanupInterval.mutate({
-                  limitCleanupInterval: value as NonNullable<
-                    archestraApiTypes.UpdateOrganizationData["body"]
-                  >["limitCleanupInterval"],
-                });
-              }}
-              disabled={updateCleanupInterval.isPending}
+            <WithPermissions
+              permissions={{ limit: ["update"] }}
+              noPermissionHandle="tooltip"
             >
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1h">Every hour</SelectItem>
-                <SelectItem value="12h">Every 12 hours</SelectItem>
-                <SelectItem value="24h">Every 24 hours</SelectItem>
-                <SelectItem value="1w">Every week</SelectItem>
-                <SelectItem value="1m">Every month</SelectItem>
-              </SelectContent>
-            </Select>
+              {({ hasPermission }) => (
+                <Select
+                  value={organizationDetails?.limitCleanupInterval || "1h"}
+                  onValueChange={(value) => {
+                    updateCleanupInterval.mutate({
+                      limitCleanupInterval: value as NonNullable<
+                        archestraApiTypes.UpdateOrganizationData["body"]
+                      >["limitCleanupInterval"],
+                    });
+                  }}
+                  disabled={updateCleanupInterval.isPending || !hasPermission}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1h">Every hour</SelectItem>
+                    <SelectItem value="12h">Every 12 hours</SelectItem>
+                    <SelectItem value="24h">Every 24 hours</SelectItem>
+                    <SelectItem value="1w">Every week</SelectItem>
+                    <SelectItem value="1m">Every month</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
           </div>
         </CardHeader>
       </Card>

@@ -405,12 +405,12 @@ function DualLLMContent({
                   <Input
                     id="max-rounds"
                     type="number"
+                    disabled={!hasPermission}
                     value={maxRounds}
                     onChange={(e) =>
                       setMaxRounds(Number.parseInt(e.target.value, 10))
                     }
                     className="w-32"
-                    disabled={!hasPermission}
                   />
                 )}
               </WithPermissions>
@@ -455,13 +455,21 @@ function DualLLMContent({
                 </PermissionButton>
               )}
             </div>
-            <Textarea
-              id="main-prompt"
-              rows={20}
-              value={mainProfilePrompt}
-              onChange={(e) => setMainProfilePrompt(e.target.value)}
-              className="font-mono text-xs"
-            />
+            <WithPermissions
+              permissions={{ dualLlmConfig: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Textarea
+                  id="main-prompt"
+                  rows={20}
+                  value={mainProfilePrompt}
+                  onChange={(e) => setMainProfilePrompt(e.target.value)}
+                  className="font-mono text-xs"
+                  disabled={!hasPermission}
+                />
+              )}
+            </WithPermissions>
           </div>
 
           <div className="border border-border rounded-lg p-6 bg-card">
@@ -508,13 +516,21 @@ function DualLLMContent({
                 </PermissionButton>
               )}
             </div>
-            <Textarea
-              id="quarantine-prompt"
-              rows={10}
-              value={quarantinedProfilePrompt}
-              onChange={(e) => setQuarantinedProfilePrompt(e.target.value)}
-              className="font-mono text-xs"
-            />
+            <WithPermissions
+              permissions={{ dualLlmConfig: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Textarea
+                  id="quarantine-prompt"
+                  rows={10}
+                  value={quarantinedProfilePrompt}
+                  onChange={(e) => setQuarantinedProfilePrompt(e.target.value)}
+                  className="font-mono text-xs"
+                  disabled={!hasPermission}
+                />
+              )}
+            </WithPermissions>
           </div>
 
           <div className="border border-border rounded-lg p-6 bg-card">
@@ -546,13 +562,21 @@ function DualLLMContent({
                 </PermissionButton>
               )}
             </div>
-            <Textarea
-              id="summary-prompt"
-              rows={4}
-              value={summaryPrompt}
-              onChange={(e) => setSummaryPrompt(e.target.value)}
-              className="font-mono text-xs"
-            />
+            <WithPermissions
+              permissions={{ dualLlmConfig: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Textarea
+                  id="summary-prompt"
+                  rows={4}
+                  value={summaryPrompt}
+                  onChange={(e) => setSummaryPrompt(e.target.value)}
+                  className="font-mono text-xs"
+                  disabled={!hasPermission}
+                />
+              )}
+            </WithPermissions>
           </div>
         </div>
       </div>

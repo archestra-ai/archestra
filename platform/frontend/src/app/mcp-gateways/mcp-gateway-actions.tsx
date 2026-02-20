@@ -25,7 +25,7 @@ export function McpGatewayActions({
   return (
     <ButtonGroup>
       <PermissionButton
-        permissions={{ mcpGateway: ["update"] }}
+        permissions={{ mcpGateway: ["read"] }}
         aria-label="Connect"
         variant="outline"
         size="icon-sm"

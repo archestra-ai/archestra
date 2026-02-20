@@ -189,7 +189,7 @@ class VirtualApiKeyModel {
    * Get the maximum number of virtual keys allowed per chat API key.
    */
   static getMaxVirtualKeysPerApiKey(): number {
-    const envValue = process.env.ARCHESTRA_MAX_VIRTUAL_KEYS_PER_API_KEY;
+    const envValue = process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS;
     if (envValue) {
       const parsed = Number.parseInt(envValue, 10);
       if (!Number.isNaN(parsed) && parsed > 0) return parsed;

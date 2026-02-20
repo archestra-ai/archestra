@@ -696,6 +696,8 @@ The following environment variables can be used to configure Archestra Platform.
 
 ### LLM Provider Configuration
 
+These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
+
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
   - Default: `https://api.openai.com/v1`
@@ -724,9 +726,7 @@ The following environment variables can be used to configure Archestra Platform.
   - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
-  > **Note**: Per-key base URLs configured in Settings > LLM API Keys take precedence over these environment variables for Chat and LLM Proxy requests that use that specific API key.
-
-- **`ARCHESTRA_MAX_VIRTUAL_KEYS_PER_API_KEY`** - Maximum number of virtual API keys that can be created per LLM API key.
+- **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
 
   - Default: `10`
   - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients

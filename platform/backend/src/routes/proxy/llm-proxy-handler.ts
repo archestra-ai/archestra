@@ -490,9 +490,16 @@ export async function handleLLMProxy<
       headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
     }
 
-    // Read per-key base URL override from header (set by chat route when API key has custom base URL)
-    // or from the virtual key's associated chat API key
+    // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
+    // External clients must NOT be able to set this header — it would be an SSRF vector
+    // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
+    const requestIp = request.ip;
+    const isFromLocalhost =
+      requestIp === "127.0.0.1" ||
+      requestIp === "::1" ||
+      requestIp === "::ffff:127.0.0.1";
     const providerBaseUrlHeader =
+      isFromLocalhost &&
       typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
         ? headersForExtraction["x-archestra-provider-base-url"]
         : undefined;

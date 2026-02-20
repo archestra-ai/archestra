@@ -58,7 +58,7 @@ export const AgentNode = memo(({ data }: NodeProps<AgentNodeType>) => {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <WithPermissions
-              permissions={{ profile: ["update"] }}
+              permissions={{ agent: ["update"] }}
               noPermissionHandle="hide"
             >
               <DropdownMenuItem onClick={() => onEditAgent(data.promptId)}>
@@ -71,7 +71,7 @@ export const AgentNode = memo(({ data }: NodeProps<AgentNodeType>) => {
               Connect
             </DropdownMenuItem>
             <WithPermissions
-              permissions={{ profile: ["delete"] }}
+              permissions={{ agent: ["delete"] }}
               noPermissionHandle="hide"
             >
               <DropdownMenuItem

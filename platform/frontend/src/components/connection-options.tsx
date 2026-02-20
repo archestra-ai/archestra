@@ -47,8 +47,14 @@ export function ConnectionOptions({
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
-  const { data: canCreateProfile } = useHasPermissions({
-    profile: ["create"],
+  const { data: canCreateAgent } = useHasPermissions({
+    agent: ["create"],
+  });
+  const { data: canCreateMcpGateway } = useHasPermissions({
+    mcpGateway: ["create"],
+  });
+  const { data: canCreateLlmProxy } = useHasPermissions({
+    llmProxy: ["create"],
   });
   const [selectedA2aAgentId, setSelectedA2aAgentId] = useState<string | null>(
     null,
@@ -225,7 +231,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card space-y-6">
               {llmProxies && llmProxies.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateProfile}
+                  canCreate={canCreateLlmProxy}
                   createHref="/llm-proxies"
                   createLabel="LLM Proxies"
                 />
@@ -279,7 +285,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card">
               {mcpGateways && mcpGateways.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateProfile}
+                  canCreate={canCreateMcpGateway}
                   createHref="/mcp-gateways"
                   createLabel="MCP Gateways"
                 />
@@ -296,7 +302,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card space-y-6">
               {internalAgents && internalAgents.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateProfile}
+                  canCreate={canCreateAgent}
                   createHref="/agents"
                   createLabel="Agents"
                 />

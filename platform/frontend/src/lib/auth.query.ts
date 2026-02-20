@@ -104,8 +104,7 @@ export function useMissingPermissions(
   const missing: Permissions = {};
 
   for (const [resource, actions] of Object.entries(requiredPermissions)) {
-    const userActions =
-      userPermissions[resource as keyof Permissions] ?? [];
+    const userActions = userPermissions[resource as keyof Permissions] ?? [];
     const missingActions = actions.filter((a) => !userActions.includes(a));
     if (missingActions.length > 0) {
       missing[resource as keyof Permissions] = missingActions;

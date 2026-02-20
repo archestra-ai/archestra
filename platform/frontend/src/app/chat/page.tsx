@@ -45,6 +45,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
@@ -122,10 +123,10 @@ export default function ChatPage() {
   });
 
   const { data: isProfileAdmin } = useHasPermissions({
-    profile: ["admin"],
+    agent: ["admin"],
   });
   const { data: canCreateProfile } = useHasPermissions({
-    profile: ["create"],
+    agent: ["create"],
   });
   const { data: teams } = useTeams();
 
@@ -1146,7 +1147,8 @@ export default function ChatPage() {
                   {(conversationId
                     ? conversation?.agentId
                     : initialAgentId) && (
-                    <Button
+                    <PermissionButton
+                      permissions={{ agent: ["update"] }}
                       variant="ghost"
                       size="sm"
                       onClick={() => openDialog("edit-agent")}
@@ -1154,7 +1156,7 @@ export default function ChatPage() {
                       className="h-8 px-2"
                     >
                       <Edit className="h-4 w-4" />
-                    </Button>
+                    </PermissionButton>
                   )}
                 </div>
               </div>

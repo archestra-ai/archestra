@@ -176,10 +176,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   });
 
   const { data: isProfileAdmin } = useHasPermissions({
-    profile: ["admin"],
+    agent: ["admin"],
   });
   const { data: canCreateProfile } = useHasPermissions({
-    profile: ["create"],
+    agent: ["create"],
   });
 
   // Non-admin users with no teams cannot create agents

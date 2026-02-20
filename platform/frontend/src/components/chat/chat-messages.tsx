@@ -106,7 +106,7 @@ export function ChatMessages({
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const { data: userCanCreateAgent } = useHasPermissions({
-    profile: ["create"],
+    agent: ["create"],
   });
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)

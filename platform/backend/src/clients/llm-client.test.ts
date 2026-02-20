@@ -272,7 +272,6 @@ describe("resolveProviderApiKey", () => {
     makeOrganization,
     makeUser,
     makeSecret,
-    makeChatApiKey,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();

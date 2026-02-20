@@ -8,14 +8,9 @@ lastUpdated: 2026-02-20
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
-
-This page documents the authentication methods available for the LLM Proxy:
-1. Direct provider API keys (existing, pass-through)
-2. Virtual API keys (archestra_-prefixed tokens)
-3. Per-key custom base URLs
 -->
 
-The LLM Proxy supports two authentication methods: direct provider API keys and virtual API keys.
+The LLM Proxy supports three authentication methods: direct provider API keys, virtual API keys, and JWKS via an external identity provider.
 
 ## Direct Provider API Key
 
@@ -66,9 +61,40 @@ The proxy resolves the virtual key to the real provider key and base URL, then f
 
 Each virtual key is tied to a specific provider. Using an OpenAI virtual key on the Anthropic proxy endpoint returns a `400` error.
 
+## JWKS (External Identity Provider)
+
+Link an Identity Provider (IdP) to the LLM Proxy so clients can authenticate with JWTs issued by your IdP. The proxy validates the JWT signature via the IdP's JWKS endpoint and resolves the actual LLM provider API key from the matched Archestra user's configured keys.
+
+### How it works
+
+1. Client sends `Authorization: Bearer <jwt>` to the LLM Proxy
+2. Proxy validates the JWT against the LLM Proxy's linked IdP's JWKS endpoint
+3. The JWT `email` claim is matched to an Archestra user
+4. The provider API key is resolved from that user's (or org's) configured LLM API keys
+5. The request is forwarded to the upstream LLM provider with the resolved key
+
+### Setup
+
+1. Go to **Settings > Identity Providers** and create an OIDC provider (issuer URL, client ID, client secret)
+2. Open the LLM Proxy profile and select the identity provider in the **Identity Provider** dropdown
+3. Clients authenticate with JWTs from the configured IdP
+
+```bash
+# Get a JWT from your IdP (example: Keycloak direct grant)
+JWT=$(curl -s -X POST "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=my-client&client_secret=secret&username=user&password=pass&scope=openid" \
+  | jq -r .access_token)
+
+# Call the LLM Proxy with the JWT
+curl -X POST "https://archestra.example.com/v1/openai/{proxyId}/chat/completions" \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
 ## Custom Base URLs
 
-Each LLM API key can have an optional **Base URL** that overrides the environment-variable default. This is configured when creating or editing an API key in Settings > LLM API Keys.
+Each LLM API key can have an optional **Base URL** that overrides the [environment-variable default](/docs/platform-deployment#llm-provider-configuration). This is configured when creating or editing an API key in Settings > LLM API Keys.
 
 Use cases:
 - Self-hosted Ollama at a non-default address

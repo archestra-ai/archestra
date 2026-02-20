@@ -11,6 +11,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { resolveProviderApiKey } from "@/clients/llm-client";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import logger from "@/logging";
@@ -25,12 +26,17 @@ import {
 } from "@/models";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
+import {
+  extractBearerToken,
+  validateExternalIdpToken,
+} from "@/routes/mcp-gateway.utils";
 import { secretManager } from "@/secrets-manager";
 import {
   type Agent,
   ApiError,
   type InteractionRequest,
   type InteractionResponse,
+  isSupportedChatProvider,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -88,9 +94,9 @@ export async function handleLLMProxy<
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
-  const userId = (await utils.headers.userId.getUser(headersForExtraction))
+  let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
-  const resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let resolvedUser = userId ? await UserModel.getById(userId) : null;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -182,12 +188,71 @@ export async function handleLLMProxy<
     }
   }
 
-  // Extract API key and resolve virtual keys
-  let apiKey = provider.extractApiKey(headers);
+  // Try JWKS auth if the agent has an external identity provider configured.
+  // When JWKS auth succeeds, the bearer token is a JWT (not a provider API key),
+  // so we resolve the actual provider key from the user's/org's configured keys.
+  let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
+  let wasJwksAuthenticated = false;
+
+  if (resolvedAgent.identityProviderId) {
+    const bearerToken = extractBearerToken(request);
+
+    if (bearerToken && !bearerToken.startsWith("archestra_")) {
+      const jwksAuthResult = await validateExternalIdpToken(
+        resolvedAgentId,
+        bearerToken,
+        "llmProxy",
+      );
+
+      if (!jwksAuthResult) {
+        return reply.status(401).send({
+          error: {
+            message: "Invalid JWT token for the configured identity provider.",
+            type: "authentication_error",
+          },
+        });
+      }
+
+      logger.info(
+        {
+          resolvedAgentId,
+          userId: jwksAuthResult.userId,
+          identityProviderId: resolvedAgent.identityProviderId,
+        },
+        `[${providerName}Proxy] JWKS authentication succeeded`,
+      );
+
+      wasJwksAuthenticated = true;
+
+      // Override userId from JWKS result for observability
+      if (jwksAuthResult.userId) {
+        userId = jwksAuthResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
+
+      // Resolve the actual provider API key from the org's configured keys
+      if (isSupportedChatProvider(providerName)) {
+        const resolved = await resolveProviderApiKey({
+          organizationId: jwksAuthResult.organizationId,
+          userId: jwksAuthResult.userId,
+          provider: providerName,
+        });
+        apiKey = resolved.apiKey;
+        perKeyBaseUrl = resolved.baseUrl ?? undefined;
+      }
+    } else {
+      // No bearer token (or it's an archestra_ virtual key) — fall through to standard auth
+    }
+  }
+
+  // Extract API key from headers if not already resolved via JWKS
+  if (!wasJwksAuthenticated) {
+    apiKey = provider.extractApiKey(headers);
+  }
 
   // Detect virtual API key (archestra_ prefixed)
-  if (apiKey?.startsWith("archestra_")) {
+  if (!wasJwksAuthenticated && apiKey?.startsWith("archestra_")) {
     const resolved = await VirtualApiKeyModel.validateToken(apiKey);
     if (!resolved) {
       return reply.status(401).send({
@@ -239,11 +304,11 @@ export async function handleLLMProxy<
   }
 
   // For keyless providers (e.g. Gemini with Vertex AI, Ollama, vLLM), require that
-  // the request was authenticated via a virtual API key. Without this check, anyone
-  // who knows the proxy URL can call the endpoint without any credentials.
+  // the request was authenticated via a virtual API key or JWKS. Without this check,
+  // anyone who knows the proxy URL can call the endpoint without any credentials.
   // The `perKeyBaseUrl` check confirms a virtual key was resolved (sets the base URL).
   const wasVirtualKeyResolved = perKeyBaseUrl !== undefined;
-  if (!apiKey && !wasVirtualKeyResolved) {
+  if (!apiKey && !wasVirtualKeyResolved && !wasJwksAuthenticated) {
     // Allow internal requests from the chat route (localhost → proxy).
     // Check the request IP rather than headers, since headers like traceparent
     // can be spoofed by external clients.

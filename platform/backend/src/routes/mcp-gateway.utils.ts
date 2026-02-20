@@ -706,6 +706,7 @@ export async function validateMCPGatewayToken(
 export async function validateExternalIdpToken(
   profileId: string,
   tokenValue: string,
+  permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
 ): Promise<TokenAuthResult | null> {
   try {
     // Look up the agent to check if it has an identity provider configured
@@ -805,15 +806,15 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    // Check if user has MCP gateway admin permission (can access all gateways)
-    const isGatewayAdmin = await userHasPermission(
+    // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
+    const isAdmin = await userHasPermission(
       user.id,
       agent.organizationId,
-      "mcpGateway",
+      permissionResource,
       "admin",
     );
 
-    if (isGatewayAdmin) {
+    if (isAdmin) {
       return {
         tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
         teamId: null,

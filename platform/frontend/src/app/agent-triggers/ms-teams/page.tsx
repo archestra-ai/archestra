@@ -64,9 +64,9 @@ import {
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import config from "@/lib/config";
+import { usePublicBaseUrl } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
 import { cn } from "@/lib/utils";
-import { usePublicBaseUrl } from "@/lib/features.hook";
 
 export default function MsTeamsPage() {
   const publicBaseUrl = usePublicBaseUrl();
@@ -138,8 +138,7 @@ export default function MsTeamsPage() {
         <span className="text-muted-foreground text-xs">
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            POST{" "}
-            {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
+            POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
           </code>{" "}
           must be publicly accessible so MS Teams can deliver messages to
           Archestra

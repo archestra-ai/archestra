@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
-import { useFeatures } from "./features.query";
 import config, { DEFAULT_BACKEND_URL } from "./config";
+import { useFeatures } from "./features.query";
 
 type Features = archestraApiTypes.GetFeaturesResponses["200"];
 

@@ -62,9 +62,9 @@ import {
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import config from "@/lib/config";
+import { usePublicBaseUrl } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
 import { cn } from "@/lib/utils";
-import { usePublicBaseUrl } from "@/lib/features.hook";
 
 export default function SlackPage() {
   const publicBaseUrl = usePublicBaseUrl();

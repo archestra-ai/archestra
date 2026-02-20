@@ -12,8 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
-import { useFeatures } from "@/lib/features.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
+import { useFeatures } from "@/lib/features.query";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -314,7 +314,7 @@ function StepBotSettings({
               2
             </span>
             <span className="pt-0.5">
-              <WebhookUrlInstruction ngrokDomain={ngrokDomain} />
+              <WebhookUrlInstruction />
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -693,7 +693,7 @@ function StepManifest({
   );
 }
 
-function WebhookUrlInstruction({ ngrokDomain }: { ngrokDomain: string }) {
+function WebhookUrlInstruction() {
   const publicBaseUrl = usePublicBaseUrl();
   const webhookUrl = `${publicBaseUrl}/api/webhooks/chatops/ms-teams`;
 

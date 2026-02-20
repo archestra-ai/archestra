@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Info } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { useFeatures } from "@/lib/features.query";
 
 interface SlackSetupDialogProps {
   open: boolean;
@@ -22,9 +21,7 @@ export function SlackSetupDialog({
   open,
   onOpenChange,
 }: SlackSetupDialogProps) {
-  const { data: features } = useFeatures();
   const publicBaseUrl = usePublicBaseUrl();
-  const ngrokDomain = features?.ngrokDomain ?? "";
 
   const mutation = useUpdateSlackChatOpsConfig();
   const { data: chatOpsProviders } = useChatOpsStatus();
@@ -65,7 +62,6 @@ export function SlackSetupDialog({
         webhookUrl={webhookUrl}
         interactiveUrl={interactiveUrl}
         slashCommandUrl={slashCommandUrl}
-        ngrokDomain={ngrokDomain}
         appId={sharedAppId}
         signingSecret={sharedSigningSecret}
         onAppIdChange={setSharedAppId}
@@ -91,7 +87,6 @@ export function SlackSetupDialog({
 
     return slides;
   }, [
-    ngrokDomain,
     sharedBotToken,
     sharedSigningSecret,
     sharedAppId,
@@ -424,7 +419,6 @@ function StepManifest({
   webhookUrl,
   interactiveUrl,
   slashCommandUrl,
-  ngrokDomain,
   appId,
   signingSecret,
   onAppIdChange,
@@ -434,7 +428,6 @@ function StepManifest({
   webhookUrl: string;
   interactiveUrl: string;
   slashCommandUrl: string;
-  ngrokDomain: string;
   appId: string;
   signingSecret: string;
   onAppIdChange: (v: string) => void;
@@ -530,17 +523,6 @@ function StepManifest({
             </span>
           </li>
         </ol>
-
-        {!ngrokDomain && (
-          <span className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">
-            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>
-              The manifest uses placeholder URLs. After creating the app, update
-              the Event Subscriptions and Interactivity URLs with your actual
-              Archestra URL.
-            </span>
-          </span>
-        )}
       </StepCard>
 
       <div className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-lg border bg-muted/30 p-4">

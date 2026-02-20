@@ -6,7 +6,9 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
+  SLACK_SLASH_COMMANDS,
 } from "@/agents/chatops/constants";
+import type { SlackInteractivePayload } from "@/agents/chatops/slack-provider";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -28,6 +30,54 @@ import {
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
 } from "@/types/chatops-channel-binding";
+
+/**
+ * Fastify preParsing hook that captures the raw request body before content-type
+ * parsers (JSON parser, @fastify/formbody) consume the stream.
+ * Required for Slack HMAC signature verification which signs the exact raw bytes.
+ * The raw body is stored on `request.slackRawBody`.
+ */
+const captureSlackRawBody = async (
+  request: { slackRawBody?: string },
+  _reply: unknown,
+  payload: AsyncIterable<Buffer | string>,
+) => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of payload) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  request.slackRawBody = raw;
+  const { Readable } = await import("node:stream");
+  return Readable.from(Buffer.from(raw));
+};
+
+/**
+ * Short-lived in-memory dedup cache for Slack events.
+ * Slack fires both `message` and `app_mention` for @mention messages
+ * with the same event ts, causing duplicate processing.
+ * Entries auto-expire after 30 seconds.
+ *
+ * This is a fast first-pass filter that saves a DB round-trip for the common
+ * duplicate case. The authoritative dedup is database-level via
+ * ChatOpsProcessedMessageModel.tryMarkAsProcessed() in the manager.
+ */
+const SLACK_DEDUP_MAX_SIZE = 10_000;
+const recentlyProcessedSlackEvents = new Map<string, true>();
+
+function markSlackEventProcessed(eventTs: string): void {
+  // Safety bound: evict oldest 10% when the map grows too large
+  if (recentlyProcessedSlackEvents.size >= SLACK_DEDUP_MAX_SIZE) {
+    const toDelete = Math.ceil(SLACK_DEDUP_MAX_SIZE * 0.1);
+    const iter = recentlyProcessedSlackEvents.keys();
+    for (let i = 0; i < toDelete; i++) {
+      const key = iter.next().value;
+      if (key) recentlyProcessedSlackEvents.delete(key);
+    }
+  }
+  recentlyProcessedSlackEvents.set(eventTs, true);
+  setTimeout(() => recentlyProcessedSlackEvents.delete(eventTs), 30_000);
+}
 
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -52,9 +102,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             z.object({ status: z.string() }),
             z.object({ success: z.boolean() }),
           ]),
-          400: z.object({ error: z.string() }),
-          429: z.object({ error: z.string() }),
-          500: z.object({ error: z.string() }),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          429: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          500: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
         },
       },
     },
@@ -351,7 +407,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
               // Send agent selection card
-              await sendAgentSelectionCard(context, message);
+              await sendAgentSelectionCard({
+                provider,
+                message,
+                isWelcome: false,
+                providerContext: context,
+              });
               return;
             }
 
@@ -365,7 +426,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!binding || !binding.agentId) {
               // No binding, or discovered channel without agent assigned — show agent selection
               await awaitDiscovery(provider, context);
-              await sendAgentSelectionCard(context, message);
+              await sendAgentSelectionCard({
+                provider,
+                message,
+                isWelcome: true,
+                providerContext: context,
+              });
               return;
             }
 
@@ -402,6 +468,531 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Slack webhook endpoint
+   *
+   * Receives events from Slack Events API.
+   * Signature validation via HMAC SHA256 signing secret.
+   */
+  fastify.post(
+    "/api/webhooks/chatops/slack",
+    {
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
+      schema: {
+        description: "Slack Events API webhook endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.union([
+            z.object({ challenge: z.string() }),
+            z.object({ ok: z.boolean() }),
+          ]),
+          400: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          429: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          500: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getSlackProvider();
+
+      if (!provider) {
+        logger.warn(
+          "[ChatOps] Slack webhook called but provider not configured",
+        );
+        throw new ApiError(400, "Slack chatops provider not configured");
+      }
+
+      // Rate limiting
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-slack-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        logger.warn(
+          { ip: clientIp },
+          "[ChatOps] Rate limit exceeded for Slack webhook",
+        );
+        throw new ApiError(429, "Too many requests");
+      }
+
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+
+      const body = request.body;
+
+      // Validate request signature FIRST — even url_verification challenges are signed.
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid Slack webhook signature");
+        throw new ApiError(400, "Invalid request signature");
+      }
+
+      // Handle URL verification challenge (after signature is verified)
+      const challengeResponse = provider.handleValidationChallenge(body) as {
+        challenge: string;
+      } | null;
+      if (challengeResponse) {
+        return reply.send(challengeResponse);
+      }
+
+      try {
+        // Check if this is an interactive payload (block_actions for agent selection)
+        const slackBody = body as {
+          type?: string;
+          payload?: string;
+          event?: { type?: string };
+        };
+
+        if (slackBody.type === "event_callback") {
+          const message = await provider.parseWebhookNotification(
+            body,
+            headers,
+          );
+
+          if (!message) {
+            return reply.send({ ok: true });
+          }
+
+          // Deduplicate: Slack fires both `message` and `app_mention` events
+          // for the same @mention with identical ts. Skip if already processed.
+          if (recentlyProcessedSlackEvents.has(message.messageId)) {
+            return reply.send({ ok: true });
+          }
+          markSlackEventProcessed(message.messageId);
+
+          // Discover channels in background (fire-and-forget — no TurnContext to expire)
+          if (message.workspaceId) {
+            chatOpsManager
+              .discoverChannels({
+                provider,
+                context: null,
+                workspaceId: message.workspaceId,
+              })
+              .catch(() => {});
+          }
+
+          // Resolve sender email
+          const senderEmail = await provider.getUserEmail(message.senderId);
+          if (senderEmail) {
+            message.senderEmail = senderEmail;
+          }
+
+          // Verify sender is a registered user
+          if (!message.senderEmail) {
+            logger.warn("[ChatOps] Could not resolve Slack user email");
+            await provider.sendReply({
+              originalMessage: message,
+              text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
+            });
+            return reply.send({ ok: true });
+          }
+
+          const user = await UserModel.findByEmail(
+            message.senderEmail.toLowerCase(),
+          );
+          if (!user) {
+            await provider.sendReply({
+              originalMessage: message,
+              text: `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+            });
+            return reply.send({ ok: true });
+          }
+
+          // Check for existing binding
+          const binding = await ChatOpsChannelBindingModel.findByChannel({
+            provider: "slack",
+            channelId: message.channelId,
+            workspaceId: message.workspaceId,
+          });
+
+          if (!binding || !binding.agentId) {
+            await sendAgentSelectionCard({
+              provider,
+              message,
+              isWelcome: true,
+            });
+            return reply.send({ ok: true });
+          }
+
+          // Process message through bound agent asynchronously.
+          // Return 200 immediately — Slack has a 3-second timeout for event deliveries.
+          // Dedup (in-memory + DB) protects against retries from Slack.
+          chatOpsManager
+            .processMessage({
+              message,
+              provider,
+              sendReply: true,
+            })
+            .catch((error) => {
+              logger.error(
+                {
+                  messageId: message.messageId,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                "[ChatOps] Error processing Slack message (async)",
+              );
+            });
+        }
+
+        return reply.send({ ok: true });
+      } catch (error) {
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+          "[ChatOps] Error processing Slack webhook",
+        );
+        throw new ApiError(500, "Internal server error");
+      }
+    },
+  );
+
+  /**
+   * Slack interactive endpoint
+   *
+   * Receives block_actions payloads from Slack when users click buttons
+   * (e.g., agent selection buttons).
+   */
+  fastify.post(
+    "/api/webhooks/chatops/slack/interactive",
+    {
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
+      schema: {
+        description: "Slack interactive components endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.object({ ok: z.boolean() }),
+          400: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+          429: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getSlackProvider();
+      if (!provider) {
+        throw new ApiError(400, "Slack chatops provider not configured");
+      }
+
+      // Rate limiting
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-slack-interactive-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        logger.warn(
+          { ip: clientIp },
+          "[ChatOps] Rate limit exceeded for Slack interactive webhook",
+        );
+        throw new ApiError(429, "Too many requests");
+      }
+
+      // Validate request signature using the captured raw body
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid Slack interactive webhook signature");
+        throw new ApiError(400, "Invalid request signature");
+      }
+
+      // Slack sends interactive payloads as form-encoded with a "payload" field
+      const formBody = request.body as { payload?: string };
+      const payloadStr = formBody.payload;
+      if (!payloadStr) {
+        throw new ApiError(400, "Missing payload");
+      }
+
+      let payload: SlackInteractivePayload;
+      try {
+        payload = JSON.parse(payloadStr) as SlackInteractivePayload;
+      } catch {
+        throw new ApiError(400, "Invalid payload JSON");
+      }
+
+      const selection = provider.parseInteractivePayload(payload);
+      if (!selection) {
+        return reply.send({ ok: true });
+      }
+
+      // Verify the user clicking the button is a registered Archestra user
+      const senderEmail = await provider.getUserEmail(selection.userId);
+      if (!senderEmail) {
+        logger.warn("[ChatOps] Could not resolve Slack interactive user email");
+        return reply.send({ ok: true });
+      }
+      const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        logger.warn(
+          { senderEmail },
+          "[ChatOps] Slack interactive user not registered in Archestra",
+        );
+        return reply.send({ ok: true });
+      }
+
+      // Verify agent exists and allows Slack
+      const agent = await AgentModel.findById(selection.agentId);
+      if (!agent) {
+        return reply.send({ ok: true });
+      }
+
+      if (!agent.allowedChatops?.includes("slack")) {
+        return reply.send({ ok: true });
+      }
+
+      const organizationId = await getDefaultOrganizationId();
+
+      // Create or update binding
+      await ChatOpsChannelBindingModel.upsertByChannel({
+        organizationId,
+        provider: "slack",
+        channelId: selection.channelId,
+        workspaceId: selection.workspaceId,
+        agentId: selection.agentId,
+      });
+
+      // Confirm the selection in the thread
+      const message: IncomingChatMessage = {
+        messageId: `slack-selection-${Date.now()}`,
+        channelId: selection.channelId,
+        workspaceId: selection.workspaceId,
+        threadId: selection.threadTs,
+        senderId: selection.userId,
+        senderName: selection.userName,
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: false,
+      };
+
+      await provider.sendReply({
+        originalMessage: message,
+        text: `Agent *${agent.name}* is now bound to this channel.\nSend a message to start interacting!`,
+      });
+
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
+   * Slack slash command endpoint
+   *
+   * Receives native slash command payloads from Slack.
+   * Slack sends form-encoded body with: command, text, user_id, channel_id,
+   * team_id, response_url, trigger_id.
+   * All three commands share this single endpoint — `command` field distinguishes them.
+   */
+  fastify.post(
+    "/api/webhooks/chatops/slack/slash-command",
+    {
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+      preParsing: [captureSlackRawBody as any],
+      schema: {
+        description: "Slack slash commands endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.unknown(),
+          400: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          429: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getSlackProvider();
+      if (!provider) {
+        throw new ApiError(400, "Slack chatops provider not configured");
+      }
+
+      // Rate limiting
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-slack-slash-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        throw new ApiError(429, "Too many requests");
+      }
+
+      // Validate request signature using the raw form-encoded body
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+      const rawBody = (request as unknown as { slackRawBody?: string })
+        .slackRawBody;
+      if (!rawBody) {
+        throw new ApiError(400, "Could not read request body for verification");
+      }
+      const isValid = await provider.validateWebhookRequest(rawBody, headers);
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid Slack slash command signature");
+        throw new ApiError(400, "Invalid request signature");
+      }
+
+      // Slack sends slash commands as form-encoded with these fields
+      const body = request.body as {
+        command?: string;
+        text?: string;
+        user_id?: string;
+        user_name?: string;
+        channel_id?: string;
+        channel_name?: string;
+        team_id?: string;
+        response_url?: string;
+        trigger_id?: string;
+      };
+
+      const command = body.command;
+      const channelId = body.channel_id || "";
+      const workspaceId = body.team_id || null;
+      const userId = body.user_id || "unknown";
+
+      // Resolve sender email and verify user
+      const senderEmail = await provider.getUserEmail(userId);
+      if (!senderEmail) {
+        return reply.send({
+          response_type: "ephemeral",
+          text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
+        });
+      }
+
+      const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        return reply.send({
+          response_type: "ephemeral",
+          text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+        });
+      }
+
+      // Build an IncomingChatMessage for reuse with existing helpers
+      const message: IncomingChatMessage = {
+        messageId: `slack-slash-${Date.now()}`,
+        channelId,
+        workspaceId,
+        threadId: undefined,
+        senderId: userId,
+        senderName: body.user_name || "Unknown User",
+        senderEmail,
+        text: body.text || "",
+        rawText: body.text || "",
+        timestamp: new Date(),
+        isThreadReply: false,
+      };
+
+      switch (command) {
+        case SLACK_SLASH_COMMANDS.HELP: {
+          return reply.send({
+            response_type: "ephemeral",
+            text:
+              "*Available commands:*\n" +
+              "`/archestra-select-agent` — Change the default agent\n" +
+              "`/archestra-status` — Show current agent binding\n" +
+              "`/archestra-help` — Show this help message\n\n" +
+              "Or just send a message to interact with the bound agent.",
+          });
+        }
+        case SLACK_SLASH_COMMANDS.STATUS: {
+          const binding = await ChatOpsChannelBindingModel.findByChannel({
+            provider: "slack",
+            channelId,
+            workspaceId,
+          });
+
+          if (binding?.agentId) {
+            const agent = await AgentModel.findById(binding.agentId);
+            return reply.send({
+              response_type: "ephemeral",
+              text:
+                `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
+                "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
+                "Use `/archestra-select-agent` to change the default agent.",
+            });
+          }
+
+          return reply.send({
+            response_type: "ephemeral",
+            text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
+          });
+        }
+        case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
+          // Send agent selection card (visible to all in channel)
+          await sendAgentSelectionCard({
+            provider,
+            message,
+            isWelcome: false,
+          });
+          // Acknowledge the slash command with an empty 200
+          return reply.send({
+            response_type: "in_channel",
+            text: "",
+          });
+        }
+        default: {
+          return reply.send({
+            response_type: "ephemeral",
+            text: "Unknown command. Use `/archestra-help` to see available commands.",
+          });
+        }
+      }
+    },
+  );
+
+  /**
    * Get chatops status (provider configuration status)
    */
   fastify.get(
@@ -418,13 +1009,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 id: z.string(),
                 displayName: z.string(),
                 configured: z.boolean(),
-                credentials: z
-                  .object({
-                    appId: z.string(),
-                    appSecret: z.string(),
-                    tenantId: z.string(),
-                  })
-                  .optional(),
+                credentials: z.record(z.string(), z.string()).optional(),
               }),
             ),
           }),
@@ -599,8 +1184,60 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
   /**
-   * Refresh channel discovery cache for a provider.
-   * Invalidates the TTL cache so channels are re-discovered on the next bot interaction.
+   * Update Slack chatops config in quickstart mode.
+   * Mutates in-memory config and reinitializes the chatops manager.
+   */
+  fastify.put(
+    "/api/chatops/config/slack",
+    {
+      schema: {
+        operationId: RouteId.UpdateSlackChatOpsConfig,
+        description:
+          "Update Slack chatops configuration (quickstart mode only)",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          botToken: z.string().min(1).max(512).optional(),
+          signingSecret: z.string().min(1).max(256).optional(),
+          appId: z.string().min(1).max(256).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (config.production && !config.isQuickstart) {
+        throw new ApiError(
+          403,
+          "Only available in quickstart or local development mode. Forbidden in production.",
+        );
+      }
+
+      const { enabled, botToken, signingSecret, appId } = request.body;
+
+      if (enabled !== undefined) {
+        config.chatops.slack.enabled = enabled;
+      }
+      if (botToken !== undefined) {
+        config.chatops.slack.botToken = botToken;
+      }
+      if (signingSecret !== undefined) {
+        config.chatops.slack.signingSecret = signingSecret;
+      }
+      if (appId !== undefined) {
+        config.chatops.slack.appId = appId;
+      }
+
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Refresh channel discovery for a provider.
+   * Clears the TTL cache, then triggers immediate discovery if the provider
+   * supports it (e.g., Slack). Otherwise channels are re-discovered on the
+   * next bot interaction (e.g., MS Teams).
    */
   fastify.post(
     "/api/chatops/channel-discovery/refresh",
@@ -616,10 +1253,22 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { provider } = request.body;
+      const { provider: providerType } = request.body;
       const prefix =
-        `${CacheKey.ChannelDiscovery}-${provider}` as AllowedCacheKey;
+        `${CacheKey.ChannelDiscovery}-${providerType}` as AllowedCacheKey;
       await cacheManager.deleteByPrefix(prefix);
+
+      // If the provider can discover channels eagerly, do it now
+      const provider = chatOpsManager.getChatOpsProvider(providerType);
+      const workspaceId = provider?.getWorkspaceId();
+      if (provider && workspaceId) {
+        await chatOpsManager.discoverChannels({
+          provider,
+          context: null,
+          workspaceId,
+        });
+      }
+
       return reply.send({ success: true });
     },
   );
@@ -650,7 +1299,7 @@ function getProviderInfo(providerType: ChatOpsProviderType): {
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
-  credentials?: { appId: string; appSecret: string; tenantId: string };
+  credentials?: Record<string, string>;
 } {
   switch (providerType) {
     case "ms-teams": {
@@ -667,7 +1316,20 @@ function getProviderInfo(providerType: ChatOpsProviderType): {
         },
       };
     }
-    // When adding new providers, TypeScript will error here until handled
+    case "slack": {
+      const provider = chatOpsManager.getSlackProvider();
+      const { botToken, signingSecret, appId } = config.chatops.slack;
+      return {
+        id: "slack",
+        displayName: "Slack",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          botToken: maskValue(botToken),
+          signingSecret: signingSecret ? "••••••••" : "",
+          appId: maskValue(appId),
+        },
+      };
+    }
   }
 }
 
@@ -678,144 +1340,33 @@ function maskValue(value: string): string {
 }
 
 /**
- * Send an Adaptive Card for agent selection
+ * Shared helper: get accessible agents and send agent selection card via the provider.
+ * Both MS Teams and Slack handlers call this instead of provider-specific functions.
  */
-async function sendAgentSelectionCard(
-  context: TurnContext,
-  message: IncomingChatMessage,
-): Promise<void> {
-  // Get available agents for MS Teams, filtered by user access
+async function sendAgentSelectionCard(params: {
+  provider: ChatOpsProvider;
+  message: IncomingChatMessage;
+  isWelcome: boolean;
+  providerContext?: unknown;
+}): Promise<void> {
   const agents = await chatOpsManager.getAccessibleChatopsAgents({
-    provider: "ms-teams",
-    senderEmail: message.senderEmail,
+    provider: params.provider.providerId,
+    senderEmail: params.message.senderEmail,
   });
 
   if (agents.length === 0) {
-    await context.sendActivity(
-      "No agents are available for you in Microsoft Teams.\n" +
-        "Contact your administrator to get access to an agent with Teams enabled.",
-    );
+    await params.provider.sendReply({
+      originalMessage: params.message,
+      text: `No agents are available for you in ${params.provider.displayName}.\nContact your administrator to get access to an agent with ${params.provider.displayName} enabled.`,
+    });
     return;
   }
 
-  // Build choices for the dropdown
-  const choices = agents.map((agent) => ({
-    title: agent.name,
-    value: agent.id,
-  }));
-
-  // Check for existing binding to pre-select
-  const existingBinding = await ChatOpsChannelBindingModel.findByChannel({
-    provider: "ms-teams",
-    channelId: message.channelId,
-    workspaceId: message.workspaceId,
-  });
-
-  // Build card body based on whether this is first-time setup or changing agent
-  const cardBody = existingBinding
-    ? [
-        {
-          type: "TextBlock",
-          size: "Medium",
-          weight: "Bolder",
-          text: "Change Default Agent",
-        },
-        {
-          type: "TextBlock",
-          text: "Select a different agent to handle messages in this channel:",
-          wrap: true,
-        },
-        {
-          type: "Input.ChoiceSet",
-          id: "agentId",
-          style: "compact",
-          value: existingBinding.agentId,
-          choices,
-        },
-      ]
-    : [
-        {
-          type: "TextBlock",
-          weight: "Bolder",
-          text: "Welcome to Archestra!",
-        },
-        {
-          type: "TextBlock",
-          text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
-          wrap: true,
-          spacing: "Small",
-        },
-        {
-          type: "TextBlock",
-          text: "**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).",
-          wrap: true,
-          spacing: "Small",
-        },
-        {
-          type: "TextBlock",
-          text: "**Available commands:**",
-          wrap: true,
-          spacing: "Medium",
-        },
-        {
-          type: "FactSet",
-          spacing: "Small",
-          facts: [
-            {
-              title: "/select-agent",
-              value:
-                "Change the default agent handling requests in the channel",
-            },
-            {
-              title: "/status",
-              value: "Check the current agent handling requests in the channel",
-            },
-            { title: "/help", value: "Show available commands" },
-          ],
-        },
-        {
-          type: "TextBlock",
-          text: "**Let's set the default agent for this channel:**",
-          wrap: true,
-          spacing: "Medium",
-        },
-        {
-          type: "Input.ChoiceSet",
-          id: "agentId",
-          style: "compact",
-          value: choices[0]?.value || "",
-          choices,
-        },
-      ];
-
-  // Send Adaptive Card
-  const card = {
-    type: "AdaptiveCard",
-    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-    version: "1.4",
-    body: cardBody,
-    actions: [
-      {
-        type: "Action.Submit",
-        title: "Confirm Selection",
-        data: {
-          action: "selectAgent",
-          channelId: message.channelId,
-          workspaceId: message.workspaceId,
-          // Include original message so we can process it after binding
-          originalMessageText: message.text || undefined,
-        },
-      },
-    ],
-  };
-
-  await context.sendActivity({
-    attachments: [
-      {
-        contentType: "application/vnd.microsoft.card.adaptive",
-        content: card,
-      },
-    ],
+  await params.provider.sendAgentSelectionCard({
+    message: params.message,
+    agents,
+    isWelcome: params.isWelcome,
+    providerContext: params.providerContext,
   });
 }
 

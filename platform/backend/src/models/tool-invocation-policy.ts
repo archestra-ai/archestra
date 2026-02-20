@@ -141,7 +141,8 @@ class ToolInvocationPolicyModel {
     action:
       | "allow_when_context_is_untrusted"
       | "block_when_context_is_untrusted"
-      | "block_always",
+      | "block_always"
+      | "require_approval",
   ): Promise<{ updated: number; created: number }> {
     if (toolIds.length === 0) {
       return { updated: 0, created: 0 };
@@ -193,6 +194,106 @@ class ToolInvocationPolicyModel {
     }
 
     return { updated, created };
+  }
+
+  /**
+   * Check if a tool requires user approval before execution in chat.
+   * Used by the AI SDK's `needsApproval` hook to pause tool execution.
+   *
+   * Returns true if any matching policy has action === "require_approval".
+   */
+  static async checkApprovalRequired(
+    toolName: string,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    toolInput: Record<string, any>,
+    context: PolicyEvaluationContext,
+  ): Promise<boolean> {
+    // Find tool by name
+    const [tool] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, toolName));
+
+    if (!tool) {
+      logger.debug({ toolName }, "checkApprovalRequired: tool not found in DB");
+      return false;
+    }
+
+    // Fetch policies for this tool
+    const policies = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+
+    logger.debug(
+      {
+        toolName,
+        toolId: tool.id,
+        policyCount: policies.length,
+        actions: policies.map((p) => p.action),
+      },
+      "checkApprovalRequired: policy lookup result",
+    );
+
+    if (policies.length === 0) {
+      return false;
+    }
+
+    // Separate into specific (has conditions) and default (empty conditions)
+    const specificPolicies = policies.filter((p) => p.conditions.length > 0);
+    const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
+
+    // Check specific policies first
+    for (const policy of specificPolicies) {
+      const conditionsMatch = policy.conditions.every((condition) => {
+        const { key, value, operator } = condition;
+        if (key.startsWith("context.")) {
+          return ToolInvocationPolicyModel.evaluateContextCondition(
+            key,
+            value,
+            operator,
+            context,
+          );
+        }
+        return ToolInvocationPolicyModel.evaluateInputCondition(
+          key,
+          value,
+          operator,
+          toolInput,
+        );
+      });
+
+      if (conditionsMatch && policy.action === "require_approval") {
+        logger.info(
+          { toolName },
+          "checkApprovalRequired: specific policy requires approval",
+        );
+        return true;
+      }
+
+      // If a specific policy matched but is not require_approval, it takes precedence
+      if (conditionsMatch) {
+        logger.debug(
+          { toolName, action: policy.action },
+          "checkApprovalRequired: specific policy matched, no approval needed",
+        );
+        return false;
+      }
+    }
+
+    // Fall back to default policy
+    for (const policy of defaultPolicies) {
+      if (policy.action === "require_approval") {
+        logger.info(
+          { toolName },
+          "checkApprovalRequired: default policy requires approval",
+        );
+        return true;
+      }
+    }
+
+    logger.debug({ toolName }, "checkApprovalRequired: no approval required");
+    return false;
   }
 
   private static evaluateContextCondition(
@@ -411,7 +512,10 @@ class ToolInvocationPolicyModel {
           continue;
         }
 
-        if (policy.action === "allow_when_context_is_untrusted") {
+        if (
+          policy.action === "allow_when_context_is_untrusted" ||
+          policy.action === "require_approval"
+        ) {
           specificAllowsUntrusted = true;
         }
       }
@@ -454,7 +558,10 @@ class ToolInvocationPolicyModel {
             continue;
           }
 
-          if (policy.action === "allow_when_context_is_untrusted") {
+          if (
+            policy.action === "allow_when_context_is_untrusted" ||
+            policy.action === "require_approval"
+          ) {
             defaultAllowsUntrusted = true;
           }
         }

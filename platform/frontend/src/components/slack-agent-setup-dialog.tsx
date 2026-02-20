@@ -7,22 +7,22 @@ import { StepCard } from "@/components/step-card";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles, useUpdateProfile } from "@/lib/agent.query";
 
-interface DefaultAgentSetupDialogProps {
+interface SlackAgentSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function DefaultAgentSetupDialog({
+export function SlackAgentSetupDialog({
   open,
   onOpenChange,
-}: DefaultAgentSetupDialogProps) {
+}: SlackAgentSetupDialogProps) {
   const queryClient = useQueryClient();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
 
-  const hasMsTeamsAgent =
+  const hasSlackAgent =
     agents?.some((a) =>
       Array.isArray(a.allowedChatops)
-        ? a.allowedChatops.includes("ms-teams")
+        ? a.allowedChatops.includes("slack")
         : false,
     ) ?? false;
 
@@ -30,10 +30,10 @@ export function DefaultAgentSetupDialog({
     <SetupDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Connect Agents to MS Teams channels"
-      description="Enable MS Teams on your agent, then bind it to a channel so it can receive and respond to messages."
+      title="Connect Agents to Slack channels"
+      description="Enable Slack on your agent, then bind it to a channel so it can receive and respond to messages."
       canProceed={(step) => {
-        if (step === 0) return hasMsTeamsAgent;
+        if (step === 0) return hasSlackAgent;
         return true;
       }}
       lastStepAction={{
@@ -45,14 +45,14 @@ export function DefaultAgentSetupDialog({
         },
       }}
       steps={[
-        <StepEnableMsTeams key="enable" />,
-        <StepSelectAgentInTeams key="invite" />,
+        <StepEnableSlack key="enable" />,
+        <StepSelectAgentInSlack key="invite" />,
       ]}
     />
   );
 }
 
-function StepEnableMsTeams() {
+function StepEnableSlack() {
   const { data: agents, isLoading } = useProfiles({
     filters: { agentType: "agent" },
   });
@@ -64,12 +64,12 @@ function StepEnableMsTeams() {
     checked: boolean,
   ) => {
     const newChatops = checked
-      ? [...currentChatops, "ms-teams"]
-      : currentChatops.filter((id) => id !== "ms-teams");
+      ? [...currentChatops, "slack"]
+      : currentChatops.filter((id) => id !== "slack");
 
     updateAgent.mutate({
       id: agentId,
-      data: { allowedChatops: newChatops as "ms-teams"[] },
+      data: { allowedChatops: newChatops as "slack"[] },
     });
   };
 
@@ -78,16 +78,16 @@ function StepEnableMsTeams() {
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <StepCard stepNumber={1} title="Enable MS Teams on Agent">
+      <StepCard stepNumber={1} title="Enable Slack on Agent">
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Toggle MS Teams on for each agent that should be available in
-          Microsoft Teams. At least one agent must be enabled to proceed.
+          Toggle Slack on for each agent that should be available in Slack. At
+          least one agent must be enabled to proceed.
         </p>
         <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed mt-2">
           <strong>Access control:</strong> Only users who have access to the
-          agent (via team membership) can interact with it through Teams. Make
+          agent (via team membership) can interact with it through Slack. Make
           sure the relevant teams are assigned to the agent. Users are
-          identified by email, so their Microsoft account email must match their
+          identified by email, so their Slack account email must match their
           Archestra email.
         </div>
       </StepCard>
@@ -95,7 +95,7 @@ function StepEnableMsTeams() {
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 min-w-0">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium">Agents</h4>
-          <span className="text-sm font-medium">MS Teams enabled</span>
+          <span className="text-sm font-medium">Slack enabled</span>
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -107,7 +107,7 @@ function StepEnableMsTeams() {
               const chatops = Array.isArray(agent.allowedChatops)
                 ? (agent.allowedChatops as string[])
                 : [];
-              const isEnabled = chatops.includes("ms-teams");
+              const isEnabled = chatops.includes("slack");
               const isPending =
                 updateAgent.isPending && updateAgent.variables?.id === agent.id;
 
@@ -154,24 +154,20 @@ function StepEnableMsTeams() {
   );
 }
 
-function StepSelectAgentInTeams() {
+function StepSelectAgentInSlack() {
   return (
     <div
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <StepCard
-        stepNumber={2}
-        title="Select default Agent for MS Teams channel"
-      >
+      <StepCard stepNumber={2} title="Select default Agent for Slack channel">
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               1
             </span>
             <span className="pt-0.5">
-              Open Microsoft Teams and navigate to the channel where the bot is
-              installed
+              Open Slack and navigate to the channel where the bot is installed
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -182,7 +178,7 @@ function StepSelectAgentInTeams() {
               Mention the bot (e.g., <strong>@Archestra</strong>) and send any
               message to it or use{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                /select-agent
+                /archestra-select-agent
               </code>{" "}
               command
             </span>
@@ -197,8 +193,9 @@ function StepSelectAgentInTeams() {
           </li>
         </ol>
       </StepCard>
+
       <video
-        src="/ms-teams/agent-bound.mp4"
+        src="/slack/slack-agent-bind.mp4"
         controls
         muted
         autoPlay

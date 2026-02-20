@@ -13,23 +13,22 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { AgentDialog } from "@/components/agent-dialog";
 import { CopyButton } from "@/components/copy-button";
-import { DefaultAgentSetupDialog } from "@/components/default-agent-setup-dialog";
 import Divider from "@/components/divider";
 import { EnableAgentsDialog } from "@/components/enable-agents-dialog";
-import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
+import { SlackAgentSetupDialog } from "@/components/slack-agent-setup-dialog";
+import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -49,7 +48,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -67,10 +65,10 @@ import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
 import { cn } from "@/lib/utils";
 
-export default function MsTeamsPage() {
-  const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
+export default function SlackPage() {
+  const [slackSetupOpen, setSlackSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
-  const [defaultAgentDialogOpen, setDefaultAgentDialogOpen] = useState(false);
+  const [slackAgentDialogOpen, setSlackAgentDialogOpen] = useState(false);
 
   const { data: features } = useFeatures();
   const { data: chatOpsProviders } = useChatOpsStatus();
@@ -79,12 +77,13 @@ export default function MsTeamsPage() {
 
   const ngrokDomain = features?.ngrokDomain;
 
-  const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
-  const msTeamsAgentIds = new Set(
+  const slack = chatOpsProviders?.find((p) => p.id === "slack");
+  const slackCreds = slack?.credentials as Record<string, string> | undefined;
+  const slackAgentIds = new Set(
     agents
       ?.filter((a) =>
         Array.isArray(a.allowedChatops)
-          ? a.allowedChatops.includes("ms-teams")
+          ? a.allowedChatops.includes("slack")
           : false,
       )
       .map((a) => a.id) ?? [],
@@ -93,15 +92,13 @@ export default function MsTeamsPage() {
     !!bindings &&
     bindings.some(
       (b) =>
-        b.provider === "ms-teams" &&
-        b.agentId &&
-        msTeamsAgentIds.has(b.agentId),
+        b.provider === "slack" && b.agentId && slackAgentIds.has(b.agentId),
     );
 
   const localDevOrQuickstartFirstStep = (
     <SetupStep
       title="Make Archestra reachable from the Internet"
-      description="The MS Teams bot needs to connect to an Archestra webhook — your instance must be publicly accessible"
+      description="The Slack bot needs to connect to an Archestra webhook — your instance must be publicly accessible"
       done={!!ngrokDomain}
       ctaLabel="Configure ngrok"
       onAction={() => setNgrokDialogOpen(true)}
@@ -118,7 +115,7 @@ export default function MsTeamsPage() {
         <>
           Archestra's webhook{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            POST {"<archestra-url>/api/webhooks/chatops/ms-teams"}
+            POST {"<archestra-url>/api/webhooks/chatops/slack"}
           </code>{" "}
           needs to be reachable from the Internet. Configure ngrok or deploy to
           a public URL.
@@ -136,11 +133,9 @@ export default function MsTeamsPage() {
         <span className="text-muted-foreground text-xs">
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            POST{" "}
-            {`${config.api.externalProxyUrls[0] || window.location.origin}/api/webhooks/chatops/ms-teams`}
+            POST {"<archestra-url>/api/webhooks/chatops/slack"}
           </code>{" "}
-          must be publicly accessible so MS Teams can deliver messages to
-          Archestra
+          must be publicly accessible so Slack can deliver events to Archestra
         </span>
       </div>
     </div>
@@ -156,11 +151,10 @@ export default function MsTeamsPage() {
       <section className="flex flex-col gap-4">
         <div>
           <h2 className="text-lg font-semibold">Setup</h2>
-          <p className="text-sm text-muted-foreground mt-1 text-xs">
-            Connect Microsoft Teams so agents can receive and respond to
-            messages.{" "}
+          <p className="text-xs text-muted-foreground mt-1">
+            Connect Slack so agents can receive and respond to messages.{" "}
             <Link
-              href="https://archestra.ai/docs/platform-ms-teams"
+              href="https://archestra.ai/docs/platform-slack"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -172,36 +166,29 @@ export default function MsTeamsPage() {
         </div>
         {firstStep}
         <SetupStep
-          title="Setup MS Teams"
-          description="Register a Teams bot application and connect it to Archestra"
-          done={!!msTeams?.configured}
-          ctaLabel="Setup MS Teams"
-          onAction={() => setMsTeamsSetupOpen(true)}
+          title="Setup Slack"
+          description="Create a Slack App from manifest and connect it to Archestra"
+          done={!!slack?.configured}
+          ctaLabel="Setup Slack"
+          onAction={() => setSlackSetupOpen(true)}
           doneActionLabel="Reconfigure"
-          onDoneAction={() => setMsTeamsSetupOpen(true)}
+          onDoneAction={() => setSlackSetupOpen(true)}
         >
-          <div className="flex items-center flex-wrap gap-4 ">
+          <div className="flex items-center flex-wrap gap-4">
+            <CredentialField label="Bot Token" value={slackCreds?.botToken} />
             <CredentialField
-              label="App ID"
-              value={msTeams?.credentials?.appId}
+              label="Signing Secret"
+              value={slackCreds?.signingSecret}
             />
-            <CredentialField
-              label="App Secret"
-              value={msTeams?.credentials?.appSecret}
-            />
-            <CredentialField
-              label="Tenant ID"
-              value={msTeams?.credentials?.tenantId}
-              optional
-            />
+            <CredentialField label="App ID" value={slackCreds?.appId} />
           </div>
         </SetupStep>
         <SetupStep
-          title="Enable MS Teams for your Agents and assign channels to them"
-          description="Agents with enabled MS Teams will appear in the table below. Then you can assign channels to them."
+          title="Enable Slack for your Agents and assign channels to them"
+          description="Agents with enabled Slack will appear in the table below. Then you can assign channels to them."
           done={hasBindings}
           ctaLabel="Configure"
-          onAction={() => setDefaultAgentDialogOpen(true)}
+          onAction={() => setSlackAgentDialogOpen(true)}
         />
       </section>
 
@@ -210,17 +197,17 @@ export default function MsTeamsPage() {
       {/* Channel Bindings Section */}
       <ChannelBindingsSection />
 
-      <MsTeamsSetupDialog
-        open={msTeamsSetupOpen}
-        onOpenChange={setMsTeamsSetupOpen}
+      <SlackSetupDialog
+        open={slackSetupOpen}
+        onOpenChange={setSlackSetupOpen}
       />
       <NgrokSetupDialog
         open={ngrokDialogOpen}
         onOpenChange={setNgrokDialogOpen}
       />
-      <DefaultAgentSetupDialog
-        open={defaultAgentDialogOpen}
-        onOpenChange={setDefaultAgentDialogOpen}
+      <SlackAgentSetupDialog
+        open={slackAgentDialogOpen}
+        onOpenChange={setSlackAgentDialogOpen}
       />
     </div>
   );
@@ -230,26 +217,26 @@ function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const updateMutation = useUpdateChatOpsBinding();
+  const queryClient = useQueryClient();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
   const [enableDialogOpen, setEnableDialogOpen] = useState(false);
-  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
-  const msTeamsAgents =
+  const slackAgents =
     agents?.filter((a) =>
       Array.isArray(a.allowedChatops)
-        ? a.allowedChatops.includes("ms-teams")
+        ? a.allowedChatops.includes("slack")
         : false,
     ) ?? [];
 
   const [editingAgent, setEditingAgent] = useState<
-    (typeof msTeamsAgents)[number] | null
+    (typeof slackAgents)[number] | null
   >(null);
 
-  const msTeamsBindings = bindings?.filter((b) => b.provider === "ms-teams");
+  const slackBindings = bindings?.filter((b) => b.provider === "slack");
 
-  // Map agentId → list of bindings
+  // Map agentId -> list of bindings
   const bindingsByAgentId = new Map<string, typeof bindings>();
-  for (const b of msTeamsBindings ?? []) {
+  for (const b of slackBindings ?? []) {
     if (!b.agentId) continue;
     const list = bindingsByAgentId.get(b.agentId) ?? [];
     list.push(b);
@@ -258,13 +245,13 @@ function ChannelBindingsSection() {
 
   // All known channels as MultiSelect items
   const channelItems =
-    msTeamsBindings?.map((b) => ({
+    slackBindings?.map((b) => ({
       value: b.id,
       label: `${b.channelName ?? b.channelId}${b.workspaceName ? ` (${b.workspaceName})` : ""}`,
     })) ?? [];
 
   const handleChannelsChange = (agentId: string, selectedIds: string[]) => {
-    if (!msTeamsBindings) return;
+    if (!slackBindings) return;
 
     const currentBindingIds = new Set(
       (bindingsByAgentId.get(agentId) ?? []).map((b) => b.id),
@@ -294,25 +281,25 @@ function ChannelBindingsSection() {
           <Button
             variant="outline"
             size="sm"
-            className="text-xs ml-2"
             onClick={() => setEnableDialogOpen(true)}
+            className="text-xs ml-2"
           >
             <Plus className="h-2 w-2" />
             Add more
           </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Assign agents to Teams channels using the dropdown below or use{" "}
+          Assign agents to Slack channels using the dropdown below or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             /select-agent
           </code>{" "}
-          in Teams.
+          in Slack.
         </p>
       </div>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground py-4">Loading...</p>
-      ) : msTeamsAgents.length > 0 ? (
+      ) : slackAgents.length > 0 ? (
         <div className="rounded-md border [&_[data-slot=table-container]]:overflow-hidden">
           <Table>
             <TableHeader>
@@ -331,8 +318,11 @@ function ChannelBindingsSection() {
                             aria-label="Refresh channels"
                             disabled={refreshMutation.isPending}
                             onClick={() =>
-                              refreshMutation.mutate("ms-teams", {
-                                onSuccess: () => setRefreshDialogOpen(true),
+                              refreshMutation.mutate("slack", {
+                                onSuccess: () =>
+                                  queryClient.invalidateQueries({
+                                    queryKey: ["chatops", "bindings"],
+                                  }),
                               })
                             }
                           >
@@ -352,7 +342,7 @@ function ChannelBindingsSection() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {msTeamsAgents.map((agent) => {
+              {slackAgents.map((agent) => {
                 const agentBindings = bindingsByAgentId.get(agent.id) ?? [];
                 const selectedIds = agentBindings.map((b) => b.id);
                 return (
@@ -380,23 +370,24 @@ function ChannelBindingsSection() {
                                 <Button
                                   variant="outline"
                                   size="icon-sm"
-                                  aria-label="Open in MS Teams"
+                                  aria-label="Open in Slack"
                                   asChild
                                 >
                                   <a
-                                    href={buildTeamsDeepLink(agentBindings[0])}
+                                    href={buildSlackDeepLink(agentBindings[0])}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                   >
-                                    <img
-                                      src="/icons/ms-teams.png"
-                                      alt="MS Teams"
-                                      className="h-4 w-4"
+                                    <Image
+                                      src="/icons/slack.png"
+                                      alt="Slack"
+                                      width={16}
+                                      height={16}
                                     />
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open in MS Teams</TooltipContent>
+                              <TooltipContent>Open in Slack</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -409,26 +400,25 @@ function ChannelBindingsSection() {
                                     <Button
                                       variant="outline"
                                       size="icon-sm"
-                                      aria-label="Open in MS Teams"
+                                      aria-label="Open in Slack"
                                     >
-                                      <img
-                                        src="/icons/ms-teams.png"
-                                        alt="MS Teams"
-                                        className="h-4 w-4"
+                                      <Image
+                                        src="/icons/slack.png"
+                                        alt="Slack"
+                                        width={16}
+                                        height={16}
                                       />
                                     </Button>
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                  Open in MS Teams
-                                </TooltipContent>
+                                <TooltipContent>Open in Slack</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <DropdownMenuContent align="start">
                               {agentBindings.map((b) => (
                                 <DropdownMenuItem key={b.id} asChild>
                                   <a
-                                    href={buildTeamsDeepLink(b)}
+                                    href={buildSlackDeepLink(b)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                   >
@@ -505,7 +495,7 @@ function ChannelBindingsSection() {
         <Card>
           <CardContent className="py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No agents have MS Teams enabled yet
+              No agents have Slack enabled yet
             </p>
           </CardContent>
         </Card>
@@ -514,12 +504,7 @@ function ChannelBindingsSection() {
       <EnableAgentsDialog
         open={enableDialogOpen}
         onOpenChange={setEnableDialogOpen}
-        provider="ms-teams"
-      />
-
-      <RefreshChannelsDialog
-        open={refreshDialogOpen}
-        onOpenChange={setRefreshDialogOpen}
+        provider="slack"
       />
 
       <AgentDialog
@@ -532,62 +517,6 @@ function ChannelBindingsSection() {
   );
 }
 
-function RefreshChannelsDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [confirmed, setConfirmed] = useState(false);
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) setConfirmed(false);
-      }}
-    >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Channel discovery cache cleared</DialogTitle>
-          <DialogDescription>
-            The list of channels will be refreshed on the next interaction with
-            the Teams bot. Send a message to the bot, then come back and click
-            Done.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="refresh-confirm"
-            checked={confirmed}
-            onCheckedChange={(v) => setConfirmed(v === true)}
-          />
-          <label htmlFor="refresh-confirm" className="text-sm cursor-pointer">
-            I have sent a message to the Teams bot
-          </label>
-        </div>
-        <DialogFooter>
-          <Button
-            disabled={!confirmed}
-            onClick={() => {
-              queryClient.invalidateQueries({
-                queryKey: ["chatops", "bindings"],
-              });
-              onOpenChange(false);
-              setConfirmed(false);
-            }}
-          >
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function NgrokSetupDialog({
   open,
   onOpenChange,
@@ -597,14 +526,6 @@ function NgrokSetupDialog({
 }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [authToken, setAuthToken] = useState("");
-
-  const dockerCommand = `docker run -p 9000:9000 -p 3000:3000 \\
-  -e ARCHESTRA_QUICKSTART=true \\
-  -e ARCHESTRA_NGROK_AUTH_TOKEN=${authToken || "<your-ngrok-auth-token>"} \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
-  -v archestra-postgres-data:/var/lib/postgresql/data \\
-  -v archestra-app-data:/app/data \\
-  archestra/platform`;
 
   const ngrokCommand = `ngrok http --authtoken=${authToken || "<your-ngrok-auth-token>"} 9000`;
 
@@ -657,73 +578,45 @@ function NgrokSetupDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Run Archestra with ngrok</DialogTitle>
+              <DialogTitle>Run ngrok for Slack webhooks</DialogTitle>
               <DialogDescription>
-                Choose how you want to set up ngrok with Archestra.
+                Start an ngrok tunnel to make Archestra reachable from Slack.
               </DialogDescription>
             </DialogHeader>
-            <Tabs defaultValue="docker">
-              <TabsList className="w-full">
-                <TabsTrigger value="docker">Docker</TabsTrigger>
-                <TabsTrigger value="local">Local Development</TabsTrigger>
-              </TabsList>
-              <TabsContent value="docker" className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  Restart Archestra using the following command to enable ngrok:
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2 text-sm">
+                <p>1. Start an ngrok tunnel:</p>
+                <div className="relative">
+                  <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
+                    {ngrokCommand}
+                  </pre>
+                  <div className="absolute top-2 right-2">
+                    <CopyButton text={ngrokCommand} />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <p>
+                  2. Set the ngrok domain in your{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    .env
+                  </code>{" "}
+                  file:
                 </p>
                 <div className="relative">
                   <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
-                    {dockerCommand}
+                    {envCommand}
                   </pre>
                   <div className="absolute top-2 right-2">
-                    <CopyButton text={dockerCommand} />
+                    <CopyButton text={envCommand} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Then open{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    localhost:3000
-                  </code>
-                </p>
-              </TabsContent>
-              <TabsContent value="local" className="space-y-3 pt-2">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    1. Start an ngrok tunnel pointing to your local Archestra
-                    instance:
-                  </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
-                      {ngrokCommand}
-                    </pre>
-                    <div className="absolute top-2 right-2">
-                      <CopyButton text={ngrokCommand} />
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p>
-                    2. Set the ngrok domain in your{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                      .env
-                    </code>{" "}
-                    file:
-                  </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
-                      {envCommand}
-                    </pre>
-                    <div className="absolute top-2 right-2">
-                      <CopyButton text={envCommand} />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Then restart Archestra with{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
-                </p>
-              </TabsContent>
-            </Tabs>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Then restart Archestra with{" "}
+                <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
+              </p>
+            </div>
           </>
         )}
       </DialogContent>
@@ -808,35 +701,21 @@ function SetupStep({
   );
 }
 
-function buildTeamsDeepLink(binding: {
+function buildSlackDeepLink(binding: {
   channelId: string;
-  channelName?: string | null;
   workspaceId?: string | null;
 }): string {
-  const channelName = encodeURIComponent(
-    binding.channelName ?? binding.channelId,
-  );
-  const base = `https://teams.microsoft.com/l/channel/${encodeURIComponent(binding.channelId)}/${channelName}`;
   if (binding.workspaceId) {
-    return `${base}?groupId=${encodeURIComponent(binding.workspaceId)}`;
+    return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;
   }
-  return base;
+  return `slack://channel?id=${binding.channelId}`;
 }
 
-function CredentialField({
-  label,
-  value,
-  optional,
-}: {
-  label: string;
-  value?: string;
-  optional?: boolean;
-}) {
+function CredentialField({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex items-center gap-0.5">
       <span className="text-muted-foreground text-xs whitespace-nowrap">
-        {label}
-        {optional && " (optional)"}:
+        {label}:
       </span>
       <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
         {value || "Not set"}

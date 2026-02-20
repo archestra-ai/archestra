@@ -25,6 +25,7 @@ import { PasswordServiceClientCredentialFactory } from "botframework-connector";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { ChatOpsChannelBindingModel } from "@/models";
 import type {
   ChatOpsProvider,
   ChatOpsProviderType,
@@ -35,6 +36,7 @@ import type {
   ThreadHistoryParams,
 } from "@/types/chatops";
 import { CHATOPS_TEAM_CACHE, CHATOPS_THREAD_HISTORY } from "./constants";
+import { errorMessage } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -492,6 +494,11 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  getWorkspaceId(): string | null {
+    // MS Teams requires a TurnContext to determine the team — no eager discovery
+    return null;
+  }
+
   async discoverChannels(
     context: unknown,
   ): Promise<DiscoveredChannel[] | null> {
@@ -576,6 +583,137 @@ class MSTeamsProvider implements ChatOpsProvider {
     } finally {
       console.error = origConsoleError;
     }
+  }
+
+  async sendAgentSelectionCard(params: {
+    message: IncomingChatMessage;
+    agents: { id: string; name: string }[];
+    isWelcome: boolean;
+    providerContext?: unknown;
+  }): Promise<void> {
+    const context = params.providerContext;
+    if (!(context instanceof TurnContext)) {
+      throw new Error(
+        "MSTeamsProvider.sendAgentSelectionCard requires a TurnContext",
+      );
+    }
+
+    const choices = params.agents.map((agent) => ({
+      title: agent.name,
+      value: agent.id,
+    }));
+
+    // Check for existing binding to pre-select
+    const existingBinding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: "ms-teams",
+      channelId: params.message.channelId,
+      workspaceId: params.message.workspaceId,
+    });
+
+    const cardBody = existingBinding?.agentId
+      ? [
+          {
+            type: "TextBlock",
+            size: "Medium",
+            weight: "Bolder",
+            text: "Change Default Agent",
+          },
+          {
+            type: "TextBlock",
+            text: "Select a different agent to handle messages in this channel:",
+            wrap: true,
+          },
+          {
+            type: "Input.ChoiceSet",
+            id: "agentId",
+            style: "compact",
+            value: existingBinding.agentId,
+            choices,
+          },
+        ]
+      : [
+          {
+            type: "TextBlock",
+            weight: "Bolder",
+            text: "Welcome to Archestra!",
+          },
+          {
+            type: "TextBlock",
+            text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "TextBlock",
+            text: "**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "TextBlock",
+            text: "**Available commands:**",
+            wrap: true,
+            spacing: "Medium",
+          },
+          {
+            type: "FactSet",
+            spacing: "Small",
+            facts: [
+              {
+                title: "/select-agent",
+                value:
+                  "Change the default agent handling requests in the channel",
+              },
+              {
+                title: "/status",
+                value:
+                  "Check the current agent handling requests in the channel",
+              },
+              { title: "/help", value: "Show available commands" },
+            ],
+          },
+          {
+            type: "TextBlock",
+            text: "**Let's set the default agent for this channel:**",
+            wrap: true,
+            spacing: "Medium",
+          },
+          {
+            type: "Input.ChoiceSet",
+            id: "agentId",
+            style: "compact",
+            value: choices[0]?.value || "",
+            choices,
+          },
+        ];
+
+    const card = {
+      type: "AdaptiveCard",
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.4",
+      body: cardBody,
+      actions: [
+        {
+          type: "Action.Submit",
+          title: "Confirm Selection",
+          data: {
+            action: "selectAgent",
+            channelId: params.message.channelId,
+            workspaceId: params.message.workspaceId,
+            originalMessageText: params.message.text || undefined,
+          },
+        },
+      ],
+    };
+
+    await context.sendActivity({
+      attachments: [
+        {
+          contentType: "application/vnd.microsoft.card.adaptive",
+          content: card,
+        },
+      ],
+    });
   }
 
   // ===========================================================================
@@ -705,23 +843,6 @@ export default MSTeamsProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  // Handle objects that may not convert to string properly (e.g., MS Graph SDK errors)
-  try {
-    return String(error);
-  } catch {
-    // If String() fails, try JSON.stringify or return a generic message
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
-}
 
 function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();

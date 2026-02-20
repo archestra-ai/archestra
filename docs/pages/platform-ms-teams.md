@@ -144,7 +144,7 @@ Replace `{{BOT_MS_APP_ID}}` with your **Microsoft App ID**. **Zip the folder con
 
 ### First Message
 
-When you **first mention the bot** in a channel with no binding:
+When you **first mention the bot** in a channel:
 
 ```
 @Archestra what's the status of service X?

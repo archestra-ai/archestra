@@ -2,7 +2,7 @@ name: Install Kind Cluster
 description: |
   Creates a Kind cluster with a pinned node image for deterministic behavior.
   Wraps helm/kind-action with a known-good kindest/node version.
-  Installs Calico CNI for NetworkPolicy enforcement (SSRF protection).
+  Optionally installs Calico CNI for NetworkPolicy enforcement (SSRF protection).
 
 inputs:
   config:
@@ -13,6 +13,10 @@ inputs:
     description: "Name of the Kind cluster"
     required: false
     default: "archestra-ci-cluster"
+  install-calico:
+    description: "Whether to install Calico CNI for NetworkPolicy enforcement. Only needed for SSRF protection tests."
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -29,6 +33,7 @@ runs:
         install_only: false
 
     - name: Install Calico CNI for NetworkPolicy enforcement
+      if: ${{ inputs.install-calico == 'true' }}
       shell: bash
       run: |
         # Install Calico operator and custom resources for NetworkPolicy support.

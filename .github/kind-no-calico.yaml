@@ -1,0 +1,30 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: archestra-ci-cluster
+# Uses Kind's default CNI (kindnet) — faster startup but no NetworkPolicy enforcement.
+# Use kind.yaml (with Calico) for tests that require NetworkPolicy (e.g., SSRF protection).
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Map ports for the Archestra platform
+      - containerPort: 30000 # Backend API
+        hostPort: 9000
+        protocol: TCP
+      - containerPort: 30050 # Metrics
+        hostPort: 9050
+        protocol: TCP
+      - containerPort: 30300 # Frontend
+        hostPort: 3000
+        protocol: TCP
+      - containerPort: 30080 # WireMock
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 30081 # Keycloak
+        hostPort: 30081
+        protocol: TCP
+      - containerPort: 30082 # MCP Server JWKS
+        hostPort: 30082
+        protocol: TCP
+      - containerPort: 30200 # Vault
+        hostPort: 8200
+        protocol: TCP

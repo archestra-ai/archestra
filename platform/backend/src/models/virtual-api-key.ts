@@ -94,12 +94,13 @@ class VirtualApiKeyModel {
     const virtualKey = await VirtualApiKeyModel.findById(id);
     if (!virtualKey) return false;
 
-    // Delete the virtual key (secret cascades)
+    // Delete the virtual key record first, then clean up the secret.
+    // The FK has ON DELETE CASCADE on the secret side, but we also call
+    // deleteSecret explicitly to handle non-DB secret backends (Vault).
     await db
       .delete(schema.virtualApiKeysTable)
       .where(eq(schema.virtualApiKeysTable.id, id));
 
-    // Explicitly clean up the secret
     await secretManager().deleteSecret(virtualKey.secretId);
 
     logger.info(
@@ -135,15 +136,22 @@ class VirtualApiKeyModel {
   /**
    * Validate a virtual API key token value.
    * Returns the virtual key and associated chat API key if valid.
+   *
+   * Uses `tokenStart` (first 14 chars) to narrow candidates to typically 1 row,
+   * then verifies the full token via the secret manager.
    */
   static async validateToken(tokenValue: string): Promise<{
     virtualKey: SelectVirtualApiKey;
     chatApiKey: ChatApiKey;
   } | null> {
-    // Get all virtual keys and check each one's secret
-    const allVirtualKeys = await db.select().from(schema.virtualApiKeysTable);
+    // Filter by tokenStart to avoid a full table scan — narrows to typically 1 candidate
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates = await db
+      .select()
+      .from(schema.virtualApiKeysTable)
+      .where(eq(schema.virtualApiKeysTable.tokenStart, tokenStart));
 
-    for (const virtualKey of allVirtualKeys) {
+    for (const virtualKey of candidates) {
       const secret = await secretManager().getSecret(virtualKey.secretId);
       if (
         secret?.secret &&

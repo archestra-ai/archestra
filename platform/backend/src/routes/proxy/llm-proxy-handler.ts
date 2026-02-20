@@ -222,11 +222,15 @@ export async function handleLLMProxy<
       const secret = await secretManager().getSecret(
         resolved.chatApiKey.secretId,
       );
+      // Support both new format (apiKey) and legacy provider-specific key names
       const secretValue =
         secret?.secret?.apiKey ??
         secret?.secret?.anthropicApiKey ??
         secret?.secret?.geminiApiKey ??
-        secret?.secret?.openaiApiKey;
+        secret?.secret?.openaiApiKey ??
+        secret?.secret?.zhipuaiApiKey ??
+        secret?.secret?.cohereApiKey ??
+        secret?.secret?.bedrockApiKey;
       if (secretValue) {
         apiKey = secretValue as string;
       }
@@ -237,14 +241,19 @@ export async function handleLLMProxy<
   // For keyless providers (e.g. Gemini with Vertex AI, Ollama, vLLM), require that
   // the request was authenticated via a virtual API key. Without this check, anyone
   // who knows the proxy URL can call the endpoint without any credentials.
-  if (!apiKey && !perKeyBaseUrl) {
-    // Check if this is an internal request (from chat route via localhost) by looking
-    // for the internal provider base URL header — only the chat route sets this.
-    const isInternalRequest =
-      headersForExtraction["x-archestra-provider-base-url"] !== undefined ||
-      headersForExtraction.traceparent !== undefined;
+  // The `perKeyBaseUrl` check confirms a virtual key was resolved (sets the base URL).
+  const wasVirtualKeyResolved = perKeyBaseUrl !== undefined;
+  if (!apiKey && !wasVirtualKeyResolved) {
+    // Allow internal requests from the chat route (localhost → proxy).
+    // Check the request IP rather than headers, since headers like traceparent
+    // can be spoofed by external clients.
+    const requestIp = request.ip;
+    const isLocalhost =
+      requestIp === "127.0.0.1" ||
+      requestIp === "::1" ||
+      requestIp === "::ffff:127.0.0.1";
 
-    if (!isInternalRequest) {
+    if (!isLocalhost) {
       return reply.status(401).send({
         error: {
           message:

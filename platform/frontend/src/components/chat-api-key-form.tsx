@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
@@ -507,10 +508,16 @@ export function ChatApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-value">
               API Key{" "}
-              {isEditMode && (
+              {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
                 <span className="text-muted-foreground font-normal">
-                  (leave blank to keep current)
+                  (optional)
                 </span>
+              ) : (
+                isEditMode && (
+                  <span className="text-muted-foreground font-normal">
+                    (leave blank to keep current)
+                  </span>
+                )
               )}
             </Label>
             {providerConfig.description && (

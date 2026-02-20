@@ -227,7 +227,15 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 ### vLLM Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/vllm/{profile-id}`
-- **Authentication**: Pass your vLLM API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Many vLLM deployments don't require authentication.
+- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your vLLM deployment requires auth.
+
+### Setup
+
+1. Go to **Settings > LLM API Keys** and add a new key with provider **vLLM**
+2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
+3. API key can be left blank for most self-hosted deployments
+
+The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environment variable. Per-key base URLs in the UI take precedence.
 
 ### Environment Variables
 
@@ -238,8 +246,8 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Important Notes
 
-- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set. Without it, vLLM won't appear as an option in the platform.
-- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. The `ARCHESTRA_CHAT_VLLM_API_KEY` is only needed if your vLLM deployment has authentication enabled.
+- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set or a per-key base URL is configured in the UI. Without either, vLLM won't appear as an option.
+- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. When adding a vLLM key in the platform, the API key field is marked as optional.
 
 ## Ollama
 
@@ -252,7 +260,15 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 ### Ollama Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/ollama/{profile-id}`
-- **Authentication**: Pass your Ollama API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Ollama typically doesn't require authentication.
+- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
+
+### Setup
+
+1. Go to **Settings > LLM API Keys** and add a new key with provider **Ollama**
+2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
+3. API key can be left blank for self-hosted Ollama
+
+The default base URL is `http://localhost:11434/v1`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_BASE_URL`.
 
 ### Environment Variables
 
@@ -263,8 +279,8 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Important Notes
 
-- **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`. Set `ARCHESTRA_OLLAMA_BASE_URL` to override the default if your Ollama server runs on a different host or port.
-- **No API key required**: Self-hosted Ollama typically doesn't require authentication. When adding an Ollama API key in the platform, the API key field is optional.
+- **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`.
+- **No API key required**: Self-hosted Ollama doesn't require authentication. When adding an Ollama key in the platform, the API key field is marked as optional.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
 
 ## Zhipu AI

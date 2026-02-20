@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import config from "@/config";
 import { AgentToolModel, TeamModel } from "@/models";
 import {
@@ -283,7 +283,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id, userId }, organizationId, headers }, reply) => {
+    async ({ params: { id, userId }, organizationId, user }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(id);
       if (!team || team.organizationId !== organizationId) {
@@ -296,10 +296,10 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team member not found");
       }
 
-      const { success: userIsAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Clean up invalid credential sources (personal tokens) for this user
       // if they no longer have access to agents through other teams

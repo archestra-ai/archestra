@@ -459,9 +459,12 @@ const testConfigsMap = {
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
   bedrock: bedrockConfig,
-} satisfies Record<SupportedProvider, CompressionTestConfig>;
+  perplexity: null, // Perplexity does not support tool calling (has built-in web search instead)
+} satisfies Record<SupportedProvider, CompressionTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap);
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is CompressionTestConfig => c !== null,
+);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolResultCompression-${config.providerName}`, () => {

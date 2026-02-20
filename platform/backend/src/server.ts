@@ -66,6 +66,7 @@ import {
   Mistral,
   Ollama,
   OpenAi,
+  Perplexity,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -135,6 +136,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Mistral.API.ChatCompletionResponseSchema, {
     id: "MistralChatCompletionResponse",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionRequestSchema, {
+    id: "PerplexityChatCompletionRequest",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionResponseSchema, {
+    id: "PerplexityChatCompletionResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",

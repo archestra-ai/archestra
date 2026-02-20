@@ -2,9 +2,23 @@
 
 import { useDebounce } from "@uidotdev/usehooks";
 import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
-import { MessageSquare, Pencil } from "lucide-react";
+import {
+  Bot,
+  Cable,
+  Home,
+  MessageCircle,
+  MessagesSquare,
+  Network,
+  Pencil,
+  Router,
+  Settings,
+  Shield,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
   CommandEmpty,
@@ -12,10 +26,18 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
+import { usePlatform } from "@/hooks/use-platform";
 import { useIsAuthenticated } from "@/lib/auth.hook";
-import { useConversations } from "@/lib/chat.query";
+import { useConversations, useDeleteConversation } from "@/lib/chat.query";
 import { getConversationDisplayTitle } from "@/lib/chat-utils";
+import {
+  SHORTCUT_DELETE,
+  SHORTCUT_NEW_CHAT,
+  SHORTCUT_SEARCH,
+  SHORTCUT_SIDEBAR,
+} from "@/lib/keyboard-shortcuts";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -68,6 +90,80 @@ function groupConversationsByDate<T extends { updatedAt: string | Date }>(
   return { today, yesterday, previous7Days, older };
 }
 
+// Product navigation items matching sidebar names
+const navigationItems = [
+  {
+    icon: Bot,
+    label: "Agents",
+    value: "agents",
+    keywords: "agent bot ai",
+    href: "/agents",
+  },
+  {
+    icon: Zap,
+    label: "Agent Triggers",
+    value: "agent-triggers",
+    keywords: "triggers automation webhooks ms teams",
+    href: "/agent-triggers/ms-teams",
+  },
+  {
+    icon: Shield,
+    label: "MCP Gateways",
+    value: "mcp-gateways",
+    keywords: "gateways security mcp",
+    href: "/mcp-gateways",
+  },
+  {
+    icon: Network,
+    label: "LLM Proxies",
+    value: "llm-proxies",
+    keywords: "proxies llm network",
+    href: "/llm-proxies",
+  },
+  {
+    icon: MessagesSquare,
+    label: "Logs",
+    value: "logs",
+    keywords: "logs llm proxy requests",
+    href: "/logs/llm-proxy",
+  },
+  {
+    icon: Wrench,
+    label: "Tool Policies",
+    value: "tool-policies",
+    keywords: "tools policies permissions",
+    href: "/tools",
+  },
+  {
+    icon: Router,
+    label: "MCP Registry",
+    value: "mcp-registry",
+    keywords: "mcp catalog registry servers",
+    href: "/mcp-catalog/registry",
+  },
+  {
+    icon: Home,
+    label: "Cost & Limits",
+    value: "cost-limits",
+    keywords: "cost dashboard limits budget",
+    href: "/cost",
+  },
+  {
+    icon: Cable,
+    label: "Connect",
+    value: "connect",
+    keywords: "connect integration api",
+    href: "/connection",
+  },
+  {
+    icon: Settings,
+    label: "Settings",
+    value: "settings",
+    keywords: "settings configuration preferences",
+    href: "/settings",
+  },
+];
+
 interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -79,7 +175,14 @@ export function ConversationSearchPalette({
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedValue, setSelectedValue] = useState("");
+  const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
+    null,
+  );
   const isAuthenticated = useIsAuthenticated();
+  const { modKey, altKey } = usePlatform();
+
+  const deleteMutation = useDeleteConversation();
 
   // Debounce search query to reduce API calls while typing
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -106,21 +209,85 @@ export function ConversationSearchPalette({
     return groupConversationsByDate(conversations);
   }, [conversations, debouncedSearch]);
 
+  // Reset state on every open/close transition.
+  // Clearing on open handles stale chars from macOS dead keys (e.g. Option+N inserts ˜
+  // via a composition event AFTER the dialog closes, bypassing the close cleanup).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reacting to open changes to reset all dialog state
   useEffect(() => {
-    if (!open) {
-      setSearchQuery("");
-    }
+    setSearchQuery("");
+    setSelectedValue("");
+    setIsPendingDeletion(null);
   }, [open]);
+
+  // Reset pending deletion when selection or search query changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reacting to selectedValue/searchQuery changes to clear stale deletion state
+  useEffect(() => {
+    setIsPendingDeletion(null);
+  }, [selectedValue, searchQuery]);
 
   const handleSelectConversation = (conversationId: string) => {
     router.push(`/chat?conversation=${conversationId}`);
     onOpenChange(false);
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     router.push("/chat");
     onOpenChange(false);
-  };
+  }, [router, onOpenChange]);
+
+  const handleDeleteConversation = useCallback(
+    (conversationId: string) => {
+      // Find the next conversation to select after deletion
+      const currentIndex = conversations.findIndex(
+        (c) => c.id === conversationId,
+      );
+      if (currentIndex !== -1) {
+        const nextConv =
+          conversations[currentIndex - 1] ??
+          conversations[currentIndex + 1] ??
+          null;
+        setSelectedValue(nextConv ? `conv-${nextConv.id}` : "");
+      }
+      deleteMutation.mutate(conversationId);
+      setIsPendingDeletion(null);
+    },
+    [deleteMutation, conversations],
+  );
+
+  // Keyboard shortcuts for search palette
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // In cmdk, the input always retains focus even during arrow-key navigation.
+      // Only intercept 'd' when the search input is empty (browse mode).
+      // When the user is typing a search query, let 'd' pass through normally.
+      if (searchQuery) return;
+
+      // 'd' for delete when conversation is selected
+      if (e.key === SHORTCUT_DELETE.key && selectedValue?.startsWith("conv-")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const conversationId = selectedValue.substring(5);
+
+        if (isPendingDeletion === conversationId) {
+          handleDeleteConversation(conversationId);
+        } else {
+          setIsPendingDeletion(conversationId);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [
+    open,
+    selectedValue,
+    searchQuery,
+    isPendingDeletion,
+    handleDeleteConversation,
+  ]);
 
   /** Generates a contextual preview snippet with search term context */
   const getPreviewText = (
@@ -203,19 +370,28 @@ export function ConversationSearchPalette({
     const preview = isSearchActive
       ? getPreviewText(conv.messages, debouncedSearch)
       : "";
+    const isPending = isPendingDeletion === conv.id;
 
     return (
       <CommandItem
         key={conv.id}
-        value={conv.id}
+        value={`conv-${conv.id}`}
         onSelect={() => handleSelectConversation(conv.id)}
-        className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full"
+        className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full relative"
       >
         <div className="flex items-start gap-2 w-full min-w-0">
-          <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <MessageCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>
+          {isPending && (
+            <Badge
+              variant="destructive"
+              className="absolute right-3 top-2.5 text-[10px] shadow-sm animate-in fade-in zoom-in duration-200"
+            >
+              Press "{SHORTCUT_DELETE.label}" to confirm
+            </Badge>
+          )}
         </div>
         {isSearchActive && preview && (
           <div className="text-xs text-muted-foreground line-clamp-2 w-full pl-6">
@@ -234,9 +410,11 @@ export function ConversationSearchPalette({
       description="Search through your conversation history"
       className="max-w-2xl"
       shouldFilter={false}
+      value={selectedValue}
+      onValueChange={setSelectedValue}
     >
       <CommandInput
-        placeholder="Search chats..."
+        placeholder="Search or navigate..."
         value={searchQuery}
         onValueChange={setSearchQuery}
       />
@@ -250,16 +428,62 @@ export function ConversationSearchPalette({
         ) : (
           <>
             {!searchQuery.trim() && (
-              <CommandGroup>
-                <CommandItem
-                  value="new-chat"
-                  onSelect={handleNewChat}
-                  className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
-                >
-                  <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">Start a New Chat</span>
-                </CommandItem>
-              </CommandGroup>
+              <>
+                <CommandGroup>
+                  <CommandItem
+                    value="new-chat"
+                    onSelect={handleNewChat}
+                    className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
+                  >
+                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="font-medium">New chat</span>
+                  </CommandItem>
+                </CommandGroup>
+
+                <CommandSeparator className="my-2" />
+
+                <div className="px-2 pb-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Pages
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Jump to
+                    </span>
+                  </div>
+                </div>
+                <CommandGroup>
+                  {navigationItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <CommandItem
+                        key={item.value}
+                        value={`${item.value} ${item.keywords} ${item.label}`}
+                        onSelect={() => {
+                          router.push(item.href);
+                          onOpenChange(false);
+                        }}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
+                      >
+                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="text-sm font-medium">
+                          {item.label}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+
+                <CommandSeparator className="my-2" />
+
+                <div className="px-2 pb-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chats
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
 
             {debouncedSearch.trim() ? (
@@ -308,6 +532,50 @@ export function ConversationSearchPalette({
           </>
         )}
       </CommandList>
+
+      <div className="border-t bg-muted/30 px-4 py-3">
+        <div className="flex items-center justify-center gap-6 flex-wrap text-xs">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {modKey}
+              </kbd>
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {SHORTCUT_SEARCH.label}
+              </kbd>
+            </div>
+            <span className="text-muted-foreground/70">Search</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {altKey}
+              </kbd>
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {SHORTCUT_NEW_CHAT.label}
+              </kbd>
+            </div>
+            <span className="text-muted-foreground/70">New Chat</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+              {SHORTCUT_DELETE.label}
+            </kbd>
+            <span className="text-muted-foreground/70">Delete Chat</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {modKey}
+              </kbd>
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {SHORTCUT_SIDEBAR.label}
+              </kbd>
+            </div>
+            <span className="text-muted-foreground/70">Sidebar</span>
+          </div>
+        </div>
+      </div>
     </CommandDialog>
   );
 }

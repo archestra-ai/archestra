@@ -60,7 +60,9 @@ server.tool(
 
 const transport = new StdioServerTransport();
 server.connect(transport);
-`.trim().replace(/\n/g, ' ');
+`
+  .trim()
+  .replace(/\n/g, " ");
 
 const ssrfTestMcpServerCommand = `npm install --silent @modelcontextprotocol/sdk zod && node -e '${ssrfTestMcpServerScript.replace(/'/g, "'\"'\"'")}'`;
 

@@ -408,7 +408,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         }
         actionButton={
           <PermissionButton
-            permissions={{ profile: ["create"] }}
+            permissions={{ llmProxy: ["create"] }}
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
           >

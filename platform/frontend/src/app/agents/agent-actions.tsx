@@ -61,7 +61,8 @@ export function AgentActions({
         </Link>
       </Button>
       <PermissionButton
-        permissions={{ profile: ["update"] }}
+        permissions={{ agent: ["update"] }}
+        tooltip="Edit"
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
@@ -74,7 +75,8 @@ export function AgentActions({
         <Pencil className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
-        permissions={{ profile: ["delete"] }}
+        permissions={{ agent: ["delete"] }}
+        tooltip="Delete"
         aria-label="Delete"
         variant="outline"
         size="icon-sm"

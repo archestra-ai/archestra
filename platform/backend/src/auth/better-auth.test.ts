@@ -548,7 +548,7 @@ describe("handleAfterHook", () => {
       const customRole = await makeCustomRole(org.id, {
         role: "custom_signin_role",
         name: "Custom Sign-in Role",
-        permission: { profile: ["read"] },
+        permission: { agent: ["read"] },
       });
 
       // Create invitation with the custom role

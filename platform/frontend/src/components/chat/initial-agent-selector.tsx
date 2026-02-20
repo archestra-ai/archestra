@@ -48,6 +48,7 @@ export function InitialAgentSelector({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          data-agent-selector
           className="h-8 justify-between max-w-[300px] min-w-0"
         >
           <Bot className="h-3 w-3 shrink-0 opacity-70" />

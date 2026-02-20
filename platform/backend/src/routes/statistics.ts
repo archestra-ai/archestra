@@ -1,7 +1,7 @@
 import { RouteId, StatisticsTimeFrameSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { StatisticsModel } from "@/models";
 import {
   AgentStatisticsSchema,
@@ -28,11 +28,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(TeamStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
       return reply.send(
         await StatisticsModel.getTeamStatistics(
           timeframe,
@@ -54,11 +54,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(AgentStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       return reply.send(
         await StatisticsModel.getAgentStatistics(
@@ -81,11 +81,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ModelStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       return reply.send(
         await StatisticsModel.getModelStatistics(
@@ -108,11 +108,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(OverviewStatisticsSchema),
       },
     },
-    async ({ query: { timeframe }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       return reply.send(
         await StatisticsModel.getOverviewStatistics(
@@ -135,11 +135,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(CostSavingsStatisticsSchema),
       },
     },
-    async ({ query: { timeframe }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       return reply.send(
         await StatisticsModel.getCostSavingsStatistics(

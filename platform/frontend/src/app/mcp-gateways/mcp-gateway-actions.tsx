@@ -25,7 +25,7 @@ export function McpGatewayActions({
   return (
     <ButtonGroup>
       <PermissionButton
-        permissions={{ profile: ["update"] }}
+        permissions={{ mcpGateway: ["update"] }}
         aria-label="Connect"
         variant="outline"
         size="icon-sm"
@@ -38,7 +38,7 @@ export function McpGatewayActions({
         <Plug className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
-        permissions={{ profile: ["update"] }}
+        permissions={{ mcpGateway: ["update"] }}
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
@@ -51,7 +51,7 @@ export function McpGatewayActions({
         <Pencil className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
-        permissions={{ profile: ["delete"] }}
+        permissions={{ mcpGateway: ["delete"] }}
         aria-label="Delete"
         variant="outline"
         size="icon-sm"

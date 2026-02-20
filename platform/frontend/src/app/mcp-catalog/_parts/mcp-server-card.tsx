@@ -498,7 +498,7 @@ export function McpServerCard({
   const remoteCardContent = (
     <>
       <WithPermissions
-        permissions={{ tool: ["update"], profile: ["update"] }}
+        permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
@@ -561,7 +561,7 @@ export function McpServerCard({
   const localCardContent = (
     <>
       <WithPermissions
-        permissions={{ tool: ["update"], profile: ["update"] }}
+        permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
@@ -641,7 +641,7 @@ export function McpServerCard({
   const playwrightCardContent = (
     <>
       <WithPermissions
-        permissions={{ tool: ["update"], profile: ["update"] }}
+        permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
@@ -732,7 +732,7 @@ export function McpServerCard({
   const builtinCardContent = (
     <>
       <WithPermissions
-        permissions={{ tool: ["update"], profile: ["update"] }}
+        permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">

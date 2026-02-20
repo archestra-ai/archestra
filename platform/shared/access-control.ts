@@ -128,6 +128,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+  [RouteId.GetAgentVersions]: {
+    agent: ["read"],
+  },
+  [RouteId.RollbackAgent]: {
+    agent: ["update"],
+  },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },

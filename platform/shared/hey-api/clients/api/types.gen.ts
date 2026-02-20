@@ -10928,7 +10928,7 @@ export type GetToolInvocationPoliciesResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -10945,7 +10945,7 @@ export type CreateToolInvocationPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason?: string | null;
     };
     path?: never;
@@ -11024,7 +11024,7 @@ export type CreateToolInvocationPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -11192,7 +11192,7 @@ export type GetToolInvocationPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -11209,7 +11209,7 @@ export type UpdateToolInvocationPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason?: string | null;
     };
     path: {
@@ -11290,7 +11290,7 @@ export type UpdateToolInvocationPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -11751,7 +11751,7 @@ export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[k
 export type BulkUpsertDefaultCallPolicyData = {
     body: {
         toolIds: Array<string>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
     };
     path?: never;
     query?: never;

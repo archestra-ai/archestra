@@ -8,7 +8,10 @@ import {
   type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { DefaultChatTransport } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
 import {
   createContext,
   type ReactNode,
@@ -34,6 +37,9 @@ interface ChatSession {
   error: Error | undefined;
   setMessages: (messages: UIMessage[]) => void;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
+  addToolApprovalResponse: ReturnType<
+    typeof useChat
+  >["addToolApprovalResponse"];
   pendingCustomServerToolCall: {
     toolCallId: string;
     toolName: string;
@@ -230,6 +236,7 @@ function ChatSessionHook({
     stop,
     error,
     addToolResult,
+    addToolApprovalResponse,
   } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
@@ -279,6 +286,7 @@ function ChatSessionHook({
         setTokenUsage(usage);
       }
     },
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   } as Parameters<typeof useChat>[0]);
 
   // Auto-generate title after first assistant response
@@ -325,6 +333,7 @@ function ChatSessionHook({
       error,
       setMessages,
       addToolResult,
+      addToolApprovalResponse,
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
       tokenUsage,
@@ -342,6 +351,7 @@ function ChatSessionHook({
     error,
     setMessages,
     addToolResult,
+    addToolApprovalResponse,
     pendingCustomServerToolCall,
     tokenUsage,
     sessionsRef,

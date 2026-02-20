@@ -673,7 +673,14 @@ export class McpServerRuntimeManager {
    * Get all available tools from all running MCP servers
    */
   get allAvailableTools(): AvailableTool[] {
-    return [];
+    const allTools: AvailableTool[] = [];
+    for (const deployment of this.mcpServerIdToDeploymentMap.values()) {
+      if (deployment.status === "running") {
+        const tools = deployment.getAvailableTools();
+        allTools.push(...tools);
+      }
+    }
+    return allTools;
   }
 
   /**

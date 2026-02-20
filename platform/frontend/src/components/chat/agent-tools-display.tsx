@@ -51,14 +51,26 @@ function AgentToolsList({ agentId }: { agentId: string }) {
         Available tools ({tools.length}):
       </p>
       <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
-        {tools.map((tool) => (
-          <span
+        {tools.map((tool: any) => (
+          <button
             key={tool.name}
-            className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded"
+            className={cn(
+              "inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded transition-colors hover:bg-accent",
+              tool.mcpAppUrl && "ring-1 ring-primary/30 font-medium"
+            )}
+            onClick={() => {
+              if (tool.mcpAppUrl) {
+                // Signal to show MCP App Panel
+                window.dispatchEvent(new CustomEvent('OPEN_MCP_APP', { 
+                  detail: { url: tool.mcpAppUrl, title: tool.name } 
+                }));
+              }
+            }}
           >
             <Wrench className="h-3 w-3 opacity-70" />
             {tool.name}
-          </span>
+            {tool.mcpAppUrl && <span className="ml-1 text-[10px] uppercase text-primary">App</span>}
+          </button>
         ))}
       </div>
     </div>

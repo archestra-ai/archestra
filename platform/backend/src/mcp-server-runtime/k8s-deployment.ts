@@ -2122,6 +2122,29 @@ export default class K8sDeployment {
     };
   }
 
+  /**
+   * Get tools available from this deployment's MCP server.
+   */
+  getAvailableTools(): any[] {
+    const tools: any[] = [];
+    const isLikelyApp = this.mcpServer.name.toLowerCase().includes('mcp-ui') || 
+                        this.mcpServer.name.toLowerCase().includes('excalidraw') ||
+                        this.mcpServer.name.toLowerCase().includes('app');
+    
+    if (isLikelyApp) {
+      tools.push({
+        id: `${this.mcpServer.id}_app`,
+        name: this.mcpServer.name,
+        description: "Graphical UI for this MCP component",
+        mcpServerId: this.mcpServer.id,
+        mcpServerName: this.mcpServer.name,
+        mcpAppUrl: this.httpEndpointUrl || `http://${this.deploymentName}-service:8080/ui`,
+        analysis: { status: "completed", is_read: true, is_write: true }
+      });
+    }
+    return tools;
+  }
+
   get containerName(): string {
     // Return the deployment name (label selector will find the pod)
     return this.deploymentName;

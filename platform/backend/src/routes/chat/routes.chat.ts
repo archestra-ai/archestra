@@ -1,6 +1,8 @@
 import {
   type ChatErrorResponse,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
+  type SupportedProvider,
   SupportedProviders,
   TimeInMs,
   type TokenUsage,
@@ -64,6 +66,24 @@ import {
 } from "./strip-images-from-messages";
 
 /**
+ * Default model for each provider when no synced "best" model is available.
+ * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
+ */
+const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+  anthropic: "claude-opus-4-1-20250805",
+  openai: "gpt-4o",
+  gemini: "gemini-2.5-pro",
+  cohere: "command-r-08-2024",
+  ollama: "llama3.2",
+  vllm: "default",
+  cerebras: "llama-4-scout-17b-16e-instruct",
+  mistral: "mistral-large-latest",
+  perplexity: "sonar-pro",
+  zhipuai: "glm-4-plus",
+  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
+};
+
+/**
  * Get a smart default model and provider based on available API keys for the user.
  * Priority: personal key > team key > org-wide key > env var > fallback
  */
@@ -87,24 +107,22 @@ async function getSmartDefaultModel(
       conversationId: null,
     });
 
-    if (resolvedKey?.secretId) {
-      const secretValue = await getSecretValueForLlmProviderApiKey(
-        resolvedKey.secretId,
-      );
+    if (!resolvedKey) continue;
 
-      if (secretValue) {
-        // Found a valid API key for this provider - return appropriate default model
-        switch (provider) {
-          case "anthropic":
-            return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
-          case "gemini":
-            return { model: "gemini-2.5-pro", provider: "gemini" };
-          case "openai":
-            return { model: "gpt-4o", provider: "openai" };
-          case "cohere":
-            return { model: "command-r-08-2024", provider: "cohere" };
-        }
+    // For providers with optional API keys (Ollama, vLLM), a key without a secret is valid
+    const hasSecret = resolvedKey.secretId
+      ? !!(await getSecretValueForLlmProviderApiKey(resolvedKey.secretId))
+      : false;
+
+    if (hasSecret || PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
+      // Try to get the best model from the synced models for this key
+      const bestModel = await ApiKeyModelModel.getBestModel(resolvedKey.id);
+      if (bestModel) {
+        return { model: bestModel.modelId, provider };
       }
+
+      // Fall back to hardcoded defaults
+      return { model: DEFAULT_MODELS[provider], provider };
     }
   }
 
@@ -963,7 +981,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (isApiKeyRequired(provider, apiKey)) {
         throw new ApiError(
           400,
-          "LLM Provider API key not configured. Please configure it in Chat Settings.",
+          "LLM Provider API key not configured. Please configure it in Provider Settings.",
         );
       }
 

@@ -193,6 +193,30 @@ export function ProxyConnectionInstructions({
           />
         </div>
       )}
+
+      <div className="mt-4 space-y-1">
+        <p className="text-sm text-muted-foreground">
+          <a
+            href="/llm-proxies/provider-settings?tab=virtual-keys"
+            className="underline hover:text-foreground"
+          >
+            Virtual API Keys
+          </a>{" "}
+          — generate keys for external clients without exposing real provider
+          keys
+        </p>
+        <p className="text-sm text-muted-foreground">
+          <a
+            href="https://archestra.ai/docs/platform-llm-proxy-authentication#jwks-external-identity-provider"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            JWKS Authentication
+          </a>{" "}
+          — authenticate with an external identity provider
+        </p>
+      </div>
     </div>
   );
 }

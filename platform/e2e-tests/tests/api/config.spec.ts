@@ -1,3 +1,4 @@
+import { SupportedProviders } from "@shared";
 import { expect, test } from "./fixtures";
 
 test.describe("Config endpoint", () => {
@@ -31,18 +32,10 @@ test.describe("Config endpoint", () => {
     expect(features).toHaveProperty("mcpServerBaseImage");
     expect(features).toHaveProperty("chatops");
 
-    // Verify providerBaseUrls has all providers
+    // Verify providerBaseUrls has an entry for every supported provider
     const urls = data.providerBaseUrls;
-    expect(urls).toHaveProperty("openai");
-    expect(urls).toHaveProperty("anthropic");
-    expect(urls).toHaveProperty("gemini");
-    expect(urls).toHaveProperty("ollama");
-    expect(urls).toHaveProperty("vllm");
-    expect(urls).toHaveProperty("bedrock");
-    expect(urls).toHaveProperty("cohere");
-    expect(urls).toHaveProperty("cerebras");
-    expect(urls).toHaveProperty("mistral");
-    expect(urls).toHaveProperty("perplexity");
-    expect(urls).toHaveProperty("zhipuai");
+    for (const provider of SupportedProviders) {
+      expect(urls).toHaveProperty(provider);
+    }
   });
 });

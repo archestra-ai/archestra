@@ -511,6 +511,17 @@ export function McpConnectionInstructions({
               OAuth 2.1
             </TabsTrigger>
           </TabsList>
+          <p className="text-xs text-muted-foreground">
+            For external identity providers, use{" "}
+            <a
+              href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              JWKS authentication
+            </a>
+          </p>
         </div>
 
         {/* Static Token Tab */}

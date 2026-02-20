@@ -9,6 +9,8 @@ import {
   Cable,
   DollarSign,
   Github,
+  History,
+  Key,
   LogIn,
   type LucideIcon,
   MessageCircle,
@@ -25,11 +27,8 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { SecurityEngineWarning } from "@/components/security-engine-warning";
-import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -54,75 +53,129 @@ interface MenuItem {
   icon: LucideIcon;
   iconClassName?: string;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
+  /** If set, overrides navigation with a click handler */
+  onClick?: () => void;
 }
 
-const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+interface MenuGroup {
+  label?: string;
+  items: MenuItem[];
+}
+
+const getNavigationGroups = (isAuthenticated: boolean): MenuGroup[] => {
   if (!isAuthenticated) {
     return [];
   }
   return [
     {
-      title: "New Chat",
-      url: "/chat",
-      icon: MessageCircle,
-      customIsActive: (pathname: string, searchParams: URLSearchParams) =>
-        pathname === "/chat" && !searchParams.get("conversation"),
+      label: "Chat",
+      items: [
+        {
+          title: "New Chat",
+          url: "/chat",
+          icon: MessageCircle,
+          customIsActive: (pathname: string, searchParams: URLSearchParams) =>
+            pathname === "/chat" && !searchParams.get("conversation"),
+        },
+        {
+          title: "Recent Chats",
+          url: "/chat",
+          icon: History,
+          onClick: () => {
+            window.dispatchEvent(
+              new CustomEvent("open-conversation-search", {
+                detail: { hidePages: true },
+              }),
+            );
+          },
+          customIsActive: () => false,
+        },
+      ],
     },
     {
-      title: "Agents",
-      url: "/agents",
-      icon: Bot,
+      label: "Agents",
+      items: [
+        {
+          title: "Agents",
+          url: "/agents",
+          icon: Bot,
+        },
+        {
+          title: "Agent Triggers",
+          url: "/agent-triggers/ms-teams",
+          icon: Zap,
+          customIsActive: (pathname: string) =>
+            pathname.startsWith("/agent-triggers"),
+        },
+      ],
     },
     {
-      title: "Agent Triggers",
-      url: "/agent-triggers/ms-teams",
-      icon: Zap,
-      customIsActive: (pathname: string) =>
-        pathname.startsWith("/agent-triggers"),
+      label: "LLM Proxies",
+      items: [
+        {
+          title: "LLM Proxies",
+          url: "/llm-proxies",
+          icon: Network,
+          customIsActive: (pathname: string) => pathname === "/llm-proxies",
+        },
+        {
+          title: "Provider Settings",
+          url: "/llm-proxies/provider-settings",
+          icon: Key,
+          customIsActive: (pathname: string) =>
+            pathname.startsWith("/llm-proxies/provider-settings"),
+        },
+        {
+          title: "Cost & Limits",
+          url: "/cost",
+          icon: DollarSign,
+        },
+      ],
     },
     {
-      title: "MCP Gateways",
-      url: "/mcp-gateways",
-      icon: Route,
+      label: "MCP & Tools",
+      items: [
+        {
+          title: "MCP Gateways",
+          url: "/mcp-gateways",
+          icon: Route,
+        },
+        {
+          title: "MCP Registry",
+          url: "/mcp-catalog/registry",
+          icon: Router,
+          customIsActive: (pathname: string) =>
+            pathname.startsWith("/mcp-catalog"),
+        },
+        {
+          title: "Tool Policies",
+          url: "/tools",
+          icon: Wrench,
+          customIsActive: (pathname: string) => pathname.startsWith("/tools"),
+        },
+      ],
     },
     {
-      title: "LLM Proxies",
-      url: "/llm-proxies",
-      icon: Network,
-    },
-    {
-      title: "Logs",
-      url: "/logs/llm-proxy",
-      icon: MessagesSquare,
-      customIsActive: (pathname: string) => pathname.startsWith("/logs"),
-    },
-    {
-      title: "Tool Policies",
-      url: "/tools",
-      icon: Wrench,
-      customIsActive: (pathname: string) => pathname.startsWith("/tools"),
-    },
-    {
-      title: "MCP Registry",
-      url: "/mcp-catalog/registry",
-      icon: Router,
-      customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
-    },
-    {
-      title: "Cost & Limits",
-      url: "/cost",
-      icon: DollarSign,
-    },
-    {
-      title: "Connect",
-      url: "/connection",
-      icon: Cable,
-    },
-    {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings,
-      customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+      items: [
+        {
+          title: "Logs",
+          url: "/logs/llm-proxy",
+          icon: MessagesSquare,
+          customIsActive: (pathname: string) => pathname.startsWith("/logs"),
+        },
+        {
+          title: "Connect",
+          url: "/connection",
+          icon: Cable,
+        },
+        {
+          title: "Settings",
+          url: "/settings",
+          icon: Settings,
+          customIsActive: (pathname: string) =>
+            pathname.startsWith("/settings"),
+        },
+      ],
     },
   ];
 };
@@ -211,54 +264,60 @@ const MainSideBarSection = ({
   searchParams: URLSearchParams;
   starCount: string;
 }) => {
-  const allItems = getNavigationItems(isAuthenticated);
+  const groups = getNavigationGroups(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const permittedItems = allItems.filter(
-    (item) => permissionMap?.[item.url] ?? true,
-  );
 
   return (
     <>
-      <SidebarGroup className="px-4">
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {permittedItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={
-                    item.customIsActive?.(pathname, searchParams) ??
-                    pathname.startsWith(item.url)
-                  }
-                >
-                  <Link href={item.url}>
-                    <item.icon className={item.iconClassName} />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-      <WithPermissions
-        permissions={{ conversation: ["read"] }}
-        noPermissionHandle="tooltip"
-      >
-        {({ hasPermission }) => {
-          return hasPermission === undefined ? null : hasPermission ? (
-            <ChatSidebarSection />
-          ) : (
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <Badge variant="outline" className="text-xs mx-4">
-                  Recent chats are not shown
-                </Badge>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          );
-        }}
-      </WithPermissions>
+      {groups.map((group, groupIndex) => {
+        const permittedItems = group.items.filter(
+          (item) => permissionMap?.[item.url] ?? true,
+        );
+        if (permittedItems.length === 0) return null;
+
+        return (
+          <SidebarGroup
+            key={group.label ?? `group-${groupIndex}`}
+            className="px-4 py-1"
+          >
+            {group.label && (
+              <SidebarGroupLabel className="text-xs text-muted-foreground uppercase tracking-wider">
+                {group.label}
+              </SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {permittedItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    {item.onClick ? (
+                      <SidebarMenuButton
+                        onClick={item.onClick}
+                        isActive={false}
+                      >
+                        <item.icon className={item.iconClassName} />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    ) : (
+                      <SidebarMenuButton
+                        asChild
+                        isActive={
+                          item.customIsActive?.(pathname, searchParams) ??
+                          pathname.startsWith(item.url)
+                        }
+                      >
+                        <Link href={item.url}>
+                          <item.icon className={item.iconClassName} />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    )}
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        );
+      })}
       {!config.enterpriseLicenseActivated && (
         <CommunitySideBarSection starCount={starCount} />
       )}

@@ -1,8 +1,9 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
+import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Edit, FileText, Globe, Plus } from "lucide-react";
+import { Bot, Edit, FileText, Globe, Loader2, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -13,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useForm } from "react-hook-form";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -27,6 +29,11 @@ import {
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import {
+  ChatApiKeyForm,
+  type ChatApiKeyFormValues,
+  PLACEHOLDER_KEY,
+} from "@/components/chat-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +43,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Empty,
   EmptyContent,
@@ -60,6 +75,7 @@ import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
 import {
   type SupportedChatProvider,
   useChatApiKeys,
+  useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
 import { useFeatures } from "@/lib/config.query";
@@ -1008,29 +1024,9 @@ export default function ChatPage() {
     );
   }
 
-  // If API key is not configured, show setup message
+  // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
-    return (
-      <div className="flex h-full w-full items-center justify-center p-8">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>LLM Provider API Key Required</CardTitle>
-            <CardDescription>
-              The chat feature requires an LLM provider API key to function.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Please configure an LLM provider API key to start using the chat
-              feature.
-            </p>
-            <Button asChild>
-              <Link href="/settings/llm-api-keys">Go to LLM API Keys</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <NoApiKeySetup />;
   }
 
   // If no agents exist, show empty state
@@ -1390,6 +1386,127 @@ export default function ChatPage() {
         }}
         agent={versionHistoryAgent}
       />
+    </div>
+  );
+}
+
+// =========================================================================
+// No API Key Setup — shown when user has no API keys configured
+// =========================================================================
+
+const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+  name: "",
+  provider: "anthropic",
+  apiKey: null,
+  baseUrl: null,
+  scope: "personal",
+  teamId: null,
+  vaultSecretPath: null,
+  vaultSecretKey: null,
+  virtualKeyNames: [],
+  isPrimary: true,
+};
+
+function NoApiKeySetup() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const createMutation = useCreateChatApiKey();
+  const byosEnabled = useFeatureFlag("byosEnabled");
+  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
+
+  const form = useForm<ChatApiKeyFormValues>({
+    defaultValues: DEFAULT_FORM_VALUES,
+  });
+
+  useEffect(() => {
+    if (isDialogOpen) {
+      form.reset(DEFAULT_FORM_VALUES);
+    }
+  }, [isDialogOpen, form]);
+
+  const formValues = form.watch();
+  const isValid =
+    formValues.apiKey !== PLACEHOLDER_KEY &&
+    formValues.name &&
+    (formValues.scope !== "team" || formValues.teamId) &&
+    (byosEnabled
+      ? formValues.vaultSecretPath && formValues.vaultSecretKey
+      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
+        formValues.apiKey);
+
+  const handleCreate = form.handleSubmit(async (values) => {
+    try {
+      await createMutation.mutateAsync({
+        name: values.name,
+        provider: values.provider,
+        apiKey: values.apiKey || undefined,
+        baseUrl: values.baseUrl || undefined,
+        scope: values.scope,
+        teamId:
+          values.scope === "team" && values.teamId ? values.teamId : undefined,
+        isPrimary: values.isPrimary || undefined,
+        vaultSecretPath:
+          byosEnabled && values.vaultSecretPath
+            ? values.vaultSecretPath
+            : undefined,
+        vaultSecretKey:
+          byosEnabled && values.vaultSecretKey
+            ? values.vaultSecretKey
+            : undefined,
+      });
+      setIsDialogOpen(false);
+    } catch {
+      // Error handled by mutation
+    }
+  });
+
+  return (
+    <div className="flex h-full w-full items-center justify-center p-8">
+      <div className="text-center space-y-4">
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Add an LLM Provider Key</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect an LLM provider to start chatting
+          </p>
+        </div>
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add API Key
+        </Button>
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add API Key</DialogTitle>
+            <DialogDescription>
+              Add an LLM provider API key to start chatting
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <ChatApiKeyForm
+              mode="full"
+              showConsoleLink
+              form={form}
+              isPending={createMutation.isPending}
+              geminiVertexAiEnabled={geminiVertexAiEnabled}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={!isValid || createMutation.isPending}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Test & Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

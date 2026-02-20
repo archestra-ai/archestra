@@ -10,6 +10,7 @@ import { context, propagation } from "@opentelemetry/api";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
   SESSION_ID_HEADER,
   USER_ID_HEADER,
 } from "@shared";
@@ -141,20 +142,33 @@ export async function resolveProviderApiKey(params: {
     );
   }
 
-  if (resolvedApiKey?.secretId) {
-    const secret = await secretManager().getSecret(resolvedApiKey.secretId);
-    // Support both old format (anthropicApiKey) and new format (apiKey)
-    const secretValue =
-      secret?.secret?.apiKey ??
-      secret?.secret?.anthropicApiKey ??
-      secret?.secret?.geminiApiKey ??
-      secret?.secret?.openaiApiKey ??
-      secret?.secret?.zhipuaiApiKey ??
-      secret?.secret?.cohereApiKey ??
-      secret?.secret?.bedrockApiKey;
-    if (secretValue) {
+  if (resolvedApiKey) {
+    if (resolvedApiKey.secretId) {
+      const secret = await secretManager().getSecret(resolvedApiKey.secretId);
+      // Support both old format (anthropicApiKey) and new format (apiKey)
+      const secretValue =
+        secret?.secret?.apiKey ??
+        secret?.secret?.anthropicApiKey ??
+        secret?.secret?.geminiApiKey ??
+        secret?.secret?.openaiApiKey ??
+        secret?.secret?.zhipuaiApiKey ??
+        secret?.secret?.cohereApiKey ??
+        secret?.secret?.bedrockApiKey;
+      if (secretValue) {
+        return {
+          apiKey: secretValue as string,
+          source: resolvedApiKey.scope,
+          chatApiKeyId: resolvedApiKey.id,
+          baseUrl: resolvedApiKey.baseUrl,
+        };
+      }
+    }
+
+    // Key exists but has no secret (e.g. Ollama, vLLM with optional API key).
+    // Return the resolved key so the caller gets the baseUrl and chatApiKeyId.
+    if (PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
       return {
-        apiKey: secretValue as string,
+        apiKey: undefined,
         source: resolvedApiKey.scope,
         chatApiKeyId: resolvedApiKey.id,
         baseUrl: resolvedApiKey.baseUrl,
@@ -732,7 +746,7 @@ export async function createLLMModelForAgent(params: {
   if (!apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama) {
     throw new ApiError(
       400,
-      "LLM Provider API key not configured. Please configure it in Chat Settings.",
+      "LLM Provider API key not configured. Please configure it in Provider Settings.",
     );
   }
 

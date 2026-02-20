@@ -494,6 +494,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetVirtualApiKeys]: {
     chatSettings: ["read"],
   },
+  [RouteId.GetAllVirtualApiKeys]: {
+    chatSettings: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     chatSettings: ["create"],
   },
@@ -731,6 +734,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     organization: ["update"],
   },
   "/settings/llm-api-keys": {
+    chatSettings: ["read"],
+  },
+  "/llm-proxies/provider-settings": {
     chatSettings: ["read"],
   },
   "/settings/identity-providers": {

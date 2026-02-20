@@ -20,6 +20,7 @@ const {
   deleteChatApiKey,
   syncChatModels,
   getVirtualApiKeys,
+  getAllVirtualApiKeys,
   createVirtualApiKey,
   deleteVirtualApiKey,
 } = archestraApiSdk;
@@ -210,6 +211,20 @@ export function useDeleteVirtualApiKey() {
       queryClient.invalidateQueries({
         queryKey: ["virtual-api-keys", chatApiKeyId],
       });
+    },
+  });
+}
+
+export function useAllVirtualApiKeys() {
+  return useQuery({
+    queryKey: ["all-virtual-api-keys"],
+    queryFn: async () => {
+      const { data, error } = await getAllVirtualApiKeys();
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
     },
   });
 }

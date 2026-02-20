@@ -36,6 +36,8 @@ const chatApiKeysTable = pgTable(
     baseUrl: text("base_url"),
     /** System keys are auto-managed for keyless providers (Vertex AI, vLLM, etc.) */
     isSystem: boolean("is_system").notNull().default(false),
+    /** When multiple keys exist for the same provider+scope, the primary key is preferred */
+    isPrimary: boolean("is_primary").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -50,18 +52,6 @@ const chatApiKeysTable = pgTable(
       table.organizationId,
       table.provider,
     ),
-    // Partial unique index: only one personal key per user per provider
-    uniqueIndex("chat_api_keys_personal_unique")
-      .on(table.userId, table.provider)
-      .where(sql`${table.scope} = 'personal' AND ${table.userId} IS NOT NULL`),
-    // Partial unique index: only one team key per team per provider
-    uniqueIndex("chat_api_keys_team_unique")
-      .on(table.teamId, table.provider)
-      .where(sql`${table.scope} = 'team' AND ${table.teamId} IS NOT NULL`),
-    // Partial unique index: only one org-wide key per organization per provider
-    uniqueIndex("chat_api_keys_org_wide_unique")
-      .on(table.organizationId, table.provider)
-      .where(sql`${table.scope} = 'org_wide'`),
     // Partial unique index: only one system key per provider (global)
     uniqueIndex("chat_api_keys_system_unique")
       .on(table.provider)

@@ -136,6 +136,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
             teamId: z.string().optional(),
+            isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -244,15 +245,19 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
+        isPrimary: body.isPrimary ?? false,
       });
 
       // Sync models for the new API key in background (non-blocking)
-      if (actualApiKeyValue && modelSyncService.hasFetcher(body.provider)) {
+      // For optional-key providers (Ollama, vLLM), sync even without an API key value
+      const canSync =
+        actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
+      if (canSync && modelSyncService.hasFetcher(body.provider)) {
         modelSyncService
           .syncModelsForApiKey(
             createdApiKey.id,
             body.provider,
-            actualApiKeyValue,
+            actualApiKeyValue ?? "",
           )
           .catch((error) => {
             logger.error(
@@ -334,6 +339,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
+            isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -461,6 +467,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: string | null;
         teamId: string | null;
         secretId: string | null;
+        isPrimary: boolean;
       }> = {};
 
       if (body.name) {
@@ -469,6 +476,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (body.baseUrl !== undefined) {
         updateData.baseUrl = body.baseUrl;
+      }
+
+      if (body.isPrimary !== undefined) {
+        updateData.isPrimary = body.isPrimary;
       }
 
       if (newSecretId) {

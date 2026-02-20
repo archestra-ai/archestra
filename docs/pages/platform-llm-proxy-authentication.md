@@ -92,9 +92,21 @@ curl -X POST "https://archestra.example.com/v1/openai/{proxyId}/chat/completions
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
+## API Key Scoping
+
+Each LLM API key has a **scope** that controls who can use it:
+
+- **Personal** — Only visible to and usable by the user who created it.
+- **Team** — Available to all members of the selected team.
+- **Organization** — Available to all members of the organization. Admin-only.
+
+You can create **multiple keys per provider per scope** (e.g. two personal Anthropic keys with different base URLs). Mark one key as **Primary** to control which key is preferred when resolving. If no key is marked primary, the oldest key is used.
+
+When the Archestra Chat or JWKS auth resolves a provider key, it follows this priority: personal key > team key > organization-wide key > environment variable.
+
 ## Custom Base URLs
 
-Each LLM API key can have an optional **Base URL** that overrides the [environment-variable default](/docs/platform-deployment#llm-provider-configuration). This is configured when creating or editing an API key in Settings > LLM API Keys.
+Each LLM API key can have an optional **Base URL** that overrides the [environment-variable default](/docs/platform-deployment#llm-provider-configuration). This is configured when creating or editing an API key in Provider Settings.
 
 Use cases:
 - Self-hosted Ollama at a non-default address

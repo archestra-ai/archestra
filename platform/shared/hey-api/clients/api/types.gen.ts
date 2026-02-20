@@ -12892,6 +12892,7 @@ export type GetChatApiKeysResponses = {
         teamId: string | null;
         baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -12914,6 +12915,7 @@ export type CreateChatApiKeyData = {
         baseUrl?: string | null;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
+        isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
     };
@@ -12996,6 +12998,7 @@ export type CreateChatApiKeyResponses = {
         teamId: string | null;
         baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -13087,6 +13090,7 @@ export type GetAvailableChatApiKeysResponses = {
         teamId: string | null;
         baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -13263,6 +13267,7 @@ export type GetChatApiKeyResponses = {
         teamId: string | null;
         baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -13284,6 +13289,7 @@ export type UpdateChatApiKeyData = {
         baseUrl?: string | null;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string | null;
+        isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
     };
@@ -13368,6 +13374,7 @@ export type UpdateChatApiKeyResponses = {
         teamId: string | null;
         baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -28411,6 +28418,93 @@ export type RotateUserTokenResponses = {
 };
 
 export type RotateUserTokenResponse = RotateUserTokenResponses[keyof RotateUserTokenResponses];
+
+export type GetAllVirtualApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/virtual-api-keys';
+};
+
+export type GetAllVirtualApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAllVirtualApiKeysError = GetAllVirtualApiKeysErrors[keyof GetAllVirtualApiKeysErrors];
+
+export type GetAllVirtualApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        chatApiKeyId: string;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        expiresAt: string | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        parentKeyName: string;
+        parentKeyProvider: string;
+        parentKeyBaseUrl: string | null;
+    }>;
+};
+
+export type GetAllVirtualApiKeysResponse = GetAllVirtualApiKeysResponses[keyof GetAllVirtualApiKeysResponses];
 
 export type GetVirtualApiKeysData = {
     body?: never;

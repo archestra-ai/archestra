@@ -1,15 +1,38 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import { ChatApiKeyModel, VirtualApiKeyModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   SelectVirtualApiKeySchema,
+  VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
 } from "@/types";
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // List all virtual keys for the organization
+  fastify.get(
+    "/api/virtual-api-keys",
+    {
+      schema: {
+        operationId: RouteId.GetAllVirtualApiKeys,
+        description:
+          "Get all virtual API keys for the organization, with parent API key info",
+        tags: ["Virtual API Keys"],
+        response: constructResponseSchema(
+          z.array(VirtualApiKeyWithParentInfoSchema),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const virtualKeys =
+        await VirtualApiKeyModel.findAllByOrganization(organizationId);
+      return reply.send(virtualKeys);
+    },
+  );
+
   // List virtual keys for a chat API key
   fastify.get(
     "/api/chat-api-keys/:chatApiKeyId/virtual-keys",
@@ -66,7 +89,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const count = await VirtualApiKeyModel.countByChatApiKeyId(
         params.chatApiKeyId,
       );
-      const maxVirtualKeys = VirtualApiKeyModel.getMaxVirtualKeysPerApiKey();
+      const maxVirtualKeys = config.llmProxy.maxVirtualKeysPerApiKey;
       if (count >= maxVirtualKeys) {
         throw new ApiError(
           400,

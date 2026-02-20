@@ -3,7 +3,11 @@ import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type { ChatApiKey, SelectVirtualApiKey } from "@/types";
+import type {
+  ChatApiKey,
+  SelectVirtualApiKey,
+  VirtualApiKeyWithParentInfo,
+} from "@/types";
 
 /** Token prefix for identification */
 const TOKEN_PREFIX = "archestra_";
@@ -16,9 +20,6 @@ const TOKEN_START_LENGTH = 14;
 
 /** Always use DB storage (not BYOS Vault compatible) */
 const FORCE_DB = true;
-
-/** Default maximum virtual keys per chat API key */
-const DEFAULT_MAX_VIRTUAL_KEYS = 10;
 
 class VirtualApiKeyModel {
   /**
@@ -124,6 +125,37 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Find all virtual keys for an organization, joined with parent API key info.
+   */
+  static async findAllByOrganization(
+    organizationId: string,
+  ): Promise<VirtualApiKeyWithParentInfo[]> {
+    const rows = await db
+      .select({
+        id: schema.virtualApiKeysTable.id,
+        chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
+        name: schema.virtualApiKeysTable.name,
+        secretId: schema.virtualApiKeysTable.secretId,
+        tokenStart: schema.virtualApiKeysTable.tokenStart,
+        expiresAt: schema.virtualApiKeysTable.expiresAt,
+        lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
+        createdAt: schema.virtualApiKeysTable.createdAt,
+        parentKeyName: schema.chatApiKeysTable.name,
+        parentKeyProvider: schema.chatApiKeysTable.provider,
+        parentKeyBaseUrl: schema.chatApiKeysTable.baseUrl,
+      })
+      .from(schema.virtualApiKeysTable)
+      .innerJoin(
+        schema.chatApiKeysTable,
+        eq(schema.virtualApiKeysTable.chatApiKeyId, schema.chatApiKeysTable.id),
+      )
+      .where(eq(schema.chatApiKeysTable.organizationId, organizationId))
+      .orderBy(schema.virtualApiKeysTable.createdAt);
+
+    return rows;
+  }
+
+  /**
    * Update last used timestamp.
    */
   static async updateLastUsed(id: string): Promise<void> {
@@ -183,18 +215,6 @@ class VirtualApiKeyModel {
     }
 
     return null;
-  }
-
-  /**
-   * Get the maximum number of virtual keys allowed per chat API key.
-   */
-  static getMaxVirtualKeysPerApiKey(): number {
-    const envValue = process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS;
-    if (envValue) {
-      const parsed = Number.parseInt(envValue, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) return parsed;
-    }
-    return DEFAULT_MAX_VIRTUAL_KEYS;
   }
 }
 

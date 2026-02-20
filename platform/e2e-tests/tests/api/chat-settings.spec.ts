@@ -292,7 +292,7 @@ test.describe("Chat API Keys CRUD", () => {
     expect(response.status()).toBe(404);
   });
 
-  test("should enforce one personal key per user per provider", async ({
+  test("should allow multiple personal keys per user per provider", async ({
     request,
     makeApiRequest,
   }) => {
@@ -315,7 +315,7 @@ test.describe("Chat API Keys CRUD", () => {
     expect(key1Response.ok()).toBe(true);
     const key1 = await key1Response.json();
 
-    // Try to create second personal key for same provider - should fail with unique constraint violation
+    // Create second personal key for same provider - should now succeed
     const key2Response = await makeApiRequest({
       request,
       method: "post",
@@ -326,16 +326,20 @@ test.describe("Chat API Keys CRUD", () => {
         apiKey: "sk-ant-personal-test-2",
         scope: "personal",
       },
-      ignoreStatusCheck: true,
     });
-    // Backend returns 500 for unique constraint violations (database error)
-    expect(key2Response.ok()).toBe(false);
+    expect(key2Response.ok()).toBe(true);
+    const key2 = await key2Response.json();
 
     // Cleanup
     await makeApiRequest({
       request,
       method: "delete",
       urlSuffix: `/api/chat-api-keys/${key1.id}`,
+    });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${key2.id}`,
     });
   });
 

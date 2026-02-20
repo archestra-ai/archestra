@@ -1,5 +1,5 @@
 {
-  "id": "e52221e8-4fad-4060-bad4-64d4d3d8b66a",
+  "id": "27f58e25-9069-4a1d-8140-d0ae3ec64761",
   "prevId": "52855d3a-aa1f-47fd-8f38-faca0b68fb8b",
   "version": "7",
   "dialect": "postgresql",
@@ -1099,6 +1099,13 @@
           "notNull": true,
           "default": false
         },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1147,72 +1154,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "chat_api_keys_personal_unique": {
-          "name": "chat_api_keys_personal_unique",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"chat_api_keys\".\"scope\" = 'personal' AND \"chat_api_keys\".\"user_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "chat_api_keys_team_unique": {
-          "name": "chat_api_keys_team_unique",
-          "columns": [
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"chat_api_keys\".\"scope\" = 'team' AND \"chat_api_keys\".\"team_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "chat_api_keys_org_wide_unique": {
-          "name": "chat_api_keys_org_wide_unique",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"chat_api_keys\".\"scope\" = 'org_wide'",
           "concurrently": false,
           "method": "btree",
           "with": {}

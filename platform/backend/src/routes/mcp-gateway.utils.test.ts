@@ -676,6 +676,49 @@ describe("validateExternalIdpToken", () => {
     expect(result?.rawToken).toBe(FAKE_JWT);
   });
 
+  test("grants access with permissionResource llmProxy for admin user", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+      teams: [],
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "admin-sub",
+      email: adminUser.email,
+      name: adminUser.name,
+      rawClaims: { sub: "admin-sub", email: adminUser.email },
+    });
+
+    const result = await validateExternalIdpToken(
+      agent.id,
+      FAKE_JWT,
+      "llmProxy",
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.isUserToken).toBe(true);
+    expect(result?.userId).toBe(adminUser.id);
+    expect(result?.isExternalIdp).toBe(true);
+    expect(result?.organizationId).toBe(org.id);
+  });
+
   test("grants access when user shares a team with the profile", async ({
     makeOrganization,
     makeUser,

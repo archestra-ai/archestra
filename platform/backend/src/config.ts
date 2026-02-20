@@ -387,6 +387,18 @@ export const parseContentMaxLength = (
   return parsed;
 };
 
+/**
+ * Parse a positive integer from an environment variable string, with a default fallback.
+ */
+const parsePositiveInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
 export default {
   frontendBaseUrl,
   api: {
@@ -670,6 +682,12 @@ export default {
   debug: isDevelopment,
   production: isProduction,
   environment,
+  llmProxy: {
+    maxVirtualKeysPerApiKey: parsePositiveInt(
+      process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
+      10,
+    ),
+  },
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },

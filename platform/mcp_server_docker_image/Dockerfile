@@ -30,35 +30,12 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Upgrade npm to 11.8.0 to get patched bundled dependencies (tar, glob, cross-spawn)
-# CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960: tar vulnerabilities
-# CVE-2025-64756: glob vulnerability
-# CVE-2024-21538: cross-spawn vulnerability
-# CVE-2026-26996: minimatch ReDoS vulnerability (patched below)
-RUN npm install -g npm@11.8.0 && \
-    # Patch tar to 7.5.8 inside npm's bundled node_modules to fix CVE-2026-26960
-    TAR_SHA256="5fc7136bf937d640436d13639447d06d44cb6b464188bf7b57fb6ac3ec1be0a2" && \
-    NPM_TAR_PATH="/usr/local/lib/node_modules/npm/node_modules/tar" && \
-    if [ -d "$NPM_TAR_PATH" ]; then \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.8.tgz && \
-        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - && \
-        rm -rf "$NPM_TAR_PATH"/* && \
-        tar -xzf "$TMP_DIR/tar.tgz" -C "$NPM_TAR_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR" && \
-        echo "Patched tar to 7.5.8 in npm"; \
-    fi && \
-    # Patch @isaacs/brace-expansion to 5.0.1 inside npm's bundled node_modules to fix GHSA-7h2j-956f-4vf2 (ReDoS)
-    BRACE_SHA256="c908309f6735b002952f2b02563e68d98cba0375322a189ebc4f6f47637ee95b" && \
-    NPM_BRACE_PATH="/usr/local/lib/node_modules/npm/node_modules/@isaacs/brace-expansion" && \
-    if [ -d "$NPM_BRACE_PATH" ]; then \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/@isaacs/brace-expansion/-/brace-expansion-5.0.1.tgz && \
-        rm -rf "$NPM_BRACE_PATH"/* && \
-        tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$NPM_BRACE_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR" && \
-        echo "Patched @isaacs/brace-expansion to 5.0.1 in npm"; \
-    fi
+# Upgrade npm to 11.10.1 which bundles fixed versions of all previously vulnerable dependencies:
+# tar@7.5.9 (CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960)
+# glob@13.0.6 (CVE-2025-64756)
+# minimatch@10.2.2 (CVE-2026-26996)
+# brace-expansion@5.0.2 (GHSA-7h2j-956f-4vf2)
+RUN npm install -g npm@11.10.1
 
 WORKDIR /opt/node-deps
 
@@ -72,30 +49,6 @@ WORKDIR /opt/node-deps
 COPY package.json package-lock.json ./
 
 RUN npm ci
-
-# Patch minimatch to 10.2.1 inside npm's bundled node_modules to fix CVE-2026-26996 (ReDoS)
-# Done AFTER npm ci because replacing minimatch changes its dependency from
-# @isaacs/brace-expansion to brace-expansion, which breaks npm's module resolution
-RUN MINIMATCH_SHA256="3762bb590e36988b9f864e8ed6a8903e31659a937d40d6d95591b2bf406957e0" && \
-    NPM_MINIMATCH_PATH="/usr/local/lib/node_modules/npm/node_modules/minimatch" && \
-    TMP_DIR=$(mktemp -d) && \
-    wget -qO "$TMP_DIR/minimatch.tgz" https://registry.npmjs.org/minimatch/-/minimatch-10.2.1.tgz && \
-    echo "$MINIMATCH_SHA256  $TMP_DIR/minimatch.tgz" | sha256sum -c - && \
-    rm -rf "$NPM_MINIMATCH_PATH"/* && \
-    tar -xzf "$TMP_DIR/minimatch.tgz" -C "$NPM_MINIMATCH_PATH" --strip-components=1 && \
-    rm -rf "$TMP_DIR" && \
-    echo "Patched minimatch to 10.2.1 in npm" && \
-    # Install brace-expansion 5.0.2 required by minimatch 10.2.1
-    BRACE_EXP_SHA256="3bb99ab8f78f432f3d83f82112683859d0f84c1f1a83f32bef8535d1663ecb4d" && \
-    NPM_BRACE_EXP_PATH="/usr/local/lib/node_modules/npm/node_modules/brace-expansion" && \
-    mkdir -p "$NPM_BRACE_EXP_PATH" && \
-    TMP_DIR=$(mktemp -d) && \
-    wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.2.tgz && \
-    echo "$BRACE_EXP_SHA256  $TMP_DIR/brace-expansion.tgz" | sha256sum -c - && \
-    rm -rf "$NPM_BRACE_EXP_PATH"/* && \
-    tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$NPM_BRACE_EXP_PATH" --strip-components=1 && \
-    rm -rf "$TMP_DIR" && \
-    echo "Installed brace-expansion 5.0.2 for minimatch 10.2.1"
 
 # Final stage - minimal runtime image with Python 3.12
 FROM python:3.12-alpine

@@ -526,7 +526,7 @@ function buildManifest(params: {
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupchat"],
+        scopes: ["team", "groupchat", "personal"],
         supportsFiles: false,
         isNotificationOnly: false,
         commandLists: [
@@ -541,6 +541,12 @@ function buildManifest(params: {
                 title: "/status",
                 description: "Show current agent for this channel",
               },
+              { title: "/help", description: "Show available commands" },
+            ],
+          },
+          {
+            scopes: ["personal"],
+            commands: [
               { title: "/help", description: "Show available commands" },
             ],
           },

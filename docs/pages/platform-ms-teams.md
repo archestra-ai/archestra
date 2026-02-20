@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 5
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-02-05
+lastUpdated: 2026-02-20
 ---
 
 <!--
@@ -82,7 +82,7 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
   "bots": [
     {
       "botId": "{{BOT_MS_APP_ID}}",
-      "scopes": ["team", "groupchat"],
+      "scopes": ["team", "groupchat", "personal"],
       "supportsFiles": false,
       "isNotificationOnly": false,
       "commandLists": [
@@ -91,6 +91,12 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
           "commands": [
             { "title": "/select-agent", "description": "Change which agent handles this channel" },
             { "title": "/status", "description": "Show current agent for this channel" },
+            { "title": "/help", "description": "Show available commands" }
+          ]
+        },
+        {
+          "scopes": ["personal"],
+          "commands": [
             { "title": "/help", "description": "Show available commands" }
           ]
         }
@@ -189,6 +195,14 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 | `@Archestra Sales > check revenue` | Sales agent |
 | `@Archestra support > help me` | Support agent |
 | `@Archestra Unknown > test` | Default agent (with fallback notice) |
+
+### Direct Messages
+
+Click the **DM** button next to any agent in the Agent Triggers page. This stores a short-lived intent (5 minutes) and opens a Teams DM with the bot. Send any message — the bot auto-binds the DM to that agent for all subsequent messages. No `@mention` or special syntax is needed.
+
+If you open a DM directly (not via the button) or the intent has expired, the bot shows an agent selection card instead.
+
+> If you update from a previous manifest without the `"personal"` scope, re-upload the updated manifest to enable DMs.
 
 ## Troubleshooting
 

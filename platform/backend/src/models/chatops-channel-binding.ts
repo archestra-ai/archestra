@@ -3,6 +3,7 @@ import {
   desc,
   eq,
   inArray,
+  isNotNull,
   isNull,
   ne,
   notInArray,
@@ -332,6 +333,9 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.channelId,
             params.activeChannelIds,
           ),
+          // Exclude DM bindings — they have channelName: null and won't appear
+          // in the active channel discovery list, but should not be cleaned up
+          isNotNull(schema.chatopsChannelBindingsTable.channelName),
         ),
       )
       .returning();

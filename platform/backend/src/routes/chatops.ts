@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { RouteId, TimeInMs } from "@shared";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -424,6 +424,20 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             if (!binding || !binding.agentId) {
+              // Try auto-bind from DM intent (set when user clicks DM button in Archestra)
+              const intentBound = await tryBindFromDmIntent({
+                provider,
+                message,
+              });
+              if (intentBound) {
+                await chatOpsManager.processMessage({
+                  message,
+                  provider,
+                  sendReply: true,
+                });
+                return;
+              }
+
               // No binding, or discovered channel without agent assigned — show agent selection
               await awaitDiscovery(provider, context);
               await sendAgentSelectionCard({
@@ -632,6 +646,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           if (!binding || !binding.agentId) {
+            // Try auto-bind from DM intent (set when user clicks DM button in Archestra)
+            const intentBound = await tryBindFromDmIntent({
+              provider,
+              message,
+            });
+            if (intentBound) {
+              chatOpsManager
+                .processMessage({
+                  message,
+                  provider,
+                  sendReply: true,
+                })
+                .catch((error) => {
+                  logger.error(
+                    {
+                      messageId: message.messageId,
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                    },
+                    "[ChatOps] Error processing intent-bound Slack DM (async)",
+                  );
+                });
+              return reply.send({ ok: true });
+            }
+
             await sendAgentSelectionCard({
               provider,
               message,
@@ -1010,6 +1049,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 displayName: z.string(),
                 configured: z.boolean(),
                 credentials: z.record(z.string(), z.string()).optional(),
+                dmInfo: z
+                  .object({
+                    botUserId: z.string().optional(),
+                    teamId: z.string().optional(),
+                    appId: z.string().optional(),
+                  })
+                  .optional(),
               }),
             ),
           }),
@@ -1214,6 +1260,52 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Store a short-lived DM intent so the next DM auto-binds to the chosen agent.
+   * Called by the frontend before opening a DM deep link.
+   */
+  fastify.post(
+    "/api/chatops/dm-intent",
+    {
+      schema: {
+        operationId: RouteId.CreateDmIntent,
+        description:
+          "Store a DM intent for auto-binding the next DM to an agent",
+        tags: ["ChatOps"],
+        body: z.object({
+          provider: ChatOpsProviderTypeSchema,
+          agentId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { provider, agentId } = request.body;
+
+      // Validate agent exists and allows this provider
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (!agent.allowedChatops?.includes(provider)) {
+        throw new ApiError(
+          400,
+          `Agent "${agent.name}" does not have ${provider} enabled`,
+        );
+      }
+
+      const cacheKey =
+        `${CacheKey.DmIntent}-${provider}-${request.user.email}` as AllowedCacheKey;
+      await cacheManager.set(
+        cacheKey,
+        { agentId: agent.id, agentName: agent.name },
+        5 * TimeInMs.Minute,
+      );
+
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the
@@ -1281,6 +1373,7 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   displayName: string;
   configured: boolean;
   credentials?: Record<string, string>;
+  dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
 }> {
   switch (providerType) {
     case "ms-teams": {
@@ -1295,6 +1388,7 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
           appSecret: dbConfig?.appSecret ? "••••••••" : "",
           tenantId: maskValue(dbConfig?.tenantId ?? ""),
         },
+        dmInfo: dbConfig?.appId ? { appId: dbConfig.appId } : undefined,
       };
     }
     case "slack": {
@@ -1309,6 +1403,13 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
           signingSecret: dbConfig?.signingSecret ? "••••••••" : "",
           appId: maskValue(dbConfig?.appId ?? ""),
         },
+        dmInfo:
+          provider?.getBotUserId() || provider?.getWorkspaceId()
+            ? {
+                botUserId: provider.getBotUserId() ?? undefined,
+                teamId: provider.getWorkspaceId() ?? undefined,
+              }
+            : undefined,
       };
     }
   }
@@ -1679,6 +1780,53 @@ function getSecurityErrorMessage(error: string): string {
   }
   // Fallback for other errors
   return error;
+}
+
+/**
+ * Try to auto-bind a DM from a stored intent.
+ * When a user clicks the DM button in Archestra, a short-lived intent is cached.
+ * If found, atomically consume it and create the binding.
+ */
+async function tryBindFromDmIntent(params: {
+  provider: ChatOpsProvider;
+  message: IncomingChatMessage;
+}): Promise<{ agent: { id: string; name: string } } | null> {
+  const { provider, message } = params;
+  if (!message.senderEmail) return null;
+
+  const cacheKey =
+    `${CacheKey.DmIntent}-${provider.providerId}-${message.senderEmail}` as AllowedCacheKey;
+  const intent = await cacheManager.getAndDelete<{
+    agentId: string;
+    agentName: string;
+  }>(cacheKey);
+  if (!intent) return null;
+
+  // Validate agent still exists and allows this provider
+  const agent = await AgentModel.findById(intent.agentId);
+  if (!agent?.allowedChatops?.includes(provider.providerId)) return null;
+
+  // Create binding
+  const organizationId = await getDefaultOrganizationId();
+  await ChatOpsChannelBindingModel.upsertByChannel({
+    organizationId,
+    provider: provider.providerId,
+    channelId: message.channelId,
+    workspaceId: message.workspaceId,
+    channelName: null,
+    agentId: agent.id,
+  });
+
+  logger.info(
+    {
+      agentId: agent.id,
+      agentName: agent.name,
+      channelId: message.channelId,
+    },
+    "[ChatOps] Auto-bound DM to agent via intent",
+  );
+
+  return { agent: { id: agent.id, name: agent.name } };
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -58,6 +59,7 @@ import { useProfiles } from "@/lib/agent.query";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
+  useCreateDmIntent,
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
@@ -218,11 +220,14 @@ export default function SlackPage() {
 function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
+  const { data: chatOpsProviders } = useChatOpsStatus();
   const updateMutation = useUpdateChatOpsBinding();
+  const dmIntentMutation = useCreateDmIntent();
   const queryClient = useQueryClient();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
   const [enableDialogOpen, setEnableDialogOpen] = useState(false);
 
+  const slack = chatOpsProviders?.find((p) => p.id === "slack");
   const slackAgents =
     agents?.filter((a) =>
       Array.isArray(a.allowedChatops)
@@ -433,6 +438,33 @@ function ChannelBindingsSection() {
                               ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                        )}
+                        {slack?.dmInfo?.botUserId && slack.dmInfo.teamId && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label="DM in Slack"
+                                  disabled={dmIntentMutation.isPending}
+                                  onClick={async () => {
+                                    await dmIntentMutation.mutateAsync({
+                                      provider: "slack",
+                                      agentId: agent.id,
+                                    });
+                                    window.open(
+                                      `slack://user?team=${slack.dmInfo?.teamId}&id=${slack.dmInfo?.botUserId}`,
+                                      "_blank",
+                                    );
+                                  }}
+                                >
+                                  <Send className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>DM in Slack</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                         <TooltipProvider>
                           <Tooltip>

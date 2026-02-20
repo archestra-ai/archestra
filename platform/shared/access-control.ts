@@ -652,6 +652,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     organization: ["update"],
   },
+  [RouteId.CreateDmIntent]: {
+    interaction: ["read"],
+  },
 };
 
 /**

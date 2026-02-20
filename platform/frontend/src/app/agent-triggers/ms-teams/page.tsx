@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -60,6 +61,7 @@ import { useProfiles } from "@/lib/agent.query";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
+  useCreateDmIntent,
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
@@ -230,11 +232,14 @@ export default function MsTeamsPage() {
 function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
+  const { data: chatOpsProviders } = useChatOpsStatus();
   const updateMutation = useUpdateChatOpsBinding();
+  const dmIntentMutation = useCreateDmIntent();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
   const [enableDialogOpen, setEnableDialogOpen] = useState(false);
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
+  const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const msTeamsAgents =
     agents?.filter((a) =>
       Array.isArray(a.allowedChatops)
@@ -442,6 +447,33 @@ function ChannelBindingsSection() {
                               ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                        )}
+                        {msTeams?.dmInfo?.appId && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label="DM in Teams"
+                                  disabled={dmIntentMutation.isPending}
+                                  onClick={async () => {
+                                    await dmIntentMutation.mutateAsync({
+                                      provider: "ms-teams",
+                                      agentId: agent.id,
+                                    });
+                                    window.open(
+                                      `https://teams.microsoft.com/l/chat/0/0?users=28:${msTeams.dmInfo?.appId}`,
+                                      "_blank",
+                                    );
+                                  }}
+                                >
+                                  <Send className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>DM in Teams</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                         <TooltipProvider>
                           <Tooltip>

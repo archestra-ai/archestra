@@ -52,10 +52,6 @@ class StaleSessionError extends Error {
 type McpToolWithServerMetadata = {
   toolName: string;
   responseModifierTemplate: string | null;
-  mcpServerSecretId: string | null;
-  mcpServerName: string | null;
-  mcpServerCatalogId: string | null;
-  mcpServerId: string | null;
   credentialSourceMcpServerId: string | null;
   executionSourceMcpServerId: string | null;
   useDynamicTeamCredential: boolean;
@@ -161,6 +157,19 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  // Short-lived cache for MCP server secrets to avoid N+1 queries when multiple
+  // tool calls hit the same MCP server within a batch or concurrent request window.
+  // Key: targetMcpServerId, Value: { result, expiresAt }
+  private secretsCache = new Map<
+    string,
+    {
+      result:
+        | { secrets: Record<string, unknown>; secretId?: string }
+        | { error: CommonToolResult };
+      expiresAt: number;
+    }
+  >();
+  private static readonly SECRETS_CACHE_TTL_MS = 30_000;
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -233,7 +242,7 @@ class McpClient {
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
     }
-    const { targetMcpServerId } = targetMcpServerIdResult;
+    const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
@@ -273,18 +282,15 @@ class McpClient {
 
         // Determine the actual tool name by stripping the server/catalog prefix.
         // We prioritize the `catalogName` prefix, which is standard for local MCP servers.
-        // If the tool name doesn't match the catalog prefix, we fall back to the `mcpServerName` (typical for remote servers).
+        // If the tool name doesn't match the catalog prefix, we fall back to the resolved `mcpServerName`.
         let targetToolName = this.stripServerPrefix(
           toolCall.name,
           tool.catalogName || "",
         );
 
-        if (targetToolName === toolCall.name && tool.mcpServerName) {
+        if (targetToolName === toolCall.name) {
           // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-          targetToolName = this.stripServerPrefix(
-            toolCall.name,
-            tool.mcpServerName,
-          );
+          targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
         }
 
         // Resolve the actual tool name from the server (preserving original casing).
@@ -305,7 +311,7 @@ class McpClient {
         return await this.createSuccessResult(
           toolCall,
           agentId,
-          tool.mcpServerName || "unknown",
+          mcpServerName,
           result.content,
           !!result.isError,
           tool.responseModifierTemplate,
@@ -426,7 +432,7 @@ class McpClient {
             connectionKey,
             toolCall,
             agentId,
-            mcpServerName: tool.mcpServerName || "unknown",
+            mcpServerName,
             catalogItem,
             targetMcpServerId,
             executeRetry: (getTransport, secrets) =>
@@ -443,7 +449,7 @@ class McpClient {
           toolCall,
           agentId,
           errorMessage,
-          tool.mcpServerName || "unknown",
+          mcpServerName,
           authInfo,
         );
       }
@@ -660,7 +666,7 @@ class McpClient {
           toolCall,
           agentId,
           "Tool is missing catalogId",
-          tool.mcpServerName || "unknown",
+          tool.catalogName || "unknown",
         ),
       };
     }
@@ -673,7 +679,7 @@ class McpClient {
           toolCall,
           agentId,
           `No catalog item found for tool catalog ID ${tool.catalogId}`,
-          tool.mcpServerName || "unknown",
+          tool.catalogName || "unknown",
         ),
       };
     }
@@ -681,7 +687,8 @@ class McpClient {
     return { tool, catalogItem };
   }
 
-  // Gets secrets of a given MCP server
+  // Gets secrets of a given MCP server, with short-lived caching to prevent
+  // N+1 queries when multiple tool calls target the same server.
   private async getSecretsForMcpServer({
     targetMcpServerId,
     toolCall,
@@ -691,6 +698,37 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
+    | { secrets: Record<string, unknown>; secretId?: string }
+    | { error: CommonToolResult }
+  > {
+    const now = Date.now();
+    const cached = this.secretsCache.get(targetMcpServerId);
+    if (cached && cached.expiresAt > now) {
+      return cached.result;
+    }
+
+    const result = await this.fetchSecretsForMcpServer(
+      targetMcpServerId,
+      toolCall,
+      agentId,
+    );
+
+    // Only cache successful results (not errors) so transient failures can be retried
+    if (!("error" in result)) {
+      this.secretsCache.set(targetMcpServerId, {
+        result,
+        expiresAt: now + McpClient.SECRETS_CACHE_TTL_MS,
+      });
+    }
+
+    return result;
+  }
+
+  private async fetchSecretsForMcpServer(
+    targetMcpServerId: string,
+    toolCall: CommonToolCall,
+    agentId: string,
+  ): Promise<
     | { secrets: Record<string, unknown>; secretId?: string }
     | { error: CommonToolResult }
   > {
@@ -735,7 +773,11 @@ class McpClient {
     agentId: string;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-  }): Promise<{ targetMcpServerId: string } | { error: CommonToolResult }> {
+  }): Promise<
+    | { targetMcpServerId: string; mcpServerName: string }
+    | { error: CommonToolResult }
+  > {
+    const fallbackName = tool.catalogName || "unknown";
     logger.info(
       {
         toolName: toolCall.name,
@@ -755,7 +797,7 @@ class McpClient {
             toolCall,
             agentId,
             "Execution source is required for local MCP server tools when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
+            fallbackName,
           ),
         };
       }
@@ -768,33 +810,37 @@ class McpClient {
             toolCall,
             agentId,
             "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
+            fallbackName,
           ),
         };
       }
-      const result =
+      const targetMcpServerId =
         catalogItem.serverType === "local"
           ? tool.executionSourceMcpServerId
           : tool.credentialSourceMcpServerId;
-      if (!result) {
+      if (!targetMcpServerId) {
         return {
           error: await this.createErrorResult(
             toolCall,
             agentId,
             "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
+            fallbackName,
           ),
         };
       }
+      const mcpServer = await McpServerModel.findById(targetMcpServerId);
       logger.info(
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetMcpServerId: result,
+          targetMcpServerId,
         },
         "Determined target MCP server ID for catalog item",
       );
-      return { targetMcpServerId: result };
+      return {
+        targetMcpServerId,
+        mcpServerName: mcpServer?.name || fallbackName,
+      };
     }
 
     // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth
@@ -805,7 +851,7 @@ class McpClient {
           toolCall,
           agentId,
           "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
-          tool.mcpServerName || "unknown",
+          fallbackName,
         ),
       };
     }
@@ -815,7 +861,7 @@ class McpClient {
           toolCall,
           agentId,
           "Dynamic team credential is enabled but tool has no catalogId.",
-          tool.mcpServerName || "unknown",
+          fallbackName,
         ),
       };
     }
@@ -839,7 +885,10 @@ class McpClient {
           },
           `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
         );
-        return { targetMcpServerId: userServer.id };
+        return {
+          targetMcpServerId: userServer.id,
+          mcpServerName: userServer.name,
+        };
       }
     }
 
@@ -865,7 +914,10 @@ class McpClient {
             },
             `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          return { targetMcpServerId: server.id };
+          return {
+            targetMcpServerId: server.id,
+            mcpServerName: server.name,
+          };
         }
       }
 
@@ -882,7 +934,10 @@ class McpClient {
             },
             `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          return { targetMcpServerId: server.id };
+          return {
+            targetMcpServerId: server.id,
+            mcpServerName: server.name,
+          };
         }
       }
     }
@@ -897,7 +952,10 @@ class McpClient {
         },
         `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
       );
-      return { targetMcpServerId: allServers[0].id };
+      return {
+        targetMcpServerId: allServers[0].id,
+        mcpServerName: allServers[0].name,
+      };
     }
 
     // Priority 5: Fallback for external IdP users if earlier team-based resolution didn't match
@@ -910,7 +968,10 @@ class McpClient {
         },
         `Dynamic resolution: using first available server for external IdP user`,
       );
-      return { targetMcpServerId: allServers[0].id };
+      return {
+        targetMcpServerId: allServers[0].id,
+        mcpServerName: allServers[0].name,
+      };
     }
 
     // No server found - return an actionable error with install link
@@ -926,7 +987,7 @@ class McpClient {
         toolCall,
         agentId,
         `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`,
-        tool.mcpServerName || "unknown",
+        fallbackName,
       ),
     };
   }

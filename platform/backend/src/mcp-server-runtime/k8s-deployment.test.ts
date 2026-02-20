@@ -2599,6 +2599,137 @@ describe("K8sDeployment.deleteK8sService", () => {
   });
 });
 
+describe("K8sDeployment.constructHttpServiceName", () => {
+  function createK8sDeploymentForServiceName(
+    serverName: string,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: serverName,
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("generates service name within 63-character K8s limit for short names", () => {
+    const k8sDeployment = createK8sDeploymentForServiceName("test-server");
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+    expect(serviceName).toBe("mcp-test-server-service");
+    expect(serviceName.length).toBeLessThanOrEqual(63);
+  });
+
+  test("truncates long MCP server names to fit within 63-character limit (issue #2613)", () => {
+    // Reproduce the exact scenario from issue #2613:
+    // MCP name "flux159mcp-server-kubernetes" with a team/user ID suffix
+    const k8sDeployment = createK8sDeploymentForServiceName(
+      "flux159mcp-server-kubernetes-bna5abjosg7kzhigeqis4yxwlwkeervo",
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+    expect(serviceName.length).toBeLessThanOrEqual(63);
+    expect(serviceName).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?-service$/);
+  });
+
+  test("handles very long names by truncating base before appending suffix", () => {
+    const longName = "a".repeat(200);
+    const k8sDeployment = createK8sDeploymentForServiceName(longName);
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+    expect(serviceName.length).toBeLessThanOrEqual(63);
+    expect(serviceName).toMatch(/-service$/);
+  });
+
+  test("strips trailing hyphens after truncation", () => {
+    // Craft a name that when prefixed with "mcp-" and truncated to 55 chars, ends with a hyphen
+    // "mcp-" = 4 chars, so we need 51 chars + hyphen at position 55
+    const nameBase = `${"a".repeat(50)}-${"b".repeat(10)}`;
+    const k8sDeployment = createK8sDeploymentForServiceName(nameBase);
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+    expect(serviceName.length).toBeLessThanOrEqual(63);
+    expect(serviceName).not.toMatch(/-{2}/);
+    expect(serviceName).toMatch(/^[a-z0-9]/);
+    expect(serviceName).toMatch(/[a-z0-9]$/);
+  });
+
+  test("replaces dots with hyphens in deployment name", () => {
+    const k8sDeployment = createK8sDeploymentForServiceName("server.v2.0");
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+    expect(serviceName).toBe("mcp-server-v2-0-service");
+    expect(serviceName).not.toContain(".");
+  });
+
+  test("handles names that produce only 'mcp' prefix after sanitization", () => {
+    const k8sDeployment = createK8sDeploymentForServiceName("@@@");
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+    // "@@@" is sanitized away, leaving deployment name "mcp-"
+    // After trailing hyphen removal, base becomes "mcp"
+    expect(serviceName).toBe("mcp-service");
+    expect(serviceName.length).toBeLessThanOrEqual(63);
+    expect(serviceName).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/);
+  });
+
+  test("produces consistent results for the same input", () => {
+    const k8sDeployment = createK8sDeploymentForServiceName(
+      "flux159mcp-server-kubernetes-bna5abjosg7kzhigeqis4yxwlwkeervo",
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const result1 = (k8sDeployment as any).constructHttpServiceName();
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+    const result2 = (k8sDeployment as any).constructHttpServiceName();
+
+    expect(result1).toBe(result2);
+  });
+
+  test("all generated service names are valid K8s DNS labels", () => {
+    const testNames = [
+      "short",
+      "a".repeat(100),
+      "name-with-dots.v1.0",
+      "UPPERCASE-NAME",
+      "name with spaces",
+      "flux159mcp-server-kubernetes-bna5abjosg7kzhigeqis4yxwlwkeervo",
+      "special@chars!here",
+    ];
+
+    for (const name of testNames) {
+      const k8sDeployment = createK8sDeploymentForServiceName(name);
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+      const serviceName = (k8sDeployment as any).constructHttpServiceName();
+
+      expect(serviceName.length).toBeLessThanOrEqual(63);
+      expect(serviceName).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/);
+    }
+  });
+});
+
 describe("K8sDeployment.stopDeployment", () => {
   function createK8sDeploymentWithMockedApis(
     mockK8sApi: Partial<k8s.CoreV1Api>,

@@ -39,7 +39,7 @@ describe("hasPermission", () => {
 
   describe("session-based authentication", () => {
     test("should return success when user has required permissions", async () => {
-      const permissions: Permissions = { profile: ["read"] };
+      const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
       };
@@ -59,7 +59,7 @@ describe("hasPermission", () => {
     });
 
     test("should return failure when user lacks required permissions", async () => {
-      const permissions: Permissions = { profile: ["admin"] };
+      const permissions: Permissions = { agent: ["admin"] };
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
       };
@@ -84,7 +84,7 @@ describe("hasPermission", () => {
 
   describe("API key authentication", () => {
     test("should allow valid API key when session check fails", async () => {
-      const permissions: Permissions = { profile: ["read"] };
+      const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer api-key-123",
       };
@@ -110,7 +110,7 @@ describe("hasPermission", () => {
     });
 
     test("should reject invalid API key when session check fails", async () => {
-      const permissions: Permissions = { profile: ["read"] };
+      const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer invalid-key",
       };
@@ -138,7 +138,7 @@ describe("hasPermission", () => {
     });
 
     test("should handle API key verification errors", async () => {
-      const permissions: Permissions = { profile: ["read"] };
+      const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer some-key",
       };
@@ -164,7 +164,7 @@ describe("hasPermission", () => {
     });
 
     test("should return error when no authorization header provided and session check fails", async () => {
-      const permissions: Permissions = { profile: ["read"] };
+      const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {};
 
       // Mock hasPermission to throw
@@ -207,7 +207,7 @@ describe("hasPermission", () => {
 
     test("should handle complex permissions object", async () => {
       const permissions: Permissions = {
-        profile: ["read", "create", "update", "delete"],
+        agent: ["read", "create", "update", "delete"],
         mcpServer: ["admin"],
         team: ["read"],
       };
@@ -235,7 +235,7 @@ describe("hasPermission", () => {
     });
 
     test("should pass through different authorization header formats", async () => {
-      const permissions: Permissions = { profile: ["read"] };
+      const permissions: Permissions = { agent: ["read"] };
 
       // Test different header formats
       const testCases = [

@@ -1,0 +1,80 @@
+# Automatically triage and review new PRs from external contributors using Claude.
+# Phase 1 (triage): Checks for spam, low-quality PRs, missing demo videos, and applies labels.
+# Phase 2 (review): If triage passes, performs a code review on the PR.
+#
+# Uses claude-community-shared.yml reusable workflow for common boilerplate.
+# Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
+name: Claude PR Triage
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] safe: checks out base repo (not PR code), Claude restricted to Read (base repo only), GitHub MCP tools, and specific gh CLI subcommands
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  check-author:
+    uses: ./.github/workflows/check-core-team.yml
+    with:
+      username: ${{ github.event.pull_request.user.login }}
+
+  triage-pr:
+    needs: check-author
+    if: |
+      needs.check-author.outputs.is_core_team_member != 'true' &&
+      github.event.pull_request.user.type != 'Bot'
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/claude-community-shared.yml
+    with:
+      prompt: "/triage-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
+      allowed_tools: "mcp__github__get_pull_request,mcp__github__list_pull_requests,mcp__github__search_issues,mcp__github__create_pull_request_review,mcp__github__add_issue_comment,mcp__github__update_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files"
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_ISSUE_TRIAGE_ANTHROPIC_API_KEY }}
+      TRIAGE_SHERIFF_APP_ID: ${{ secrets.TRIAGE_SHERIFF_APP_ID }}
+      TRIAGE_SHERIFF_PRIVATE_KEY: ${{ secrets.TRIAGE_SHERIFF_PRIVATE_KEY }}
+
+  check-triage-result:
+    needs: triage-pr
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      should_review: ${{ steps.check.outputs.should_review }}
+    steps:
+      - name: Check if PR passed triage
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state --jq '.state')
+          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name] | any(. == "ready for review")')
+
+          if [[ "$PR_STATE" == "OPEN" && "$HAS_LABEL" == "true" ]]; then
+            echo "should_review=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_review=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  review-pr:
+    needs: check-triage-result
+    if: needs.check-triage-result.outputs.should_review == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/claude-community-shared.yml
+    with:
+      prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
+      allowed_tools: "Read,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),mcp__github__create_pull_request_review,mcp__github__get_pull_request_files,mcp__github__get_pull_request_diff,mcp__github__get_pull_request"
+      timeout_minutes: 30
+      use_sticky_comment: true
+      track_progress: true
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_ISSUE_TRIAGE_ANTHROPIC_API_KEY }}
+      TRIAGE_SHERIFF_APP_ID: ${{ secrets.TRIAGE_SHERIFF_APP_ID }}
+      TRIAGE_SHERIFF_PRIVATE_KEY: ${{ secrets.TRIAGE_SHERIFF_PRIVATE_KEY }}

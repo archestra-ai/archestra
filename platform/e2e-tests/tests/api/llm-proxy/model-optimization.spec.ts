@@ -273,6 +273,41 @@ const mistralConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const perplexityConfig: ModelOptimizationTestConfig = {
+  providerName: "Perplexity",
+  provider: "perplexity",
+
+  endpoint: (agentId) => `/v1/perplexity/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-perplexity-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-perplexity-baseline",
+  optimizedModel: "e2e-test-perplexity-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 const vllmConfig: ModelOptimizationTestConfig = {
   providerName: "vLLM",
   provider: "vllm",
@@ -402,17 +437,24 @@ function generateLongMessage(): string {
 // Test Suite
 // =============================================================================
 
-const testConfigs: ModelOptimizationTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cohereConfig,
-  cerebrasConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  perplexity: perplexityConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: null, // Bedrock messages use nested content arrays that the tokenizer doesn't count correctly
+} satisfies Record<SupportedProvider, ModelOptimizationTestConfig | null>;
+
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is ModelOptimizationTestConfig => c !== null,
+);
 
 test.describe("LLMProxy-ModelOptimization", () => {
   for (const config of testConfigs) {

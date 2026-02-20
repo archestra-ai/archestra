@@ -19,7 +19,9 @@ export const actions = [
 ] as const;
 
 export const resources = [
-  "profile",
+  "agent",
+  "mcpGateway",
+  "llmProxy",
   "tool",
   "policy",
   "interaction",
@@ -38,7 +40,6 @@ export const resources = [
   "limit",
   "tokenPrice",
   "chatSettings",
-  "prompt",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -57,3 +58,26 @@ export const PermissionsSchema = z.partialRecord(
   z.enum(resources),
   z.array(z.enum(actions)),
 );
+
+/** Database-level agent type discriminator values */
+export type AgentType = "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+
+/**
+ * Maps an agent's `agentType` to the corresponding RBAC resource.
+ *
+ * - "agent" → "agent"
+ * - "mcp_gateway" → "mcpGateway"
+ * - "llm_proxy" → "llmProxy"
+ * - "profile" → "agent" (legacy profiles use the "agent" resource)
+ */
+export function getResourceForAgentType(agentType: AgentType): Resource {
+  switch (agentType) {
+    case "mcp_gateway":
+      return "mcpGateway";
+    case "llm_proxy":
+      return "llmProxy";
+    case "agent":
+    case "profile":
+      return "agent";
+  }
+}

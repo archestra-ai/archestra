@@ -19,6 +19,13 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
   };
 });
 
+// Mock ApiKeyModelModel for fast model DB lookup
+const mockGetFastestModel = vi.hoisted(() => vi.fn());
+vi.mock("@/models/api-key-model", () => ({
+  default: { getFastestModel: mockGetFastestModel },
+}));
+
+import { createDirectLLMModel } from "@/clients/llm-client";
 import {
   buildTitlePrompt,
   extractFirstMessages,
@@ -255,6 +262,77 @@ describe("generateConversationTitle", () => {
     });
 
     expect(result).toBe("Title With Whitespace");
+  });
+
+  it("uses fastest model from DB when chatApiKeyId is provided", async () => {
+    mockGetFastestModel.mockResolvedValueOnce({ modelId: "db-fast-model" });
+    mockGenerateText.mockResolvedValueOnce({ text: "DB Model Title" });
+
+    const result = await generateConversationTitle({
+      provider: "anthropic",
+      apiKey: "test-key",
+      chatApiKeyId: "api-key-123",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    expect(result).toBe("DB Model Title");
+    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-123");
+    expect(createDirectLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelName: "db-fast-model" }),
+    );
+  });
+
+  it("falls back to FAST_MODELS when no chatApiKeyId", async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: "Fallback Title" });
+
+    await generateConversationTitle({
+      provider: "anthropic",
+      apiKey: "test-key",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    expect(mockGetFastestModel).not.toHaveBeenCalled();
+    expect(createDirectLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelName: "claude-3-5-haiku-20241022" }),
+    );
+  });
+
+  it("falls back to FAST_MODELS when getFastestModel returns null", async () => {
+    mockGetFastestModel.mockResolvedValueOnce(null);
+    mockGenerateText.mockResolvedValueOnce({ text: "Null Fallback Title" });
+
+    await generateConversationTitle({
+      provider: "openai",
+      apiKey: "test-key",
+      chatApiKeyId: "api-key-456",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-456");
+    expect(createDirectLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelName: "gpt-4o-mini" }),
+    );
+  });
+
+  it("falls back to FAST_MODELS when getFastestModel throws", async () => {
+    mockGetFastestModel.mockRejectedValueOnce(new Error("DB Error"));
+    mockGenerateText.mockResolvedValueOnce({ text: "Error Fallback Title" });
+
+    await generateConversationTitle({
+      provider: "gemini",
+      apiKey: "test-key",
+      chatApiKeyId: "api-key-789",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-789");
+    expect(createDirectLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelName: "gemini-2.0-flash-001" }),
+    );
   });
 });
 

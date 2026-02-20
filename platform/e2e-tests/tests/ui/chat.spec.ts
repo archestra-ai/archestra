@@ -1,9 +1,29 @@
 import { E2eTestId } from "@shared";
+import { WIREMOCK_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues.
 // Retries handle transient streaming/WireMock flakiness in CI.
 test.describe.configure({ mode: "serial", retries: 2 });
+
+// Warm up WireMock's SSE streaming pipeline before the first test.
+// The Anthropic test (first in sequence) flakes ~41% of runs because the first
+// streaming request through WireMock takes >90s in CI due to cold-start overhead.
+// This throwaway request primes the connection so the real test succeeds immediately.
+test.beforeAll(async () => {
+  try {
+    await fetch(`${WIREMOCK_BASE_URL}/anthropic/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        messages: [{ role: "user", content: "chat-ui-e2e-test warmup" }],
+      }),
+    });
+  } catch {
+    // Warm-up failure is non-fatal — the test will retry if needed
+  }
+});
 
 interface ChatProviderTestConfig {
   providerName: string;
@@ -84,6 +104,16 @@ const mistralConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// Perplexity - Uses OpenAI-compatible streaming format
+const perplexityConfig: ChatProviderTestConfig = {
+  providerName: "perplexity",
+  providerDisplayName: "Perplexity",
+  modelId: "sonar-pro",
+  modelDisplayName: "Sonar Pro",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 // Ollama - Uses OpenAI-compatible streaming format
 const ollamaConfig: ChatProviderTestConfig = {
   providerName: "ollama",
@@ -121,6 +151,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   cerebrasConfig,
   cohereConfig,
   mistralConfig,
+  perplexityConfig,
   ollamaConfig,
   vllmConfig,
   zhipuaiConfig,
@@ -200,8 +231,9 @@ for (const config of testConfigs) {
       // Wait for the response to appear
       // The mocked response should contain our expected text
       // Use generous timeout - streaming responses in CI can be slow
+      // (WireMock + streaming + CI resource contention can take >60s)
       await expect(page.getByText(config.expectedResponse)).toBeVisible({
-        timeout: 60_000,
+        timeout: 90_000,
       });
 
       // Verify the user's message also appears in the chat

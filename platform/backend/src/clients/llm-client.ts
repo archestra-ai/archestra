@@ -87,6 +87,7 @@ const envApiKeyGetters: Record<
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
 };
@@ -186,10 +187,11 @@ export function isApiKeyRequired(
 }
 
 /**
- * Fast models for each provider, used for title generation and other quick operations.
+ * Fast models for each provider, used as fallback for title generation and other quick operations.
  * These are optimized for speed and cost rather than capability.
  *
- * TODO: Replace this hardcoded map with fast model values from the models database table.
+ * Primary resolution uses ApiKeyModelModel.getFastestModel() from the database.
+ * This map serves as a fallback when no database result is available.
  */
 export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   anthropic: "claude-3-5-haiku-20241022",
@@ -202,6 +204,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   zhipuai: "glm-4-flash", // Zhipu's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
+  perplexity: "sonar", // Perplexity's fast model
 };
 
 /**
@@ -314,22 +317,44 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     return client(modelName);
   },
 
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
+      );
+    }
+    // Perplexity uses OpenAI-compatible API, so we use the OpenAI SDK
+    // This provides better compatibility than @ai-sdk/perplexity
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
+    });
+    return client.chat(modelName);
+  },
+
   vllm: ({ apiKey, modelName }) => {
     // vLLM uses OpenAI-compatible API
+    // Use client.chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses) which many
+    // OpenAI-compatible providers don't support
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY",
       baseURL: config.llm.vllm.baseUrl,
     });
-    return client(modelName);
+    return client.chat(modelName);
   },
 
   ollama: ({ apiKey, modelName }) => {
     // Ollama uses OpenAI-compatible API
+    // Use client.chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses) which Ollama doesn't
+    // fully support (especially streaming tool calls)
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY",
       baseURL: config.llm.ollama.baseUrl,
     });
-    return client(modelName);
+    return client.chat(modelName);
   },
 
   zhipuai: ({ apiKey, modelName }) => {
@@ -340,11 +365,13 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       );
     }
     // Zhipu AI uses OpenAI-compatible API
+    // Use client.chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses)
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
     });
-    return client(modelName);
+    return client.chat(modelName);
   },
 
   bedrock: ({ apiKey, modelName }) => {
@@ -510,6 +537,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         fetch: createTracedFetch(),
       });
       return client(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      // Perplexity uses OpenAI-compatible API, so we use the OpenAI SDK
+      // This provides better compatibility than @ai-sdk/perplexity
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
+        headers,
+      });
+      return client.chat(modelName);
     },
 
     vllm: ({ apiKey, agentId, modelName, headers }) => {

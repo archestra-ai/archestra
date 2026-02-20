@@ -439,7 +439,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         }
         actionButton={
           <PermissionButton
-            permissions={{ profile: ["create"] }}
+            permissions={{ agent: ["create"] }}
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
             disabled={cannotCreateDueToNoTeams}

@@ -1,22 +1,5 @@
 import type { Metadata } from "next";
-import {
-  DM_Sans,
-  Inter,
-  JetBrains_Mono,
-  Lato,
-  Libre_Baskerville,
-  Merriweather,
-  Montserrat,
-  Open_Sans,
-  Outfit,
-  Oxanium,
-  Plus_Jakarta_Sans,
-  Poppins,
-  Quicksand,
-  Roboto,
-  Source_Code_Pro,
-  Source_Sans_3,
-} from "next/font/google";
+import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
@@ -30,91 +13,127 @@ import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
 import { AuthProvider } from "./auth/auth-provider";
 
-// Load fonts for white-labeling
-const latoFont = Lato({
-  subsets: ["latin"],
-  weight: ["300", "400", "700", "900"],
+// Load fonts for white-labeling (self-hosted to avoid Google Fonts network
+// dependency during Docker builds — Turbopack cannot fetch them reliably)
+const latoFont = localFont({
+  src: [
+    { path: "../fonts/Lato-Light.woff2", weight: "300" },
+    { path: "../fonts/Lato-Regular.woff2", weight: "400" },
+    { path: "../fonts/Lato-Bold.woff2", weight: "700" },
+    { path: "../fonts/Lato-Black.woff2", weight: "900" },
+  ],
   variable: "--font-lato",
+  display: "swap",
 });
 
-const interFont = Inter({
-  subsets: ["latin"],
+const interFont = localFont({
+  src: "../fonts/Inter-Variable.woff2",
   variable: "--font-inter",
+  weight: "100 900",
+  display: "swap",
 });
 
-const openSansFont = Open_Sans({
-  subsets: ["latin"],
+const openSansFont = localFont({
+  src: "../fonts/OpenSans-Variable.woff2",
   variable: "--font-open-sans",
+  weight: "300 800",
+  display: "swap",
 });
 
-const robotoFont = Roboto({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "700", "900"],
+const robotoFont = localFont({
+  src: "../fonts/Roboto-Variable.woff2",
   variable: "--font-roboto",
+  weight: "100 900",
+  display: "swap",
 });
 
-const sourceSansFont = Source_Sans_3({
-  subsets: ["latin"],
+const sourceSansFont = localFont({
+  src: "../fonts/SourceSans3-Variable.woff2",
   variable: "--font-source-sans",
+  weight: "200 900",
+  display: "swap",
 });
 
-const jetbrainsMonoFont = JetBrains_Mono({
-  subsets: ["latin"],
+const jetbrainsMonoFont = localFont({
+  src: "../fonts/JetBrainsMono-Variable.woff2",
   variable: "--font-jetbrains-mono",
+  weight: "100 800",
+  display: "swap",
 });
 
-// Additional fonts for theme support
-const dmSansFont = DM_Sans({
-  subsets: ["latin"],
+const dmSansFont = localFont({
+  src: "../fonts/DMSans-Variable.woff2",
   variable: "--font-dm-sans",
+  weight: "100 1000",
+  display: "swap",
 });
 
-const poppinsFont = Poppins({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+const poppinsFont = localFont({
+  src: [
+    { path: "../fonts/Poppins-Light.woff2", weight: "300" },
+    { path: "../fonts/Poppins-Regular.woff2", weight: "400" },
+    { path: "../fonts/Poppins-Medium.woff2", weight: "500" },
+    { path: "../fonts/Poppins-SemiBold.woff2", weight: "600" },
+    { path: "../fonts/Poppins-Bold.woff2", weight: "700" },
+  ],
   variable: "--font-poppins",
+  display: "swap",
 });
 
-const oxaniumFont = Oxanium({
-  subsets: ["latin"],
+const oxaniumFont = localFont({
+  src: "../fonts/Oxanium-Variable.woff2",
   variable: "--font-oxanium",
+  weight: "200 800",
+  display: "swap",
 });
 
-const montserratFont = Montserrat({
-  subsets: ["latin"],
+const montserratFont = localFont({
+  src: "../fonts/Montserrat-Variable.woff2",
   variable: "--font-montserrat",
+  weight: "100 900",
+  display: "swap",
 });
 
-const sourceCodeProFont = Source_Code_Pro({
-  subsets: ["latin"],
+const sourceCodeProFont = localFont({
+  src: "../fonts/SourceCodePro-Variable.woff2",
   variable: "--font-source-code-pro",
+  weight: "200 900",
+  display: "swap",
 });
 
-const merriweatherFont = Merriweather({
-  subsets: ["latin"],
-  weight: ["300", "400", "700", "900"],
+const merriweatherFont = localFont({
+  src: "../fonts/Merriweather-Variable.woff2",
   variable: "--font-merriweather",
+  weight: "300 900",
+  display: "swap",
 });
 
-const quicksandFont = Quicksand({
-  subsets: ["latin"],
+const quicksandFont = localFont({
+  src: "../fonts/Quicksand-Variable.woff2",
   variable: "--font-quicksand",
+  weight: "300 700",
+  display: "swap",
 });
 
-const outfitFont = Outfit({
-  subsets: ["latin"],
+const outfitFont = localFont({
+  src: "../fonts/Outfit-Variable.woff2",
   variable: "--font-outfit",
+  weight: "100 900",
+  display: "swap",
 });
 
-const plusJakartaSansFont = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+const plusJakartaSansFont = localFont({
+  src: "../fonts/PlusJakartaSans-Variable.woff2",
   variable: "--font-plus-jakarta-sans",
+  weight: "200 800",
+  display: "swap",
 });
 
-const libreBaskervilleFont = Libre_Baskerville({
-  subsets: ["latin"],
-  weight: ["400", "700"],
+const libreBaskervilleFont = localFont({
+  src: "../fonts/LibreBaskerville-Variable.woff2",
   variable: "--font-libre-baskerville",
+  weight: "400 700",
+  display: "swap",
 });
 
 export const metadata: Metadata = {

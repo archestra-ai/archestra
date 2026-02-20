@@ -1,5 +1,4 @@
 import { expect, test as setup } from "@playwright/test";
-import { SecretsManagerType } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -22,17 +21,6 @@ setup("authenticate as admin", async ({ page }) => {
   await page.request.patch(`${UI_BASE_URL}/api/organization`, {
     data: { onboardingComplete: true, globalToolPolicy: "restrictive" },
   });
-
-  // Initialize secrets manager to DB mode for all shards
-  // This is required because sharded test runs are independent, and most tests rely on DB mode.
-  // The credentials-with-vault.ee.spec.ts test will override this to test Vault integration,
-  // then switch back to DB mode. Other shards that don't run that test will already be in DB mode.
-  await page.request.post(
-    `${UI_BASE_URL}/api/secrets/initialize-secrets-manager`,
-    {
-      data: { type: SecretsManagerType.DB },
-    },
-  );
 
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
   await page.reload({ waitUntil: "domcontentloaded" });

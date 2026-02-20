@@ -40,6 +40,33 @@ async function cleanupKeyByName(
   }
 }
 
+async function cleanupOrgWideKeyByProvider(
+  makeApiRequest: MakeApiRequest,
+  request: APIRequestContext,
+  provider: string,
+) {
+  const existingKeys = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/chat-api-keys",
+  });
+  const existingKeysData = (await existingKeys.json()) as {
+    id: string;
+    provider: string;
+    scope: string;
+  }[];
+  for (const key of existingKeysData) {
+    if (key.provider === provider && key.scope === "org_wide") {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat-api-keys/${key.id}`,
+        ignoreStatusCheck: true,
+      });
+    }
+  }
+}
+
 test.describe("Chat API Keys CRUD", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -98,6 +125,8 @@ test.describe("Chat API Keys CRUD", () => {
   }) => {
     // Clean up any leftover key from previous runs to avoid unique constraint violations
     await cleanupKeyByName(makeApiRequest, request, "Org Wide Test Key");
+    // Also clean up any existing org_wide bedrock key (e.g. from seed data or prior failed run)
+    await cleanupOrgWideKeyByProvider(makeApiRequest, request, "bedrock");
 
     // Use bedrock provider - the only one without env var in CI (all others are seeded)
     const response = await makeApiRequest({

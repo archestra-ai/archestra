@@ -218,15 +218,7 @@ async function makeInternalAgent(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<
-      Tool,
-      | "name"
-      | "description"
-      | "parameters"
-      | "catalogId"
-      | "mcpServerId"
-      | "agentId"
-    >
+    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
   > = {},
 ): Promise<Tool> {
   const toolData = {
@@ -318,7 +310,7 @@ async function makeCustomRole(
     role: roleName,
     name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
-    permission: { profile: ["read"] },
+    permission: { agent: ["read"] },
     ...overrides,
   };
 

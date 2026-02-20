@@ -1,6 +1,5 @@
 import { E2eTestId } from "@shared";
 import { Pencil, Plug, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -25,7 +24,8 @@ export function McpGatewayActions({
 }: McpGatewayActionsProps) {
   return (
     <ButtonGroup>
-      <Button
+      <PermissionButton
+        permissions={{ mcpGateway: ["update"] }}
         aria-label="Connect"
         variant="outline"
         size="icon-sm"
@@ -36,9 +36,9 @@ export function McpGatewayActions({
         }}
       >
         <Plug className="h-4 w-4" />
-      </Button>
+      </PermissionButton>
       <PermissionButton
-        permissions={{ profile: ["update"] }}
+        permissions={{ mcpGateway: ["update"] }}
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
@@ -51,7 +51,7 @@ export function McpGatewayActions({
         <Pencil className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
-        permissions={{ profile: ["delete"] }}
+        permissions={{ mcpGateway: ["delete"] }}
         aria-label="Delete"
         variant="outline"
         size="icon-sm"

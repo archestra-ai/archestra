@@ -133,7 +133,7 @@ describe("useHasPermissions", () => {
   it("should return true when user has all required permissions", async () => {
     const userPermissions: Permissions = {
       organization: ["read", "create", "update"],
-      profile: ["read", "create"],
+      agent: ["read", "create"],
     };
 
     vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
@@ -142,7 +142,7 @@ describe("useHasPermissions", () => {
 
     const permissionsToCheck: Permissions = {
       organization: ["read", "create"],
-      profile: ["read"],
+      agent: ["read"],
     };
 
     const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
@@ -159,7 +159,7 @@ describe("useHasPermissions", () => {
   it("should return false when user is missing required permissions", async () => {
     const userPermissions: Permissions = {
       organization: ["read"],
-      profile: ["read"],
+      agent: ["read"],
     };
 
     vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
@@ -191,7 +191,7 @@ describe("useHasPermissions", () => {
     } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
 
     const permissionsToCheck: Permissions = {
-      profile: ["read"], // User doesn't have profile resource at all
+      agent: ["read"], // User doesn't have agent resource at all
     };
 
     const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
@@ -285,7 +285,7 @@ describe("usePermissionMap", () => {
   it("should check multiple permission sets and return a map of results", async () => {
     const userPermissions: Permissions = {
       organization: ["read", "create"],
-      profile: ["read"],
+      agent: ["read"],
     };
 
     vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
@@ -296,8 +296,8 @@ describe("usePermissionMap", () => {
       canReadOrg: { organization: ["read"] },
       canCreateOrg: { organization: ["create"] },
       canDeleteOrg: { organization: ["delete"] }, // User doesn't have this
-      canReadProfile: { profile: ["read"] },
-      canCreateProfile: { profile: ["create"] }, // User doesn't have this
+      canReadAgent: { agent: ["read"] },
+      canCreateAgent: { agent: ["create"] }, // User doesn't have this
     };
 
     const { result } = renderHook(() => usePermissionMap(permissionMap), {
@@ -312,8 +312,8 @@ describe("usePermissionMap", () => {
       canReadOrg: true,
       canCreateOrg: true,
       canDeleteOrg: false,
-      canReadProfile: true,
-      canCreateProfile: false,
+      canReadAgent: true,
+      canCreateAgent: false,
     });
   });
 

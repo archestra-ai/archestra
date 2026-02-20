@@ -1753,7 +1753,7 @@ export default class K8sDeployment {
       .replace(/\./g, "-")
       .slice(0, maxBaseLength)
       .replace(/^[^a-z0-9]+/, "")
-      .replace(/[^a-z0-9-]+$/g, "");
+      .replace(/[^a-z0-9]+$/g, "");
 
     const normalizedBase = base.length > 0 ? base : "mcp-server";
     return `${normalizedBase}${K8sDeployment.HTTP_SERVICE_SUFFIX}`;

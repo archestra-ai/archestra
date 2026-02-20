@@ -103,6 +103,37 @@ describe("InteractionModel", () => {
       expect(request?.messages?.[0]?.content).toBe("Hello  world  test");
     });
 
+    test("throws FK violation when profileId does not exist", async () => {
+      await expect(
+        InteractionModel.create({
+          profileId: "00000000-0000-0000-0000-000000000000",
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          response: {
+            id: "test-response",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: "Hi",
+                  refusal: null,
+                },
+                finish_reason: "stop",
+                logprobs: null,
+              },
+            ],
+          },
+          type: "openai:chatCompletions",
+        }),
+      ).rejects.toThrow();
+    });
+
     test("handles data without null bytes unchanged", async () => {
       const interaction = await InteractionModel.create({
         profileId,

@@ -1,22 +1,29 @@
+import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
-import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
+import { expect, goToPage, test } from "../../fixtures";
+import { clickButton, expandTablePagination } from "../../utils";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
+
+/**
+ * Navigate to the LLM API Keys page and expand pagination to show all rows.
+ * This ensures all API key rows are visible for assertions and interactions,
+ * regardless of how many seeded keys exist.
+ */
+async function goToApiKeysPage(page: Page) {
+  await goToPage(page, "/settings/llm-api-keys");
+  await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
+}
 
 test.describe("Chat API Keys", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("Admin can CRUD API keys", async ({
-    page,
-    goToPage,
-    makeRandomString,
-  }) => {
+  test("Admin can CRUD API keys", async ({ page, makeRandomString }) => {
     const keyName = makeRandomString(8, "Test Key");
     const updatedName = makeRandomString(8, "Updated Test Key");
 
     // Navigate and wait for page to load
-    await goToPage(page, "/settings/llm-api-keys");
+    await goToApiKeysPage(page);
 
     // Click Add API Key button
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -79,7 +86,6 @@ test.describe("Chat API Keys", () => {
     test("One personal scope can be created for each user for each provider and other user cannot see them", async ({
       adminPage,
       editorPage,
-      goToPage,
       makeRandomString,
     }) => {
       const testKeyNames = [
@@ -88,7 +94,7 @@ test.describe("Chat API Keys", () => {
         "Test Key 3",
         "Test Key 4",
       ].map((name) => makeRandomString(8, name));
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
 
       // Admin create a personal scope for Anthropic
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -107,7 +113,7 @@ test.describe("Chat API Keys", () => {
       });
 
       // Editor cannot see Admin's personal api key in the list
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
       await expect(
         editorPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyNames[0]}`),
       ).not.toBeVisible();
@@ -123,7 +129,7 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // But Admin can still create personal scope for OpenAI
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByLabel(/Name/i).fill(testKeyNames[1]);
       await adminPage.getByRole("combobox", { name: "Provider" }).click();
@@ -142,7 +148,7 @@ test.describe("Chat API Keys", () => {
       });
 
       // Then editor create a personal scope for Anthropic
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await editorPage.getByLabel(/Name/i).fill(testKeyNames[2]);
       await editorPage
@@ -159,7 +165,7 @@ test.describe("Chat API Keys", () => {
       });
 
       // Admin cannot see Editor's personal scope in the list
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await expect(
         adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyNames[2]}`),
       ).not.toBeVisible();
@@ -175,7 +181,7 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // But he can create personal scope for OpenAI
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await editorPage.getByLabel(/Name/i).fill(testKeyNames[3]);
       await editorPage.getByRole("combobox", { name: "Provider" }).click();
@@ -207,11 +213,10 @@ test.describe("Chat API Keys", () => {
       adminPage,
       editorPage,
       memberPage,
-      goToPage,
       makeRandomString,
     }) => {
       const testKeyName = makeRandomString(8, "Test Key");
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
 
       // Editor create a team scope key for Engineering team
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -234,21 +239,21 @@ test.describe("Chat API Keys", () => {
       });
 
       // Editor and Admin can see it but Member cannot (he is not a member of the Engineering team)
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
       await expect(
         editorPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
       ).toBeVisible();
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await expect(
         adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
       ).toBeVisible();
-      await goToPage(memberPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(memberPage);
       await expect(
         memberPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
       ).not.toBeVisible();
 
       // Editor cannot create second team scope for Engineering team
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await editorPage.getByRole("combobox", { name: "Scope" }).click();
       await editorPage.getByRole("option", { name: "Team" }).click();
@@ -258,7 +263,7 @@ test.describe("Chat API Keys", () => {
       ).not.toBeVisible();
 
       // Cleanup: delete the created key
-      await goToPage(editorPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(editorPage);
       await editorPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
         .click();
@@ -269,10 +274,9 @@ test.describe("Chat API Keys", () => {
       adminPage,
       editorPage,
       memberPage,
-      goToPage,
       makeRandomString,
     }) => {
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Find any existing org-wide Anthropic key by looking at the Scope column
@@ -315,8 +319,7 @@ test.describe("Chat API Keys", () => {
 
       // Every user can see the org-wide key
       for (const p of [adminPage, editorPage, memberPage]) {
-        await goToPage(p, "/settings/llm-api-keys");
-        await p.waitForLoadState("domcontentloaded");
+        await goToApiKeysPage(p);
         await expect(
           p.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
         ).toBeVisible();
@@ -331,7 +334,7 @@ test.describe("Chat API Keys", () => {
 
       // Cleanup: only delete the key if we created it in this test
       if (needsCleanup) {
-        await goToPage(adminPage, "/settings/llm-api-keys");
+        await goToApiKeysPage(adminPage);
         await adminPage
           .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
           .click();

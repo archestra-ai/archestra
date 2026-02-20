@@ -73,8 +73,8 @@ export function McpConnectionInstructions({
   const { data: mcpServers = [] } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
-  const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ["admin"],
+  const { data: hasAdminPermission } = useHasPermissions({
+    mcpGateway: ["admin"],
   });
 
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -170,10 +170,10 @@ export function McpConnectionInstructions({
         return;
       }
 
-      if (tool.mcpServerId) {
-        const server = mcpServers.find((s) => s.id === tool.mcpServerId);
+      if (tool.catalogId) {
+        const server = mcpServers.find((s) => s.catalogId === tool.catalogId);
         if (server) {
-          const existing = groups.get(tool.mcpServerId);
+          const existing = groups.get(tool.catalogId);
           const toolData = {
             id: tool.id,
             name: parseFullToolName(tool.name).toolName || tool.name,
@@ -186,7 +186,7 @@ export function McpConnectionInstructions({
             const credentialSource =
               agentTool.credentialSourceMcpServerId ??
               agentTool.executionSourceMcpServerId;
-            groups.set(tool.mcpServerId, {
+            groups.set(tool.catalogId, {
               server,
               tools: [toolData],
               credentialSourceMcpServerId: credentialSource,
@@ -204,8 +204,10 @@ export function McpConnectionInstructions({
   const getToolsCountForProfile = useCallback(
     (profile: ProfileType) => {
       return profile.tools.reduce((acc: number, curr) => {
-        if (curr.mcpServerId) {
-          const server = mcpServers?.find((s) => s.id === curr.mcpServerId);
+        if (curr.catalogId) {
+          const server = mcpServers?.find(
+            (s) => s.catalogId === curr.catalogId,
+          );
           if (server) {
             acc++;
           }
@@ -258,7 +260,7 @@ export function McpConnectionInstructions({
         ? userToken
           ? `${userToken.tokenStart}***`
           : "ask-admin-for-access-token"
-        : hasProfileAdminPermission && selectedTeamToken
+        : hasAdminPermission && selectedTeamToken
           ? `${selectedTeamToken.tokenStart}***`
           : "ask-admin-for-access-token";
 
@@ -596,7 +598,7 @@ export function McpConnectionInstructions({
                   onClick={handleExposeToken}
                   disabled={
                     isLoadingToken ||
-                    (!isPersonalTokenSelected && !hasProfileAdminPermission)
+                    (!isPersonalTokenSelected && !hasAdminPermission)
                   }
                 >
                   {isLoadingToken ? (
@@ -621,7 +623,7 @@ export function McpConnectionInstructions({
                   size="sm"
                   className="gap-2 bg-transparent"
                   onClick={
-                    isPersonalTokenSelected || hasProfileAdminPermission
+                    isPersonalTokenSelected || hasAdminPermission
                       ? handleCopyConfig
                       : handleCopyConfigWithoutRealToken
                   }

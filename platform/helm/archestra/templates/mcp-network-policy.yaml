@@ -1,0 +1,80 @@
+{{- if .Values.archestra.orchestrator.kubernetes.networkPolicy.create }}
+---
+# NetworkPolicy to prevent MCP server pods from performing SSRF attacks.
+# Blocks egress traffic to private/internal IP ranges (IPv4 and IPv6) while
+# allowing DNS resolution and outbound connections to the public internet.
+#
+# This policy targets all pods with the label "app: mcp-server", which is applied
+# to all MCP server deployments by the Archestra orchestrator.
+#
+# See: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-mcp-server-ssrf-protection
+  namespace: {{ .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-network-policy
+spec:
+  # Target all MCP server pods (the orchestrator labels every MCP server pod with app=mcp-server)
+  podSelector:
+    matchLabels:
+      app: mcp-server
+  policyTypes:
+    - Egress
+  egress:
+    # Rule 1: Allow DNS resolution (required for any outbound connectivity).
+    # NOTE: This allows DNS to any destination, not just the cluster DNS service (kube-dns).
+    # Restricting to kube-dns would be more secure but adds fragility (custom DNS setups,
+    # CoreDNS label variations, etc.). DNS tunneling is a low-severity risk that can be
+    # mitigated at the DNS server level if needed.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Rule 2: Allow IPv4 traffic to the public internet, but block private/internal ranges.
+    # Kubernetes NetworkPolicy does not support "deny" rules, so we allow 0.0.0.0/0
+    # with exceptions for private/reserved ranges.
+    #
+    # Blocked IPv4 ranges:
+    #   10.0.0.0/8      - RFC 1918 private (cluster pods, services, nodes)
+    #   172.16.0.0/12   - RFC 1918 private
+    #   192.168.0.0/16  - RFC 1918 private
+    #   169.254.0.0/16  - Link-local / cloud metadata endpoints (AWS, GCP, Azure)
+    #   100.64.0.0/10   - Carrier-grade NAT (RFC 6598)
+    #   127.0.0.0/8     - Loopback
+    #   0.0.0.0/32      - Some HTTP libraries treat 0.0.0.0 as localhost
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 0.0.0.0/32
+              {{- range .Values.archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs }}
+              - {{ . }}
+              {{- end }}
+    # Rule 3: Block IPv6 private/internal ranges on dual-stack clusters.
+    #
+    # Blocked IPv6 ranges:
+    #   ::1/128         - IPv6 loopback
+    #   fc00::/7        - IPv6 unique local addresses (equivalent to RFC 1918)
+    #   fe80::/10       - IPv6 link-local
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fc00::/7
+              - fe80::/10
+    {{- with .Values.archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules }}
+    # Additional user-configured egress rules (e.g., to allow specific internal services)
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

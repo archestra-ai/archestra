@@ -1,4 +1,5 @@
 import {
+  PERPLEXITY_MODELS,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   type SupportedProvider,
@@ -276,6 +277,26 @@ async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
     displayName: model.id,
     provider: "mistral" as const,
     createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
+ * Fetch models from Perplexity API
+ *
+ * Note: Perplexity does NOT have a /models endpoint like OpenAI.
+ * Returns a hardcoded list of available models. Perplexity does not have a
+ * /models endpoint, so we return the known models directly. API key validation
+ * happens on first actual use rather than on model list refresh.
+ *
+ * @see https://docs.perplexity.ai/models/model-cards
+ */
+async function fetchPerplexityModels(_apiKey: string): Promise<ModelInfo[]> {
+  // Perplexity has no /models endpoint - validation happens on first actual use.
+  // Model list centralized in shared/model-constants.ts (PERPLEXITY_MODELS).
+  return PERPLEXITY_MODELS.map((m) => ({
+    id: m.id,
+    displayName: m.displayName,
+    provider: "perplexity" as const,
   }));
 }
 
@@ -734,6 +755,7 @@ async function getProviderApiKey({
     mistral: () => config.chat.mistral.apiKey || null,
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
+    perplexity: () => config.chat.perplexity?.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
@@ -753,6 +775,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
+  perplexity: fetchPerplexityModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
@@ -823,9 +846,14 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
-        provider,
-      )
+      [
+        "anthropic",
+        "cerebras",
+        "cohere",
+        "mistral",
+        "openai",
+        "perplexity",
+      ].includes(provider)
     ) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);

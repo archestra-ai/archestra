@@ -79,6 +79,7 @@ runs:
         platforms: ${{ inputs.platforms }}
         tags: ${{ inputs.tags }}
         outputs: ${{ inputs.outputs }}
+        network: host
         build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
         secrets: |
           turbo_team=${{ inputs.turbo-team }}

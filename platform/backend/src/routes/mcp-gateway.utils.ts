@@ -479,7 +479,7 @@ export async function validateTeamToken(
  * Validates that:
  * 1. The token is valid (exists and matches)
  * 2. The profile is accessible via this token:
- *    - User has profile:admin permission (can access all profiles), OR
+ *    - User has mcpGateway:admin permission (can access all gateways), OR
  *    - User is a member of at least one team that the profile is assigned to
  */
 export async function validateUserToken(
@@ -496,15 +496,15 @@ export async function validateUserToken(
     return null;
   }
 
-  // Check if user has profile admin permission (can access all profiles)
-  const isProfileAdmin = await userHasPermission(
+  // Check if user has MCP gateway admin permission (can access all gateways)
+  const isGatewayAdmin = await userHasPermission(
     token.userId,
     token.organizationId,
-    "profile",
+    "mcpGateway",
     "admin",
   );
 
-  if (isProfileAdmin) {
+  if (isGatewayAdmin) {
     return {
       tokenId: token.id,
       teamId: null, // User tokens aren't scoped to a single team
@@ -596,15 +596,15 @@ export async function validateOAuthToken(
 
     const organizationId = membership.organizationId;
 
-    // Check if user has profile admin permission (can access all profiles)
-    const isProfileAdmin = await userHasPermission(
+    // Check if user has MCP gateway admin permission (can access all gateways)
+    const isGatewayAdmin = await userHasPermission(
       userId,
       organizationId,
-      "profile",
+      "mcpGateway",
       "admin",
     );
 
-    if (isProfileAdmin) {
+    if (isGatewayAdmin) {
       return {
         tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
         teamId: null,
@@ -805,15 +805,15 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    // Check if user has profile admin permission (can access all profiles)
-    const isProfileAdmin = await userHasPermission(
+    // Check if user has MCP gateway admin permission (can access all gateways)
+    const isGatewayAdmin = await userHasPermission(
       user.id,
       agent.organizationId,
-      "profile",
+      "mcpGateway",
       "admin",
     );
 
-    if (isProfileAdmin) {
+    if (isGatewayAdmin) {
       return {
         tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
         teamId: null,

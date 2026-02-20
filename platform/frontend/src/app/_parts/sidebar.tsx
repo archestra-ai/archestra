@@ -14,9 +14,9 @@ import {
   MessageCircle,
   MessagesSquare,
   Network,
+  Route,
   Router,
   Settings,
-  Shield,
   Slack,
   Star,
   Wrench,
@@ -83,7 +83,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
     {
       title: "MCP Gateways",
       url: "/mcp-gateways",
-      icon: Shield,
+      icon: Route,
     },
     {
       title: "LLM Proxies",

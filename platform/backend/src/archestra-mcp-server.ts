@@ -203,15 +203,15 @@ export async function executeArchestraTool(
     // Check user has access if user token is being used
     const userId = tokenAuth?.userId;
     if (userId && organizationId) {
-      const isProfileAdmin = await userHasPermission(
+      const isAgentAdmin = await userHasPermission(
         userId,
         organizationId,
-        "profile",
+        "agent",
         "admin",
       );
 
       const userAccessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, isProfileAdmin);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
       if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
         return {
           content: [
@@ -1631,12 +1631,10 @@ export async function executeArchestraTool(
         };
       }
 
-      // For catalog-based servers (local installations), query tools by catalogId
-      // This ensures all installations of the same catalog show the same tools
-      // For legacy servers without catalogId, fall back to mcpServerId
+      // Query tools by catalogId — all MCP servers have a catalogId
       const tools = mcpServer.catalogId
         ? await ToolModel.findByCatalogId(mcpServer.catalogId)
-        : await ToolModel.findByMcpServerId(mcpServerId);
+        : [];
 
       return {
         content: [
@@ -2962,11 +2960,11 @@ export async function getAgentTools(context: {
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
   if (userId && !skipAccessCheck) {
-    // Check if user has profile admin permission directly (don't trust caller)
+    // Check if user has agent admin permission directly (don't trust caller)
     const isAgentAdmin = await userHasPermission(
       userId,
       organizationId,
-      "profile",
+      "agent",
       "admin",
     );
 

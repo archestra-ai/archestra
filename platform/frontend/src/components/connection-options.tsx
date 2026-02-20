@@ -7,8 +7,8 @@ import {
   Info,
   Lock,
   Network,
+  Route,
   Server,
-  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -146,7 +146,7 @@ export function ConnectionOptions({
           }
         >
           <div className="flex items-center gap-2">
-            <Shield
+            <Route
               className="h-4 w-4"
               style={
                 activeTab === "mcp" ? { color: "var(--chart-2)" } : undefined

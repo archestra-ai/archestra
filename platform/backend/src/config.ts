@@ -522,6 +522,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
     },
+    perplexity: {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_BASE_URL ||
+        "https://api.perplexity.ai",
+    },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
@@ -561,6 +566,9 @@ export default {
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
+    },
+    perplexity: {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
@@ -610,7 +618,7 @@ export default {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.45", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.46", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

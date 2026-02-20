@@ -226,9 +226,21 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                       value: "block_when_context_is_untrusted",
                       label: "Allow in trusted context",
                     },
+                    {
+                      value: "require_approval",
+                      label: "Require approval",
+                    },
                     { value: "block_always", label: "Block always" },
                   ].map(({ value, label }) => (
-                    <SelectItem key={label} value={value}>
+                    <SelectItem
+                      key={label}
+                      value={value}
+                      description={
+                        value === "require_approval"
+                          ? "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool is always allowed."
+                          : undefined
+                      }
+                    >
                       {label}
                     </SelectItem>
                   ))}

@@ -26,12 +26,15 @@ import {
   CHATOPS_MESSAGE_RETENTION,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
+import SlackProvider from "./slack-provider";
+import { errorMessage } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
  */
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
+  private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   getMSTeamsProvider(): MSTeamsProvider | null {
@@ -44,12 +47,24 @@ export class ChatOpsManager {
     return this.msTeamsProvider;
   }
 
+  getSlackProvider(): SlackProvider | null {
+    if (!this.slackProvider) {
+      this.slackProvider = new SlackProvider();
+      if (!this.slackProvider.isConfigured()) {
+        return null;
+      }
+    }
+    return this.slackProvider;
+  }
+
   getChatOpsProvider(
     providerType: ChatOpsProviderType,
   ): ChatOpsProvider | null {
     switch (providerType) {
       case "ms-teams":
         return this.getMSTeamsProvider();
+      case "slack":
+        return this.getSlackProvider();
     }
   }
 
@@ -187,6 +202,7 @@ export class ChatOpsManager {
 
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.getMSTeamsProvider() },
+      { name: "Slack", provider: this.getSlackProvider() },
     ];
 
     for (const { name, provider } of providers) {
@@ -203,6 +219,25 @@ export class ChatOpsManager {
       }
     }
 
+    // Eager channel discovery for providers that support it (fire-and-forget).
+    // Providers that can determine their workspace ID without an incoming message
+    // (e.g., Slack via auth.test) get channels discovered immediately on startup.
+    for (const { name, provider } of providers) {
+      const workspaceId = provider?.getWorkspaceId();
+      if (provider && workspaceId) {
+        this.discoverChannels({
+          provider,
+          context: null,
+          workspaceId,
+        }).catch((error) => {
+          logger.warn(
+            { error: errorMessage(error) },
+            `[ChatOps] Initial ${name} channel discovery failed`,
+          );
+        });
+      }
+    }
+
     this.startProcessedMessageCleanup();
   }
 
@@ -215,6 +250,10 @@ export class ChatOpsManager {
     if (this.msTeamsProvider) {
       await this.msTeamsProvider.cleanup();
       this.msTeamsProvider = null;
+    }
+    if (this.slackProvider) {
+      await this.slackProvider.cleanup();
+      this.slackProvider = null;
     }
     this.stopCleanupInterval();
   }
@@ -296,15 +335,12 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const {
-      agentToUse,
-      cleanedMessageText: _cleanedMessageText,
-      fallbackMessage,
-    } = await this.resolveInlineAgentMention({
-      messageText: message.text,
-      defaultAgent: agent,
-      provider,
-    });
+    const { agentToUse, cleanedMessageText, fallbackMessage } =
+      await this.resolveInlineAgentMention({
+        messageText: message.text,
+        defaultAgent: agent,
+        provider,
+      });
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -332,10 +368,11 @@ export class ChatOpsManager {
     // Build context from thread history
     const contextMessages = await this.fetchThreadHistory(message, provider);
 
-    // Build the full message with context
-    let fullMessage = message.text;
+    // Build the full message with context — use cleanedMessageText so
+    // the "AgentName >" prefix is stripped from what the LLM sees
+    let fullMessage = cleanedMessageText;
     if (contextMessages.length > 0) {
-      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${message.text}`;
+      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
     // Execute the A2A message using the agent
@@ -722,22 +759,6 @@ async function getDefaultOrganizationId(): Promise<string> {
     throw new Error("No organizations found");
   }
   return org.id;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  // Handle objects that may not convert to string properly
-  try {
-    return String(error);
-  } catch {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
 }
 
 /**

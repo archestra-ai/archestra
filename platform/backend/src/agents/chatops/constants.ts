@@ -35,7 +35,7 @@ export const CHATOPS_THREAD_HISTORY = {
 };
 
 /**
- * Team ID cache configuration for MS Teams
+ * Channel-to-team mapping cache configuration
  */
 export const CHATOPS_TEAM_CACHE = {
   /** Maximum number of channel-to-team mappings to cache */
@@ -62,4 +62,15 @@ export const CHATOPS_COMMANDS = {
   SELECT_AGENT: "/select-agent",
   STATUS: "/status",
   HELP: "/help",
+} as const;
+
+/**
+ * Native Slack slash commands.
+ * These are registered in the Slack app manifest and handled by a dedicated endpoint.
+ * All three share one backend endpoint — the `command` field distinguishes them.
+ */
+export const SLACK_SLASH_COMMANDS = {
+  SELECT_AGENT: "/archestra-select-agent",
+  STATUS: "/archestra-status",
+  HELP: "/archestra-help",
 } as const;

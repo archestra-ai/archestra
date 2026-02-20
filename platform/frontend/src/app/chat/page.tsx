@@ -122,17 +122,17 @@ export default function ChatPage() {
     internalMcpCatalog: ["create"],
   });
 
-  const { data: isProfileAdmin } = useHasPermissions({
+  const { data: isAgentAdmin } = useHasPermissions({
     agent: ["admin"],
   });
-  const { data: canCreateProfile } = useHasPermissions({
+  const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
   const { data: teams } = useTeams();
 
   // Non-admin users with no teams cannot create agents
   const cannotCreateDueToNoTeams =
-    !isProfileAdmin && (!teams || teams.length === 0);
+    !isAgentAdmin && (!teams || teams.length === 0);
 
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
@@ -1069,7 +1069,7 @@ export default function ChatPage() {
             <ButtonWithTooltip
               disabled
               disabledText={
-                canCreateProfile
+                canCreateAgent
                   ? "You need to be a member of at least one team to create agents"
                   : "You don't have permission to create agents"
               }

@@ -175,16 +175,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     initialData: initialData?.teams,
   });
 
-  const { data: isProfileAdmin } = useHasPermissions({
+  const { data: isAgentAdmin } = useHasPermissions({
     agent: ["admin"],
   });
-  const { data: canCreateProfile } = useHasPermissions({
+  const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
 
   // Non-admin users with no teams cannot create agents
   const cannotCreateDueToNoTeams =
-    !isProfileAdmin && (!teams || teams.length === 0);
+    !isAgentAdmin && (!teams || teams.length === 0);
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
@@ -444,7 +444,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             data-testid={E2eTestId.CreateAgentButton}
             disabled={cannotCreateDueToNoTeams}
             tooltip={
-              canCreateProfile && cannotCreateDueToNoTeams
+              canCreateAgent && cannotCreateDueToNoTeams
                 ? "You need to be a member of at least one team to create agents"
                 : undefined
             }

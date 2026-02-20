@@ -123,10 +123,16 @@ class InvitationModel {
           organizationId,
         );
         if (defaultTeam) {
-          await TeamModel.addMember(defaultTeam.id, user.id);
-          logger.info(
-            `👥 User ${user.email} auto-assigned to Default Team in organization ${organizationId}`,
+          const alreadyMember = await TeamModel.isUserInTeam(
+            defaultTeam.id,
+            user.id,
           );
+          if (!alreadyMember) {
+            await TeamModel.addMember(defaultTeam.id, user.id);
+            logger.info(
+              `👥 User ${user.email} auto-assigned to Default Team in organization ${organizationId}`,
+            );
+          }
         } else {
           logger.warn(
             { organizationId },

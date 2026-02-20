@@ -1,13 +1,7 @@
 "use client";
 
 import JSZip from "jszip";
-import {
-  Download,
-  ExternalLink,
-  Info,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react";
+import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -85,28 +79,26 @@ export function MsTeamsSetupDialog({
           />
         );
       }
-      if (index < slides.length - 1) {
+      if (step.component === "install-and-connect") {
         return (
-          <StepSlide
+          <StepInstallAndConnect
             key={step.title}
-            title={step.title}
             stepNumber={index + 1}
             video={step.video}
-            instructions={step.instructions}
+            appId={sharedAppId}
+            appSecret={sharedAppSecret}
+            tenantId={sharedTenantId}
+            creds={creds}
           />
         );
       }
-      // Last step
       return (
-        <StepConfigForm
+        <StepSlide
           key={step.title}
-          appId={sharedAppId}
-          appSecret={sharedAppSecret}
-          tenantId={sharedTenantId}
-          onAppIdChange={setSharedAppId}
-          onAppSecretChange={setSharedAppSecret}
-          onTenantIdChange={setSharedTenantId}
-          creds={creds}
+          title={step.title}
+          stepNumber={index + 1}
+          video={step.video}
+          instructions={step.instructions}
         />
       );
     });
@@ -222,23 +214,9 @@ function buildSteps() {
       component: "manifest" as const,
     },
     {
-      title: "Install in MS Teams",
+      title: "Install in MS Teams and connect Archestra",
+      component: "install-and-connect" as const,
       video: "/ms-teams/ms-teams-upload-app.mp4",
-      instructions: [
-        <>
-          In Teams, go to <strong>Apps</strong> →{" "}
-          <strong>Manage your apps</strong> → <strong>Upload an app</strong>
-        </>,
-        <>
-          Select your <strong>archestra-teams-app.zip</strong> file
-        </>,
-        <>
-          <strong>Add the app</strong> to a team or channel
-        </>,
-      ],
-    },
-    {
-      title: "Connect to Archestra",
     },
   ];
 }
@@ -403,143 +381,120 @@ function StepBotSettings({
   );
 }
 
-function StepConfigForm({
+function StepInstallAndConnect({
+  stepNumber,
+  video,
   appId,
   appSecret,
   tenantId,
-  onAppIdChange,
-  onAppSecretChange,
-  onTenantIdChange,
   creds,
 }: {
+  stepNumber: number;
+  video?: string;
   appId: string;
   appSecret: string;
   tenantId: string;
-  onAppIdChange: (v: string) => void;
-  onAppSecretChange: (v: string) => void;
-  onTenantIdChange: (v: string) => void;
   creds?: { appId?: string; appSecret?: string; tenantId?: string };
 }) {
+  const displayAppId = appId || creds?.appId || "";
+  const displayTenantId = tenantId || creds?.tenantId || "";
+  const hasSecret = Boolean(appSecret || creds?.appSecret);
+
   return (
     <div
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <StepCard stepNumber={6} title="Connect to Archestra">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Enter the credentials you copied from the Azure Bot resource.
-        </p>
+      <StepCard
+        stepNumber={stepNumber}
+        title="Install in MS Teams and connect Archestra"
+      >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               1
             </span>
-            <span className="pt-0.5 flex-1">
-              <strong>App ID</strong> — from the Azure Bot Configuration page
-              <Input
-                id="setup-app-id"
-                value={appId}
-                onChange={(e) => onAppIdChange(e.target.value)}
-                placeholder={
-                  creds?.appId ? `Current: ${creds.appId}` : "Azure Bot App ID"
-                }
-                className="mt-1.5"
-              />
+            <span className="pt-0.5">
+              In Teams, go to <strong>Apps</strong> →{" "}
+              <strong>Manage your apps</strong> → <strong>Upload an app</strong>
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               2
             </span>
-            <span className="pt-0.5 flex-1">
-              <strong>App Secret</strong> — the client secret you created
-              <Input
-                id="setup-app-secret"
-                type="password"
-                value={appSecret}
-                onChange={(e) => onAppSecretChange(e.target.value)}
-                placeholder={
-                  creds?.appSecret
-                    ? `Current: ${creds.appSecret}`
-                    : "Azure Bot App Secret"
-                }
-                className="mt-1.5"
-              />
+            <span className="pt-0.5">
+              Select your <strong>archestra-teams-app.zip</strong> file
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               3
             </span>
+            <span className="pt-0.5">
+              <strong>Add the app</strong> to a team or channel
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              4
+            </span>
             <span className="pt-0.5 flex-1">
-              <strong>Tenant ID</strong>{" "}
-              <span className="text-muted-foreground">(optional)</span> — only
-              needed for single-tenant bots
-              <Input
-                id="setup-tenant-id"
-                value={tenantId}
-                onChange={(e) => onTenantIdChange(e.target.value)}
-                placeholder={
-                  creds?.tenantId
-                    ? `Current: ${creds.tenantId}`
-                    : "Azure AD Tenant ID"
-                }
-                className="mt-1.5"
-              />
+              Click <strong>Connect</strong> in the bottom right corner
+              <div className="mt-2 space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono">
+                <div className="flex gap-1.5">
+                  <span className="text-muted-foreground shrink-0">
+                    App ID:
+                  </span>
+                  {displayAppId ? (
+                    <span className="break-all">{displayAppId}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">
+                  <span className="text-muted-foreground shrink-0">
+                    Tenant ID:
+                  </span>
+                  {displayTenantId ? (
+                    <span className="break-all">{displayTenantId}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">
+                  <span className="text-muted-foreground shrink-0">
+                    App Secret:
+                  </span>
+                  {hasSecret ? (
+                    <span>{"••••••••"}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </div>
+              </div>
             </span>
           </li>
         </ol>
       </StepCard>
 
-      <EnvVarsInfo appId={appId} appSecret={appSecret} tenantId={tenantId} />
-    </div>
-  );
-}
-
-function EnvVarsInfo({
-  appId,
-  appSecret,
-  tenantId,
-}: {
-  appId: string;
-  appSecret: string;
-  tenantId: string;
-}) {
-  const envVarsText = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<your-app-id>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret || "<your-app-secret>"}`,
-    tenantId
-      ? `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId}`
-      : "ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<your-tenant-id>",
-  ].join("\n");
-
-  const maskedDisplay = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<your-app-id>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret ? "********" : "<your-app-secret>"}`,
-    tenantId
-      ? `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId}`
-      : "ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<your-tenant-id>",
-  ].join("\n");
-
-  return (
-    <div className="flex items-start gap-2.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 text-sm text-muted-foreground">
-      <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
-      <div className="min-w-0 flex-1">
-        <p>
-          Values are saved to the database and persist across restarts. You can
-          also set these environment variables for initial provisioning:
-        </p>
-        <div className="relative mt-2">
-          <pre className="bg-muted rounded-md px-3 py-2 text-xs font-mono leading-relaxed overflow-x-auto">
-            {maskedDisplay}
-          </pre>
-          <div className="absolute top-1 right-1">
-            <CopyButton text={envVarsText} />
-          </div>
-        </div>
-      </div>
+      {video && (
+        <video
+          src={video}
+          controls
+          muted
+          autoPlay
+          loop
+          playsInline
+          className="rounded-md w-full"
+        />
+      )}
     </div>
   );
 }

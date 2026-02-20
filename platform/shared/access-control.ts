@@ -78,7 +78,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpGateway: ["read"],
   llmProxy: ["read"],
   tool: ["create", "read", "update", "delete"],
-  policy: ["create", "read", "update", "delete"],
+  policy: ["read"],
   interaction: ["create", "read", "update", "delete"],
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
@@ -674,8 +674,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     mcpToolCall: ["read"],
   },
 
-  "/tools": {
-    tool: ["read"],
+  "/tool-policies": {
+    policy: ["read"],
   },
 
   "/mcp-catalog": {

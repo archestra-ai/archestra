@@ -99,7 +99,10 @@ export default function SecuritySettingsPage() {
                 <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
                   <ShieldCheck className="h-4 w-4" />
                   Policies apply to agents' tools.
-                  <Link href="/tools" className="text-primary hover:underline">
+                  <Link
+                    href="/tool-policies"
+                    className="text-primary hover:underline"
+                  >
                     Click here to configure policies
                   </Link>
                 </span>
@@ -205,7 +208,10 @@ export default function SecuritySettingsPage() {
               <Label>Manual trigger</Label>
               <p className="text-sm text-muted-foreground">
                 Select tools on the{" "}
-                <Link href="/tools" className="text-primary hover:underline">
+                <Link
+                  href="/tool-policies"
+                  className="text-primary hover:underline"
+                >
                   Tools page
                 </Link>{" "}
                 and click "Configure with Subagent"

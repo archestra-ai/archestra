@@ -9,6 +9,7 @@ import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/cost/optimization-rules/_parts/condition";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -456,12 +457,19 @@ export function Rule({
 
   return (
     <div className={cn(className, "flex flex-row gap-2 items-center text-sm")}>
-      <Switch
-        checked={enabled}
-        onCheckedChange={onToggle}
-        disabled={switchDisabled}
-        className="mr-4"
-      />
+      <WithPermissions
+        permissions={{ limit: ["update"] }}
+        noPermissionHandle="tooltip"
+      >
+        {({ hasPermission }) => (
+          <Switch
+            checked={enabled}
+            onCheckedChange={onToggle}
+            disabled={switchDisabled || !hasPermission}
+            className="mr-4"
+          />
+        )}
+      </WithPermissions>
       In{" "}
       <EntitySelect
         entityType={formData.entityType}

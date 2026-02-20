@@ -98,9 +98,10 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
     },
     {
       title: "Tool Policies",
-      url: "/tools",
+      url: "/tool-policies",
       icon: Wrench,
-      customIsActive: (pathname: string) => pathname.startsWith("/tools"),
+      customIsActive: (pathname: string) =>
+        pathname.startsWith("/tool-policies"),
     },
     {
       title: "MCP Registry",

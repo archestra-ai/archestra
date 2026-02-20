@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { PolicyCondition } from "@/app/tools/_parts/tool-call-policy-condition";
+import type { PolicyCondition } from "@/app/tool-policies/_parts/tool-call-policy-condition";
 
 const {
   bulkUpsertDefaultCallPolicy,

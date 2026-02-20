@@ -5,8 +5,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
-import { permissionsToStrings } from "@/lib/auth.utils";
+import { useHasPermissions, useMissingPermissions } from "@/lib/auth.query";
+import { formatMissingPermissions } from "@/lib/auth.utils";
 
 type WithPermissionsProps = {
   permissions: Permissions;
@@ -31,6 +31,7 @@ export function WithPermissions({
   noPermissionHandle,
 }: WithPermissionsProps) {
   const { data: hasPermission, isPending } = useHasPermissions(permissions);
+  const missingPermissions = useMissingPermissions(permissions);
 
   // if has permission, return children as is
   if (hasPermission) {
@@ -46,7 +47,6 @@ export function WithPermissions({
 
   // if no permission and noPermissionHandle is 'tooltip', return a tooltip with the permission error
   if (noPermissionHandle === "tooltip") {
-    const permissionError = `Missing permissions: ${permissionsToStrings(permissions).join(", ")}`;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -54,7 +54,9 @@ export function WithPermissions({
             {children({ hasPermission: isPending ? undefined : false })}
           </span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>
+        <TooltipContent className="max-w-60">
+          {formatMissingPermissions(missingPermissions)}
+        </TooltipContent>
       </Tooltip>
     );
   }

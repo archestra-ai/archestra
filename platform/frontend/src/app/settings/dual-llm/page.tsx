@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CodeText } from "@/components/code-text";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -396,15 +397,23 @@ function DualLLMContent({
               Maximum number of Q&A rounds between main and quarantined agents.
             </p>
             <div className="flex items-center gap-3">
-              <Input
-                id="max-rounds"
-                type="number"
-                value={maxRounds}
-                onChange={(e) =>
-                  setMaxRounds(Number.parseInt(e.target.value, 10))
-                }
-                className="w-32"
-              />
+              <WithPermissions
+                permissions={{ dualLlmConfig: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <Input
+                    id="max-rounds"
+                    type="number"
+                    value={maxRounds}
+                    onChange={(e) =>
+                      setMaxRounds(Number.parseInt(e.target.value, 10))
+                    }
+                    className="w-32"
+                    disabled={!hasPermission}
+                  />
+                )}
+              </WithPermissions>
               {maxRounds !== config?.maxRounds && (
                 <PermissionButton
                   permissions={{ dualLlmConfig: ["update"] }}

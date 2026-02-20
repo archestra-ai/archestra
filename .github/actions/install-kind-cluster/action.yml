@@ -39,23 +39,47 @@ runs:
         kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/tigera-operator.yaml
         kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/custom-resources.yaml
 
-        echo "Waiting for Calico pods to be ready..."
         # Wait for calico-system namespace to be created by the operator
+        echo "Waiting for calico-system namespace..."
         for i in $(seq 1 30); do
           if kubectl get namespace calico-system > /dev/null 2>&1; then
             echo "calico-system namespace exists"
             break
           fi
+          if [ "$i" -eq 30 ]; then
+            echo "ERROR: calico-system namespace was not created within 60s"
+            exit 1
+          fi
           echo "Waiting for calico-system namespace... ($i/30)"
           sleep 2
         done
 
-        # Wait for Calico pods to be ready (timeout 120s)
-        kubectl wait --for=condition=Ready pods --all -n calico-system --timeout=120s || {
-          echo "Warning: Some Calico pods not ready, checking status..."
-          kubectl get pods -n calico-system
-          kubectl get pods -n tigera-operator
-        }
+        # Wait for Calico pods to appear before checking readiness.
+        # kubectl wait fails immediately with "no matching resources found" if no pods exist yet.
+        echo "Waiting for Calico pods to appear..."
+        for i in $(seq 1 30); do
+          POD_COUNT=$(kubectl get pods -n calico-system --no-headers 2>/dev/null | wc -l)
+          if [ "$POD_COUNT" -gt 0 ]; then
+            echo "Found $POD_COUNT Calico pod(s)"
+            break
+          fi
+          if [ "$i" -eq 30 ]; then
+            echo "ERROR: No Calico pods appeared in calico-system within 60s"
+            kubectl get pods -n calico-system 2>/dev/null || true
+            kubectl get pods -n tigera-operator 2>/dev/null || true
+            exit 1
+          fi
+          echo "Waiting for Calico pods to appear... ($i/30)"
+          sleep 2
+        done
 
+        # Wait for all Calico pods to be ready
+        echo "Waiting for Calico pods to be ready..."
+        kubectl wait --for=condition=Ready pods --all -n calico-system --timeout=120s
         echo "Calico CNI installed successfully"
         kubectl get pods -n calico-system
+
+        # With disableDefaultCNI, the node stays NotReady until Calico is running.
+        # Wait for node readiness before proceeding to helm deploys.
+        echo "Waiting for node to be ready..."
+        kubectl wait --for=condition=Ready nodes --all --timeout=120s

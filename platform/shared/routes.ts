@@ -305,6 +305,7 @@ export const RouteId = {
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Invitation Routes

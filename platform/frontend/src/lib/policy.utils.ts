@@ -49,7 +49,8 @@ export function getCallPolicyActionFromPolicies(
     if (
       action === "allow_when_context_is_untrusted" ||
       action === "block_when_context_is_untrusted" ||
-      action === "block_always"
+      action === "block_always" ||
+      action === "require_approval"
     ) {
       return action;
     }

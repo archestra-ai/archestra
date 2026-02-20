@@ -259,6 +259,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userPromptParts.push(conversation.agent.userPrompt);
       }
 
+      // Add instruction about tool approval denials
+      systemPromptParts.push(
+        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.",
+      );
+
       // Combine all prompts into system prompt (system prompts first, then user prompts)
       if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
         const allParts = [...systemPromptParts, ...userPromptParts];

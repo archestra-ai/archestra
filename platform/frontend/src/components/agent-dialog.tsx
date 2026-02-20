@@ -1037,7 +1037,7 @@ export function AgentDialog({
                             Users can interact with this agent in{" "}
                             {provider.displayName}, configure channels in{" "}
                             <Link
-                              href="/agent-triggers"
+                              href={`/agent-triggers/${provider.id}`}
                               className="underline hover:text-foreground"
                             >
                               Agent Triggers
@@ -1215,7 +1215,7 @@ export function AgentDialog({
                           Users can interact with this agent via email, first
                           run initial set up in{" "}
                           <Link
-                            href="/agent-triggers"
+                            href="/agent-triggers/email"
                             className="underline hover:text-foreground"
                           >
                             Agent Triggers

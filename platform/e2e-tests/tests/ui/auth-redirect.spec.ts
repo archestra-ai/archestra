@@ -56,6 +56,37 @@ test.describe(
       }
     });
 
+    test("redirectTo parameter preserves OAuth consent URL with protocol in query params", async ({
+      browser,
+    }) => {
+      // This tests the specific bug where signing in with a redirectTo pointing to
+      // the OAuth consent page (which contains redirect_uri=cursor://...) would fail
+      // because the redirect validation rejected :// in query parameter values
+      const context = await browser.newContext({ storageState: undefined });
+      const page = await context.newPage();
+
+      try {
+        // Simulate the OAuth flow: consent URL with a custom protocol redirect_uri
+        const consentPath =
+          "/oauth/consent?response_type=code&client_id=testClient&redirect_uri=cursor%3A%2F%2Fapp%2Fcallback&scope=mcp&code_challenge=abc&code_challenge_method=S256";
+        const encodedRedirect = encodeURIComponent(consentPath);
+        await page.goto(
+          `${UI_BASE_URL}/auth/sign-in?redirectTo=${encodedRedirect}`,
+        );
+
+        // Sign in via UI form
+        await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+
+        // After sign-in, should be redirected to the OAuth consent page, NOT /chat
+        await page.waitForURL(/\/oauth\/consent/, { timeout: 15000 });
+        expect(page.url()).toContain("/oauth/consent");
+        expect(page.url()).toContain("response_type=code");
+        expect(page.url()).toContain("client_id=testClient");
+      } finally {
+        await context.close();
+      }
+    });
+
     test("redirectTo parameter is validated (rejects malicious URLs)", async ({
       browser,
     }) => {

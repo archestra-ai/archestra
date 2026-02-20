@@ -78,12 +78,12 @@ runs:
         echo "Waiting for Calico pods to be ready..."
         kubectl wait --for=condition=Ready pods --all -n calico-system --timeout=120s
 
+        echo "Calico CNI installed successfully"
+        kubectl get pods -n calico-system
+
         # Wait for the node to become Ready. With disableDefaultCNI, the node stays
         # NotReady until Calico is running. Without a Ready node, no application pods
         # can be scheduled (they stay Pending indefinitely).
         echo "Waiting for node to become Ready..."
         kubectl wait --for=condition=Ready nodes --all --timeout=120s
         echo "Node is Ready"
-
-        echo "Calico CNI installed successfully"
-        kubectl get pods -n calico-system

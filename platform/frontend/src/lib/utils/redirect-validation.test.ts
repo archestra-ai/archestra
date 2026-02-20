@@ -131,7 +131,7 @@ describe("redirect-validation", () => {
       ).toBe("/");
     });
 
-    it("should reject paths containing backslashes", () => {
+    it("should reject paths with backslashes in the path portion", () => {
       // Some browsers normalize backslashes to forward slashes
       // /\evil.com could become //evil.com (protocol-relative URL)
       expect(getValidatedRedirectPath(encodeURIComponent("/\\evil.com"))).toBe(
@@ -145,12 +145,53 @@ describe("redirect-validation", () => {
       ).toBe("/");
     });
 
-    it("should reject paths containing ://", () => {
+    it("should allow backslashes in query parameter values", () => {
+      // Backslashes in query params are just data, not part of the path
+      expect(
+        getValidatedRedirectPath(
+          encodeURIComponent("/page?path=C:\\Users\\file"),
+        ),
+      ).toBe("/page?path=C:\\Users\\file");
+    });
+
+    it("should reject paths with :// in the path portion", () => {
+      expect(
+        getValidatedRedirectPath(encodeURIComponent("https://evil.com/path")),
+      ).toBe("/");
+      expect(
+        getValidatedRedirectPath(encodeURIComponent("/https://evil.com")),
+      ).toBe("/");
+    });
+
+    it("should allow paths with :// in query parameter values", () => {
+      // Protocol URLs in query params are just data, not redirect targets.
+      // This is critical for OAuth flows where redirect_uri contains protocol URLs
+      // (e.g., cursor://anysphere.cursor-mcp/oauth/callback)
       expect(
         getValidatedRedirectPath(
           encodeURIComponent("/redirect?url=https://evil.com"),
         ),
-      ).toBe("/");
+      ).toBe("/redirect?url=https://evil.com");
+      expect(
+        getValidatedRedirectPath(
+          encodeURIComponent(
+            "/oauth/consent?redirect_uri=cursor://app/callback&scope=mcp",
+          ),
+        ),
+      ).toBe("/oauth/consent?redirect_uri=cursor://app/callback&scope=mcp");
+    });
+
+    it("should handle OAuth consent redirect with complex query params", () => {
+      // Simulates the real OAuth flow: sign-in redirectTo contains the full
+      // consent URL with encoded redirect_uri containing a custom protocol
+      const consentUrl =
+        "/oauth/consent?response_type=code&client_id=abc&redirect_uri=cursor%3A%2F%2Fapp%2Fcallback&scope=mcp&code_challenge=xyz&code_challenge_method=S256";
+      // After searchParams.get() decodes once, we pass the decoded value.
+      // getValidatedRedirectPath decodes again, revealing cursor:// in query params.
+      // This should still be accepted since :// is only in query params, not the path.
+      expect(getValidatedRedirectPath(encodeURIComponent(consentUrl))).toBe(
+        consentUrl,
+      );
     });
 
     it("should reject paths not starting with /", () => {

@@ -65,6 +65,24 @@ export const PERPLEXITY_MODELS = [
 ] as const;
 
 /**
+ * Default provider base URLs.
+ * Used as placeholder hints in the UI and as fallback values when no per-key base URL is configured.
+ */
+export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com",
+  gemini: "https://generativelanguage.googleapis.com",
+  bedrock: "",
+  cohere: "https://api.cohere.ai",
+  cerebras: "https://api.cerebras.ai/v1",
+  mistral: "https://api.mistral.ai/v1",
+  perplexity: "https://api.perplexity.ai",
+  vllm: "",
+  ollama: "http://localhost:11434/v1",
+  zhipuai: "https://api.z.ai/api/paas/v4",
+};
+
+/**
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
  * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.

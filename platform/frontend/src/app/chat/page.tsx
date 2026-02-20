@@ -271,15 +271,12 @@ export default function ChatPage() {
   // Check if API key is configured for any provider
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
-  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { isLoading: isLoadingFeatures } = useFeatures();
   const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModels();
-  // Vertex AI Gemini mode doesn't require an API key (uses ADC)
-  // vLLM/Ollama may not require an API key either
-  const hasAnyApiKey =
-    chatApiKeys.some((k) => k.secretId) ||
-    features?.geminiVertexAiEnabled ||
-    features?.vllmEnabled;
+  // Check if user has any API keys (including system keys for keyless providers
+  // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
+  const hasAnyApiKey = chatApiKeys.length > 0;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL and reset initial state when navigating to base /chat

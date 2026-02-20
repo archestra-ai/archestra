@@ -19,6 +19,9 @@ const {
   updateChatApiKey,
   deleteChatApiKey,
   syncChatModels,
+  getVirtualApiKeys,
+  createVirtualApiKey,
+  deleteVirtualApiKey,
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
@@ -132,6 +135,81 @@ export function useDeleteChatApiKey() {
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+    },
+  });
+}
+
+export function useVirtualApiKeys(chatApiKeyId: string | null) {
+  return useQuery({
+    queryKey: ["virtual-api-keys", chatApiKeyId],
+    queryFn: async () => {
+      if (!chatApiKeyId) return [];
+      const { data, error } = await getVirtualApiKeys({
+        path: { chatApiKeyId },
+      });
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled: !!chatApiKeyId,
+  });
+}
+
+export function useCreateVirtualApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      chatApiKeyId,
+      data,
+    }: {
+      chatApiKeyId: string;
+      data: archestraApiTypes.CreateVirtualApiKeyData["body"];
+    }) => {
+      const { data: responseData, error } = await createVirtualApiKey({
+        path: { chatApiKeyId },
+        body: data,
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return responseData;
+    },
+    onSuccess: (_data, { chatApiKeyId }) => {
+      toast.success("Virtual API key created");
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys", chatApiKeyId],
+      });
+    },
+  });
+}
+
+export function useDeleteVirtualApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      chatApiKeyId,
+      id,
+    }: {
+      chatApiKeyId: string;
+      id: string;
+    }) => {
+      const { data: responseData, error } = await deleteVirtualApiKey({
+        path: { chatApiKeyId, id },
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return responseData;
+    },
+    onSuccess: (_data, { chatApiKeyId }) => {
+      toast.success("Virtual API key deleted");
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys", chatApiKeyId],
+      });
     },
   });
 }

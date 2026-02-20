@@ -21,9 +21,11 @@ import {
   LimitValidationService,
   TokenPriceModel,
   UserModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
+import { secretManager } from "@/secrets-manager";
 import {
   type Agent,
   ApiError,
@@ -180,8 +182,78 @@ export async function handleLLMProxy<
     }
   }
 
-  // Extract API key
-  const apiKey = provider.extractApiKey(headers);
+  // Extract API key and resolve virtual keys
+  let apiKey = provider.extractApiKey(headers);
+  let perKeyBaseUrl: string | undefined;
+
+  // Detect virtual API key (archestra_ prefixed)
+  if (apiKey?.startsWith("archestra_")) {
+    const resolved = await VirtualApiKeyModel.validateToken(apiKey);
+    if (!resolved) {
+      return reply.status(401).send({
+        error: {
+          message: "Invalid virtual API key",
+          type: "authentication_error",
+        },
+      });
+    }
+    if (
+      resolved.virtualKey.expiresAt &&
+      resolved.virtualKey.expiresAt < new Date()
+    ) {
+      return reply.status(401).send({
+        error: {
+          message: "Virtual API key expired",
+          type: "authentication_error",
+        },
+      });
+    }
+    // Validate provider matches
+    if (resolved.chatApiKey.provider !== providerName) {
+      return reply.status(400).send({
+        error: {
+          message: `Virtual API key is for provider "${resolved.chatApiKey.provider}", but request is for "${providerName}"`,
+          type: "invalid_request_error",
+        },
+      });
+    }
+    // Resolve the real provider API key from the secret
+    if (resolved.chatApiKey.secretId) {
+      const secret = await secretManager().getSecret(
+        resolved.chatApiKey.secretId,
+      );
+      const secretValue =
+        secret?.secret?.apiKey ??
+        secret?.secret?.anthropicApiKey ??
+        secret?.secret?.geminiApiKey ??
+        secret?.secret?.openaiApiKey;
+      if (secretValue) {
+        apiKey = secretValue as string;
+      }
+    }
+    perKeyBaseUrl = resolved.chatApiKey.baseUrl ?? undefined;
+  }
+
+  // For keyless providers (e.g. Gemini with Vertex AI, Ollama, vLLM), require that
+  // the request was authenticated via a virtual API key. Without this check, anyone
+  // who knows the proxy URL can call the endpoint without any credentials.
+  if (!apiKey && !perKeyBaseUrl) {
+    // Check if this is an internal request (from chat route via localhost) by looking
+    // for the internal provider base URL header — only the chat route sets this.
+    const isInternalRequest =
+      headersForExtraction["x-archestra-provider-base-url"] !== undefined ||
+      headersForExtraction.traceparent !== undefined;
+
+    if (!isInternalRequest) {
+      return reply.status(401).send({
+        error: {
+          message:
+            "Authentication required. Use a virtual API key (archestra_...) or pass a provider API key.",
+          type: "authentication_error",
+        },
+      });
+    }
+  }
 
   // Check usage limits
   try {
@@ -409,9 +481,18 @@ export async function handleLLMProxy<
       headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
     }
 
+    // Read per-key base URL override from header (set by chat route when API key has custom base URL)
+    // or from the virtual key's associated chat API key
+    const providerBaseUrlHeader =
+      typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
+        ? headersForExtraction["x-archestra-provider-base-url"]
+        : undefined;
+    const effectiveBaseUrl =
+      perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
+
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
-      baseUrl: provider.getBaseUrl(),
+      baseUrl: effectiveBaseUrl,
       mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,

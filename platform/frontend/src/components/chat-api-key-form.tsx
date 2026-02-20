@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type archestraApiTypes,
+  DEFAULT_PROVIDER_BASE_URLS,
+  E2eTestId,
+} from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -16,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useProviderBaseUrls } from "@/lib/config.query";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
 import { WithPermissions } from "./roles/with-permissions";
@@ -38,6 +43,7 @@ export type ChatApiKeyFormValues = {
   name: string;
   provider: CreateChatApiKeyBody["provider"];
   apiKey: string | null;
+  baseUrl: string | null;
   scope: NonNullable<CreateChatApiKeyBody["scope"]>;
   teamId: string | null;
   vaultSecretPath: string | null;
@@ -206,6 +212,7 @@ export function ChatApiKeyForm({
   geminiVertexAiEnabled = false,
 }: ChatApiKeyFormProps) {
   const byosEnabled = useFeatureFlag("byosEnabled");
+  const { data: providerBaseUrls } = useProviderBaseUrls();
   const isEditMode = Boolean(existingKey);
 
   // Data fetching for team selector
@@ -541,6 +548,31 @@ export function ChatApiKeyForm({
             )}
           </div>
         )}
+
+        {/* Base URL input */}
+        <div className="space-y-2">
+          <Label htmlFor="chat-api-key-base-url">
+            Base URL{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </Label>
+          <Input
+            id="chat-api-key-base-url"
+            type="url"
+            placeholder={
+              providerBaseUrls?.[provider] ||
+              DEFAULT_PROVIDER_BASE_URLS[provider] ||
+              "https://..."
+            }
+            disabled={isPending}
+            {...form.register("baseUrl")}
+          />
+          <p className="text-xs text-muted-foreground">
+            Override the default API endpoint. Useful for self-hosted or proxy
+            setups.
+          </p>
+        </div>
       </div>
     </div>
   );

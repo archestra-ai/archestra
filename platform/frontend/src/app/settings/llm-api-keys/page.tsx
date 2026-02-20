@@ -12,7 +12,9 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  Copy,
   ExternalLink,
+  Key,
   Loader2,
   Pencil,
   Plus,
@@ -27,6 +29,7 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import {
   ChatApiKeyForm,
   type ChatApiKeyFormValues,
@@ -48,7 +51,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { Separator } from "@/components/ui/separator";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
@@ -57,9 +62,12 @@ import {
   type ChatApiKeyScope,
   useChatApiKeys,
   useCreateChatApiKey,
+  useCreateVirtualApiKey,
   useDeleteChatApiKey,
+  useDeleteVirtualApiKey,
   useSyncChatModels,
   useUpdateChatApiKey,
+  useVirtualApiKeys,
 } from "@/lib/chat-settings.query";
 import { useFeatureFlag } from "@/lib/features.hook";
 
@@ -87,6 +95,7 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
   provider: "anthropic",
   apiKey: null,
+  baseUrl: null,
   scope: "personal",
   teamId: null,
   vaultSecretPath: null,
@@ -132,6 +141,7 @@ function ChatSettingsContent() {
         name: selectedApiKey.name,
         provider: selectedApiKey.provider,
         apiKey: PLACEHOLDER_KEY,
+        baseUrl: selectedApiKey.baseUrl ?? null,
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
         // Include vault secret info for BYOS mode
@@ -148,6 +158,7 @@ function ChatSettingsContent() {
         name: values.name,
         provider: values.provider,
         apiKey: values.apiKey ?? undefined,
+        baseUrl: values.baseUrl || undefined,
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
@@ -184,6 +195,7 @@ function ChatSettingsContent() {
         data: {
           name: values.name || undefined,
           apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
+          baseUrl: values.baseUrl || null,
           scope: scopeChanged ? values.scope : undefined,
           teamId:
             scopeChanged || teamIdChanged
@@ -500,23 +512,27 @@ function ChatSettingsContent() {
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit API Key</DialogTitle>
               <DialogDescription>
-                Update the name or API key value
+                Update the name, API key value, or manage virtual keys
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
+            <div className="py-4 space-y-4">
               {selectedApiKey && (
-                <ChatApiKeyForm
-                  mode="full"
-                  showConsoleLink={false}
-                  existingKey={selectedApiKey}
-                  existingKeys={apiKeys}
-                  form={editForm}
-                  isPending={updateMutation.isPending}
-                />
+                <>
+                  <ChatApiKeyForm
+                    mode="full"
+                    showConsoleLink={false}
+                    existingKey={selectedApiKey}
+                    existingKeys={apiKeys}
+                    form={editForm}
+                    isPending={updateMutation.isPending}
+                  />
+                  <Separator />
+                  <VirtualKeysSection chatApiKeyId={selectedApiKey.id} />
+                </>
               )}
             </div>
             <DialogFooter>
@@ -571,6 +587,144 @@ function ChatSettingsContent() {
         </Dialog>
       </div>
     </LoadingWrapper>
+  );
+}
+
+/**
+ * Virtual API Keys section shown inside the Edit API Key dialog.
+ */
+function VirtualKeysSection({ chatApiKeyId }: { chatApiKeyId: string }) {
+  const { data: virtualKeys = [], isPending } = useVirtualApiKeys(chatApiKeyId);
+  const createMutation = useCreateVirtualApiKey();
+  const deleteMutation = useDeleteVirtualApiKey();
+  const [newKeyName, setNewKeyName] = useState("");
+  const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (!newKeyName.trim()) return;
+    try {
+      const result = await createMutation.mutateAsync({
+        chatApiKeyId,
+        data: { name: newKeyName.trim() },
+      });
+      setNewKeyName("");
+      if (result?.value) {
+        setCreatedKeyValue(result.value);
+      }
+    } catch {
+      // Handled by mutation
+    }
+  };
+
+  const handleCopy = () => {
+    if (createdKeyValue) {
+      navigator.clipboard.writeText(createdKeyValue);
+      toast.success("Copied to clipboard");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Key className="h-4 w-4" />
+        <h3 className="text-sm font-semibold">Virtual API Keys</h3>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Virtual keys let external clients (n8n, etc.) use this API key via the
+        LLM Proxy without exposing the real provider key.
+      </p>
+
+      {/* Created key value - show once */}
+      {createdKeyValue && (
+        <Alert>
+          <Key className="h-4 w-4" />
+          <AlertTitle>Virtual key created</AlertTitle>
+          <AlertDescription>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="text-xs bg-muted px-2 py-1 rounded break-all flex-1">
+                {createdKeyValue}
+              </code>
+              <Button variant="outline" size="icon-sm" onClick={handleCopy}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Copy this key now. It won&apos;t be shown again.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Existing virtual keys */}
+      {isPending ? (
+        <div className="flex justify-center py-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      ) : virtualKeys.length > 0 ? (
+        <div className="space-y-1">
+          {virtualKeys.map((vk) => (
+            <div
+              key={vk.id}
+              className="flex items-center justify-between text-sm py-1"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="truncate">{vk.name}</span>
+                <code className="text-xs text-muted-foreground">
+                  {vk.tokenStart}...
+                </code>
+                {vk.expiresAt && (
+                  <span className="text-xs text-muted-foreground">
+                    expires {new Date(vk.expiresAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() =>
+                  deleteMutation.mutate({ chatApiKeyId, id: vk.id })
+                }
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">
+          No virtual keys yet
+        </p>
+      )}
+
+      {/* Create new virtual key */}
+      <div className="flex items-center gap-2">
+        <Input
+          value={newKeyName}
+          onChange={(e) => setNewKeyName(e.target.value)}
+          placeholder="Virtual key name"
+          className="h-8 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleCreate();
+            }
+          }}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCreate}
+          disabled={!newKeyName.trim() || createMutation.isPending}
+        >
+          {createMutation.isPending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Plus className="h-3 w-3" />
+          )}
+        </Button>
+      </div>
+    </div>
   );
 }
 

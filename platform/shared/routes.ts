@@ -31,7 +31,11 @@ export const RouteId = {
   GetAllDelegationConnections: "getAllDelegationConnections",
 
   // Features Routes
+  /** @deprecated Use GetConfig instead */
   GetFeatures: "getFeatures",
+
+  // Config Routes
+  GetConfig: "getConfig",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
@@ -226,6 +230,11 @@ export const RouteId = {
   GetChatApiKey: "getChatApiKey",
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
+
+  // Virtual API Key Routes
+  GetVirtualApiKeys: "getVirtualApiKeys",
+  CreateVirtualApiKey: "createVirtualApiKey",
+  DeleteVirtualApiKey: "deleteVirtualApiKey",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",

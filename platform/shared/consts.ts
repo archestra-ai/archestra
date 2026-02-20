@@ -176,6 +176,12 @@ export const EXECUTION_ID_HEADER = "X-Archestra-Execution-Id";
 export const META_HEADER = "X-Archestra-Meta";
 
 /**
+ * Header used to pass a per-key provider base URL from chat → LLM proxy.
+ * When present, the proxy uses this value instead of the env-var-based config default.
+ */
+export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
+
+/**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
  * - Account linking (trustedProviders)
  * - Provider registration

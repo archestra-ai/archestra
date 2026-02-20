@@ -133,6 +133,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1, "Name is required"),
             provider: SupportedChatProviderSchema,
             apiKey: z.string().min(1).optional(),
+            baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
             teamId: z.string().optional(),
             vaultSecretPath: z.string().min(1).optional(),
@@ -239,6 +240,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         provider: body.provider,
         secretId: secret?.id ?? null,
+        baseUrl: body.baseUrl ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
@@ -329,6 +331,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
+            baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
             vaultSecretPath: z.string().min(1).optional(),
@@ -453,6 +456,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Build update object
       const updateData: Partial<{
         name: string;
+        baseUrl: string | null;
         scope: "personal" | "team" | "org_wide";
         userId: string | null;
         teamId: string | null;
@@ -461,6 +465,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (body.name) {
         updateData.name = body.name;
+      }
+
+      if (body.baseUrl !== undefined) {
+        updateData.baseUrl = body.baseUrl;
       }
 
       if (newSecretId) {

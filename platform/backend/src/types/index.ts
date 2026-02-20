@@ -39,3 +39,4 @@ export * from "./tool";
 export * from "./tool-result-compression";
 export * from "./user";
 export * from "./user-token";
+export * from "./virtual-api-key";

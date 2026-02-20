@@ -491,6 +491,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
   },
+  [RouteId.GetVirtualApiKeys]: {
+    chatSettings: ["read"],
+  },
+  [RouteId.CreateVirtualApiKey]: {
+    chatSettings: ["create"],
+  },
+  [RouteId.DeleteVirtualApiKey]: {
+    chatSettings: ["delete"],
+  },
   [RouteId.GetModelsWithApiKeys]: {
     chatSettings: ["read"],
   },

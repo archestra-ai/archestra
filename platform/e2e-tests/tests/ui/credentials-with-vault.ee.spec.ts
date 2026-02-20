@@ -1,17 +1,22 @@
-import {
-  archestraApiSdk,
-  DEFAULT_VAULT_TOKEN,
-  E2eTestId,
-  SecretsManagerType,
-} from "@shared";
+import type { Page } from "@playwright/test";
+import { archestraApiSdk, DEFAULT_VAULT_TOKEN, E2eTestId } from "@shared";
 import { DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   clickButton,
+  expandTablePagination,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   verifyToolCallResultViaApi,
 } from "../../utils";
+
+/**
+ * Navigate to the LLM API Keys page and expand pagination to show all rows.
+ */
+async function goToApiKeysPage(page: Page) {
+  await goToPage(page, "/settings/llm-api-keys");
+  await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
+}
 
 const vaultAddr =
   process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:8200";
@@ -23,33 +28,20 @@ let byosEnabled = true;
 
 test.describe.configure({ mode: "serial" });
 
-test("At the beginning of tests, we change secrets manager to BYOS_VAULT", async ({
+// Check if BYOS Vault is enabled via the features API.
+// In CI, the Vault job deploys with ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT so all
+// replicas start in BYOS mode. Locally, this may not be configured, so tests skip gracefully.
+test("Check if BYOS Vault is enabled", async ({
   adminPage,
   extractCookieHeaders,
 }) => {
   await goToPage(adminPage, "/mcp-catalog/registry");
   await adminPage.waitForLoadState("domcontentloaded");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  const { data } = await archestraApiSdk.initializeSecretsManager({
-    body: {
-      type: SecretsManagerType.BYOS_VAULT,
-    },
-    headers: { Cookie: cookieHeaders },
-  });
-  expect(data?.type).toBe(SecretsManagerType.BYOS_VAULT);
   const { data: features } = await archestraApiSdk.getFeatures({
     headers: { Cookie: cookieHeaders },
   });
   byosEnabled = !!features?.byosEnabled;
-
-  if (!byosEnabled) {
-    await archestraApiSdk.initializeSecretsManager({
-      body: {
-        type: SecretsManagerType.DB,
-      },
-      headers: { Cookie: cookieHeaders },
-    });
-  }
 });
 
 test("Then we create folder in Vault for Default Team and exemplary secret", async () => {
@@ -96,9 +88,13 @@ test("Then we create folder in Vault for Default Team and exemplary secret", asy
 test("Then we configure vault for Default Team", async ({ adminPage }) => {
   test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
   await goToPage(adminPage, "/settings/teams");
-  await adminPage
-    .getByTestId(`${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`)
-    .click();
+  // Wait for the configure button to appear - page may take time to render
+  // team list and vault configuration UI in CI
+  const configureButton = adminPage.getByTestId(
+    `${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`,
+  );
+  await expect(configureButton).toBeVisible({ timeout: 30_000 });
+  await configureButton.click();
   await adminPage
     .getByRole("textbox", { name: "Vault Path" })
     .fill(teamFolderPath);
@@ -127,7 +123,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       const keyName = makeRandomString(8, "Test Key");
 
       // Open Create personal chat API key form and fill in the form
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByRole("textbox", { name: "Name" }).fill(keyName);
 
@@ -183,7 +179,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       ).toBeVisible();
 
       // Cleanup
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
         .click();
@@ -357,19 +353,4 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       },
     });
   });
-});
-
-test("At the end of tests, we change secrets manager to DB because all other tests rely on it", async ({
-  adminPage,
-  extractCookieHeaders,
-}) => {
-  test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-  const cookieHeaders = await extractCookieHeaders(adminPage);
-  const { data } = await archestraApiSdk.initializeSecretsManager({
-    body: {
-      type: SecretsManagerType.DB,
-    },
-    headers: { Cookie: cookieHeaders },
-  });
-  expect(data?.type).toBe(SecretsManagerType.DB);
 });

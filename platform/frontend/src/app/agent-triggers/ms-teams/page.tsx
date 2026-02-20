@@ -10,6 +10,7 @@ import {
   Loader2,
   MessageSquare,
   Pencil,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +19,7 @@ import { AgentDialog } from "@/components/agent-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { DefaultAgentSetupDialog } from "@/components/default-agent-setup-dialog";
 import Divider from "@/components/divider";
+import { EnableAgentsDialog } from "@/components/enable-agents-dialog";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -89,7 +91,12 @@ export default function MsTeamsPage() {
   );
   const hasBindings =
     !!bindings &&
-    bindings.some((b) => b.agentId && msTeamsAgentIds.has(b.agentId));
+    bindings.some(
+      (b) =>
+        b.provider === "ms-teams" &&
+        b.agentId &&
+        msTeamsAgentIds.has(b.agentId),
+    );
 
   const localDevOrQuickstartFirstStep = (
     <SetupStep
@@ -129,7 +136,8 @@ export default function MsTeamsPage() {
         <span className="text-muted-foreground text-xs">
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            POST {"<archestra-url>/api/webhooks/chatops/ms-teams"}
+            POST{" "}
+            {`${config.api.externalProxyUrls[0] || window.location.origin}/api/webhooks/chatops/ms-teams`}
           </code>{" "}
           must be publicly accessible so MS Teams can deliver messages to
           Archestra
@@ -189,13 +197,11 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
         <SetupStep
-          title="Connect Agents to MS Teams channels"
-          description="Map your agents to Teams channels — each channel gets its own dedicated agent"
+          title="Enable MS Teams for your Agents and assign channels to them"
+          description="Agents with enabled MS Teams will appear in the table below. Then you can assign channels to them."
           done={hasBindings}
-          ctaLabel="Connect"
+          ctaLabel="Configure"
           onAction={() => setDefaultAgentDialogOpen(true)}
-          doneActionLabel="Connect more"
-          onDoneAction={() => setDefaultAgentDialogOpen(true)}
         />
       </section>
 
@@ -225,6 +231,7 @@ function ChannelBindingsSection() {
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const updateMutation = useUpdateChatOpsBinding();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
+  const [enableDialogOpen, setEnableDialogOpen] = useState(false);
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
   const msTeamsAgents =
@@ -238,9 +245,11 @@ function ChannelBindingsSection() {
     (typeof msTeamsAgents)[number] | null
   >(null);
 
+  const msTeamsBindings = bindings?.filter((b) => b.provider === "ms-teams");
+
   // Map agentId → list of bindings
   const bindingsByAgentId = new Map<string, typeof bindings>();
-  for (const b of bindings ?? []) {
+  for (const b of msTeamsBindings ?? []) {
     if (!b.agentId) continue;
     const list = bindingsByAgentId.get(b.agentId) ?? [];
     list.push(b);
@@ -249,13 +258,13 @@ function ChannelBindingsSection() {
 
   // All known channels as MultiSelect items
   const channelItems =
-    bindings?.map((b) => ({
+    msTeamsBindings?.map((b) => ({
       value: b.id,
       label: `${b.channelName ?? b.channelId}${b.workspaceName ? ` (${b.workspaceName})` : ""}`,
     })) ?? [];
 
   const handleChannelsChange = (agentId: string, selectedIds: string[]) => {
-    if (!bindings) return;
+    if (!msTeamsBindings) return;
 
     const currentBindingIds = new Set(
       (bindingsByAgentId.get(agentId) ?? []).map((b) => b.id),
@@ -280,7 +289,18 @@ function ChannelBindingsSection() {
   return (
     <section className="flex flex-col gap-4 -mt-2">
       <div>
-        <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Agents ready to chat with</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs ml-2"
+            onClick={() => setEnableDialogOpen(true)}
+          >
+            <Plus className="h-2 w-2" />
+            Add more
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           Assign agents to Teams channels using the dropdown below or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
@@ -360,7 +380,7 @@ function ChannelBindingsSection() {
                                 <Button
                                   variant="outline"
                                   size="icon-sm"
-                                  aria-label="Open in Teams"
+                                  aria-label="Open in MS Teams"
                                   asChild
                                 >
                                   <a
@@ -376,7 +396,7 @@ function ChannelBindingsSection() {
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open in Teams</TooltipContent>
+                              <TooltipContent>Open in MS Teams</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -389,7 +409,7 @@ function ChannelBindingsSection() {
                                     <Button
                                       variant="outline"
                                       size="icon-sm"
-                                      aria-label="Open in Teams"
+                                      aria-label="Open in MS Teams"
                                     >
                                       <img
                                         src="/icons/ms-teams.png"
@@ -399,7 +419,9 @@ function ChannelBindingsSection() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
-                                <TooltipContent>Open in Teams</TooltipContent>
+                                <TooltipContent>
+                                  Open in MS Teams
+                                </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <DropdownMenuContent align="start">
@@ -488,6 +510,12 @@ function ChannelBindingsSection() {
           </CardContent>
         </Card>
       )}
+
+      <EnableAgentsDialog
+        open={enableDialogOpen}
+        onOpenChange={setEnableDialogOpen}
+        provider="ms-teams"
+      />
 
       <RefreshChannelsDialog
         open={refreshDialogOpen}

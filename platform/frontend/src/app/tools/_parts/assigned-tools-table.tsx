@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -221,8 +221,8 @@ export function AssignedToolsTable({
       setRowSelection(newRowSelection);
 
       const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => tools[Number(index)])
-        .filter(Boolean);
+        .map((rowId) => tools.find((tool) => tool.id === rowId))
+        .filter((tool): tool is ToolWithAssignmentsData => Boolean(tool));
 
       setSelectedTools(newSelectedTools);
     },
@@ -264,8 +264,20 @@ export function AssignedToolsTable({
           sortDirection: newSorting[0].desc ? "desc" : "asc",
         });
       }
+
+      // Preserve selection by tool IDs after sorting
+      const currentSelection = rowSelection;
+      if (Object.keys(currentSelection).length > 0) {
+        const newSelection: RowSelectionState = {};
+        tools.forEach((tool) => {
+          if (currentSelection[tool.id]) {
+            newSelection[tool.id] = true;
+          }
+        });
+        setRowSelection(newSelection);
+      }
     },
-    [updateUrlParams],
+    [updateUrlParams, rowSelection, tools],
   );
 
   const handleBulkAction = useCallback(
@@ -448,16 +460,20 @@ export function AssignedToolsTable({
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
-        cell: ({ row }) => (
-          <TruncatedText
-            message={row.original.name}
-            className="break-all"
-            maxLength={60}
-          />
-        ),
-        size: 200,
-        minSize: 200,
-        maxSize: 200,
+        cell: ({ row }) => {
+          const displayName =
+            parseFullToolName(row.original.name).toolName || row.original.name;
+          return (
+            <TruncatedText
+              message={displayName}
+              className="break-all"
+              maxLength={60}
+            />
+          );
+        },
+        size: 150,
+        minSize: 150,
+        maxSize: 150,
       },
       {
         id: "origin",
@@ -486,7 +502,7 @@ export function AssignedToolsTable({
                   <TooltipTrigger asChild>
                     <Badge
                       variant="default"
-                      className="bg-indigo-500 max-w-[100px]"
+                      className="bg-indigo-500 max-w-[150px]"
                     >
                       <span className="truncate">{catalogItem.name}</span>
                     </Badge>
@@ -517,7 +533,7 @@ export function AssignedToolsTable({
             </TooltipProvider>
           );
         },
-        size: 100,
+        size: 180,
       },
       {
         id: "assignmentCount",
@@ -683,7 +699,7 @@ export function AssignedToolsTable({
             </WithPermissions>
           );
         },
-        size: 170,
+        size: 140,
       },
       {
         id: "actions",
@@ -854,7 +870,7 @@ export function AssignedToolsTable({
             <Tooltip>
               <TooltipTrigger asChild>
                 <PermissionButton
-                  permissions={{ profile: ["update"], tool: ["update"] }}
+                  permissions={{ agent: ["update"], tool: ["update"] }}
                   size="sm"
                   variant="outline"
                   onClick={handleAutoConfigurePolicies}
@@ -935,6 +951,7 @@ export function AssignedToolsTable({
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}
             onRowSelectionChange={handleRowSelectionChange}
+            getRowId={(row) => row.id}
           />
         )}
       </div>

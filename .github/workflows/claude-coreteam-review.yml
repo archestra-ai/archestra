@@ -3,7 +3,7 @@
 #
 # See here for more details:
 # https://github.com/anthropics/claude-code-action/blob/main/examples/pr-review-comprehensive.yml
-name: Claude PR Review
+name: Claude Core Team Review
 
 on:
   pull_request:
@@ -44,7 +44,7 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
-    uses: ./.github/workflows/claude-pr-review-impl.yml
+    uses: ./.github/workflows/claude-coreteam-review-shared.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
@@ -57,7 +57,7 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
-    uses: ./.github/workflows/claude-pr-review-impl.yml
+    uses: ./.github/workflows/claude-coreteam-review-shared.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
@@ -70,7 +70,7 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
-    uses: ./.github/workflows/claude-pr-review-impl.yml
+    uses: ./.github/workflows/claude-coreteam-review-shared.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}
     secrets:

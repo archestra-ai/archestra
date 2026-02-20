@@ -52,6 +52,10 @@ inputs:
     description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
     required: false
     default: ""
+  extra-helm-set:
+    description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
+    required: false
+    default: ""
 
 outputs:
   backend-url:
@@ -136,6 +140,7 @@ runs:
         HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        EXTRA_HELM_SET: ${{ inputs.extra-helm-set }}
       run: |
         # Start e2e-tests Helm install in background
         echo "Starting e2e-tests Helm install in background..."
@@ -160,6 +165,15 @@ runs:
           MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
         fi
 
+        # Build extra --set flags if provided (comma-separated key=value pairs)
+        EXTRA_SET_FLAGS=""
+        if [ -n "${EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
         # Deploy platform (this takes longer, so e2e-tests will finish during this)
         echo "Deploying Archestra Platform..."
         helm install archestra-platform "${CHART_REF}" \
@@ -167,6 +181,7 @@ runs:
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           ${MCP_SET_FLAG} \
+          ${EXTRA_SET_FLAGS} \
           --atomic --timeout=4m
 
         # Wait for e2e-tests to complete (should already be done by now)
@@ -188,6 +203,7 @@ runs:
         HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        EXTRA_HELM_SET: ${{ inputs.extra-helm-set }}
       run: |
         # Determine chart reference: use helm-chart-ref if set, otherwise use local path
         if [ -n "${HELM_CHART_REF}" ]; then
@@ -207,11 +223,21 @@ runs:
           MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
         fi
 
+        # Build extra --set flags if provided (comma-separated key=value pairs)
+        EXTRA_SET_FLAGS=""
+        if [ -n "${EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           ${MCP_SET_FLAG} \
+          ${EXTRA_SET_FLAGS} \
           --atomic --timeout=4m
 
     - name: Verify deployment

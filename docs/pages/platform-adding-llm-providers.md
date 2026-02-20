@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-02-16
+lastUpdated: 2026-02-18
 ---
 
 <!--
@@ -207,12 +207,16 @@ Each provider must be added to the LLM Proxy and Chat UI e2e tests to ensure all
 | `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)                              |
 | `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json`      | WireMock stub mapping for Chat UI streaming responses - must use SSE format with `bodyPatterns` matching on `chat-ui-e2e-test`           |
 | `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`)                  |
-| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` array                                                             |
-| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` array                                                              |
-| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` array                                                                   |
-| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` array                                                                 |
-| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` array                                                                  |
-| `e2e-tests/tests/ui/chat.spec.ts`                               | Chat UI tests - add `{provider}Config` to `testConfigs` array with `providerName`, `modelId`, `modelDisplayName`, and `expectedResponse` |
+| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` map                                                               |
+| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` map                                                                |
+| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` map                                                                     |
+| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` map                                                                   |
+| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` map                                                                    |
+| `e2e-tests/tests/api/llm-proxy/execution-metrics.spec.ts`       | Execution metrics tests (agent execution ID tracking) - add `{provider}Config` to `testConfigs` map                                      |
+| `e2e-tests/tests/api/llm-proxy/streaming-tool-calls.spec.ts`    | Streaming tool call tests - add `{provider}Config` to `testConfigs` map (or `null` if provider uses non-SSE streaming format)            |
+| `e2e-tests/tests/ui/chat.spec.ts`                               | Chat UI tests - add `{provider}Config` to `testConfigs` map with `providerName`, `modelId`, `modelDisplayName`, and `expectedResponse`   |
+
+All LLM Proxy test files use the `satisfies Record<SupportedProvider, Config>` pattern to enforce at compile time that every provider has a config entry. When a new provider is added to `SupportedProvider` without adding its test config, TypeScript will report a compile error.
 
 ## Chat Support
 
@@ -283,6 +287,7 @@ Existing provider implementations for reference:
 - Anthropic: `backend/src/routes/proxy/routesv2/anthropic.ts`, `backend/src/routes/proxy/adapterV2/anthropic.ts`
 - Cohere: `backend/src/routes/proxy/routesv2/cohere.ts`, `backend/src/routes/proxy/adapterV2/cohere.ts`
 - Gemini: `backend/src/routes/proxy/routesv2/gemini.ts`, `backend/src/routes/proxy/adapterV2/gemini.ts`
+- Bedrock: `backend/src/routes/proxy/routesv2/bedrock.ts`, `backend/src/routes/proxy/adapterV2/bedrock.ts` (uses AWS Signature V4 auth and Converse API)
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):
 

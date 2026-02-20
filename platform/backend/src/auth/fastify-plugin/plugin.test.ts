@@ -32,8 +32,8 @@ vi.mock("@/models", () => ({
 
 vi.mock("@shared/access-control", () => ({
   requiredEndpointPermissionsMap: {
-    createAgent: { profile: ["create"] },
-    getAgents: { profile: ["read"] },
+    createAgent: { agent: ["create"] },
+    getAgents: { agent: ["read"] },
   },
   allAvailableActions: {},
   editorPermissions: {},
@@ -299,7 +299,7 @@ describe("authPlugin integration", () => {
       await authnz.handle(mockRequest, mockReply);
 
       expect(mockHasPermission).toHaveBeenCalledWith(
-        { profile: ["create"] },
+        { agent: ["create"] },
         expect.objectContaining({}),
       );
     });

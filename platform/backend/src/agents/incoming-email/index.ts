@@ -574,11 +574,11 @@ export async function processIncomingEmail(
         );
       }
 
-      // Check if user is a profile admin (can access all agents)
-      const isProfileAdmin = await userHasPermission(
+      // Check if user is an agent admin (can access all agents)
+      const isAgentAdmin = await userHasPermission(
         user.id,
         agent.organizationId,
-        "profile",
+        "agent",
         "admin",
       );
 
@@ -586,7 +586,7 @@ export async function processIncomingEmail(
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         user.id,
         agentId,
-        isProfileAdmin,
+        isAgentAdmin,
       );
 
       if (!hasAccess) {
@@ -596,7 +596,7 @@ export async function processIncomingEmail(
             agentId,
             userId: user.id,
             senderEmail,
-            isProfileAdmin,
+            isAgentAdmin,
           },
           "[IncomingEmail] Private mode: user does not have access to this agent",
         );
@@ -614,7 +614,7 @@ export async function processIncomingEmail(
           agentId,
           userId: user.id,
           senderEmail,
-          isProfileAdmin,
+          isAgentAdmin,
         },
         "[IncomingEmail] Private mode: sender authenticated via email",
       );

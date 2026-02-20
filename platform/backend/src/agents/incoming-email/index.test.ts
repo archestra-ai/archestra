@@ -1042,7 +1042,7 @@ describe("processIncomingEmail security modes", () => {
       text: "Agent security response",
       finishReason: "end_turn",
     });
-    // Default: user is not a profile admin
+    // Default: user is not an agent admin
     vi.mocked(userHasPermission).mockResolvedValue(false);
   });
 
@@ -1279,7 +1279,7 @@ describe("processIncomingEmail security modes", () => {
       .insert(schema.agentTeamsTable)
       .values({ agentId, teamId: team.id });
 
-    // Mock: adminUser IS a profile admin
+    // Mock: adminUser IS an agent admin
     vi.mocked(userHasPermission).mockResolvedValue(true);
 
     const mockProvider = {
@@ -1319,7 +1319,7 @@ describe("processIncomingEmail security modes", () => {
     expect(vi.mocked(userHasPermission)).toHaveBeenCalledWith(
       adminUser.id,
       org.id,
-      "profile",
+      "agent",
       "admin",
     );
   });

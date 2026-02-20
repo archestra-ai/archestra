@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/gemini/v1beta/models/[^:]+:generateContent",
+    "headers": {
+      "x-goog-api-key": {
+        "contains": "gemini-execution-metrics"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "Hello! I'm here to help."
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 10,
+        "candidatesTokenCount": 5,
+        "totalTokenCount": 15
+      }
+    }
+  }
+}

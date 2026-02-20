@@ -10,9 +10,9 @@ import {
   DollarSign,
   Eye,
   Plus,
+  Route,
   Search,
   Server,
-  Shield,
   Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -449,7 +449,7 @@ function McpGateways({
         }
         actionButton={
           <PermissionButton
-            permissions={{ profile: ["create"] }}
+            permissions={{ mcpGateway: ["create"] }}
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
           >
@@ -559,7 +559,7 @@ function GatewayConnectionColumns({
           }`}
         >
           <div className="flex items-center gap-2">
-            <Shield
+            <Route
               className={`h-4 w-4 ${activeTab === "mcp" ? "text-green-500" : ""}`}
             />
             <span className="font-medium">MCP Gateway</span>

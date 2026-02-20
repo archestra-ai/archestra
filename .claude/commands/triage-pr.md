@@ -4,60 +4,82 @@ $ARGUMENTS
 
 ## Steps
 
-1. Use `mcp__github__get_pull_request` to get the PR details (extract the PR number from PR_NUMBER above).
-2. Use `mcp__github__get_pull_request_files` to see what files are changed.
-3. Evaluate the PR against the rules below.
+1. Use `mcp__github__get_pull_request` to get the PR details (extract the PR number and repo from the arguments above).
+2. Use `mcp__github__get_pull_request_files` to see what files are changed and how many lines are modified.
+3. Evaluate the PR against the rules below, in order. Stop at the first matching rule.
 
-### Auto-close as low-quality if ANY of these apply:
-- Empty or boilerplate PR description (no explanation of what/why)
-- Changes are clearly unrelated to the project (spam, self-promotion, etc.)
-- Trivial changes that add no value (whitespace-only, random comment additions)
-- PR modifies only CI/workflow files without prior discussion
+---
 
-### Bounty claim PRs:
-If the PR title or description contains "bounty" or the PR has a bounty-related label (e.g. "Bounty claim"), it MUST include a demo video (a link to a video, gif, or screen recording) showcasing the feature or fix. If no demo video is present, close the PR with a comment explaining:
-"This PR is a bounty claim but doesn't include a demo video. All bounty claims must include a video/gif/screen recording demonstrating the feature or fix. Please reopen with a demo attached."
+## Rule 1: Spam detection
 
-### LLM provider PRs:
-If the PR adds or modifies an LLM provider (e.g. changes files under `backend/src/routes/proxy/`, `backend/src/types/llm-providers/`, `backend/src/routes/proxy/adapterV2/`, or `backend/src/clients/`), leave a review comment noting that the PR should be reviewed against the standards defined in `docs/pages/platform-adding-llm-providers.md`. Include a link: https://github.com/archestra-ai/archestra/blob/main/docs/pages/platform-adding-llm-providers.md
+Use `mcp__github__list_pull_requests` to check the author's recent activity. **Close without further evaluation** if ANY of these apply:
+- Author has 3+ PRs opened in the last 24 hours with none merged
+- Author has multiple PRs targeting the same issue
+- PR body is AI-generated boilerplate with no project-specific content (e.g., generic "I improved the code quality" with no specifics)
+- Changes are clearly unrelated to the project (self-promotion, spam links, random files)
 
-### Check for related issues:
-4. If the PR doesn't reference an issue, comment asking the contributor to link one.
+If closing for spam, comment:
+"Closing this PR. [Brief reason — e.g., 'Multiple PRs opened in rapid succession' or 'Changes are unrelated to this project']. If this was a mistake, please open a single focused PR with a clear description."
 
-### Valid PRs:
-5. If the PR is valid, apply appropriate labels:
-   - `bug` - Bug fixes
-   - `enhancement` - New features or improvements
-   - `documentation` - Documentation changes
+## Rule 2: Auto-close as low-quality
 
-6. If the PR is valid and high-quality, leave a brief welcoming comment.
+Close if ANY of these apply:
+- Empty PR description (no explanation of what or why)
+- Trivial changes that add no value (whitespace-only, random comment additions, reformatting without functional changes)
+- PR modifies only CI/workflow files without prior discussion in an issue
 
-## IMPORTANT: You MUST always leave a comment
+If closing, comment:
+"Closing this PR. [Specific reason]. To contribute, please open an issue first to discuss the proposed change."
 
-**Every PR MUST receive a comment via `mcp__github__add_issue_comment` before any other action (labeling, closing, etc.).** Never close or label a PR without commenting first.
+## Rule 3: Demo video requirement
 
-### If closing as low-quality:
-You MUST use `mcp__github__add_issue_comment` to post a comment BEFORE closing. Be polite but direct. Example:
-"Thanks for your interest in contributing! I'm closing this PR because [reason]. If you'd like to contribute, please open an issue first to discuss the change."
+Determine if the PR is **exempt** from demo video. A PR is exempt if ANY of these are true:
+- Total lines changed (additions + deletions) is under 10 AND changes are typo fixes, small doc edits, or comment-only
+- Changes are test-only (only adds or modifies test files)
+- Changes are backend/API-only with no UI impact (no frontend file changes)
+- Pure refactoring (under 100 lines changed) that maintains existing behavior with no new features
 
-### If closing as bounty claim without video:
-You MUST use `mcp__github__add_issue_comment` to post a comment BEFORE closing. Example:
-"This PR is a bounty claim but doesn't include a demo video. All bounty claims must include a video/gif/screen recording demonstrating the feature or fix. Please reopen with a demo attached."
+**If the PR is not exempt and does not include a demo video** (a link to a video, gif, Loom, or screen recording in the PR description), close it with this comment:
+"PRs with UI or functional changes require a demo video (screen recording, gif, or Loom link) showing the change in action. Please reopen this PR with a demo attached to the description. Test-only, backend-only, and small doc/typo fixes are exempt."
 
-### If valid but missing issue reference:
-You MUST use `mcp__github__add_issue_comment` to post a comment. Example:
-"Thanks for the PR! Could you please link this to a related issue? If there isn't one, please create an issue first describing the problem or feature."
+**If the PR is a bounty claim** (title or description contains "bounty", or has a bounty-related label) and missing a demo video, close with:
+"Bounty claims require a demo video showing the feature or fix working. Please reopen with a video, gif, or screen recording attached to the PR description."
 
-### If valid:
-You MUST use `mcp__github__add_issue_comment` to acknowledge the PR. Example:
-"Thanks for the contribution! I've labeled this PR for the team to review."
+## Rule 4: LLM provider changes
+
+If the PR adds or modifies an LLM provider (changes files under `backend/src/routes/proxy/`, `backend/src/types/llm-providers/`, `backend/src/routes/proxy/adapterV2/`, or `backend/src/clients/`), comment noting the PR should be reviewed against `docs/pages/platform-adding-llm-providers.md`:
+https://github.com/archestra-ai/archestra/blob/main/docs/pages/platform-adding-llm-providers.md
+
+This is informational only — do not close the PR for this reason. Continue evaluating remaining rules.
+
+## Rule 5: Issue reference check
+
+If the PR does not reference an issue (no "Fixes #", "Closes #", "Resolves #", or "#NNN" in the title or description), comment:
+"Please link this PR to a related issue. If there is no existing issue, please create one describing the problem or feature before this PR can be reviewed."
+
+Do not close the PR for this reason, but do NOT add the `ready for review` label. Apply the `needs more info` label instead along with the appropriate type label (`bug`, `enhancement`, or `documentation`).
+
+## Rule 6: Valid PR
+
+If the PR passes all rules above:
+- Apply the appropriate type label: `bug`, `enhancement`, or `documentation`
+- Apply the `ready for review` label
+- **Do not comment.** Valid PRs are labeled silently.
+
+---
+
+## Tone
+
+- Professional and direct. No exclamation marks. No "Thanks for contributing!" or "Great work!" filler.
+- When commenting on problems, be specific about what is wrong and what the contributor should do.
 
 ## Tools to use
-- `mcp__github__get_pull_request` - Get PR details
-- `mcp__github__list_pull_requests` - List recent PRs if needed
-- `mcp__github__search_issues` - Search for related issues
-- `mcp__github__create_pull_request_review` - Leave a review
-- `mcp__github__add_issue_comment` - ALWAYS use this to comment before any other action
-- `mcp__github__update_pull_request` - Add labels, close PRs (AFTER commenting)
-- `mcp__github__get_pull_request_diff` - View PR diff
-- `mcp__github__get_pull_request_files` - View changed files
+
+- `mcp__github__get_pull_request` — Get PR details
+- `mcp__github__list_pull_requests` — Check author's recent PRs for spam detection
+- `mcp__github__search_issues` — Search for related issues
+- `mcp__github__add_issue_comment` — Comment (only when there is a problem or informational note)
+- `mcp__github__update_pull_request` — Add labels, close PRs
+- `mcp__github__get_pull_request_diff` — View PR diff
+- `mcp__github__get_pull_request_files` — View changed files
+- `mcp__github__create_pull_request_review` — Leave a review comment

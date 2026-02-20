@@ -715,13 +715,11 @@ describe("mcp-reinstall", () => {
         expect.objectContaining({
           name: "Test Catalog__tool1",
           catalogId: catalog.id,
-          mcpServerId: server.id,
           rawToolName: "tool1",
         }),
         expect.objectContaining({
           name: "Test Catalog__tool2",
           catalogId: catalog.id,
-          mcpServerId: server.id,
           rawToolName: "tool2",
         }),
       ]);

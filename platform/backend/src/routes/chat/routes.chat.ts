@@ -16,7 +16,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -40,6 +40,7 @@ import {
   MessageModel,
   TeamModel,
 } from "@/models";
+import ApiKeyModelModel from "@/models/api-key-model";
 import { getExternalAgentId } from "@/routes/proxy/utils/headers/external-agent-id";
 import { startActiveChatSpan } from "@/routes/proxy/utils/tracing";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -167,7 +168,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: { id: conversationId, messages },
         user,
         organizationId,
-        headers,
       } = request;
       const chatAbortController = new AbortController();
 
@@ -211,10 +211,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       });
 
-      const { success: userIsProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Get conversation
       const conversation = await ConversationModel.findById({
@@ -227,7 +227,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      const externalAgentId = getExternalAgentId(headers);
+      const externalAgentId = getExternalAgentId(request.headers);
 
       // Fetch enabled tool IDs and custom selection status in parallel
       const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -242,7 +242,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentName: conversation.agent.name,
         agentId: conversation.agentId,
         userId: user.id,
-        userIsProfileAdmin,
+        userIsAgentAdmin,
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
         conversationId: conversation.id,
         organizationId,
@@ -335,10 +335,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const modelMessages = await convertToModelMessages(
             strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
           );
+
+          // Perplexity does NOT support tool calling - it has built-in web search instead
+          // @see https://docs.perplexity.ai/api-reference/chat-completions-post
+          const supportsToolCalling = provider !== "perplexity";
+
           const streamTextConfig: Parameters<typeof streamText>[0] = {
             model,
             messages: modelMessages,
-            tools: mcpTools,
+            ...(supportsToolCalling && { tools: mcpTools }),
             stopWhen: stepCountIs(500),
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {
@@ -363,13 +368,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Known image-capable model patterns:
           // - gemini-2.0-flash-exp-image-generation
           // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
-          // - Any model with "image-generation" in the name
+          // - gemini-2.5-flash-image
+          // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
+          // - Any model with "image" in the name (covers current and future image models)
+          //
+          // TODO: Use output modalities from the models DB table instead of hardcoded
+          // pattern matching. The `models` table has capability info that would be more
+          // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
+          // "capabilities unknown", so that needs to be fixed first.
           const modelLower = conversation.selectedModel.toLowerCase();
           const isGeminiImageModel =
             provider === "gemini" &&
-            (modelLower.includes("image-generation") ||
-              modelLower.includes("native-audio-dialog") ||
-              modelLower === "gemini-2.5-flash-image");
+            (modelLower.includes("image") ||
+              modelLower.includes("native-audio-dialog"));
           if (isGeminiImageModel) {
             streamTextConfig.providerOptions = {
               google: {
@@ -634,12 +645,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { agentId }, user, organizationId, headers }, reply) => {
+    async ({ params: { agentId }, user, organizationId }, reply) => {
       // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Verify agent exists and user has access
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
@@ -654,7 +665,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         userId: user.id,
         organizationId,
-        userIsProfileAdmin: isAgentAdmin,
+        userIsAgentAdmin: isAgentAdmin,
         // No conversation context here as this is just fetching available tools
       });
 
@@ -700,15 +711,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: { agentId, title, selectedModel, selectedProvider, chatApiKeyId },
         user,
         organizationId,
-        headers,
       },
       reply,
     ) => {
       // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Validate that the agent exists and user has access to it
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
@@ -785,7 +795,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (body.chatApiKeyId) {
@@ -809,10 +819,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate agentId if provided
       if (body.agentId) {
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          headers,
-        );
+        const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        });
 
         const agent = await AgentModel.findById(
           body.agentId,
@@ -864,7 +874,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await browserStreamFeature.closeTab(conversation.agentId, id, {
             userId: user.id,
             organizationId,
-            userIsProfileAdmin: false,
+            userIsAgentAdmin: false,
           });
         } catch (error) {
           logger.warn(
@@ -946,7 +956,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : detectProviderFromModel(conversation.selectedModel);
 
       // Resolve API key using the centralized function (handles all providers)
-      const { apiKey } = await resolveProviderApiKey({
+      const { apiKey, chatApiKeyId } = await resolveProviderApiKey({
         organizationId,
         userId: user.id,
         provider,
@@ -964,6 +974,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const generatedTitle = await generateConversationTitle({
         provider,
         apiKey,
+        chatApiKeyId,
         firstUserMessage,
         firstAssistantMessage,
       });
@@ -1264,6 +1275,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
 export interface GenerateTitleParams {
   provider: SupportedChatProvider;
   apiKey: string | undefined;
+  chatApiKeyId?: string;
   firstUserMessage: string;
   firstAssistantMessage: string;
 }
@@ -1275,13 +1287,21 @@ export interface GenerateTitleParams {
 export async function generateConversationTitle(
   params: GenerateTitleParams,
 ): Promise<string | null> {
-  const { provider, apiKey, firstUserMessage, firstAssistantMessage } = params;
+  const {
+    provider,
+    apiKey,
+    chatApiKeyId,
+    firstUserMessage,
+    firstAssistantMessage,
+  } = params;
+
+  const modelName = await resolveFastModelName(provider, chatApiKeyId);
 
   // Create model for title generation (direct call, not through LLM Proxy)
   const model = createDirectLLMModel({
     provider,
     apiKey,
-    modelName: FAST_MODELS[provider],
+    modelName,
   });
 
   const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
@@ -1490,6 +1510,33 @@ async function validateChatApiKeyAccess(
   if (!canAccessKey) {
     throw new ApiError(403, "You do not have access to this API key");
   }
+}
+
+/**
+ * Resolves the fast model name for title generation.
+ * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
+ */
+async function resolveFastModelName(
+  provider: SupportedChatProvider,
+  chatApiKeyId: string | undefined,
+): Promise<string> {
+  if (!chatApiKeyId) {
+    return FAST_MODELS[provider];
+  }
+
+  try {
+    const fastestModel = await ApiKeyModelModel.getFastestModel(chatApiKeyId);
+    if (fastestModel) {
+      return fastestModel.modelId;
+    }
+  } catch (error) {
+    logger.warn(
+      { error, chatApiKeyId },
+      "Failed to resolve fastest model from DB, falling back to hardcoded model",
+    );
+  }
+
+  return FAST_MODELS[provider];
 }
 
 export default chatRoutes;

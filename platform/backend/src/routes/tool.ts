@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { ToolModel } from "@/models";
 import {
   constructResponseSchema,
@@ -25,11 +25,11 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
       },
     },
-    async ({ user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
     },
@@ -63,15 +63,15 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           origin,
           excludeArchestraTools,
         },
-        headers,
         user,
+        organizationId,
       },
       reply,
     ) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const result = await ToolModel.findAllWithAssignments({
         pagination: { limit, offset },

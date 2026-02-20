@@ -18,12 +18,13 @@ interface RolePermissionBuilderProps {
 // Group resources by category for better organization
 const resourceCategories: Record<string, Resource[]> = {
   "Core Resources": [
-    "profile",
+    "agent",
+    "mcpGateway",
+    "llmProxy",
     "tool",
     "policy",
     "interaction",
     "conversation",
-    "prompt",
   ],
   "MCP & Integrations": [
     "mcpServer",
@@ -47,7 +48,9 @@ const resourceCategories: Record<string, Resource[]> = {
 
 // Human-readable labels for resources
 const resourceLabels: Record<Resource, string> = {
-  profile: "Profiles",
+  agent: "Agents",
+  mcpGateway: "MCP Gateways",
+  llmProxy: "LLM Proxies",
   tool: "Tools",
   policy: "Policies",
   interaction: "Interactions",
@@ -67,7 +70,6 @@ const resourceLabels: Record<Resource, string> = {
   limit: "Limits",
   tokenPrice: "Token Prices",
   chatSettings: "Chat Settings",
-  prompt: "Prompts",
 };
 
 // Human-readable labels for actions

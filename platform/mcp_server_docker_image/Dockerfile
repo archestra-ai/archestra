@@ -30,34 +30,12 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Upgrade npm to 11.8.0 to get patched bundled dependencies (tar, glob, cross-spawn)
-# CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960: tar vulnerabilities
-# CVE-2025-64756: glob vulnerability
-# CVE-2024-21538: cross-spawn vulnerability
-RUN npm install -g npm@11.8.0 && \
-    # Patch tar to 7.5.8 inside npm's bundled node_modules to fix CVE-2026-26960
-    TAR_SHA256="5fc7136bf937d640436d13639447d06d44cb6b464188bf7b57fb6ac3ec1be0a2" && \
-    NPM_TAR_PATH="/usr/local/lib/node_modules/npm/node_modules/tar" && \
-    if [ -d "$NPM_TAR_PATH" ]; then \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.8.tgz && \
-        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - && \
-        rm -rf "$NPM_TAR_PATH"/* && \
-        tar -xzf "$TMP_DIR/tar.tgz" -C "$NPM_TAR_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR" && \
-        echo "Patched tar to 7.5.8 in npm"; \
-    fi && \
-    # Patch @isaacs/brace-expansion to 5.0.1 inside npm's bundled node_modules to fix GHSA-7h2j-956f-4vf2 (ReDoS)
-    BRACE_SHA256="c908309f6735b002952f2b02563e68d98cba0375322a189ebc4f6f47637ee95b" && \
-    NPM_BRACE_PATH="/usr/local/lib/node_modules/npm/node_modules/@isaacs/brace-expansion" && \
-    if [ -d "$NPM_BRACE_PATH" ]; then \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/@isaacs/brace-expansion/-/brace-expansion-5.0.1.tgz && \
-        rm -rf "$NPM_BRACE_PATH"/* && \
-        tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$NPM_BRACE_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR" && \
-        echo "Patched @isaacs/brace-expansion to 5.0.1 in npm"; \
-    fi
+# Upgrade npm to 11.10.1 which bundles fixed versions of all previously vulnerable dependencies:
+# tar@7.5.9 (CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960)
+# glob@13.0.6 (CVE-2025-64756)
+# minimatch@10.2.2 (CVE-2026-26996)
+# brace-expansion@5.0.2 (GHSA-7h2j-956f-4vf2)
+RUN npm install -g npm@11.10.1
 
 WORKDIR /opt/node-deps
 
@@ -103,7 +81,7 @@ RUN apk add --no-cache \
    # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
    apk upgrade --no-cache nodejs bind openssl go
 
-# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package (CVE-2026-23950)
+# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm
 COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \

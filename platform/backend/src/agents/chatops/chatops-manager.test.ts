@@ -168,8 +168,10 @@ describe("ChatOpsManager security validation", () => {
       handleValidationChallenge: () => null,
       parseWebhookNotification: async () => null,
       sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      sendAgentSelectionCard: async () => {},
       getThreadHistory: async () => [],
       getUserEmail: overrides.getUserEmail ?? (async () => null),
+      getWorkspaceId: () => null,
       discoverChannels: async () => null,
     };
   }
@@ -650,7 +652,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
   }) => {
     const adminUser = await makeUser({ email: "fulladmin@example.com" });
     const org = await makeOrganization();
-    // Make user an admin (admins have all permissions including profile:admin)
+    // Make user an admin (admins have all permissions including agent:admin)
     await makeMember(adminUser.id, org.id, { role: "admin" });
 
     // Agent NOT in any of admin's teams

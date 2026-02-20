@@ -186,6 +186,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 You can get an API key from the [Mistral AI Console](https://console.mistral.ai/api-keys).
 
+## Perplexity AI
+
+[Perplexity AI](https://www.perplexity.ai/) provides AI-powered search and answer engines with real-time web search capabilities through an OpenAI-compatible API.
+
+### Supported Perplexity APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Perplexity Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/perplexity/{agent-id}`
+- **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                            | Required | Description                                                                    |
+| ----------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_PERPLEXITY_BASE_URL`     | No       | Perplexity API base URL (default: `https://api.perplexity.ai`)                 |
+| `ARCHESTRA_CHAT_PERPLEXITY_API_KEY` | No       | Default API key for Perplexity (can be overridden per conversation/team/org)   |
+
+### Getting an API Key
+
+You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/settings/api).
+
+### Important Notes
+
+- **No tool calling support**: Perplexity does NOT support external tool calling. It performs internal web searches and returns results in the response. Use Perplexity for search-augmented generation, not agentic workflows requiring custom tools.
+- **Search results**: Perplexity responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
+- **Models**: Popular models include `sonar-pro`, `sonar`, and `sonar-deep-research` for different use cases.
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.

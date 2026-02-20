@@ -136,6 +136,7 @@ export const __test = {
   },
   getCacheKey,
   isBrowserMcpTool,
+  normalizeJsonSchema,
 };
 
 /**
@@ -147,14 +148,14 @@ export const __test = {
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
- * @param userIsProfileAdmin - Whether the user has profile admin permission
+ * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
-  userIsProfileAdmin: boolean,
+  userIsAgentAdmin: boolean,
 ): Promise<{
   tokenValue: string;
   tokenId: string;
@@ -198,8 +199,8 @@ export async function selectMCPGatewayToken(
   // Get all team tokens
   const tokens = await TeamTokenModel.findAll();
 
-  // 2. If user is profile admin, use organization token (teamId is null)
-  if (userIsProfileAdmin) {
+  // 2. If user is agent admin, use organization token (teamId is null)
+  if (userIsAgentAdmin) {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
       const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
@@ -373,7 +374,7 @@ export function closeChatMcpClient(
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
  * @param organizationId - The organization ID for token creation
- * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
@@ -381,7 +382,7 @@ export async function getChatMcpClient(
   agentId: string,
   userId: string,
   organizationId: string,
-  userIsProfileAdmin: boolean,
+  userIsAgentAdmin: boolean,
   conversationId?: string,
 ): Promise<Client | null> {
   const cacheKey = getCacheKey(agentId, userId, conversationId);
@@ -435,7 +436,7 @@ export async function getChatMcpClient(
     agentId,
     userId,
     organizationId,
-    userIsProfileAdmin,
+    userIsAgentAdmin,
   );
   if (!tokenResult) {
     logger.error(
@@ -516,7 +517,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeJsonSchema(schema: unknown): JSONSchema7 {
-  const fallbackSchema: JSONSchema7 = { type: "object", properties: {} };
+  const fallbackSchema: JSONSchema7 = {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+  };
 
   // If schema is missing or invalid, return a minimal valid schema
   if (!isRecord(schema)) {
@@ -532,8 +537,46 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     return fallbackSchema;
   }
 
-  // Return the schema as-is if it's already valid JSON Schema
-  return schema as JSONSchema7;
+  // Add additionalProperties: false to all object-type schemas recursively.
+  // This is required for OpenAI-compatible providers (Ollama, vLLM) to properly
+  // emit streaming tool calls instead of outputting tool calls as text content.
+  // Without it, models hallucinate extra properties and providers may fail to
+  // recognize the output as a tool call in streaming mode.
+  return addAdditionalPropertiesFalse(schema) as JSONSchema7;
+}
+
+/**
+ * Recursively adds `additionalProperties: false` to all object-type schemas.
+ * Traverses properties, array items, and nested schemas.
+ */
+function addAdditionalPropertiesFalse(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...schema };
+
+  if (result.type === "object") {
+    if (!("additionalProperties" in result)) {
+      result.additionalProperties = false;
+    }
+
+    // Recurse into properties
+    if (isRecord(result.properties)) {
+      const newProps: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(result.properties)) {
+        newProps[key] = isRecord(value)
+          ? addAdditionalPropertiesFalse(value)
+          : value;
+      }
+      result.properties = newProps;
+    }
+  }
+
+  // Recurse into array items
+  if (result.type === "array" && isRecord(result.items)) {
+    result.items = addAdditionalPropertiesFalse(result.items);
+  }
+
+  return result;
 }
 
 /**
@@ -543,7 +586,7 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
  * @param organizationId - The organization ID for token creation
- * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param userIsAgentAdmin - Whether the user has agent:admin permission
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object
@@ -553,7 +596,7 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
-  userIsProfileAdmin,
+  userIsAgentAdmin,
   enabledToolIds,
   conversationId,
   sessionId,
@@ -565,7 +608,7 @@ export async function getChatMcpTools({
   agentId: string;
   userId: string;
   organizationId: string;
-  userIsProfileAdmin: boolean;
+  userIsAgentAdmin: boolean;
   enabledToolIds?: string[];
   conversationId?: string;
   /** Session ID for grouping related LLM requests in logs */
@@ -614,7 +657,7 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
-    userIsProfileAdmin,
+    userIsAgentAdmin,
   );
   if (!mcpGwToken) {
     logger.warn(
@@ -630,7 +673,7 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
-    userIsProfileAdmin,
+    userIsAgentAdmin,
     conversationId,
   );
 
@@ -666,15 +709,6 @@ export async function getChatMcpTools({
       try {
         // Normalize the schema and wrap with jsonSchema() helper
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
-
-        logger.debug(
-          {
-            toolName: mcpTool.name,
-            schemaType: normalizedSchema.type,
-            hasProperties: !!normalizedSchema.properties,
-          },
-          "Converting MCP tool with JSON Schema",
-        );
 
         // Construct Tool using jsonSchema() to wrap JSON Schema
         aiTools[mcpTool.name] = {
@@ -769,7 +803,7 @@ export async function getChatMcpTools({
                     agentName,
                     userId,
                     organizationId,
-                    userIsProfileAdmin,
+                    userIsAgentAdmin,
                     conversationId,
                     mcpGwToken,
                     abortSignal,
@@ -822,7 +856,7 @@ export async function getChatMcpTools({
           agentId,
           organizationId,
           userId,
-          skipAccessCheck: userIsProfileAdmin,
+          skipAccessCheck: userIsAgentAdmin,
         });
 
         // Build the context for agent tool execution
@@ -999,7 +1033,7 @@ interface ToolExecutionContext {
   agentName: string;
   userId: string;
   organizationId: string;
-  userIsProfileAdmin: boolean;
+  userIsAgentAdmin: boolean;
   conversationId?: string;
   mcpGwToken: {
     tokenId: string;
@@ -1028,7 +1062,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     agentName,
     userId,
     organizationId,
-    userIsProfileAdmin,
+    userIsAgentAdmin,
     conversationId,
     mcpGwToken,
     abortSignal,
@@ -1054,7 +1088,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
       conversationId,
-      { userId, organizationId, userIsProfileAdmin },
+      { userId, organizationId, userIsAgentAdmin },
     );
 
     if (!tabResult.success) {
@@ -1149,7 +1183,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       await browserStreamFeature.syncUrlFromNavigateToolCall({
         agentId,
         conversationId,
-        userContext: { userId, organizationId, userIsProfileAdmin },
+        userContext: { userId, organizationId, userIsAgentAdmin },
         toolResultContent: result.content,
       });
     }

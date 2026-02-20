@@ -155,7 +155,7 @@ export class ToolAutoPolicyService {
       }
 
       // Get MCP server name from joined data
-      const mcpServerName = tool.mcpServer?.name || null;
+      const mcpServerName = tool.catalog?.name || null;
 
       logger.debug(
         { toolId, toolName: tool.name, mcpServerName },

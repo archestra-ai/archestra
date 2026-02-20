@@ -14,8 +14,28 @@ import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import OpenRouterChatCompletionInteraction from "./llmProviders/openrouter";
+import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
+
+type InteractionFactory = (interaction: Interaction) => InteractionUtils;
+
+const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
+  "openai:chatCompletions": (i) => new OpenAiChatCompletionInteraction(i),
+  "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
+  "bedrock:converse": (i) => new BedrockConverseInteraction(i),
+  "cerebras:chatCompletions": (i) => new CerebrasChatCompletionInteraction(i),
+  "cohere:chat": (i) => new CohereChatInteraction(i),
+  "gemini:generateContent": (i) => new GeminiGenerateContentInteraction(i),
+  "mistral:chatCompletions": (i) => new MistralChatCompletionInteraction(i),
+  "ollama:chatCompletions": (i) => new OllamaChatCompletionInteraction(i),
+  "openrouter:chatCompletions": (i) =>
+    new OpenRouterChatCompletionInteraction(i),
+  "perplexity:chatCompletions": (i) =>
+    new PerplexityChatCompletionInteraction(i),
+  "vllm:chatCompletions": (i) => new VllmChatCompletionInteraction(i),
+  "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
+};
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -122,33 +142,12 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    const type = this.type as string;
-    switch (type) {
-      case "openai:chatCompletions":
-        return new OpenAiChatCompletionInteraction(interaction);
-      case "anthropic:messages":
-        return new AnthropicMessagesInteraction(interaction);
-      case "bedrock:converse":
-        return new BedrockConverseInteraction(interaction);
-      case "openrouter:chatCompletions":
-        return new OpenRouterChatCompletionInteraction(interaction);
-      case "zhipuai:chatCompletions":
-        return new ZhipuaiChatCompletionInteraction(interaction);
-      case "cerebras:chatCompletions":
-        return new CerebrasChatCompletionInteraction(interaction);
-      case "mistral:chatCompletions":
-        return new MistralChatCompletionInteraction(interaction);
-      case "vllm:chatCompletions":
-        return new VllmChatCompletionInteraction(interaction);
-      case "ollama:chatCompletions":
-        return new OllamaChatCompletionInteraction(interaction);
-      case "cohere:chat":
-        return new CohereChatInteraction(interaction);
-      case "gemini:generateContent":
-      default:
-        // Default to Gemini for any other provider
-        return new GeminiGenerateContentInteraction(interaction);
+    const factory =
+      interactionFactories[this.type as keyof typeof interactionFactories];
+    if (!factory) {
+      throw new Error(`Unsupported interaction type: ${this.type}`);
     }
+    return factory(interaction);
   }
 
   isLastMessageToolCall(): boolean {

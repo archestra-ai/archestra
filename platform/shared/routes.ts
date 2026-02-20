@@ -172,6 +172,11 @@ export const RouteId = {
     "mistralChatCompletionsWithDefaultAgent",
   MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
 
+  // Proxy Routes - Perplexity
+  PerplexityChatCompletionsWithDefaultAgent:
+    "perplexityChatCompletionsWithDefaultAgent",
+  PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -229,27 +234,6 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
-
-  // Prompt Routes
-  GetPrompts: "getPrompts",
-  CreatePrompt: "createPrompt",
-  GetPrompt: "getPrompt",
-  GetPromptVersions: "getPromptVersions",
-  GetPromptTools: "getPromptTools",
-  RollbackPrompt: "rollbackPrompt",
-  UpdatePrompt: "updatePrompt",
-  DeletePrompt: "deletePrompt",
-
-  // Agent Prompt Routes
-  GetAgentPrompts: "getAgentPrompts",
-  AssignAgentPrompts: "assignAgentPrompts",
-  DeleteAgentPrompt: "deleteAgentPrompt",
-
-  // Prompt Agent Routes (agent assignment to prompts)
-  GetAllPromptAgentConnections: "getAllPromptAgentConnections",
-  GetPromptAgents: "getPromptAgents",
-  SyncPromptAgents: "syncPromptAgents",
-  DeletePromptAgent: "deletePromptAgent",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -312,7 +296,6 @@ export const RouteId = {
   GetSecretsType: "getSecretsType",
   GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
-  InitializeSecretsManager: "initializeSecretsManager",
 
   // Incoming Email Routes
   GetIncomingEmailStatus: "getIncomingEmailStatus",
@@ -327,6 +310,7 @@ export const RouteId = {
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Invitation Routes

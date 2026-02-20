@@ -126,13 +126,12 @@ describe("persistTools", () => {
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
     const catalog = await makeInternalMcpCatalog();
-    const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+    await makeMcpServer({ catalogId: catalog.id });
 
     // Create an MCP tool and assign it to the agent
     const mcpTool = await makeTool({
       name: "mcp-tool-1",
       catalogId: catalog.id,
-      mcpServerId: mcpServer.id,
     });
     await AgentToolModel.createIfNotExists(agent.id, mcpTool.id);
 
@@ -162,7 +161,7 @@ describe("persistTools", () => {
     expect(proxyTools[0].name).toBe("proxy-tool-1");
   });
 
-  test("skips MCP tools with null mcpServerId (deleted MCP server)", async ({
+  test("skips MCP tools with catalogId (even without MCP server)", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeTool,
@@ -170,18 +169,17 @@ describe("persistTools", () => {
     const agent = await makeAgent({ name: "Test Agent" });
     const catalog = await makeInternalMcpCatalog();
 
-    // Create an MCP tool with catalogId but no mcpServerId (simulates deleted MCP server)
+    // Create an MCP tool with catalogId (catalogId is what identifies MCP tools)
     const mcpTool = await makeTool({
       name: "mcp-tool-orphaned",
       catalogId: catalog.id,
-      mcpServerId: null,
     });
     await AgentToolModel.createIfNotExists(agent.id, mcpTool.id);
 
     // Try to persist a tool with the same name as the orphaned MCP tool
     const tools = [
       {
-        toolName: "mcp-tool-orphaned", // Same name as MCP tool with null mcpServerId
+        toolName: "mcp-tool-orphaned", // Same name as MCP tool with catalogId
         toolParameters: { type: "object" },
         toolDescription: "Should be skipped",
       },
@@ -310,13 +308,12 @@ describe("persistTools", () => {
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
     const catalog = await makeInternalMcpCatalog();
-    const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+    await makeMcpServer({ catalogId: catalog.id });
 
     // Create an MCP tool and assign it
     const mcpTool = await makeTool({
       name: "existing-mcp-tool",
       catalogId: catalog.id,
-      mcpServerId: mcpServer.id,
     });
     await AgentToolModel.createIfNotExists(agent.id, mcpTool.id);
 

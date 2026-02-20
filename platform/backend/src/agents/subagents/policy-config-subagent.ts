@@ -301,6 +301,7 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
   cohere: "cohere:chat",
   cerebras: "cerebras:chatCompletions",
   mistral: "mistral:chatCompletions",
+  perplexity: "perplexity:chatCompletions",
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",
   zhipuai: "zhipuai:chatCompletions",

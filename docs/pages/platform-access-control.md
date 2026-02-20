@@ -3,7 +3,7 @@ title: "Access Control"
 category: Archestra Platform
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 4
-lastUpdated: 2026-02-12
+lastUpdated: 2026-02-19
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -15,10 +15,10 @@ Archestra uses a role-based access control (RBAC) system to manage user permissi
 
 Permissions in Archestra are defined using a `resource:action` format, where:
 
-- **Resource**: The type of object or feature being accessed (e.g., `profile`, `tool`, `organization`)
+- **Resource**: The type of object or feature being accessed (e.g., `agent`, `tool`, `organization`)
 - **Action**: The operation being performed (`create`, `read`, `update`, `delete`, `admin`)
 
-For example, the permission `profile:create` allows creating new profiles, while `organization:read` allows viewing organization information.
+For example, the permission `agent:create` allows creating new automation agents, `mcpGateway:create` allows creating MCP gateways, `llmProxy:create` allows creating LLM proxies, and `organization:read` allows viewing organization information.
 
 ## Predefined Roles
 
@@ -26,9 +26,9 @@ The following roles are built into Archestra and cannot be modified or deleted:
 
 | Role | Description | Granted Permissions |
 |------|-------------|--------------------|
-| **admin** | Full administrative access to all organization resources | `organization:read`<br /><br />`organization:update`<br /><br />`organization:delete`<br /><br />`member:create`<br /><br />`member:update`<br /><br />`member:delete`<br /><br />`invitation:create`<br /><br />`invitation:cancel`<br /><br />`team:create`<br /><br />`team:read`<br /><br />`team:update`<br /><br />`team:delete`<br /><br />`team:admin`<br /><br />`ac:create`<br /><br />`ac:read`<br /><br />`ac:update`<br /><br />`ac:delete`<br /><br />`profile:create`<br /><br />`profile:read`<br /><br />`profile:update`<br /><br />`profile:delete`<br /><br />`profile:admin`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`dualLlmConfig:create`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmConfig:update`<br /><br />`dualLlmConfig:delete`<br /><br />`dualLlmResult:create`<br /><br />`dualLlmResult:read`<br /><br />`dualLlmResult:update`<br /><br />`dualLlmResult:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`identityProvider:create`<br /><br />`identityProvider:read`<br /><br />`identityProvider:update`<br /><br />`identityProvider:delete`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:update`<br /><br />`mcpServer:delete`<br /><br />`mcpServer:admin`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`mcpServerInstallationRequest:delete`<br /><br />`mcpServerInstallationRequest:admin`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:create`<br /><br />`limit:read`<br /><br />`limit:update`<br /><br />`limit:delete`<br /><br />`tokenPrice:create`<br /><br />`tokenPrice:read`<br /><br />`tokenPrice:update`<br /><br />`tokenPrice:delete`<br /><br />`chatSettings:create`<br /><br />`chatSettings:read`<br /><br />`chatSettings:update`<br /><br />`chatSettings:delete`<br /><br />`prompt:create`<br /><br />`prompt:read`<br /><br />`prompt:update`<br /><br />`prompt:delete` |
-| **editor** | Power user with full CRUD access to most resources but no admin privileges | `profile:create`<br /><br />`profile:read`<br /><br />`profile:update`<br /><br />`profile:delete`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`dualLlmConfig:create`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmConfig:update`<br /><br />`dualLlmConfig:delete`<br /><br />`dualLlmResult:create`<br /><br />`dualLlmResult:read`<br /><br />`dualLlmResult:update`<br /><br />`dualLlmResult:delete`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:update`<br /><br />`mcpServer:delete`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`mcpServerInstallationRequest:delete`<br /><br />`organization:read`<br /><br />`team:read`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:create`<br /><br />`limit:read`<br /><br />`limit:update`<br /><br />`limit:delete`<br /><br />`tokenPrice:create`<br /><br />`tokenPrice:read`<br /><br />`tokenPrice:update`<br /><br />`tokenPrice:delete`<br /><br />`chatSettings:create`<br /><br />`chatSettings:read`<br /><br />`chatSettings:update`<br /><br />`chatSettings:delete`<br /><br />`prompt:create`<br /><br />`prompt:read`<br /><br />`prompt:update`<br /><br />`prompt:delete`<br /><br /><br /><br /><br /><br /><br /><br /> |
-| **member** | Standard user with limited access to organization resources | `profile:read`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmResult:read`<br /><br />`internalMcpCatalog:read`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:delete`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`organization:read`<br /><br />`team:read`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:read`<br /><br />`tokenPrice:read`<br /><br />`chatSettings:read`<br /><br />`prompt:read`<br /><br /><br /><br /><br /><br /><br /><br /> |
+| **admin** | Full administrative access to all organization resources | `organization:read`<br /><br />`organization:update`<br /><br />`organization:delete`<br /><br />`member:create`<br /><br />`member:update`<br /><br />`member:delete`<br /><br />`invitation:create`<br /><br />`invitation:cancel`<br /><br />`team:create`<br /><br />`team:read`<br /><br />`team:update`<br /><br />`team:delete`<br /><br />`team:admin`<br /><br />`ac:create`<br /><br />`ac:read`<br /><br />`ac:update`<br /><br />`ac:delete`<br /><br />`agent:create`<br /><br />`agent:read`<br /><br />`agent:update`<br /><br />`agent:delete`<br /><br />`agent:admin`<br /><br />`mcpGateway:create`<br /><br />`mcpGateway:read`<br /><br />`mcpGateway:update`<br /><br />`mcpGateway:delete`<br /><br />`mcpGateway:admin`<br /><br />`llmProxy:create`<br /><br />`llmProxy:read`<br /><br />`llmProxy:update`<br /><br />`llmProxy:delete`<br /><br />`llmProxy:admin`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`dualLlmConfig:create`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmConfig:update`<br /><br />`dualLlmConfig:delete`<br /><br />`dualLlmResult:create`<br /><br />`dualLlmResult:read`<br /><br />`dualLlmResult:update`<br /><br />`dualLlmResult:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`identityProvider:create`<br /><br />`identityProvider:read`<br /><br />`identityProvider:update`<br /><br />`identityProvider:delete`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:update`<br /><br />`mcpServer:delete`<br /><br />`mcpServer:admin`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`mcpServerInstallationRequest:delete`<br /><br />`mcpServerInstallationRequest:admin`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:create`<br /><br />`limit:read`<br /><br />`limit:update`<br /><br />`limit:delete`<br /><br />`tokenPrice:create`<br /><br />`tokenPrice:read`<br /><br />`tokenPrice:update`<br /><br />`tokenPrice:delete`<br /><br />`chatSettings:create`<br /><br />`chatSettings:read`<br /><br />`chatSettings:update`<br /><br />`chatSettings:delete` |
+| **editor** | Power user with full CRUD access to most resources but no admin privileges | `agent:create`<br /><br />`agent:read`<br /><br />`agent:update`<br /><br />`agent:delete`<br /><br />`mcpGateway:create`<br /><br />`mcpGateway:read`<br /><br />`mcpGateway:update`<br /><br />`mcpGateway:delete`<br /><br />`llmProxy:create`<br /><br />`llmProxy:read`<br /><br />`llmProxy:update`<br /><br />`llmProxy:delete`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`dualLlmConfig:create`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmConfig:update`<br /><br />`dualLlmConfig:delete`<br /><br />`dualLlmResult:create`<br /><br />`dualLlmResult:read`<br /><br />`dualLlmResult:update`<br /><br />`dualLlmResult:delete`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:update`<br /><br />`mcpServer:delete`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`mcpServerInstallationRequest:delete`<br /><br />`organization:read`<br /><br />`team:read`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:create`<br /><br />`limit:read`<br /><br />`limit:update`<br /><br />`limit:delete`<br /><br />`tokenPrice:create`<br /><br />`tokenPrice:read`<br /><br />`tokenPrice:update`<br /><br />`tokenPrice:delete`<br /><br />`chatSettings:create`<br /><br />`chatSettings:read`<br /><br />`chatSettings:update`<br /><br />`chatSettings:delete`<br /><br /><br /><br /><br /><br /><br /><br /> |
+| **member** | Standard user with limited access to organization resources | `agent:read`<br /><br />`mcpGateway:read`<br /><br />`llmProxy:read`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmResult:read`<br /><br />`internalMcpCatalog:read`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:delete`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`organization:read`<br /><br />`team:read`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:read`<br /><br />`tokenPrice:read`<br /><br />`chatSettings:read`<br /><br /><br /><br /><br /><br /><br /><br /> |
 
 
 ## Custom Roles
@@ -51,6 +51,11 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:read` | View and list RBAC roles |
 | `ac:update` | Modify existing RBAC roles |
 | `ac:delete` | Remove existing RBAC roles |
+| `agent:create` | Create new automation agents with prompts and configurations |
+| `agent:read` | View and list automation agents with prompts and configurations |
+| `agent:update` | Modify existing automation agents with prompts and configurations |
+| `agent:delete` | Remove existing automation agents with prompts and configurations |
+| `agent:admin` | Administrative control over automation agents with prompts and configurations |
 | `chatSettings:create` | Create new chat feature configuration and settings |
 | `chatSettings:read` | View and list chat feature configuration and settings |
 | `chatSettings:update` | Modify existing chat feature configuration and settings |
@@ -71,10 +76,10 @@ The following table lists all available permissions that can be assigned to cust
 | `identityProvider:read` | View and list identity providers for authentication |
 | `identityProvider:update` | Modify existing identity providers for authentication |
 | `identityProvider:delete` | Remove existing identity providers for authentication |
-| `interaction:create` | Create new conversation history and profile interactions |
-| `interaction:read` | View and list conversation history and profile interactions |
-| `interaction:update` | Modify existing conversation history and profile interactions |
-| `interaction:delete` | Remove existing conversation history and profile interactions |
+| `interaction:create` | Create new conversation history and agent interactions |
+| `interaction:read` | View and list conversation history and agent interactions |
+| `interaction:update` | Modify existing conversation history and agent interactions |
+| `interaction:delete` | Remove existing conversation history and agent interactions |
 | `internalMcpCatalog:create` | Create new internal mcp server catalog management |
 | `internalMcpCatalog:read` | View and list internal mcp server catalog management |
 | `internalMcpCatalog:update` | Modify existing internal mcp server catalog management |
@@ -85,6 +90,16 @@ The following table lists all available permissions that can be assigned to cust
 | `limit:read` | View and list usage limits and quotas |
 | `limit:update` | Modify existing usage limits and quotas |
 | `limit:delete` | Remove existing usage limits and quotas |
+| `llmProxy:create` | Create new llm proxies for security, observability, and cost management |
+| `llmProxy:read` | View and list llm proxies for security, observability, and cost management |
+| `llmProxy:update` | Modify existing llm proxies for security, observability, and cost management |
+| `llmProxy:delete` | Remove existing llm proxies for security, observability, and cost management |
+| `llmProxy:admin` | Administrative control over llm proxies for security, observability, and cost management |
+| `mcpGateway:create` | Create new mcp gateways that provide unified mcp endpoints for tools |
+| `mcpGateway:read` | View and list mcp gateways that provide unified mcp endpoints for tools |
+| `mcpGateway:update` | Modify existing mcp gateways that provide unified mcp endpoints for tools |
+| `mcpGateway:delete` | Remove existing mcp gateways that provide unified mcp endpoints for tools |
+| `mcpGateway:admin` | Administrative control over mcp gateways that provide unified mcp endpoints for tools |
 | `mcpServer:create` | Create new mcp servers for tool integration |
 | `mcpServer:read` | View and list mcp servers for tool integration |
 | `mcpServer:update` | Modify existing mcp servers for tool integration |
@@ -106,15 +121,6 @@ The following table lists all available permissions that can be assigned to cust
 | `policy:read` | View and list tool invocation and trusted data policies for security |
 | `policy:update` | Modify existing tool invocation and trusted data policies for security |
 | `policy:delete` | Remove existing tool invocation and trusted data policies for security |
-| `profile:create` | Create new profiles that can use tools and interact with users |
-| `profile:read` | View and list profiles that can use tools and interact with users |
-| `profile:update` | Modify existing profiles that can use tools and interact with users |
-| `profile:delete` | Remove existing profiles that can use tools and interact with users |
-| `profile:admin` | Administrative control over profiles that can use tools and interact with users |
-| `prompt:create` | Create new reusable prompt templates and system prompts |
-| `prompt:read` | View and list reusable prompt templates and system prompts |
-| `prompt:update` | Modify existing reusable prompt templates and system prompts |
-| `prompt:delete` | Remove existing reusable prompt templates and system prompts |
 | `team:create` | Create new teams for organizing members and access control |
 | `team:read` | View and list teams for organizing members and access control |
 | `team:update` | Modify existing teams for organizing members and access control |
@@ -124,10 +130,10 @@ The following table lists all available permissions that can be assigned to cust
 | `tokenPrice:read` | View and list token pricing configuration |
 | `tokenPrice:update` | Modify existing token pricing configuration |
 | `tokenPrice:delete` | Remove existing token pricing configuration |
-| `tool:create` | Create new individual tools that can be assigned to profiles |
-| `tool:read` | View and list individual tools that can be assigned to profiles |
-| `tool:update` | Modify existing individual tools that can be assigned to profiles |
-| `tool:delete` | Remove existing individual tools that can be assigned to profiles |
+| `tool:create` | Create new individual tools that can be assigned to agents |
+| `tool:read` | View and list individual tools that can be assigned to agents |
+| `tool:update` | Modify existing individual tools that can be assigned to agents |
+| `tool:delete` | Remove existing individual tools that can be assigned to agents |
 
 
 ## Best Practices
@@ -141,16 +147,16 @@ Grant users only the minimum permissions necessary for their role. Start with th
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign profiles and MCP servers** to specific teams
+2. **Assign agents and MCP servers** to specific teams
 3. **Add members to teams** based on their role and responsibilities
 
 #### Team Access Control Rules
 
-**For Profiles:**
+**For Agents (MCP Gateways, LLM Proxies, Automation Agents):**
 
-- Team members can only see profiles assigned to teams they belong to
-- Exception: Users with `profile:admin` permission can see all profiles
-- Exception: Profiles with no team assignment are visible to all organization members
+- Team members can only see agents assigned to teams they belong to
+- Exception: Users with `agent:admin` permission can see all agents
+- Exception: Agents with no team assignment are visible to all organization members
 
 **For MCP Servers:**
 
@@ -160,7 +166,7 @@ Combine roles with team-based access control for fine-grained resource access:
 
 **Associated Artifacts:**
 
-Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for profiles and MCP servers they have access to.
+Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for agents and MCP servers they have access to.
 
 ### Regular Review
 
@@ -168,4 +174,4 @@ Periodically review custom roles and member assignments to ensure they align wit
 
 ### Role Naming
 
-Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Profile-Manager", "Read-Only-Analyst", "Tool-Developer").
+Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Agent-Manager", "Read-Only-Analyst", "Tool-Developer").

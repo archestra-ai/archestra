@@ -17,6 +17,7 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   cerebras: () => new TiktokenTokenizer(),
   cohere: () => new TiktokenTokenizer(),
   mistral: () => new TiktokenTokenizer(),
+  perplexity: () => new TiktokenTokenizer(),
   vllm: () => new TiktokenTokenizer(),
   ollama: () => new TiktokenTokenizer(),
   zhipuai: () => new TiktokenTokenizer(),

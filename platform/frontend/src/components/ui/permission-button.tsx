@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import { type Permissions, type Resource, resourceLabels } from "@shared";
 import type React from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
@@ -81,8 +81,17 @@ export function PermissionButton({
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-60">
-        {tooltip || "You don't have permission to perform this action."}
+        {tooltip || formatMissingPermissions(permissions)}
       </TooltipContent>
     </Tooltip>
   );
+}
+
+function formatMissingPermissions(permissions: Permissions): string {
+  const parts = Object.entries(permissions).map(([resource, actions]) => {
+    const label = resourceLabels[resource as Resource] ?? resource;
+    return `${label} (${actions.join(", ")})`;
+  });
+
+  return `Missing permissions: ${parts.join(", ")}`;
 }

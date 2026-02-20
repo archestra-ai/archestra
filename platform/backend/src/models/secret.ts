@@ -28,6 +28,18 @@ class SecretModel {
   }
 
   /**
+   * Find a secret by name
+   */
+  static async findByName(name: string): Promise<SelectSecret | null> {
+    const [secret] = await db
+      .select()
+      .from(schema.secretsTable)
+      .where(eq(schema.secretsTable.name, name));
+
+    return secret ?? null;
+  }
+
+  /**
    * Find multiple secrets by IDs in a single query
    */
   static async findByIds(ids: string[]): Promise<SelectSecret[]> {

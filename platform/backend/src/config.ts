@@ -439,36 +439,6 @@ export default {
       },
     },
   },
-  chatops: {
-    msTeams: {
-      enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
-      appId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "",
-      appSecret: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET || "",
-      // Optional: Set for single-tenant Azure Bot (leave empty for multi-tenant)
-      tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID || "",
-      // Graph API credentials for thread history (falls back to Bot credentials if not set)
-      graph: {
-        tenantId:
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID ||
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID ||
-          "",
-        clientId:
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID ||
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID ||
-          "",
-        clientSecret:
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET ||
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET ||
-          "",
-      },
-    },
-    slack: {
-      enabled: process.env.ARCHESTRA_CHATOPS_SLACK_ENABLED === "true",
-      botToken: process.env.ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN || "",
-      signingSecret: process.env.ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET || "",
-      appId: process.env.ARCHESTRA_CHATOPS_SLACK_APP_ID || "",
-    },
-  },
   knowledgeGraph: {
     provider: parseKnowledgeGraphProvider(),
     lightrag: {

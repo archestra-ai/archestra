@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
-import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
 
 interface MsTeamsSetupDialogProps {
@@ -44,9 +43,6 @@ export function MsTeamsSetupDialog({
   const [sharedAppId, setSharedAppId] = useState("");
   const [sharedAppSecret, setSharedAppSecret] = useState("");
   const [sharedTenantId, setSharedTenantId] = useState("");
-
-  const isLocalEnvOrQuickstart =
-    features?.isQuickstart || config.environment === "development";
 
   const hasAppId = Boolean(sharedAppId || creds?.appId);
   const hasAppSecret = Boolean(sharedAppSecret || creds?.appSecret);
@@ -101,67 +97,48 @@ export function MsTeamsSetupDialog({
         );
       }
       // Last step
-      if (isLocalEnvOrQuickstart) {
-        return (
-          <StepConfigForm
-            key={step.title}
-            appId={sharedAppId}
-            appSecret={sharedAppSecret}
-            tenantId={sharedTenantId}
-            onAppIdChange={setSharedAppId}
-            onAppSecretChange={setSharedAppSecret}
-            onTenantIdChange={setSharedTenantId}
-            creds={creds}
-          />
-        );
-      }
       return (
-        <StepEnvVarsInfo
+        <StepConfigForm
           key={step.title}
           appId={sharedAppId}
           appSecret={sharedAppSecret}
           tenantId={sharedTenantId}
+          onAppIdChange={setSharedAppId}
+          onAppSecretChange={setSharedAppSecret}
+          onTenantIdChange={setSharedTenantId}
+          creds={creds}
         />
       );
     });
-  }, [
-    ngrokDomain,
-    isLocalEnvOrQuickstart,
-    sharedAppId,
-    sharedAppSecret,
-    sharedTenantId,
-    creds,
-  ]);
+  }, [ngrokDomain, sharedAppId, sharedAppSecret, sharedTenantId, creds]);
 
-  const lastStepAction = isLocalEnvOrQuickstart
-    ? {
-        label: saving ? "Connecting..." : "Connect",
-        disabled: saving || !canSave,
-        loading: saving,
-        onClick: async () => {
-          setSaving(true);
-          try {
-            const body: Record<string, unknown> = { enabled: true };
-            if (sharedAppId) body.appId = sharedAppId;
-            if (sharedAppSecret) body.appSecret = sharedAppSecret;
-            if (sharedTenantId) body.tenantId = sharedTenantId;
-            const updateResult = await mutation.mutateAsync(
-              body as {
-                enabled?: boolean;
-                appId?: string;
-                appSecret?: string;
-                tenantId?: string;
-              },
-            );
-            if (updateResult?.success) {
-              handleOpenChange(false);
-            }
-          } finally {
-            setSaving(false);
-          }
-        },
+  const lastStepAction = {
+    label: saving ? "Connecting..." : "Connect",
+    disabled: saving || !canSave,
+    loading: saving,
+    onClick: async () => {
+      setSaving(true);
+      try {
+        const body: Record<string, unknown> = { enabled: true };
+        if (sharedAppId) body.appId = sharedAppId;
+        if (sharedAppSecret) body.appSecret = sharedAppSecret;
+        if (sharedTenantId) body.tenantId = sharedTenantId;
+        const updateResult = await mutation.mutateAsync(
+          body as {
+            enabled?: boolean;
+            appId?: string;
+            appSecret?: string;
+            tenantId?: string;
+          },
+        );
+        if (updateResult?.success) {
+          handleOpenChange(false);
+        }
+      } finally {
+        setSaving(false);
       }
-    : undefined;
+    },
+  };
 
   return (
     <SetupDialog
@@ -551,9 +528,8 @@ function EnvVarsInfo({
       <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
       <div className="min-w-0 flex-1">
         <p>
-          Values that are set or edited here are stored in memory and will be
-          reset after server restart. For persistent configuration, set these
-          environment variables:
+          Values are saved to the database and persist across restarts. You can
+          also set these environment variables for initial provisioning:
         </p>
         <div className="relative mt-2">
           <pre className="bg-muted rounded-md px-3 py-2 text-xs font-mono leading-relaxed overflow-x-auto">
@@ -563,86 +539,6 @@ function EnvVarsInfo({
             <CopyButton text={envVarsText} />
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StepEnvVarsInfo({
-  appId,
-  appSecret,
-  tenantId,
-}: {
-  appId?: string;
-  appSecret?: string;
-  tenantId?: string;
-}) {
-  const envVarsText = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<Microsoft App ID>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret || "<Client Secret>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId || "<Tenant ID>"}`,
-  ].join("\n");
-
-  const maskedEnvVarsDisplay = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<Microsoft App ID>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret ? "********" : "<Client Secret>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId || "<Tenant ID>"}`,
-  ].join("\n");
-
-  return (
-    <div
-      className="grid flex-1 gap-6"
-      style={{ gridTemplateColumns: "1fr 1fr" }}
-    >
-      <StepCard stepNumber={6} title="Configure Archestra">
-        <ol className="space-y-3">
-          <li className="flex gap-3 text-sm leading-relaxed">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-              1
-            </span>
-            <span className="pt-0.5">
-              Set the environment variables shown on the right
-            </span>
-          </li>
-          <li className="flex gap-3 text-sm leading-relaxed">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-              2
-            </span>
-            <span className="pt-0.5">
-              <strong>Restart Archestra</strong> for changes to take effect
-            </span>
-          </li>
-          <li className="flex gap-3 text-sm leading-relaxed">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-              3
-            </span>
-            <span className="pt-0.5">
-              Edit an agent and enable the <strong>Microsoft Teams</strong>{" "}
-              toggle
-            </span>
-          </li>
-        </ol>
-      </StepCard>
-
-      <div className="flex flex-col justify-center gap-5 rounded-lg border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Set the following environment variables and restart Archestra to
-          enable MS Teams integration.
-        </p>
-        <div className="relative rounded bg-muted px-4 py-3 font-mono text-sm leading-loose">
-          <div className="absolute top-2 right-2">
-            <CopyButton text={envVarsText} />
-          </div>
-          <pre className="text-xs leading-loose whitespace-pre-wrap">
-            {maskedEnvVarsDisplay}
-          </pre>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          After setting these variables, restart Archestra for the changes to
-          take effect. The MS Teams toggle will then appear on agents.
-        </p>
       </div>
     </div>
   );

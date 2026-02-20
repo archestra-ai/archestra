@@ -25,7 +25,6 @@ export function useUpdateChatOpsConfigInQuickstart() {
         return;
       }
       toast.success("MS Teams configuration updated");
-      queryClient.invalidateQueries({ queryKey: ["features"] });
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
     },
     onError: (error) => {
@@ -60,7 +59,6 @@ export function useUpdateSlackChatOpsConfig() {
         return;
       }
       toast.success("Slack configuration updated");
-      queryClient.invalidateQueries({ queryKey: ["features"] });
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
     },
     onError: (error) => {

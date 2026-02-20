@@ -111,7 +111,8 @@ export function useRotateToken() {
       }
       return response.data as { value: string };
     },
-    onSuccess: (_data, tokenId) => {
+    onSuccess: (data, tokenId) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
       queryClient.invalidateQueries({ queryKey: ["tokenValue", tokenId] });
     },

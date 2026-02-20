@@ -1,6 +1,7 @@
 import { PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { OrganizationRoleModel } from "@/models";
 import {
   ApiError,
@@ -29,8 +30,19 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      // Get all roles including predefined ones
+    async ({ organizationId, headers }, reply) => {
+      const { success: canUpdateOrganization } = await hasPermission(
+        { organization: ["update"] },
+        headers,
+      );
+
+      if (!canUpdateOrganization) {
+        // Non-admin users only see predefined roles
+        return reply.send(
+          OrganizationRoleModel.getPredefinedOnly(organizationId),
+        );
+      }
+
       return reply.send(await OrganizationRoleModel.getAll(organizationId));
     },
   );

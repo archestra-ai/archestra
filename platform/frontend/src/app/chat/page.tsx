@@ -17,6 +17,7 @@ import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dia
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -44,6 +45,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
@@ -71,6 +73,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/pending-tool-state";
+import { useTeams } from "@/lib/team.query";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -118,6 +121,18 @@ export default function ChatPage() {
   const { data: canCreateCatalog } = useHasPermissions({
     internalMcpCatalog: ["create"],
   });
+
+  const { data: isAgentAdmin } = useHasPermissions({
+    agent: ["admin"],
+  });
+  const { data: canCreateAgent } = useHasPermissions({
+    agent: ["create"],
+  });
+  const { data: teams } = useTeams();
+
+  // Non-admin users with no teams cannot create agents
+  const cannotCreateDueToNoTeams =
+    !isAgentAdmin && (!teams || teams.length === 0);
 
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
@@ -1050,12 +1065,26 @@ export default function ChatPage() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button asChild>
-            <Link href="/agents?create=true">
+          {cannotCreateDueToNoTeams ? (
+            <ButtonWithTooltip
+              disabled
+              disabledText={
+                canCreateAgent
+                  ? "You need to be a member of at least one team to create agents"
+                  : "You don't have permission to create agents"
+              }
+            >
               <Plus className="mr-2 h-4 w-4" />
               Create Agent
-            </Link>
-          </Button>
+            </ButtonWithTooltip>
+          ) : (
+            <Button asChild>
+              <Link href="/agents?create=true">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Agent
+              </Link>
+            </Button>
+          )}
         </EmptyContent>
       </Empty>
     );
@@ -1119,7 +1148,8 @@ export default function ChatPage() {
                   {(conversationId
                     ? conversation?.agentId
                     : initialAgentId) && (
-                    <Button
+                    <PermissionButton
+                      permissions={{ agent: ["update"] }}
                       variant="ghost"
                       size="sm"
                       onClick={() => openDialog("edit-agent")}
@@ -1127,7 +1157,7 @@ export default function ChatPage() {
                       className="h-8 px-2"
                     >
                       <Edit className="h-4 w-4" />
-                    </Button>
+                    </PermissionButton>
                   )}
                 </div>
               </div>

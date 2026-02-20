@@ -1,6 +1,11 @@
 "use client";
 
-import type { Action, Permissions, Resource } from "@shared";
+import {
+  type Action,
+  type Permissions,
+  type Resource,
+  resourceLabels,
+} from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -44,32 +49,6 @@ const resourceCategories: Record<string, Resource[]> = {
     "chatSettings",
     "identityProvider",
   ],
-};
-
-// Human-readable labels for resources
-const resourceLabels: Record<Resource, string> = {
-  agent: "Agents",
-  mcpGateway: "MCP Gateways",
-  llmProxy: "LLM Proxies",
-  tool: "Tools",
-  policy: "Policies",
-  interaction: "Interactions",
-  dualLlmConfig: "Dual LLM Configs",
-  dualLlmResult: "Dual LLM Results",
-  organization: "Organization",
-  identityProvider: "Identity Providers",
-  member: "Members",
-  invitation: "Invitations",
-  internalMcpCatalog: "Internal MCP Catalog",
-  mcpServer: "MCP Servers",
-  mcpServerInstallationRequest: "MCP Server Installation Requests",
-  mcpToolCall: "MCP Tool Calls",
-  team: "Teams",
-  ac: "Access Control",
-  conversation: "Conversations",
-  limit: "Limits",
-  tokenPrice: "Token Prices",
-  chatSettings: "Chat Settings",
 };
 
 // Human-readable labels for actions

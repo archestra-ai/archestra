@@ -133,10 +133,14 @@ export function useCreateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
-      const response = await createAgent({ body: data });
-      return response.data;
+      const { data: responseData, error } = await createAgent({ body: data });
+      if (error) {
+        handleApiError(error);
+      }
+      return responseData;
     },
     onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // Invalidate profile tokens for the new profile
       if (data?.id) {
@@ -158,10 +162,17 @@ export function useUpdateProfile() {
       id: string;
       data: archestraApiTypes.UpdateAgentData["body"];
     }) => {
-      const response = await updateAgent({ path: { id }, body: data });
-      return response.data;
+      const { data: responseData, error } = await updateAgent({
+        path: { id },
+        body: data,
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return responseData;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
       queryClient.invalidateQueries({
@@ -184,7 +195,8 @@ export function useDeleteProfile() {
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });

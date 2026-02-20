@@ -14,7 +14,7 @@ import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 import type { ToolsInitialData } from "./page";
 
-export function ToolsClient({
+export function ToolPoliciesClient({
   initialData,
 }: {
   initialData?: ToolsInitialData;

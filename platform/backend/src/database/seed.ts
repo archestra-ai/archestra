@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_TEAM_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
   type PredefinedRoleName,
@@ -163,12 +164,21 @@ async function seedChatAssistantAgent(): Promise<void> {
 
   const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
 
-  await db.insert(schema.agentsTable).values({
-    organizationId: org.id,
-    name: "Chat Assistant",
-    agentType: "agent",
-    systemPrompt,
-  });
+  const [inserted] = await db
+    .insert(schema.agentsTable)
+    .values({
+      organizationId: org.id,
+      name: "Chat Assistant",
+      agentType: "agent",
+      systemPrompt,
+    })
+    .returning({ id: schema.agentsTable.id });
+
+  // Assign to Default Team so all members have access
+  const defaultTeam = await TeamModel.findByName(DEFAULT_TEAM_NAME, org.id);
+  if (defaultTeam && inserted) {
+    await AgentTeamModel.assignTeamsToAgent(inserted.id, [defaultTeam.id]);
+  }
 
   logger.info("Seeded Chat Assistant internal agent");
 }
@@ -301,11 +311,11 @@ async function seedDefaultTeam(): Promise<void> {
 
   // Check if default team already exists
   const existingTeams = await TeamModel.findByOrganization(org.id);
-  let defaultTeam = existingTeams.find((t) => t.name === "Default Team");
+  let defaultTeam = existingTeams.find((t) => t.name === DEFAULT_TEAM_NAME);
 
   if (!defaultTeam) {
     defaultTeam = await TeamModel.create({
-      name: "Default Team",
+      name: DEFAULT_TEAM_NAME,
       description: "Default team for all users",
       organizationId: org.id,
       createdBy: user.id,
@@ -327,6 +337,10 @@ async function seedDefaultTeam(): Promise<void> {
     defaultTeam.id,
   ]);
   await AgentTeamModel.assignTeamsToAgent(defaultLlmProxy.id, [defaultTeam.id]);
+
+  // Note: Chat Assistant team assignment is handled in seedChatAssistantAgent(),
+  // which always runs after seedDefaultTeam() in seedRequiredStartingData().
+
   logger.info("Assigned default team to default agents");
 }
 
@@ -567,6 +581,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
   await seedDefaultTeam();
+  // seedChatAssistantAgent needs to run after seedDefaultTeam() so that default team is available for assignment
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();

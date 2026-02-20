@@ -85,6 +85,36 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
 }
 
 /**
+ * Returns only the permissions the user is missing from the required set.
+ * Useful for showing specific missing permissions in tooltips.
+ */
+export function useMissingPermissions(
+  requiredPermissions: Permissions,
+): Permissions {
+  const { data: userPermissions } = useAllPermissions();
+
+  if (
+    !requiredPermissions ||
+    Object.keys(requiredPermissions).length === 0 ||
+    !userPermissions
+  ) {
+    return requiredPermissions;
+  }
+
+  const missing: Permissions = {};
+
+  for (const [resource, actions] of Object.entries(requiredPermissions)) {
+    const userActions = userPermissions[resource as keyof Permissions] ?? [];
+    const missingActions = actions.filter((a) => !userActions.includes(a));
+    if (missingActions.length > 0) {
+      missing[resource as keyof Permissions] = missingActions;
+    }
+  }
+
+  return missing;
+}
+
+/**
  * Low-level query which fetches the dictionary of all user permissions.
  * Avoid using directly in components and use useHasPermissions instead.
  */

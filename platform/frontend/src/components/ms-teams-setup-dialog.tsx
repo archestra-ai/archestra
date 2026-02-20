@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
 import { useFeatures } from "@/lib/features.query";
+import { usePublicBaseUrl } from "@/lib/features.hook";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -693,12 +694,8 @@ function StepManifest({
 }
 
 function WebhookUrlInstruction({ ngrokDomain }: { ngrokDomain: string }) {
-  const [customDomain, setCustomDomain] = useState("");
-  const hasKnownDomain = Boolean(ngrokDomain);
-  const domain = hasKnownDomain ? ngrokDomain : customDomain || "your-domain";
-  const webhookUrl = `https://${domain}/api/webhooks/chatops/ms-teams`;
-
-  const canCopy = hasKnownDomain || Boolean(customDomain);
+  const publicBaseUrl = usePublicBaseUrl();
+  const webhookUrl = `${publicBaseUrl}/api/webhooks/chatops/ms-teams`;
 
   return (
     <>
@@ -708,33 +705,9 @@ function WebhookUrlInstruction({ ngrokDomain }: { ngrokDomain: string }) {
           {webhookUrl}
         </code>
         <span className="shrink-0">
-          {canCopy && <CopyButton text={webhookUrl} />}
+          <CopyButton text={webhookUrl} />
         </span>
       </span>
-      {!hasKnownDomain && (
-        <>
-          <label
-            htmlFor="webhook-custom-domain"
-            className="mt-2 flex items-center gap-2 text-xs"
-          >
-            <span className="shrink-0 text-muted-foreground">Your domain:</span>
-            <Input
-              id="webhook-custom-domain"
-              type="text"
-              value={customDomain}
-              onChange={(e) => setCustomDomain(e.target.value)}
-              placeholder="e.g. myapp.example.com"
-              className="h-6 rounded border bg-background px-2 text-xs font-mono w-48 placeholder:text-muted-foreground/50"
-            />
-          </label>
-          {!customDomain && (
-            <span className="mt-1 flex items-center gap-1 text-xs text-amber-500">
-              <TriangleAlert className="h-3 w-3 shrink-0" />
-              Enter your public Archestra domain above
-            </span>
-          )}
-        </>
-      )}
     </>
   );
 }

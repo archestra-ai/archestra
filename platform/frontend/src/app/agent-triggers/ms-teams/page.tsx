@@ -66,8 +66,10 @@ import {
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
 import { cn } from "@/lib/utils";
+import { usePublicBaseUrl } from "@/lib/features.hook";
 
 export default function MsTeamsPage() {
+  const publicBaseUrl = usePublicBaseUrl();
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
   const [defaultAgentDialogOpen, setDefaultAgentDialogOpen] = useState(false);
@@ -118,7 +120,7 @@ export default function MsTeamsPage() {
         <>
           Archestra's webhook{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            POST {"<archestra-url>/api/webhooks/chatops/ms-teams"}
+            POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
           </code>{" "}
           needs to be reachable from the Internet. Configure ngrok or deploy to
           a public URL.
@@ -137,7 +139,7 @@ export default function MsTeamsPage() {
           The webhook endpoint{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             POST{" "}
-            {`${config.api.externalProxyUrls[0] || window.location.origin}/api/webhooks/chatops/ms-teams`}
+            {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
           </code>{" "}
           must be publicly accessible so MS Teams can deliver messages to
           Archestra

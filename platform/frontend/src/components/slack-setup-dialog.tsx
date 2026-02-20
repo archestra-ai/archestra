@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { useFeatures } from "@/lib/features.query";
+import { usePublicBaseUrl } from "@/lib/features.hook";
 
 interface SlackSetupDialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ export function SlackSetupDialog({
   onOpenChange,
 }: SlackSetupDialogProps) {
   const { data: features } = useFeatures();
+  const publicBaseUrl = usePublicBaseUrl();
   const ngrokDomain = features?.ngrokDomain ?? "";
 
   const mutation = useUpdateSlackChatOpsConfig();
@@ -50,15 +52,9 @@ export function SlackSetupDialog({
     }
   };
 
-  const webhookUrl = ngrokDomain
-    ? `https://${ngrokDomain}/api/webhooks/chatops/slack`
-    : "<archestra-url>/api/webhooks/chatops/slack";
-  const interactiveUrl = ngrokDomain
-    ? `https://${ngrokDomain}/api/webhooks/chatops/slack/interactive`
-    : "<archestra-url>/api/webhooks/chatops/slack/interactive";
-  const slashCommandUrl = ngrokDomain
-    ? `https://${ngrokDomain}/api/webhooks/chatops/slack/slash-command`
-    : "<archestra-url>/api/webhooks/chatops/slack/slash-command";
+  const webhookUrl = `${publicBaseUrl}/api/webhooks/chatops/slack`;
+  const interactiveUrl = `${publicBaseUrl}/api/webhooks/chatops/slack/interactive`;
+  const slashCommandUrl = `${publicBaseUrl}/api/webhooks/chatops/slack/slash-command`;
 
   const steps = React.useMemo(() => {
     const slides: React.ReactNode[] = [

@@ -62,9 +62,9 @@ import {
   useChatApiKeys,
 } from "@/lib/chat-settings.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useFeatures } from "@/lib/config.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
-import { useFeatures } from "@/lib/features.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   applyPendingActions,

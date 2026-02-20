@@ -38,10 +38,10 @@ test("Check if BYOS Vault is enabled", async ({
   await goToPage(adminPage, "/mcp-catalog/registry");
   await adminPage.waitForLoadState("domcontentloaded");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  const { data: features } = await archestraApiSdk.getFeatures({
+  const { data: config } = await archestraApiSdk.getConfig({
     headers: { Cookie: cookieHeaders },
   });
-  byosEnabled = !!features?.byosEnabled;
+  byosEnabled = !!config?.features?.byosEnabled;
 });
 
 test("Then we create folder in Vault for Default Team and exemplary secret", async () => {

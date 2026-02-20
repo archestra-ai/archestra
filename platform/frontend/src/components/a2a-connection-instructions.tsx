@@ -19,7 +19,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";

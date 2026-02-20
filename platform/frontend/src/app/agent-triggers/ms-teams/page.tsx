@@ -64,7 +64,7 @@ import {
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 import { cn } from "@/lib/utils";
 
 export default function MsTeamsPage() {

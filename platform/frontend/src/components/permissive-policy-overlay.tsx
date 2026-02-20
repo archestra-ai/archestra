@@ -3,7 +3,7 @@
 import { ShieldOff } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 
 interface PermissivePolicyOverlayProps {
   children: ReactNode;

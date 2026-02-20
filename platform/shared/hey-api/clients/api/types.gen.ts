@@ -16509,54 +16509,6 @@ export type GetDualLlmResultsByInteractionResponses = {
 
 export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
 
-export type GetFeaturesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/features';
-};
-
-export type GetFeaturesResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        'orchestrator-k8s-runtime': boolean;
-        byosEnabled: boolean;
-        byosVaultKvVersion: '1' | '2';
-        geminiVertexAiEnabled: boolean;
-        vllmEnabled: boolean;
-        ollamaEnabled: boolean;
-        mistralEnabled: boolean;
-        perplexityEnabled: boolean;
-        globalToolPolicy: 'permissive' | 'restrictive';
-        browserStreamingEnabled: boolean;
-        incomingEmail: {
-            enabled: boolean;
-            provider?: 'outlook';
-            displayName?: string;
-            emailDomain?: string;
-        };
-        knowledgeGraph: {
-            enabled: boolean;
-            provider?: 'lightrag';
-            displayName?: string;
-        };
-        mcpServerBaseImage: string;
-        orchestratorK8sNamespace: string;
-        isQuickstart: boolean;
-        ngrokDomain: string;
-        chatops: {
-            msTeamsEnabled: boolean;
-            msTeamsAppId: boolean;
-            msTeamsAppSecret: boolean;
-            msTeamsTenantId: boolean;
-        };
-    };
-};
-
-export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
-
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers?: {

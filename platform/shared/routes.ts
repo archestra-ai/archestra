@@ -30,10 +30,6 @@ export const RouteId = {
   DeleteAgentDelegation: "deleteAgentDelegation",
   GetAllDelegationConnections: "getAllDelegationConnections",
 
-  // Features Routes
-  /** @deprecated Use GetConfig instead */
-  GetFeatures: "getFeatures",
-
   // Config Routes
   GetConfig: "getConfig",
 

@@ -89,7 +89,7 @@ import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 import { cn } from "@/lib/utils";
 
 const { useIdentityProviders } = config.enterpriseLicenseActivated

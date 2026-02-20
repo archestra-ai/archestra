@@ -45,23 +45,4 @@ test.describe("Config endpoint", () => {
     expect(urls).toHaveProperty("perplexity");
     expect(urls).toHaveProperty("zhipuai");
   });
-
-  test("GET /api/features still works (backward compat)", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    const response = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/features",
-    });
-
-    const data = (await response.json()) as Record<string, unknown>;
-
-    // Old endpoint returns flat features (no nesting)
-    expect(data).toHaveProperty("orchestrator-k8s-runtime");
-    expect(data).toHaveProperty("globalToolPolicy");
-    // Should NOT have providerBaseUrls (that's only on /api/config)
-    expect(data).not.toHaveProperty("providerBaseUrls");
-  });
 });

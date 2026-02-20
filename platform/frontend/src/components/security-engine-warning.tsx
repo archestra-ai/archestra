@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 
 export function SecurityEngineWarning() {
   const { data: features, isLoading } = useFeatures();

@@ -718,7 +718,7 @@ export const updateChatOpsBinding = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Update MS Teams chatops configuration (quickstart mode only)
+ * Update MS Teams chatops configuration
  */
 export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = false>(options?: Options<UpdateChatOpsConfigInQuickstartData, ThrowOnError>) => (options?.client ?? client).put<UpdateChatOpsConfigInQuickstartResponses, UpdateChatOpsConfigInQuickstartErrors, ThrowOnError>({
     url: '/api/chatops/config/ms-teams',
@@ -730,7 +730,7 @@ export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = f
 });
 
 /**
- * Update Slack chatops configuration (quickstart mode only)
+ * Update Slack chatops configuration
  */
 export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(options?: Options<UpdateSlackChatOpsConfigData, ThrowOnError>) => (options?.client ?? client).put<UpdateSlackChatOpsConfigResponses, UpdateSlackChatOpsConfigErrors, ThrowOnError>({
     url: '/api/chatops/config/slack',

@@ -16486,12 +16486,6 @@ export type GetFeaturesResponses = {
         orchestratorK8sNamespace: string;
         isQuickstart: boolean;
         ngrokDomain: string;
-        chatops: {
-            msTeamsEnabled: boolean;
-            msTeamsAppId: boolean;
-            msTeamsAppSecret: boolean;
-            msTeamsTenantId: boolean;
-        };
     };
 };
 

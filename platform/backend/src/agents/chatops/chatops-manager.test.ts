@@ -681,6 +681,77 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
   });
 });
 
+describe("ChatOpsManager.initialize — partial config", () => {
+  // Clear all chatops env vars to prevent seed logic from running
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("initializes Slack when only Slack config exists in DB", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "test-secret",
+      appId: "A123",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).not.toBeNull();
+    expect(manager.getSlackProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
+  test("initializes MS Teams when only MS Teams config exists in DB", async () => {
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "test-app-id",
+      appSecret: "test-secret",
+      tenantId: "test-tenant",
+      graphTenantId: "test-tenant",
+      graphClientId: "test-app-id",
+      graphClientSecret: "test-secret",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getMSTeamsProvider()).not.toBeNull();
+    expect(manager.getMSTeamsProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
+  test("handles no config in DB gracefully", async () => {
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.isAnyProviderConfigured()).toBe(false);
+
+    await manager.cleanup();
+  });
+});
+
 // =============================================================================
 // seedConfigFromEnvVars (private, tested via cast)
 // =============================================================================

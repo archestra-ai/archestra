@@ -53,13 +53,21 @@ class ChatOpsConfigModel {
   }
 
   private async getConfig<T>(secretName: string): Promise<T | null> {
-    const secretRow = await SecretModel.findByName(secretName);
-    if (!secretRow) return null;
+    try {
+      const secretRow = await SecretModel.findByName(secretName);
+      if (!secretRow) return null;
 
-    const secret = await secretManager().getSecret(secretRow.id);
-    if (!secret?.secret) return null;
+      const secret = await secretManager().getSecret(secretRow.id);
+      if (!secret?.secret) return null;
 
-    return secret.secret as unknown as T;
+      return secret.secret as unknown as T;
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        `ChatOpsConfigModel: failed to read config "${secretName}"`,
+      );
+      return null;
+    }
   }
 
   private async saveConfig(

@@ -476,6 +476,24 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
   }
 }
 
+/**
+ * Expand a paginated DataTable to show all rows (100 per page).
+ * Call this after navigating to a page with a paginated table to ensure
+ * all rows are visible for assertions and interactions.
+ */
+export async function expandTablePagination(
+  page: Page,
+  tableTestId: string,
+): Promise<void> {
+  const tableContainer = page.getByTestId(tableTestId);
+  await expect(tableContainer).toBeVisible({ timeout: 10000 });
+  const rowsPerPageSelect = tableContainer.getByRole("combobox");
+  if (await rowsPerPageSelect.isVisible().catch(() => false)) {
+    await rowsPerPageSelect.click();
+    await page.getByRole("option", { name: "100" }).click();
+  }
+}
+
 export async function clickButton({
   page,
   options,

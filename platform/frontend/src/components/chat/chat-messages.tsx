@@ -217,9 +217,13 @@ export function ChatMessages({
     const textX = textRect.left;
     const textY = textRect.top;
 
-    // Agent selector position (top left area)
-    const selectorX = 248;
-    const selectorY = 85;
+    // Agent selector position - dynamically find the actual button.
+    // The SVG path draws the arrowhead at internal coords (60, 5), so offset
+    // selectorX/Y so the arrowhead lands near the button's left edge, below the header.
+    const selectorEl = document.querySelector("[data-agent-selector]");
+    const selectorRect = selectorEl?.getBoundingClientRect();
+    const selectorX = selectorRect ? selectorRect.left - 8 : 248;
+    const selectorY = selectorRect ? selectorRect.bottom + 30 : 85;
 
     // Calculate SVG dimensions - arrow should end at text marker position
     const svgWidth = Math.max(textX - selectorX, 200); // Width from selector to text

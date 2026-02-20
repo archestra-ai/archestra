@@ -273,6 +273,7 @@ class OptimizationRuleModel {
       cohere: [],
       cerebras: [],
       mistral: [],
+      perplexity: [], // Perplexity model pricing varies, no defaults
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
@@ -307,6 +308,7 @@ class OptimizationRuleModel {
         cohere: [],
         cerebras: [],
         mistral: [],
+        perplexity: [], // Perplexity optimization rules - no defaults (no tool support)
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],

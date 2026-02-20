@@ -327,10 +327,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const modelMessages = await convertToModelMessages(
             strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
           );
+
+          // Perplexity does NOT support tool calling - it has built-in web search instead
+          // @see https://docs.perplexity.ai/api-reference/chat-completions-post
+          const supportsToolCalling = provider !== "perplexity";
+
           const streamTextConfig: Parameters<typeof streamText>[0] = {
             model,
             messages: modelMessages,
-            tools: mcpTools,
+            ...(supportsToolCalling && { tools: mcpTools }),
             stopWhen: stepCountIs(500),
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {

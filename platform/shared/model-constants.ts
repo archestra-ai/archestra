@@ -11,6 +11,7 @@ export const SupportedProvidersSchema = z.enum([
   "cohere",
   "cerebras",
   "mistral",
+  "perplexity",
   "vllm",
   "ollama",
   "zhipuai",
@@ -24,6 +25,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cohere:chat",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
+  "perplexity:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
@@ -43,10 +45,24 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cohere: "Cohere",
   cerebras: "Cerebras",
   mistral: "Mistral AI",
+  perplexity: "Perplexity AI",
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
 };
+
+/**
+ * Perplexity model definitions — single source of truth.
+ * Perplexity has no /models endpoint, so models are maintained here.
+ * @see https://ai-sdk.dev/providers/ai-sdk-providers/perplexity#model-capabilities
+ */
+export const PERPLEXITY_MODELS = [
+  { id: "sonar-pro", displayName: "Sonar Pro" },
+  { id: "sonar", displayName: "Sonar" },
+  { id: "sonar-reasoning-pro", displayName: "Sonar Reasoning Pro" },
+  { id: "sonar-reasoning", displayName: "Sonar Reasoning" },
+  { id: "sonar-deep-research", displayName: "Sonar Deep Research" },
+] as const;
 
 /**
  * Pattern-based model markers per provider.
@@ -89,6 +105,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   mistral: {
     fastest: ["mistral-small", "ministral"],
     best: ["mistral-large"],
+  },
+  perplexity: {
+    fastest: ["sonar"],
+    best: ["sonar-pro", "sonar-reasoning-pro", "sonar-reasoning"],
   },
   ollama: {
     fastest: ["llama3.2", "phi"],

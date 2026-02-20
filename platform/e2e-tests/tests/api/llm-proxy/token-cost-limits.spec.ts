@@ -165,6 +165,33 @@ const mistralConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const perplexityConfig: TokenCostLimitTestConfig = {
+  providerName: "Perplexity",
+
+  endpoint: (profileId) => `/v1/perplexity/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-perplexity-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-perplexity-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  tokenPrice: {
+    provider: "perplexity",
+    model: "test-perplexity-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 const vllmConfig: TokenCostLimitTestConfig = {
   providerName: "vLLM",
 
@@ -312,6 +339,7 @@ const testConfigsMap = {
   cohere: cohereConfig,
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
+  perplexity: perplexityConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,

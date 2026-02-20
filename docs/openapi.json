@@ -6848,6 +6848,1259 @@
         ],
         "additionalProperties": {}
       },
+      "PerplexityChatCompletionRequestInput": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                          }
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "developer"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                          }
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "system"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "input_audio"
+                                    ]
+                                  },
+                                  "input_audio": {
+                                    "type": "object",
+                                    "properties": {
+                                      "data": {
+                                        "type": "string"
+                                      },
+                                      "format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "wav",
+                                          "mp3"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "format"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "input_audio"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "file"
+                                    ]
+                                  },
+                                  "file": {
+                                    "type": "object",
+                                    "properties": {
+                                      "file_data": {
+                                        "type": "string"
+                                      },
+                                      "file_id": {
+                                        "type": "string"
+                                      },
+                                      "filename": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "file"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
+                              }
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
+                          }
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "user"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "audio": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              }
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "refusal"
+                                    ]
+                                  },
+                                  "refusal": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "refusal"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "function_call": {
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "refusal": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "function"
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "custom"
+                                ]
+                              },
+                              "custom": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "input",
+                                  "name"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "custom"
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                          }
+                        ],
+                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                      }
+                    }
+                  },
+                  "required": [
+                    "role"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "tool"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "tool_call_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "tool_call_id"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "name"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
+                }
+              ],
+              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "parameters": {
+                          "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "strict": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "function"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L988"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "custom"
+                      ]
+                    },
+                    "custom": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "The name of the custom tool, used to identify it in tool calls"
+                        },
+                        "description": {
+                          "description": "Optional description of the custom tool, used to provide more context",
+                          "type": "string"
+                        },
+                        "format": {
+                          "description": "The input format for the custom tool. Default is unconstrained text.",
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text"
+                                  ],
+                                  "description": "Unconstrained text format. Always `text`"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "description": "Unconstrained free-form text"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "grammar"
+                                  ]
+                                },
+                                "grammar": {
+                                  "type": "object",
+                                  "properties": {
+                                    "definition": {
+                                      "type": "string",
+                                      "description": "The grammar definition"
+                                    },
+                                    "syntax": {
+                                      "type": "string",
+                                      "enum": [
+                                        "lark",
+                                        "regex"
+                                      ],
+                                      "description": "The syntax of the grammar definition"
+                                    }
+                                  },
+                                  "required": [
+                                    "definition",
+                                    "syntax"
+                                  ],
+                                  "description": "Your chosen grammar"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "grammar"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "custom"
+                  ],
+                  "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific custom tool.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1229-L1236\n  "
+                }
+              ],
+              "description": "\n  A function tool that can be used to generate a response.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392\n  "
+            }
+          },
+          "tool_choice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "auto",
+                  "required"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "allowed_tools"
+                    ]
+                  },
+                  "allowed_tools": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "required"
+                        ],
+                        "description": "\n    Constrains the tools available to the model to a pre-defined set.\n\n    auto allows the model to pick from among the allowed tools and generate a\n    message.\n\n    required requires the model to call one or more of the allowed tools.\n    "
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "parameters": {
+                                    "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  "strict": {
+                                    "anyOf": [
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "function"
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L988"
+                          }
+                        },
+                        "description": "A list of tool definitions that the model should be allowed to call"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "tools"
+                    ],
+                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455"
+                  }
+                },
+                "required": [
+                  "type",
+                  "allowed_tools"
+                ],
+                "description": "\n  Constrains the tools available to the model to a pre-defined set.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L359\n  "
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "function"
+                    ]
+                  },
+                  "function": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "function"
+                ],
+                "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific function.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1207-L1214\n  "
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "custom"
+                    ]
+                  },
+                  "custom": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "The name of the custom tool, used to identify it in tool calls"
+                      },
+                      "description": {
+                        "description": "Optional description of the custom tool, used to provide more context",
+                        "type": "string"
+                      },
+                      "format": {
+                        "description": "The input format for the custom tool. Default is unconstrained text.",
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ],
+                                "description": "Unconstrained text format. Always `text`"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "description": "Unconstrained free-form text"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "grammar"
+                                ]
+                              },
+                              "grammar": {
+                                "type": "object",
+                                "properties": {
+                                  "definition": {
+                                    "type": "string",
+                                    "description": "The grammar definition"
+                                  },
+                                  "syntax": {
+                                    "type": "string",
+                                    "enum": [
+                                      "lark",
+                                      "regex"
+                                    ],
+                                    "description": "The syntax of the grammar definition"
+                                  }
+                                },
+                                "required": [
+                                  "definition",
+                                  "syntax"
+                                ],
+                                "description": "Your chosen grammar"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "grammar"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "custom"
+                ],
+                "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific custom tool.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1229-L1236\n  "
+              }
+            ],
+            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ]
+      },
+      "PerplexityChatCompletionResponseInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "finish_reason": {
+                  "type": "string",
+                  "enum": [
+                    "stop",
+                    "length",
+                    "tool_calls",
+                    "content_filter",
+                    "function_call"
+                  ]
+                },
+                "index": {
+                  "type": "number"
+                },
+                "logprobs": {
+                  "anyOf": [
+                    {},
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "refusal": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "annotations": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "audio": {
+                      "anyOf": [
+                        {},
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "function_call": {
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tool_calls": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "function"
+                                    ]
+                                  },
+                                  "function": {
+                                    "type": "object",
+                                    "properties": {
+                                      "arguments": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "arguments",
+                                      "name"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "function"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "custom"
+                                    ]
+                                  },
+                                  "custom": {
+                                    "type": "object",
+                                    "properties": {
+                                      "input": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "input",
+                                      "name"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "custom"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                              }
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
+                }
+              },
+              "required": [
+                "finish_reason",
+                "index",
+                "logprobs",
+                "message"
+              ],
+              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
+            }
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "enum": [
+              "chat.completion"
+            ]
+          },
+          "server_tier": {
+            "type": "string"
+          },
+          "system_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "completion_tokens": {
+                "type": "number"
+              },
+              "prompt_tokens": {
+                "type": "number"
+              },
+              "total_tokens": {
+                "type": "number"
+              },
+              "completion_tokens_details": {
+                "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144"
+              },
+              "prompt_tokens_details": {
+                "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+              }
+            },
+            "required": [
+              "completion_tokens",
+              "prompt_tokens",
+              "total_tokens"
+            ],
+            "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+          }
+        },
+        "required": [
+          "id",
+          "choices",
+          "created",
+          "model",
+          "object"
+        ],
+        "additionalProperties": {}
+      },
       "VllmChatCompletionRequestInput": {
         "type": "object",
         "properties": {
@@ -17055,6 +18308,1312 @@
         "additionalProperties": false
       },
       "MistralChatCompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "finish_reason": {
+                  "type": "string",
+                  "enum": [
+                    "stop",
+                    "length",
+                    "tool_calls",
+                    "content_filter",
+                    "function_call"
+                  ]
+                },
+                "index": {
+                  "type": "number"
+                },
+                "logprobs": {
+                  "anyOf": [
+                    {},
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "refusal": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "annotations": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "audio": {
+                      "anyOf": [
+                        {},
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "function_call": {
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tool_calls": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "function"
+                                    ]
+                                  },
+                                  "function": {
+                                    "type": "object",
+                                    "properties": {
+                                      "arguments": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "arguments",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "function"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "custom"
+                                    ]
+                                  },
+                                  "custom": {
+                                    "type": "object",
+                                    "properties": {
+                                      "input": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "input",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "custom"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                              }
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
+                }
+              },
+              "required": [
+                "finish_reason",
+                "index",
+                "logprobs",
+                "message"
+              ],
+              "additionalProperties": false,
+              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
+            }
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "enum": [
+              "chat.completion"
+            ]
+          },
+          "server_tier": {
+            "type": "string"
+          },
+          "system_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "completion_tokens": {
+                "type": "number"
+              },
+              "prompt_tokens": {
+                "type": "number"
+              },
+              "total_tokens": {
+                "type": "number"
+              },
+              "completion_tokens_details": {
+                "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144"
+              },
+              "prompt_tokens_details": {
+                "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+              }
+            },
+            "required": [
+              "completion_tokens",
+              "prompt_tokens",
+              "total_tokens"
+            ],
+            "additionalProperties": false,
+            "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+          }
+        },
+        "required": [
+          "id",
+          "choices",
+          "created",
+          "model",
+          "object"
+        ],
+        "additionalProperties": {}
+      },
+      "PerplexityChatCompletionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                          }
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "developer"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                          }
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "system"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "input_audio"
+                                    ]
+                                  },
+                                  "input_audio": {
+                                    "type": "object",
+                                    "properties": {
+                                      "data": {
+                                        "type": "string"
+                                      },
+                                      "format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "wav",
+                                          "mp3"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "format"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "input_audio"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "file"
+                                    ]
+                                  },
+                                  "file": {
+                                    "type": "object",
+                                    "properties": {
+                                      "file_data": {
+                                        "type": "string"
+                                      },
+                                      "file_id": {
+                                        "type": "string"
+                                      },
+                                      "filename": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "file"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
+                              }
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
+                          }
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "user"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "audio": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              }
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "refusal"
+                                    ]
+                                  },
+                                  "refusal": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "refusal"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "function_call": {
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "refusal": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "function"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "custom"
+                                ]
+                              },
+                              "custom": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "input",
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "custom"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                          }
+                        ],
+                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
+                      }
+                    }
+                  },
+                  "required": [
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "tool"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "tool_call_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "tool_call_id"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "name"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
+                }
+              ],
+              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "parameters": {
+                          "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "strict": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "function"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L988"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "custom"
+                      ]
+                    },
+                    "custom": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "The name of the custom tool, used to identify it in tool calls"
+                        },
+                        "description": {
+                          "description": "Optional description of the custom tool, used to provide more context",
+                          "type": "string"
+                        },
+                        "format": {
+                          "description": "The input format for the custom tool. Default is unconstrained text.",
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text"
+                                  ],
+                                  "description": "Unconstrained text format. Always `text`"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "description": "Unconstrained free-form text"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "grammar"
+                                  ]
+                                },
+                                "grammar": {
+                                  "type": "object",
+                                  "properties": {
+                                    "definition": {
+                                      "type": "string",
+                                      "description": "The grammar definition"
+                                    },
+                                    "syntax": {
+                                      "type": "string",
+                                      "enum": [
+                                        "lark",
+                                        "regex"
+                                      ],
+                                      "description": "The syntax of the grammar definition"
+                                    }
+                                  },
+                                  "required": [
+                                    "definition",
+                                    "syntax"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Your chosen grammar"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "grammar"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "custom"
+                  ],
+                  "additionalProperties": false,
+                  "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific custom tool.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1229-L1236\n  "
+                }
+              ],
+              "description": "\n  A function tool that can be used to generate a response.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392\n  "
+            }
+          },
+          "tool_choice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "auto",
+                  "required"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "allowed_tools"
+                    ]
+                  },
+                  "allowed_tools": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "required"
+                        ],
+                        "description": "\n    Constrains the tools available to the model to a pre-defined set.\n\n    auto allows the model to pick from among the allowed tools and generate a\n    message.\n\n    required requires the model to call one or more of the allowed tools.\n    "
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "parameters": {
+                                    "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  "strict": {
+                                    "anyOf": [
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "function"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L988"
+                          }
+                        },
+                        "description": "A list of tool definitions that the model should be allowed to call"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "tools"
+                    ],
+                    "additionalProperties": false,
+                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455"
+                  }
+                },
+                "required": [
+                  "type",
+                  "allowed_tools"
+                ],
+                "additionalProperties": false,
+                "description": "\n  Constrains the tools available to the model to a pre-defined set.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L359\n  "
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "function"
+                    ]
+                  },
+                  "function": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "function"
+                ],
+                "additionalProperties": false,
+                "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific function.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1207-L1214\n  "
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "custom"
+                    ]
+                  },
+                  "custom": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "The name of the custom tool, used to identify it in tool calls"
+                      },
+                      "description": {
+                        "description": "Optional description of the custom tool, used to provide more context",
+                        "type": "string"
+                      },
+                      "format": {
+                        "description": "The input format for the custom tool. Default is unconstrained text.",
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ],
+                                "description": "Unconstrained text format. Always `text`"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false,
+                            "description": "Unconstrained free-form text"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "grammar"
+                                ]
+                              },
+                              "grammar": {
+                                "type": "object",
+                                "properties": {
+                                  "definition": {
+                                    "type": "string",
+                                    "description": "The grammar definition"
+                                  },
+                                  "syntax": {
+                                    "type": "string",
+                                    "enum": [
+                                      "lark",
+                                      "regex"
+                                    ],
+                                    "description": "The syntax of the grammar definition"
+                                  }
+                                },
+                                "required": [
+                                  "definition",
+                                  "syntax"
+                                ],
+                                "additionalProperties": false,
+                                "description": "Your chosen grammar"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "grammar"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "custom"
+                ],
+                "additionalProperties": false,
+                "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific custom tool.\n\n  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1229-L1236\n  "
+              }
+            ],
+            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "additionalProperties": false
+      },
+      "PerplexityChatCompletionResponse": {
         "type": "object",
         "properties": {
           "id": {
@@ -41545,7 +44104,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MistralChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -41805,7 +44364,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MistralChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -42102,6 +44661,7 @@
                           "gemini",
                           "mistral",
                           "openai",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -42430,6 +44990,7 @@
                       "gemini",
                       "mistral",
                       "openai",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -42498,6 +45059,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -42787,6 +45349,7 @@
                 "gemini",
                 "mistral",
                 "openai",
+                "perplexity",
                 "vllm",
                 "ollama",
                 "zhipuai"
@@ -42838,6 +45401,7 @@
                           "gemini",
                           "mistral",
                           "openai",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -43189,6 +45753,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -43578,6 +46143,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -44117,6 +46683,7 @@
                 "gemini",
                 "mistral",
                 "openai",
+                "perplexity",
                 "vllm",
                 "ollama",
                 "zhipuai"
@@ -44153,6 +46720,7 @@
                           "gemini",
                           "mistral",
                           "openai",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -44719,6 +47287,7 @@
                           "cohere",
                           "cerebras",
                           "mistral",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -45696,6 +48265,7 @@
                           "gemini",
                           "mistral",
                           "openai",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -46064,6 +48634,7 @@
                       "gemini",
                       "mistral",
                       "openai",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -46132,6 +48703,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -46533,6 +49105,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -46895,6 +49468,7 @@
                       "gemini",
                       "mistral",
                       "openai",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -46980,6 +49554,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -47911,6 +50486,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -48340,6 +50916,7 @@
                         "gemini",
                         "mistral",
                         "openai",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -54142,6 +56719,9 @@
                     "mistralEnabled": {
                       "type": "boolean"
                     },
+                    "perplexityEnabled": {
+                      "type": "boolean"
+                    },
                     "globalToolPolicy": {
                       "type": "string",
                       "enum": [
@@ -54242,6 +56822,7 @@
                     "vllmEnabled",
                     "ollamaEnabled",
                     "mistralEnabled",
+                    "perplexityEnabled",
                     "globalToolPolicy",
                     "browserStreamingEnabled",
                     "incomingEmail",
@@ -56915,13 +59496,13 @@
                                 "type": "string"
                               },
                               "request": {
-                                "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                                "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                               },
                               "processedRequest": {
                                 "nullable": true,
                                 "allOf": [
                                   {
-                                    "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   }
                                 ]
                               },
@@ -59183,13 +61764,13 @@
                                 "type": "string"
                               },
                               "request": {
-                                "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                                "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                               },
                               "processedRequest": {
                                 "nullable": true,
                                 "allOf": [
                                   {
-                                    "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   }
                                 ]
                               },
@@ -59325,13 +61906,13 @@
                                 "type": "string"
                               },
                               "request": {
-                                "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                                "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                               },
                               "processedRequest": {
                                 "nullable": true,
                                 "allOf": [
                                   {
-                                    "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   }
                                 ]
                               },
@@ -59342,6 +61923,148 @@
                                 "type": "string",
                                 "enum": [
                                   "mistral:chatCompletions"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "executionId",
+                              "userId",
+                              "sessionId",
+                              "sessionSource",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "outputTokens",
+                              "baselineCost",
+                              "cost",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "toonSkipReason",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "executionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "request": {
+                                "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
+                                  }
+                                ]
+                              },
+                              "response": {
+                                "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "perplexity:chatCompletions"
                                 ]
                               },
                               "model": {
@@ -61306,13 +64029,13 @@
                           "type": "string"
                         },
                         "request": {
-                          "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                          "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                         },
                         "processedRequest": {
                           "nullable": true,
                           "allOf": [
                             {
-                              "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             }
                           ]
                         },
@@ -63574,13 +66297,13 @@
                           "type": "string"
                         },
                         "request": {
-                          "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                          "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                         },
                         "processedRequest": {
                           "nullable": true,
                           "allOf": [
                             {
-                              "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             }
                           ]
                         },
@@ -63716,13 +66439,13 @@
                           "type": "string"
                         },
                         "request": {
-                          "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                          "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                         },
                         "processedRequest": {
                           "nullable": true,
                           "allOf": [
                             {
-                              "$ref": "#/components/schemas/MistralChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             }
                           ]
                         },
@@ -63733,6 +66456,148 @@
                           "type": "string",
                           "enum": [
                             "mistral:chatCompletions"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "executionId",
+                        "userId",
+                        "sessionId",
+                        "sessionSource",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "outputTokens",
+                        "baselineCost",
+                        "cost",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "toonSkipReason",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "executionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "request": {
+                          "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
+                            }
+                          ]
+                        },
+                        "response": {
+                          "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "perplexity:chatCompletions"
                           ]
                         },
                         "model": {
@@ -80173,7 +83038,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MistralChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -80433,7 +83298,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MistralChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -81933,7 +84798,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MistralChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -82193,7 +85058,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MistralChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -82528,6 +85393,7 @@
                           "cohere",
                           "cerebras",
                           "mistral",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -82846,6 +85712,7 @@
                       "cohere",
                       "cerebras",
                       "mistral",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -82939,6 +85806,7 @@
                         "cohere",
                         "cerebras",
                         "mistral",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -83258,6 +86126,7 @@
                       "cohere",
                       "cerebras",
                       "mistral",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -83355,6 +86224,7 @@
                         "cohere",
                         "cerebras",
                         "mistral",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -86458,6 +89328,536 @@
                     "logo"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/perplexity/chat/completions": {
+      "post": {
+        "operationId": "perplexityChatCompletionsWithDefaultAgent",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Create a chat completion with Perplexity (uses default agent). Note: Perplexity does not support external tool calling.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/perplexity/{agentId}/chat/completions": {
+      "post": {
+        "operationId": "perplexityChatCompletionsWithAgent",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Create a chat completion with Perplexity for a specific agent. Note: Perplexity does not support external tool calling.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
                 }
               }
             }
@@ -92460,6 +95860,7 @@
                           "cohere",
                           "cerebras",
                           "mistral",
+                          "perplexity",
                           "vllm",
                           "ollama",
                           "zhipuai"
@@ -92733,6 +96134,7 @@
                       "cohere",
                       "cerebras",
                       "mistral",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -92783,6 +96185,7 @@
                         "cohere",
                         "cerebras",
                         "mistral",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -93076,6 +96479,7 @@
                         "cohere",
                         "cerebras",
                         "mistral",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"
@@ -93348,6 +96752,7 @@
                       "cohere",
                       "cerebras",
                       "mistral",
+                      "perplexity",
                       "vllm",
                       "ollama",
                       "zhipuai"
@@ -93403,6 +96808,7 @@
                         "cohere",
                         "cerebras",
                         "mistral",
+                        "perplexity",
                         "vllm",
                         "ollama",
                         "zhipuai"

@@ -6,6 +6,7 @@ import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
+import perplexityProxyRoutesV2 from "./proxy/routesv2/perplexity";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
 
@@ -43,6 +44,7 @@ export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
 export const cohereProxyRoutes = cohereProxyRoutesV2;
 export const geminiProxyRoutes = geminiProxyRoutesV2;
 export const mistralProxyRoutes = mistralProxyRoutesV2;
+export const perplexityProxyRoutes = perplexityProxyRoutesV2;
 export const openAiProxyRoutes = openAiProxyRoutesV2;
 export const vllmProxyRoutes = vllmProxyRoutesV2;
 export const ollamaProxyRoutes = ollamaProxyRoutesV2;

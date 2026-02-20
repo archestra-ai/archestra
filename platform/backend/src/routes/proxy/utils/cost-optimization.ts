@@ -14,6 +14,7 @@ import type {
   Gemini,
   Mistral,
   OpenAi,
+  Perplexity,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -24,6 +25,7 @@ type ProviderMessages = {
   cohere: Cohere.Types.ChatRequest["messages"];
   gemini: Gemini.Types.GenerateContentRequest["contents"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];
+  perplexity: Perplexity.Types.ChatCompletionsRequest["messages"];
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];

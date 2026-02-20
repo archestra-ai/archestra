@@ -200,9 +200,12 @@ const testConfigsMap = {
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
   bedrock: bedrockConfig,
-} satisfies Record<SupportedProvider, ExecutionMetricsTestConfig>;
+  perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
+} satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap);
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is ExecutionMetricsTestConfig => c !== null,
+);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ExecutionMetrics-${config.providerName}`, () => {

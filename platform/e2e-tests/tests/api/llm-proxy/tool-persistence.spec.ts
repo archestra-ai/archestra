@@ -316,9 +316,12 @@ const testConfigsMap = {
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
   bedrock: bedrockConfig,
-} satisfies Record<SupportedProvider, ToolPersistenceTestConfig>;
+  perplexity: null, // Perplexity does not support tool calling
+} satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;
 
-const testConfigs = Object.values(testConfigsMap);
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is ToolPersistenceTestConfig => c !== null,
+);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolPersistence-${config.providerName}`, () => {

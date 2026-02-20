@@ -338,22 +338,8 @@ async function seedDefaultTeam(): Promise<void> {
   ]);
   await AgentTeamModel.assignTeamsToAgent(defaultLlmProxy.id, [defaultTeam.id]);
 
-  // Assign team to Chat Assistant agent if it exists
-  const chatAssistant = await db
-    .select({ id: schema.agentsTable.id })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        eq(schema.agentsTable.organizationId, org.id),
-        eq(schema.agentsTable.name, "Chat Assistant"),
-      ),
-    )
-    .limit(1);
-  if (chatAssistant.length > 0) {
-    await AgentTeamModel.assignTeamsToAgent(chatAssistant[0].id, [
-      defaultTeam.id,
-    ]);
-  }
+  // Note: Chat Assistant team assignment is handled in seedChatAssistantAgent(),
+  // which always runs after seedDefaultTeam() in seedRequiredStartingData().
 
   logger.info("Assigned default team to default agents");
 }
@@ -595,6 +581,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
   await seedDefaultTeam();
+  // seedChatAssistantAgent needs to run after seedDefaultTeam() so that default team is available for assignment
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();

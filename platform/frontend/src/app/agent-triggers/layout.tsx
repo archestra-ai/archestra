@@ -17,7 +17,13 @@ const triggers: Trigger[] = [
     label: "MS Teams",
     href: "/agent-triggers/ms-teams",
     iconSrc: "/icons/ms-teams.png",
-    description: "Chat with you agents via Microsoft Teams",
+    description: "Chat with you agents via MS Teams",
+  },
+  {
+    label: "Slack",
+    href: "/agent-triggers/slack",
+    iconSrc: "/icons/slack.png",
+    description: "Chat with your agents via Slack",
   },
   {
     label: "Email",
@@ -58,7 +64,7 @@ export default function AgentTriggersLayout({
                   key={trigger.href}
                   href={trigger.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border-2 px-6 py-4 transition-all",
+                    "flex items-center gap-3 rounded-lg border-2 px-6 py-4 transition-all w-[310px]",
                     "hover:border-primary/60 hover:bg-primary/5",
                     isActive
                       ? "border-primary bg-primary/10 shadow-sm"

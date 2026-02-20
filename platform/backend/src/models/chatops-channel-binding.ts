@@ -424,6 +424,31 @@ class ChatOpsChannelBindingModel {
 
     return deleted.length;
   }
+
+  /**
+   * Unbind an agent from all channels for specific providers.
+   * Sets agentId to null (preserves the discovered channel binding).
+   * Used when an agent's allowedChatops is updated to remove providers.
+   */
+  static async unbindAgentFromProviders(
+    agentId: string,
+    providers: ChatOpsProviderType[],
+  ): Promise<number> {
+    if (providers.length === 0) return 0;
+
+    const updated = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({ agentId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.agentId, agentId),
+          inArray(schema.chatopsChannelBindingsTable.provider, providers),
+        ),
+      )
+      .returning();
+
+    return updated.length;
+  }
 }
 
 export default ChatOpsChannelBindingModel;

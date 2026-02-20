@@ -1,12 +1,22 @@
+import type { Page } from "@playwright/test";
 import { archestraApiSdk, DEFAULT_VAULT_TOKEN, E2eTestId } from "@shared";
 import { DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   clickButton,
+  expandTablePagination,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   verifyToolCallResultViaApi,
 } from "../../utils";
+
+/**
+ * Navigate to the LLM API Keys page and expand pagination to show all rows.
+ */
+async function goToApiKeysPage(page: Page) {
+  await goToPage(page, "/settings/llm-api-keys");
+  await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
+}
 
 const vaultAddr =
   process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:8200";
@@ -113,7 +123,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       const keyName = makeRandomString(8, "Test Key");
 
       // Open Create personal chat API key form and fill in the form
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByRole("textbox", { name: "Name" }).fill(keyName);
 
@@ -169,7 +179,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       ).toBeVisible();
 
       // Cleanup
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
         .click();

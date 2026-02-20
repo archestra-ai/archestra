@@ -172,6 +172,11 @@ export const RouteId = {
     "mistralChatCompletionsWithDefaultAgent",
   MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
 
+  // Proxy Routes - Perplexity
+  PerplexityChatCompletionsWithDefaultAgent:
+    "perplexityChatCompletionsWithDefaultAgent",
+  PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -300,6 +305,7 @@ export const RouteId = {
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Invitation Routes

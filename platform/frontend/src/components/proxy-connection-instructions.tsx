@@ -44,6 +44,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.mistral,
     originalUrl: "https://api.mistral.ai/v1/",
   },
+  perplexity: {
+    label: providerDisplayNames.perplexity,
+    originalUrl: "https://api.perplexity.ai/",
+  },
   cohere: {
     label: providerDisplayNames.cohere,
     originalUrl: "https://api.cohere.com/v2/",

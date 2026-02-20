@@ -33,6 +33,7 @@ import type {
 import type { ChatOpsProviderType } from "@/types/chatops";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+import ChatOpsChannelBindingModel from "./chatops-channel-binding";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -823,6 +824,21 @@ class AgentModel {
     // Sync label assignments if labels is provided
     if (labels !== undefined) {
       await AgentLabelModel.syncAgentLabels(id, labels);
+    }
+
+    // If allowedChatops changed, unbind the agent from removed providers
+    if (agent.allowedChatops !== undefined) {
+      const oldProviders = existingAgent.allowedChatops ?? [];
+      const newProviders = agent.allowedChatops ?? [];
+      const removedProviders = oldProviders.filter(
+        (p) => !newProviders.includes(p),
+      );
+      if (removedProviders.length > 0) {
+        await ChatOpsChannelBindingModel.unbindAgentFromProviders(
+          id,
+          removedProviders,
+        );
+      }
     }
 
     // Fetch the tools for the updated agent

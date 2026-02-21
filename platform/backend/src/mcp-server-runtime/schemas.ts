@@ -1,3 +1,4 @@
+import { McpAppToolMetaSchema } from "@shared";
 import { z } from "zod";
 
 export type K8sRuntimeStatus =
@@ -42,6 +43,7 @@ export const AvailableToolSchema = z.object({
   mcpServerId: z.string(),
   mcpServerName: z.string(),
   analysis: AvailableToolAnalysisSchema,
+  meta: McpAppToolMetaSchema.optional(),
 });
 
 export type AvailableTool = z.infer<typeof AvailableToolSchema>;

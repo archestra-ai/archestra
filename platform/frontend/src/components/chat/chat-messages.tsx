@@ -38,11 +38,13 @@ import {
 } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { extractInlineMcpAppHtml } from "@shared";
 import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { McpAppFrame } from "./mcp-app-frame";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -953,6 +955,30 @@ function MessageTool({
         toolResultPart={toolResultPart}
         errorText={errorText}
       />
+    );
+  }
+
+  // MCP Apps: detect inline UI HTML in tool results and render in a sandboxed iframe
+  const mcpAppToolOutput = toolResultPart?.output ?? part.output;
+  const mcpAppHtml = extractInlineMcpAppHtml(mcpAppToolOutput);
+  if (mcpAppHtml) {
+    const hasInput = part.input && Object.keys(part.input).length > 0;
+    return (
+      <Tool>
+        <ToolHeader
+          type={`tool-${toolName}`}
+          state={getHeaderState({
+            state: part.state || "input-available",
+            toolResultPart,
+            errorText: undefined,
+          })}
+          isCollapsible
+        />
+        <ToolContent>
+          {hasInput ? <ToolInput input={part.input} /> : null}
+          <McpAppFrame html={mcpAppHtml} />
+        </ToolContent>
+      </Tool>
     );
   }
 

@@ -144,6 +144,90 @@ async function handleMcpPostRequest(
 export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
 
+  // GET endpoint for MCP App UI resources (proxied to MCP servers)
+  fastify.get(
+    `${endpoint}/:profileId/resources`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        params: z.object({
+          profileId: UuidIdSchema,
+        }),
+        querystring: z.object({
+          uri: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { profileId, token } =
+        extractProfileIdAndTokenFromRequest(request) ?? {};
+
+      if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: "Missing or invalid Authorization header",
+        };
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return { error: "Unauthorized", message: "Invalid token" };
+      }
+
+      const { uri } = request.query as { uri: string };
+      if (!uri?.startsWith("ui://")) {
+        return reply.status(400).send({
+          error: "Only ui:// resource URIs are supported via this endpoint",
+        });
+      }
+
+      try {
+        const { server } = await createAgentServer(profileId, {
+          tokenId: tokenAuth.tokenId,
+          teamId: tokenAuth.teamId,
+          isOrganizationToken: tokenAuth.isOrganizationToken,
+          organizationId: tokenAuth.organizationId,
+          ...(tokenAuth.isUserToken && { isUserToken: true }),
+          ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+          ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
+          ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
+        });
+
+        const transport = createStatelessTransport(profileId);
+        await server.connect(transport);
+
+        // Build a JSON-RPC resources/read request and send it through
+        const jsonRpcBody = {
+          jsonrpc: "2.0",
+          id: `res-${Date.now()}`,
+          method: "resources/read",
+          params: { uri },
+        };
+
+        reply.hijack();
+        await transport.handleRequest(
+          request.raw,
+          reply.raw,
+          jsonRpcBody,
+        );
+      } catch (error) {
+        fastify.log.error(
+          { error, profileId, uri },
+          "Failed to read MCP resource via gateway",
+        );
+        if (!reply.sent) {
+          return reply.status(502).send({
+            error: "Failed to read resource from MCP server",
+          });
+        }
+      }
+    },
+  );
+
   // GET endpoint for server discovery with profile ID in URL
   fastify.get(
     `${endpoint}/:profileId`,

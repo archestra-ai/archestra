@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
+import { formatDistanceToNow } from "date-fns";
 import { Copy, Key, Loader2, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
@@ -11,7 +12,6 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -38,36 +38,76 @@ import {
   useCreateVirtualApiKey,
   useDeleteVirtualApiKey,
 } from "@/lib/chat-settings.query";
+import { useFeatureValue } from "@/lib/features.hook";
 
 type VirtualKeyWithParent =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"][number];
+
+/**
+ * Format an expiration date as a human-readable relative string.
+ * e.g. "in 30 days", "in about 2 hours", "Never"
+ */
+function formatExpiration(date: Date | string | null): string {
+  if (!date) return "Never";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (d <= new Date()) return "Expired";
+  return formatDistanceToNow(d, { addSuffix: true });
+}
+
+/**
+ * Compute default expiration date from config seconds value.
+ * Returns null (never expires) when defaultSeconds is 0 or unavailable.
+ */
+function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
+  if (!defaultSeconds) return null;
+  return new Date(Date.now() + defaultSeconds * 1000);
+}
+
+/**
+ * Format a Date to a datetime-local input value (YYYY-MM-DDTHH:mm).
+ */
+function toDatetimeLocalValue(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 export function ProviderSettingsVirtualKeys() {
   const { data: virtualKeys = [], isPending } = useAllVirtualApiKeys();
   const { data: apiKeys = [] } = useChatApiKeys();
   const createMutation = useCreateVirtualApiKey();
   const deleteMutation = useDeleteVirtualApiKey();
+  const defaultExpirationSeconds = useFeatureValue(
+    "virtualKeyDefaultExpirationSeconds",
+  );
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
+  const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<Date | null>(
+    null,
+  );
   const [newKeyName, setNewKeyName] = useState("");
   const [selectedParentKeyId, setSelectedParentKeyId] = useState<string>("");
+  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim() || !selectedParentKeyId) return;
     try {
       const result = await createMutation.mutateAsync({
         chatApiKeyId: selectedParentKeyId,
-        data: { name: newKeyName.trim() },
+        data: {
+          name: newKeyName.trim(),
+          expiresAt: expiresAt ?? undefined,
+        },
       });
       setNewKeyName("");
       if (result?.value) {
         setCreatedKeyValue(result.value);
+        setCreatedKeyExpiresAt(expiresAt);
       }
     } catch {
       // Handled by mutation
     }
-  }, [newKeyName, selectedParentKeyId, createMutation]);
+  }, [newKeyName, selectedParentKeyId, expiresAt, createMutation]);
 
   const handleCopy = useCallback(() => {
     if (createdKeyValue) {
@@ -96,7 +136,7 @@ export function ProviderSettingsVirtualKeys() {
       },
       {
         accessorKey: "parentKeyName",
-        header: "Parent API Key",
+        header: "Provider API Key",
         cell: ({ row }) => {
           const provider = row.original
             .parentKeyProvider as ChatApiKeyResponse["provider"];
@@ -120,14 +160,11 @@ export function ProviderSettingsVirtualKeys() {
       {
         accessorKey: "expiresAt",
         header: "Expires",
-        cell: ({ row }) =>
-          row.original.expiresAt ? (
-            <span className="text-sm text-muted-foreground">
-              {new Date(row.original.expiresAt).toLocaleDateString()}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">Never</span>
-          ),
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {formatExpiration(row.original.expiresAt)}
+          </span>
+        ),
       },
       {
         accessorKey: "lastUsedAt",
@@ -188,8 +225,10 @@ export function ProviderSettingsVirtualKeys() {
           <Button
             onClick={() => {
               setCreatedKeyValue(null);
+              setCreatedKeyExpiresAt(null);
               setNewKeyName("");
               setSelectedParentKeyId(parentableKeys[0]?.id ?? "");
+              setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
               setIsCreateDialogOpen(true);
             }}
             disabled={parentableKeys.length === 0}
@@ -234,84 +273,127 @@ export function ProviderSettingsVirtualKeys() {
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Create Virtual API Key</DialogTitle>
-              <DialogDescription>
-                Create a virtual key linked to one of your provider API keys
-              </DialogDescription>
+              <DialogTitle>
+                {createdKeyValue
+                  ? "Virtual API Key Created"
+                  : "Create Virtual API Key"}
+              </DialogTitle>
+              {!createdKeyValue && (
+                <DialogDescription>
+                  Create a virtual key linked to one of your provider API keys
+                </DialogDescription>
+              )}
             </DialogHeader>
             <div className="space-y-4 py-2">
-              {createdKeyValue && (
-                <Alert>
-                  <Key className="h-4 w-4" />
-                  <AlertTitle>Virtual key created</AlertTitle>
-                  <AlertDescription>
-                    <div className="flex items-center gap-2 mt-1">
-                      <code className="text-xs bg-muted px-2 py-1 rounded break-all flex-1">
-                        {createdKeyValue}
-                      </code>
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={handleCopy}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
+              {createdKeyValue ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Key className="h-4 w-4" />
+                    Copy this key now. It won&apos;t be shown again.
+                  </div>
+                  <div className="flex items-center gap-2 bg-muted rounded px-3 py-2">
+                    <code className="text-xs break-all flex-1 min-w-0">
+                      {createdKeyValue}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0"
+                      onClick={handleCopy}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      Expires:
+                    </span>{" "}
+                    {formatExpiration(createdKeyExpiresAt)}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Provider API Key</Label>
+                    <Select
+                      value={selectedParentKeyId}
+                      onValueChange={setSelectedParentKeyId}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select an API key" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {parentableKeys.map((key) => {
+                          const config = PROVIDER_CONFIG[key.provider];
+                          return (
+                            <SelectItem key={key.id} value={key.id}>
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src={config.icon}
+                                  alt={config.name}
+                                  width={16}
+                                  height={16}
+                                  className="rounded dark:invert"
+                                />
+                                <span>{key.name}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {config.name}
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                      value={newKeyName}
+                      onChange={(e) => setNewKeyName(e.target.value)}
+                      placeholder="My virtual key"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleCreate();
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Expiration</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="datetime-local"
+                        value={expiresAt ? toDatetimeLocalValue(expiresAt) : ""}
+                        min={toDatetimeLocalValue(new Date())}
+                        onChange={(e) =>
+                          setExpiresAt(
+                            e.target.value ? new Date(e.target.value) : null,
+                          )
+                        }
+                        className="flex-1"
+                      />
+                      {expiresAt && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setExpiresAt(null)}
+                        >
+                          Never
+                        </Button>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Copy this key now. It won&apos;t be shown again.
+                    <p className="text-xs text-muted-foreground">
+                      {expiresAt
+                        ? `Expires ${formatExpiration(expiresAt)}`
+                        : "Key will never expire"}
                     </p>
-                  </AlertDescription>
-                </Alert>
+                  </div>
+                </>
               )}
-
-              <div className="space-y-2">
-                <Label>Parent API Key</Label>
-                <Select
-                  value={selectedParentKeyId}
-                  onValueChange={setSelectedParentKeyId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an API key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentableKeys.map((key) => {
-                      const config = PROVIDER_CONFIG[key.provider];
-                      return (
-                        <SelectItem key={key.id} value={key.id}>
-                          <div className="flex items-center gap-2">
-                            <Image
-                              src={config.icon}
-                              alt={config.name}
-                              width={16}
-                              height={16}
-                              className="rounded dark:invert"
-                            />
-                            <span>{key.name}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {config.name}
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="My virtual key"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleCreate();
-                    }
-                  }}
-                />
-              </div>
             </div>
             <DialogFooter>
               <Button

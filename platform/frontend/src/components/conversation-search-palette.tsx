@@ -17,7 +17,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -175,15 +175,16 @@ const navigationItems = [
 interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  hidePages?: boolean;
+  recentChatsView?: boolean;
 }
 
 export function ConversationSearchPalette({
   open,
   onOpenChange,
-  hidePages = false,
+  recentChatsView = false,
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
@@ -260,8 +261,13 @@ export function ConversationSearchPalette({
       }
       deleteMutation.mutate(conversationId);
       setIsPendingDeletion(null);
+
+      // Redirect to new chat if the deleted conversation is currently open
+      if (searchParams.get("conversation") === conversationId) {
+        router.push("/chat");
+      }
     },
-    [deleteMutation, conversations],
+    [deleteMutation, conversations, searchParams, router],
   );
 
   // Keyboard shortcuts for search palette
@@ -443,14 +449,14 @@ export function ConversationSearchPalette({
                   <CommandItem
                     value="new-chat"
                     onSelect={handleNewChat}
-                    className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
+                    className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
                   >
                     <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium">New chat</span>
                   </CommandItem>
                 </CommandGroup>
 
-                {!hidePages && (
+                {!recentChatsView && (
                   <>
                     <CommandSeparator className="my-2" />
 
@@ -485,18 +491,18 @@ export function ConversationSearchPalette({
                         );
                       })}
                     </CommandGroup>
+
+                    <CommandSeparator className="my-2" />
+
+                    <div className="px-2 pb-1.5">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Chats
+                        </span>
+                      </div>
+                    </div>
                   </>
                 )}
-
-                <CommandSeparator className="my-2" />
-
-                <div className="px-2 pb-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Chats
-                    </span>
-                  </div>
-                </div>
               </>
             )}
 

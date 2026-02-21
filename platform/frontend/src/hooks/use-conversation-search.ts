@@ -8,13 +8,13 @@ import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/lib/keyboard-shortcuts";
 export function useConversationSearch() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [hidePages, setHidePages] = useState(false);
+  const [recentChatsView, setRecentChatsView] = useState(false);
   const { isMac } = usePlatform();
 
   useEffect(() => {
     const handleOpenPalette = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      setHidePages(detail?.hidePages ?? false);
+      setRecentChatsView(detail?.recentChatsView ?? false);
       setIsOpen(true);
     };
 
@@ -31,7 +31,7 @@ export function useConversationSearch() {
       ) {
         event.preventDefault();
         event.stopPropagation();
-        setHidePages(false);
+        setRecentChatsView(false);
         // Using functional update (prev => !prev) to avoid stale closure issues.
         // This ensures we always toggle relative to current state without needing
         // isOpen in the dependency array.
@@ -60,6 +60,6 @@ export function useConversationSearch() {
   return {
     isOpen,
     setIsOpen,
-    hidePages,
+    recentChatsView,
   };
 }

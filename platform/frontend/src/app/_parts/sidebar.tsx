@@ -84,7 +84,7 @@ const getNavigationGroups = (isAuthenticated: boolean): MenuGroup[] => {
           onClick: () => {
             window.dispatchEvent(
               new CustomEvent("open-conversation-search", {
-                detail: { hidePages: true },
+                detail: { recentChatsView: true },
               }),
             );
           },

@@ -134,6 +134,13 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 
 ## Environment Variables
 
+**Naming Convention**: All env vars MUST follow the pattern `ARCHESTRA_<PRODUCT_AREA>_<THING>` (e.g., `ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`, `ARCHESTRA_OTEL_VERBOSE_TRACING`).
+
+**Adding New Env Vars**:
+1. **Consume in `backend/src/config.ts`** - Parse and validate the env var here. If a custom parse/validation function is needed, export it and add tests in `backend/src/config.test.ts`
+2. **Document in `../docs/pages/platform-deployment.md`** - All new env vars MUST be documented in the Environment Variables section. Use best judgement on whether it warrants a new subsection
+3. **Frontend access via `/api/config`** - If the frontend needs to reference an env var value, expose it through `backend/src/routes/config.ts` response and consume via `useFeatureValue()` or `useFeatureFlag()` hooks
+
 ```bash
 # Database Configuration
 # ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL

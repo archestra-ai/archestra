@@ -1,5 +1,9 @@
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
-import { assertAuthenticatedForKeylessProvider } from "./llm-proxy-auth";
+import {
+  assertAuthenticatedForKeylessProvider,
+  validateVirtualApiKey,
+} from "./llm-proxy-auth";
 
 describe("assertAuthenticatedForKeylessProvider", () => {
   test("allows request when apiKey is present", () => {
@@ -68,5 +72,39 @@ describe("assertAuthenticatedForKeylessProvider", () => {
         "10.0.0.5",
       ),
     ).toThrow("Authentication required");
+  });
+});
+
+describe("validateVirtualApiKey", () => {
+  test("returns 401 with 'Virtual API key expired' for expired key", async () => {
+    // Mock VirtualApiKeyModel.validateToken to return an expired key
+    const { VirtualApiKeyModel } = await import("@/models");
+    const spy = vi
+      .spyOn(VirtualApiKeyModel, "validateToken")
+      .mockResolvedValue({
+        virtualKey: {
+          id: "vk-1",
+          chatApiKeyId: "ck-1",
+          name: "test",
+          tokenHash: "hash",
+          tokenStart: "archestra_",
+          expiresAt: new Date("2020-01-01"),
+          lastUsedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        chatApiKey: {
+          id: "ck-1",
+          provider: "openai",
+          secretId: "secret-1",
+          baseUrl: null,
+        },
+      } as never);
+
+    await expect(
+      validateVirtualApiKey("archestra_test_token", "openai"),
+    ).rejects.toThrow("Virtual API key expired");
+
+    spy.mockRestore();
   });
 });

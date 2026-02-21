@@ -27,10 +27,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               geminiVertexAiEnabled: z.boolean(),
-              vllmEnabled: z.boolean(),
-              ollamaEnabled: z.boolean(),
-              mistralEnabled: z.boolean(),
-              perplexityEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
               browserStreamingEnabled: z.boolean(),
               incomingEmail: z.object({
@@ -48,6 +44,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               orchestratorK8sNamespace: z.string(),
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
+              virtualKeyDefaultExpirationSeconds: z.number(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -70,10 +67,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
-          vllmEnabled: config.llm.vllm.enabled,
-          ollamaEnabled: config.llm.ollama.enabled,
-          mistralEnabled: true,
-          perplexityEnabled: true,
           globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),
           knowledgeGraph: getKnowledgeGraphProviderInfo(),
@@ -81,6 +74,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
           isQuickstart: config.isQuickstart,
           ngrokDomain: getNgrokDomain(),
+          virtualKeyDefaultExpirationSeconds:
+            config.llmProxy.virtualKeyDefaultExpirationSeconds,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

@@ -732,6 +732,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
+- **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
+
+  - Default: `2592000` (30 days)
+  - Set to `0` to create virtual keys that never expire by default
+  - Users can override this per-key when creating virtual keys via the UI
+
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
   - Default: `false`

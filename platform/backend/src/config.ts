@@ -388,6 +388,36 @@ export const parseContentMaxLength = (
 };
 
 /**
+ * Parse virtual key default expiration from environment variable.
+ * Must be a non-negative integer (seconds). 0 means "never expires".
+ * Returns the default (30 days) for invalid or negative values.
+ */
+export const parseVirtualKeyDefaultExpiration = (
+  envValue: string | undefined,
+): number => {
+  const DEFAULT_EXPIRATION = 2592000; // 30 days in seconds
+  if (!envValue) return DEFAULT_EXPIRATION;
+
+  const trimmed = envValue.trim();
+  if (!trimmed) return DEFAULT_EXPIRATION;
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "${trimmed}", using default ${DEFAULT_EXPIRATION}`,
+    );
+    return DEFAULT_EXPIRATION;
+  }
+
+  if (parsed === 0) {
+    logger.info(
+      "ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS set to 0: virtual keys will not expire by default",
+    );
+  }
+  return parsed;
+};
+
+/**
  * Parse a positive integer from an environment variable string, with a default fallback.
  */
 const parsePositiveInt = (
@@ -656,6 +686,9 @@ export default {
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
       10,
+    ),
+    virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
+      process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
   },
   benchmark: {

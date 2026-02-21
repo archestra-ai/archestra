@@ -93,10 +93,11 @@ export default function MsTeamsPage() {
 
   const setupDataLoading =
     featuresLoading || statusLoading || bindingsLoading || agentsLoading;
-  const allStepsCompleted =
-    !!ngrokDomain && !!msTeams?.configured && hasBindings;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
+  const allStepsCompleted = isLocalDev
+    ? !!ngrokDomain && !!msTeams?.configured && hasBindings
+    : !!msTeams?.configured && hasBindings;
 
   return (
     <div className="flex flex-col gap-6">

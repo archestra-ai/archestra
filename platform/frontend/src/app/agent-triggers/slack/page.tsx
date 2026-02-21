@@ -88,9 +88,11 @@ export default function SlackPage() {
 
   const setupDataLoading =
     featuresLoading || statusLoading || bindingsLoading || agentsLoading;
-  const allStepsCompleted = !!ngrokDomain && !!slack?.configured && hasBindings;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
+  const allStepsCompleted = isLocalDev
+    ? !!ngrokDomain && !!slack?.configured && hasBindings
+    : !!slack?.configured && hasBindings;
 
   return (
     <div className="flex flex-col gap-6">

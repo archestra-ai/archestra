@@ -2,7 +2,7 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 import { loginViaApi } from "../../utils";
 
-test.describe("Origin error handling", { tag: ["@firefox", "@webkit"] }, () => {
+test.describe("Origin error handling", { tag: ["@quickstart", "@firefox", "@webkit"] }, () => {
   test("login from localhost succeeds (baseline)", async ({ browser }) => {
     // storageState: undefined overrides the project-level adminAuthFile
     // to create a truly unauthenticated context

@@ -12,7 +12,7 @@ import { clickButton } from "../../utils";
  */
 
 test.describe("MCP Install", () => {
-  test("Self-hosted from catalog", async ({
+  test("Self-hosted from catalog", { tag: "@quickstart" }, async ({
     adminPage,
     extractCookieHeaders,
   }) => {

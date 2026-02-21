@@ -1408,6 +1408,7 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 };
 
 function NoApiKeySetup() {
+  const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const createMutation = useCreateChatApiKey();
   const byosEnabled = useFeatureFlag("byosEnabled");
@@ -1454,6 +1455,8 @@ function NoApiKeySetup() {
             : undefined,
       });
       setIsDialogOpen(false);
+      // Navigate to clean /chat URL so there's no stale conversation param
+      router.push("/chat");
     } catch {
       // Error handled by mutation
     }

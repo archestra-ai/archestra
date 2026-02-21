@@ -30,7 +30,7 @@ import {
   extractBearerToken,
   validateExternalIdpToken,
 } from "@/routes/mcp-gateway.utils";
-import { secretManager } from "@/secrets-manager";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Agent,
   ApiError,
@@ -284,18 +284,9 @@ export async function handleLLMProxy<
     }
     // Resolve the real provider API key from the secret
     if (resolved.chatApiKey.secretId) {
-      const secret = await secretManager().getSecret(
+      const secretValue = await getSecretValueForLlmProviderApiKey(
         resolved.chatApiKey.secretId,
       );
-      // Support both new format (apiKey) and legacy provider-specific key names
-      const secretValue =
-        secret?.secret?.apiKey ??
-        secret?.secret?.anthropicApiKey ??
-        secret?.secret?.geminiApiKey ??
-        secret?.secret?.openaiApiKey ??
-        secret?.secret?.zhipuaiApiKey ??
-        secret?.secret?.cohereApiKey ??
-        secret?.secret?.bedrockApiKey;
       if (secretValue) {
         apiKey = secretValue as string;
       }

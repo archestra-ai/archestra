@@ -19,7 +19,7 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
-import { secretManager } from "@/secrets-manager";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
 /**
@@ -144,16 +144,9 @@ export async function resolveProviderApiKey(params: {
 
   if (resolvedApiKey) {
     if (resolvedApiKey.secretId) {
-      const secret = await secretManager().getSecret(resolvedApiKey.secretId);
-      // Support both old format (anthropicApiKey) and new format (apiKey)
-      const secretValue =
-        secret?.secret?.apiKey ??
-        secret?.secret?.anthropicApiKey ??
-        secret?.secret?.geminiApiKey ??
-        secret?.secret?.openaiApiKey ??
-        secret?.secret?.zhipuaiApiKey ??
-        secret?.secret?.cohereApiKey ??
-        secret?.secret?.bedrockApiKey;
+      const secretValue = await getSecretValueForLlmProviderApiKey(
+        resolvedApiKey.secretId,
+      );
       if (secretValue) {
         return {
           apiKey: secretValue as string,

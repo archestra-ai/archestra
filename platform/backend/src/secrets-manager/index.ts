@@ -1,4 +1,4 @@
-import { SecretsManagerType } from "@shared";
+import { SecretsManagerType, SupportedProviders } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -211,14 +211,29 @@ export function assertByosEnabled(): ReadonlyVaultSecretManager {
   return secretManager() as ReadonlyVaultSecretManager;
 }
 
+/**
+ * Retrieve the API key value for an LLM provider from the secrets store.
+ *
+ * Current format: `{ apiKey: "sk-..." }`
+ * Legacy formats (pre-v1.0): `{ <provider>ApiKey: "sk-..." }` (e.g. `anthropicApiKey`, `openaiApiKey`).
+ * These provider-specific keys were used before the unified API key system.
+ * They may still exist in databases that were created before the migration.
+ */
 export async function getSecretValueForLlmProviderApiKey(
   secretId: string,
-): Promise<string | unknown> {
+): Promise<string | undefined> {
   const secret = await secretManager().getSecret(secretId);
-  return (
-    secret?.secret?.apiKey ??
-    secret?.secret?.anthropicApiKey ??
-    secret?.secret?.geminiApiKey ??
-    secret?.secret?.openaiApiKey
-  );
+  const data = secret?.secret as Record<string, unknown> | null;
+  if (!data) return undefined;
+
+  // Current format
+  if (typeof data.apiKey === "string") return data.apiKey;
+
+  // Legacy format: `<provider>ApiKey` (e.g. anthropicApiKey, openaiApiKey)
+  for (const provider of SupportedProviders) {
+    const legacyKey = `${provider}ApiKey`;
+    if (typeof data[legacyKey] === "string") return data[legacyKey] as string;
+  }
+
+  return undefined;
 }

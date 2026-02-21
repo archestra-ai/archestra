@@ -35,6 +35,10 @@ The manifest pre-configures all required scopes, event subscriptions, and intera
     "description": "Archestra AI Agent"
   },
   "features": {
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
     "bot_user": {
       "display_name": "Archestra",
       "always_online": true
@@ -71,6 +75,8 @@ The manifest pre-configures all required scopes, event subscriptions, and intera
         "groups:history",
         "groups:read",
         "im:history",
+        "im:read",
+        "im:write",
         "users:read",
         "users:read.email"
       ]

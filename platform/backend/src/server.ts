@@ -605,6 +605,7 @@ const start = async () => {
     await initializeEmailProvider();
 
     // Initialize chatops providers (MS Teams, Slack, etc.)
+    // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
     // Initialize knowledge graph provider (if configured)

@@ -62,7 +62,6 @@ export function AgentActions({
       </Button>
       <PermissionButton
         permissions={{ agent: ["update"] }}
-        tooltip="Edit"
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
@@ -76,7 +75,6 @@ export function AgentActions({
       </PermissionButton>
       <PermissionButton
         permissions={{ agent: ["delete"] }}
-        tooltip="Delete"
         aria-label="Delete"
         variant="outline"
         size="icon-sm"

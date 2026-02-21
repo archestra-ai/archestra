@@ -331,6 +331,17 @@ class OrganizationRoleModel {
   }
 
   /**
+   * List only predefined roles for an organization
+   */
+  static getPredefinedOnly(organizationId: string): Array<OrganizationRole> {
+    return [
+      generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
+      generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
+      generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
+    ];
+  }
+
+  /**
    * List all roles for an organization (including predefined)
    */
   static async getAll(
@@ -340,11 +351,8 @@ class OrganizationRoleModel {
       { organizationId },
       "OrganizationRoleModel.getAll: fetching roles",
     );
-    const predefinedRoles = [
-      generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
-      generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
-      generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
-    ];
+    const predefinedRoles =
+      OrganizationRoleModel.getPredefinedOnly(organizationId);
 
     try {
       const customRoles = await db

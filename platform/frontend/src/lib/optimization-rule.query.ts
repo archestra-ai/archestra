@@ -52,7 +52,8 @@ export function useCreateOptimizationRule() {
       }
       return responseData;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (!data) return;
       toast.success("Optimization rule created");
       // Wait for the query to refetch to avoid showing stale data
       await queryClient.invalidateQueries({
@@ -79,7 +80,8 @@ export function useUpdateOptimizationRule() {
       }
       return responseData;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (!data) return;
       toast.success("Optimization rule updated");
       // Wait for the query to refetch to avoid showing stale data
       await queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
@@ -102,7 +104,8 @@ export function useDeleteOptimizationRule() {
       }
       return { success: true };
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (!data) return;
       toast.success("Optimization rule deleted");
       // Wait for the query to refetch to avoid showing stale data
       await queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });

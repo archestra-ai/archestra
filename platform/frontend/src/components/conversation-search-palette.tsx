@@ -140,7 +140,7 @@ const navigationItems = [
     label: "Tool Policies",
     value: "tool-policies",
     keywords: "tools policies permissions",
-    href: "/tools",
+    href: "/tool-policies",
   },
   {
     icon: Router,

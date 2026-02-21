@@ -23,9 +23,8 @@ import {
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
 import { LRUCacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
-import { ChatOpsChannelBindingModel } from "@/models";
+import { ChatOpsChannelBindingModel, type MsTeamsConfig } from "@/models";
 import type {
   ChatOpsProvider,
   ChatOpsProviderType,
@@ -51,10 +50,18 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   private adapter: CloudAdapter | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private config: MsTeamsConfig;
+
+  constructor(msTeamsConfig: MsTeamsConfig) {
+    this.config = msTeamsConfig;
+  }
 
   isConfigured(): boolean {
-    const { enabled, appId, appSecret } = config.chatops.msTeams;
-    return enabled && Boolean(appId) && Boolean(appSecret);
+    return (
+      this.config.enabled &&
+      Boolean(this.config.appId) &&
+      Boolean(this.config.appSecret)
+    );
   }
 
   async initialize(): Promise<void> {
@@ -63,7 +70,12 @@ class MSTeamsProvider implements ChatOpsProvider {
       return;
     }
 
-    const { appId, appSecret, tenantId, graph } = config.chatops.msTeams;
+    const { appId, appSecret, tenantId } = this.config;
+    const graph = {
+      tenantId: this.config.graphTenantId,
+      clientId: this.config.graphClientId,
+      clientSecret: this.config.graphClientSecret,
+    };
 
     // Initialize Bot Framework adapter
     const credentialsFactory = tenantId
@@ -276,7 +288,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     let messageId = "";
     try {
       await this.adapter.continueConversationAsync(
-        config.chatops.msTeams.appId,
+        this.config.appId,
         ref,
         async (context) => {
           const response = await context.sendActivity(replyText);
@@ -807,7 +819,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     messages: ChatMessage[],
     excludeMessageId?: string,
   ): ChatThreadMessage[] {
-    const botAppId = config.chatops.msTeams.appId;
+    const botAppId = this.config.appId;
 
     return messages
       .filter((msg) => msg.id && msg.id !== excludeMessageId)

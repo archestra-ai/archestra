@@ -119,6 +119,7 @@ export function useCreateConversation() {
       return data;
     },
     onSuccess: (newConversation) => {
+      if (!newConversation) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
       if (newConversation) {
@@ -160,7 +161,8 @@ export function useUpdateConversation() {
       }
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
@@ -186,7 +188,8 @@ export function useDeleteConversation() {
       }
       return data;
     },
-    onSuccess: (_, deletedId) => {
+    onSuccess: (data, deletedId) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
 
@@ -238,7 +241,8 @@ export function useGenerateConversationTitle() {
       }
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
@@ -331,7 +335,8 @@ export function useUpdateConversationEnabledTools() {
       }
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.conversationId, "enabled-tools"],
       });
@@ -356,7 +361,8 @@ export function useClearConversationEnabledTools() {
       }
       return data;
     },
-    onSuccess: (_, conversationId) => {
+    onSuccess: (data, conversationId) => {
+      if (!data) return;
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId, "enabled-tools"],
       });

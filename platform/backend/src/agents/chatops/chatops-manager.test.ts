@@ -1,6 +1,10 @@
 import * as a2aExecutor from "@/agents/a2a-executor";
-import { AgentTeamModel, ChatOpsChannelBindingModel } from "@/models";
-import { describe, expect, test, vi } from "@/test";
+import {
+  AgentTeamModel,
+  ChatOpsChannelBindingModel,
+  ChatOpsConfigModel,
+} from "@/models";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type {
   ChatOpsProvider,
   ChatReplyOptions,
@@ -674,5 +678,223 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
 
     // Admin should see all agents
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+});
+
+describe("ChatOpsManager.initialize — partial config", () => {
+  // Clear all chatops env vars to prevent seed logic from running
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("initializes Slack when only Slack config exists in DB", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "test-secret",
+      appId: "A123",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).not.toBeNull();
+    expect(manager.getSlackProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
+  test("initializes MS Teams when only MS Teams config exists in DB", async () => {
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "test-app-id",
+      appSecret: "test-secret",
+      tenantId: "test-tenant",
+      graphTenantId: "test-tenant",
+      graphClientId: "test-app-id",
+      graphClientSecret: "test-secret",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getMSTeamsProvider()).not.toBeNull();
+    expect(manager.getMSTeamsProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
+  test("handles no config in DB gracefully", async () => {
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.isAnyProviderConfigured()).toBe(false);
+
+    await manager.cleanup();
+  });
+});
+
+// =============================================================================
+// seedConfigFromEnvVars (private, tested via cast)
+// =============================================================================
+
+describe("ChatOpsManager.seedConfigFromEnvVars", () => {
+  // Clear all chatops env vars before each test to prevent real dev-env values from leaking
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("seeds MS Teams config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "env-app-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "env-tenant-id");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config).not.toBeNull();
+    expect(config?.enabled).toBe(true);
+    expect(config?.appId).toBe("env-app-id");
+    expect(config?.appSecret).toBe("env-app-secret");
+    expect(config?.tenantId).toBe("env-tenant-id");
+  });
+
+  test("seeds Slack config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-test-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "test-signing-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "A12345");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config).not.toBeNull();
+    expect(config?.enabled).toBe(true);
+    expect(config?.botToken).toBe("xoxb-test-token");
+    expect(config?.signingSecret).toBe("test-signing-secret");
+    expect(config?.appId).toBe("A12345");
+  });
+
+  test("does not overwrite existing MS Teams DB config", async () => {
+    // Pre-seed DB
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "db-app-id",
+      appSecret: "db-app-secret",
+      tenantId: "db-tenant",
+      graphTenantId: "db-tenant",
+      graphClientId: "db-app-id",
+      graphClientSecret: "db-app-secret",
+    });
+
+    // Set different env vars
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "env-app-secret");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    // DB config should be unchanged
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config?.appId).toBe("db-app-id");
+  });
+
+  test("does not overwrite existing Slack DB config", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-db-token",
+      signingSecret: "db-signing-secret",
+      appId: "DB_APP",
+    });
+
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-env-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "env-signing-secret");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config?.botToken).toBe("xoxb-db-token");
+  });
+
+  test("no-op when no DB config and no env vars", async () => {
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const msTeams = await ChatOpsConfigModel.getMsTeamsConfig();
+    const slack = await ChatOpsConfigModel.getSlackConfig();
+    expect(msTeams).toBeNull();
+    expect(slack).toBeNull();
+  });
+
+  test("MS Teams graph credentials fall back to bot credentials when not set", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "bot-app-id");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "bot-app-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "bot-tenant-id");
+    // Graph env vars NOT set — should fall back to bot values
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config?.graphTenantId).toBe("bot-tenant-id");
+    expect(config?.graphClientId).toBe("bot-app-id");
+    expect(config?.graphClientSecret).toBe("bot-app-secret");
+  });
+
+  test("does not seed MS Teams when only appId is set (missing appSecret)", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
+    // appSecret not set
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config).toBeNull();
   });
 });

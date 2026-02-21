@@ -2,6 +2,7 @@
 
 import type { OrganizationTheme } from "@shared";
 import { Check } from "lucide-react";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,12 +34,22 @@ export function ThemeSelector({
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {themes.map((theme) => (
-            <ThemeOption
-              key={theme.id}
-              theme={theme}
-              isSelected={selectedTheme === theme.id}
-              onClick={() => onThemeSelect(theme.id)}
-            />
+            <div key={theme.id} className="flex-1">
+              <WithPermissions
+                permissions={{ organization: ["update"] }}
+                noPermissionHandle="tooltip"
+                key={theme.id}
+              >
+                {({ hasPermission }) => (
+                  <ThemeOption
+                    theme={theme}
+                    isSelected={selectedTheme === theme.id}
+                    onClick={() => onThemeSelect(theme.id)}
+                    disabled={!hasPermission}
+                  />
+                )}
+              </WithPermissions>
+            </div>
           ))}
         </div>
       </CardContent>
@@ -50,14 +61,21 @@ interface ThemeOptionProps {
   theme: ThemeMetadata;
   isSelected: boolean;
   onClick: () => void;
+  disabled: boolean;
 }
 
-function ThemeOption({ theme, isSelected, onClick }: ThemeOptionProps) {
+function ThemeOption({
+  theme,
+  isSelected,
+  onClick,
+  disabled,
+}: ThemeOptionProps) {
   return (
     <Button
       variant={isSelected ? "default" : "outline"}
-      className="h-auto p-3 flex-col items-center gap-2 relative"
+      className="h-auto p-3 flex-col items-center gap-2 relative w-full"
       onClick={onClick}
+      disabled={disabled}
     >
       {isSelected && <Check className="h-4 w-4 absolute top-2 right-2" />}
       <span className="text-sm font-medium text-center w-full">

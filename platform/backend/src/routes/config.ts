@@ -48,12 +48,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               orchestratorK8sNamespace: z.string(),
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
-              chatops: z.object({
-                msTeamsEnabled: z.boolean(),
-                msTeamsAppId: z.boolean(),
-                msTeamsAppSecret: z.boolean(),
-                msTeamsTenantId: z.boolean(),
-              }),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -87,12 +81,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
           isQuickstart: config.isQuickstart,
           ngrokDomain: getNgrokDomain(),
-          chatops: {
-            msTeamsEnabled: config.chatops.msTeams.enabled,
-            msTeamsAppId: Boolean(config.chatops.msTeams.appId),
-            msTeamsAppSecret: Boolean(config.chatops.msTeams.appSecret),
-            msTeamsTenantId: Boolean(config.chatops.msTeams.tenantId),
-          },
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

@@ -96,9 +96,9 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
 export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
-export const DEFAULT_PROFILE_NAME = "Default Profile";
 export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
+export const DEFAULT_TEAM_NAME = "Default Team";
 
 /**
  * Separator used to construct fully-qualified MCP tool names

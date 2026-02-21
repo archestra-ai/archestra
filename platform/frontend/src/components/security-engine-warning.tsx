@@ -27,7 +27,10 @@ export function SecurityEngineWarning() {
         <AlertDescription className="text-xs mt-1">
           <p>Agents can perform dangerous actions without supervision.</p>
           <p className="mt-1">
-            <Link href="/tools" className="inline-flex items-center underline">
+            <Link
+              href="/tool-policies"
+              className="inline-flex items-center underline"
+            >
               Go to Tools Settings
             </Link>
           </p>

@@ -11,11 +11,11 @@ import {
 import type { SlackInteractivePayload } from "@/agents/chatops/slack-provider";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
   ChatOpsChannelBindingModel,
+  ChatOpsConfigModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
@@ -1019,7 +1019,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (_, reply) => {
       // Iterate through all provider types - automatically includes new providers
       // TypeScript exhaustiveness in getProviderInfo() ensures new providers are handled
-      const providers = ChatOpsProviderTypeSchema.options.map(getProviderInfo);
+      const providers = await Promise.all(
+        ChatOpsProviderTypeSchema.options.map(getProviderInfo),
+      );
 
       return reply.send({ providers });
     },
@@ -1132,16 +1134,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Update MS Teams chatops config in quickstart mode.
-   * Mutates in-memory config and reinitializes the chatops manager.
+   * Update MS Teams chatops config.
+   * Persists to DB and reinitializes the chatops manager (which reloads from DB).
    */
   fastify.put(
     "/api/chatops/config/ms-teams",
     {
       schema: {
         operationId: RouteId.UpdateChatOpsConfigInQuickstart,
-        description:
-          "Update MS Teams chatops configuration (quickstart mode only)",
+        description: "Update MS Teams chatops configuration",
         tags: ["ChatOps"],
         body: z.object({
           enabled: z.boolean().optional(),
@@ -1153,47 +1154,36 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (config.production && !config.isQuickstart) {
-        throw new ApiError(
-          403,
-          "Only available in quickstart or local development mode. Forbidden in production.",
-        );
-      }
-
       const { enabled, appId, appSecret, tenantId } = request.body;
 
-      if (enabled !== undefined) {
-        config.chatops.msTeams.enabled = enabled;
-      }
-      if (appId !== undefined) {
-        config.chatops.msTeams.appId = appId;
-        config.chatops.msTeams.graph.clientId = appId;
-      }
-      if (appSecret !== undefined) {
-        config.chatops.msTeams.appSecret = appSecret;
-        config.chatops.msTeams.graph.clientSecret = appSecret;
-      }
-      if (tenantId !== undefined) {
-        config.chatops.msTeams.tenantId = tenantId;
-        config.chatops.msTeams.graph.tenantId = tenantId;
-      }
+      // Merge new values with existing DB config (or defaults for first setup)
+      const existing = await ChatOpsConfigModel.getMsTeamsConfig();
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        appId: appId ?? existing?.appId ?? "",
+        appSecret: appSecret ?? existing?.appSecret ?? "",
+        tenantId: tenantId ?? existing?.tenantId ?? "",
+        graphTenantId: tenantId ?? existing?.graphTenantId ?? "",
+        graphClientId: appId ?? existing?.graphClientId ?? "",
+        graphClientSecret: appSecret ?? existing?.graphClientSecret ?? "",
+      };
 
+      await ChatOpsConfigModel.saveMsTeamsConfig(merged);
       await chatOpsManager.reinitialize();
 
       return reply.send({ success: true });
     },
   );
   /**
-   * Update Slack chatops config in quickstart mode.
-   * Mutates in-memory config and reinitializes the chatops manager.
+   * Update Slack chatops config.
+   * Persists to DB and reinitializes the chatops manager (which reloads from DB).
    */
   fastify.put(
     "/api/chatops/config/slack",
     {
       schema: {
         operationId: RouteId.UpdateSlackChatOpsConfig,
-        description:
-          "Update Slack chatops configuration (quickstart mode only)",
+        description: "Update Slack chatops configuration",
         tags: ["ChatOps"],
         body: z.object({
           enabled: z.boolean().optional(),
@@ -1205,28 +1195,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (config.production && !config.isQuickstart) {
-        throw new ApiError(
-          403,
-          "Only available in quickstart or local development mode. Forbidden in production.",
-        );
-      }
-
       const { enabled, botToken, signingSecret, appId } = request.body;
 
-      if (enabled !== undefined) {
-        config.chatops.slack.enabled = enabled;
-      }
-      if (botToken !== undefined) {
-        config.chatops.slack.botToken = botToken;
-      }
-      if (signingSecret !== undefined) {
-        config.chatops.slack.signingSecret = signingSecret;
-      }
-      if (appId !== undefined) {
-        config.chatops.slack.appId = appId;
-      }
+      // Merge new values with existing DB config (or defaults for first setup)
+      const existing = await ChatOpsConfigModel.getSlackConfig();
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        botToken: botToken ?? existing?.botToken ?? "",
+        signingSecret: signingSecret ?? existing?.signingSecret ?? "",
+        appId: appId ?? existing?.appId ?? "",
+      };
 
+      await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();
 
       return reply.send({ success: true });
@@ -1293,40 +1273,41 @@ async function getDefaultOrganizationId(): Promise<string> {
 
 /**
  * Get provider info for status endpoint.
+ * Reads credentials from DB (the single source of truth).
  * Uses exhaustive switch to force updates when new providers are added.
  */
-function getProviderInfo(providerType: ChatOpsProviderType): {
+async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
   credentials?: Record<string, string>;
-} {
+}> {
   switch (providerType) {
     case "ms-teams": {
       const provider = chatOpsManager.getMSTeamsProvider();
-      const { appId, appSecret, tenantId } = config.chatops.msTeams;
+      const dbConfig = await ChatOpsConfigModel.getMsTeamsConfig();
       return {
         id: "ms-teams",
         displayName: "Microsoft Teams",
         configured: provider?.isConfigured() ?? false,
         credentials: {
-          appId: maskValue(appId),
-          appSecret: appSecret ? "••••••••" : "",
-          tenantId: maskValue(tenantId),
+          appId: maskValue(dbConfig?.appId ?? ""),
+          appSecret: dbConfig?.appSecret ? "••••••••" : "",
+          tenantId: maskValue(dbConfig?.tenantId ?? ""),
         },
       };
     }
     case "slack": {
       const provider = chatOpsManager.getSlackProvider();
-      const { botToken, signingSecret, appId } = config.chatops.slack;
+      const dbConfig = await ChatOpsConfigModel.getSlackConfig();
       return {
         id: "slack",
         displayName: "Slack",
         configured: provider?.isConfigured() ?? false,
         credentials: {
-          botToken: maskValue(botToken),
-          signingSecret: signingSecret ? "••••••••" : "",
-          appId: maskValue(appId),
+          botToken: maskValue(dbConfig?.botToken ?? ""),
+          signingSecret: dbConfig?.signingSecret ? "••••••••" : "",
+          appId: maskValue(dbConfig?.appId ?? ""),
         },
       };
     }

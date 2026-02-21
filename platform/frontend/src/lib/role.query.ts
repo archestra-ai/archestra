@@ -55,7 +55,8 @@ export function useCreateRole() {
       }
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
       queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
     },
@@ -85,7 +86,8 @@ export function useUpdateRole() {
       }
       return response.data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
       queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
       queryClient.invalidateQueries({
@@ -109,7 +111,8 @@ export function useDeleteRole() {
       }
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
       queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
     },

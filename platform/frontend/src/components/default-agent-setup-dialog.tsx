@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { SetupDialog } from "@/components/setup-dialog";
-import { Badge } from "@/components/ui/badge";
+import { StepCard } from "@/components/step-card";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles, useUpdateProfile } from "@/lib/agent.query";
 
@@ -76,12 +76,26 @@ function StepEnableMsTeams() {
   return (
     <div
       className="grid flex-1 gap-6"
-      style={{ gridTemplateColumns: "6fr 4fr" }}
+      style={{ gridTemplateColumns: "1fr 1fr" }}
     >
+      <StepCard stepNumber={1} title="Enable MS Teams on Agent">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Toggle MS Teams on for each agent that should be available in
+          Microsoft Teams. At least one agent must be enabled to proceed.
+        </p>
+        <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed mt-2">
+          <strong>Access control:</strong> Only users who have access to the
+          agent (via team membership) can interact with it through Teams. Make
+          sure the relevant teams are assigned to the agent. Users are
+          identified by email, so their Microsoft account email must match their
+          Archestra email.
+        </div>
+      </StepCard>
+
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 min-h-0 min-w-0">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium">Agents</h4>
-          <span className="text-sm font-medium">Teams enabled</span>
+          <span className="text-sm font-medium">MS Teams enabled</span>
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -136,26 +150,6 @@ function StepEnableMsTeams() {
           </div>
         )}
       </div>
-
-      <div className="flex flex-col gap-4 py-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            Step 1
-          </Badge>
-          <h3 className="text-lg font-semibold">Enable MS Teams on Agent</h3>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Toggle MS Teams on for each agent that should be available in
-          Microsoft Teams. At least one agent must be enabled to proceed.
-        </p>
-        <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed mt-2">
-          <strong>Access control:</strong> Only users who have access to the
-          agent (via team membership) can interact with it through Teams. Make
-          sure the relevant teams are assigned to the agent. Users are
-          identified by email, so their Microsoft account email must match their
-          Archestra email.
-        </div>
-      </div>
     </div>
   );
 }
@@ -164,29 +158,12 @@ function StepSelectAgentInTeams() {
   return (
     <div
       className="grid flex-1 gap-6"
-      style={{ gridTemplateColumns: "6fr 4fr" }}
+      style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <div className="flex justify-center items-center rounded-lg border bg-muted/30 p-2 relative">
-        <video
-          src="/ms-teams/agent-bound.mp4"
-          controls
-          muted
-          autoPlay
-          loop
-          playsInline
-          className="rounded-md w-full h-full object-contain"
-        />
-      </div>
-
-      <div className="flex flex-col gap-4 py-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            Step 2
-          </Badge>
-          <h3 className="text-lg font-semibold">
-            Select default Agent for Teams channel
-          </h3>
-        </div>
+      <StepCard
+        stepNumber={2}
+        title="Select default Agent for MS Teams channel"
+      >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -219,7 +196,16 @@ function StepSelectAgentInTeams() {
             </span>
           </li>
         </ol>
-      </div>
+      </StepCard>
+      <video
+        src="/ms-teams/agent-bound.mp4"
+        controls
+        muted
+        autoPlay
+        loop
+        playsInline
+        className="rounded-md w-full"
+      />
     </div>
   );
 }

@@ -62,7 +62,8 @@ export function useSetTeamVaultFolder() {
       }
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       toast.success("Vault folder configured successfully");
       queryClient.invalidateQueries({
         queryKey: ["team-vault-folder", variables.teamId],
@@ -87,7 +88,8 @@ export function useDeleteTeamVaultFolder() {
       }
       return data;
     },
-    onSuccess: (_, teamId) => {
+    onSuccess: (data, teamId) => {
+      if (!data) return;
       toast.success("Vault folder removed successfully");
       queryClient.invalidateQueries({
         queryKey: ["team-vault-folder", teamId],

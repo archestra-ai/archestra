@@ -7,6 +7,7 @@ const ToolInvocationPolicyActionSchema = z.enum([
   "allow_when_context_is_untrusted",
   "block_when_context_is_untrusted",
   "block_always",
+  "require_approval",
 ]);
 
 const CallPolicyConditionSchema = z.object({

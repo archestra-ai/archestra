@@ -54,8 +54,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
-  dualLlmConfig: ["create", "read", "update", "delete"],
-  dualLlmResult: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["read"],
+  dualLlmResult: ["read"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
@@ -78,7 +78,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpGateway: ["read"],
   llmProxy: ["read"],
   tool: ["create", "read", "update", "delete"],
-  policy: ["create", "read", "update", "delete"],
+  policy: ["read"],
   interaction: ["create", "read", "update", "delete"],
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
@@ -128,6 +128,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+  [RouteId.GetAgentVersions]: {
+    agent: ["read"],
+  },
+  [RouteId.RollbackAgent]: {
+    agent: ["update"],
+  },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -640,6 +646,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatOpsConfigInQuickstart]: {
     organization: ["update"],
   },
+  [RouteId.UpdateSlackChatOpsConfig]: {
+    organization: ["update"],
+  },
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     organization: ["update"],
   },
@@ -674,8 +683,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     mcpToolCall: ["read"],
   },
 
-  "/tools": {
-    tool: ["read"],
+  "/tool-policies": {
+    policy: ["read"],
   },
 
   "/mcp-catalog": {
@@ -709,8 +718,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": {
     organization: ["read"],
   },
+  "/settings/security": {
+    organization: ["read"],
+  },
   "/settings/appearance": {
-    organization: ["update"],
+    organization: ["read"],
   },
   "/settings/llm-api-keys": {
     chatSettings: ["read"],
@@ -719,7 +731,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     identityProvider: ["read"],
   },
   "/settings/secrets": {
-    organization: ["update"],
+    organization: ["read"],
   },
   // Agent Triggers
   "/agent-triggers/ms-teams": {

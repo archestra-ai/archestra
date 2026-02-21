@@ -6,6 +6,7 @@ import {
   AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
+  ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
   OrganizationModel,
   UserModel,
@@ -14,34 +15,34 @@ import {
   RouteCategory,
   startActiveChatSpan,
 } from "@/routes/proxy/utils/tracing";
-import {
-  type ChatOpsProcessingResult,
-  type ChatOpsProvider,
-  type ChatOpsProviderType,
-  ChatOpsProviderTypeSchema,
-  type IncomingChatMessage,
+import type {
+  ChatOpsProcessingResult,
+  ChatOpsProvider,
+  ChatOpsProviderType,
+  IncomingChatMessage,
 } from "@/types/chatops";
 import {
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
+import SlackProvider from "./slack-provider";
+import { errorMessage } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
  */
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
+  private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   getMSTeamsProvider(): MSTeamsProvider | null {
-    if (!this.msTeamsProvider) {
-      this.msTeamsProvider = new MSTeamsProvider();
-      if (!this.msTeamsProvider.isConfigured()) {
-        return null;
-      }
-    }
     return this.msTeamsProvider;
+  }
+
+  getSlackProvider(): SlackProvider | null {
+    return this.slackProvider;
   }
 
   getChatOpsProvider(
@@ -50,6 +51,8 @@ export class ChatOpsManager {
     switch (providerType) {
       case "ms-teams":
         return this.getMSTeamsProvider();
+      case "slack":
+        return this.getSlackProvider();
     }
   }
 
@@ -99,8 +102,9 @@ export class ChatOpsManager {
    * Check if any chatops provider is configured and enabled.
    */
   isAnyProviderConfigured(): boolean {
-    return ChatOpsProviderTypeSchema.options.some((type) =>
-      this.getChatOpsProvider(type)?.isConfigured(),
+    return (
+      (this.msTeamsProvider?.isConfigured() ?? false) ||
+      (this.slackProvider?.isConfigured() ?? false)
     );
   }
 
@@ -181,12 +185,30 @@ export class ChatOpsManager {
   }
 
   async initialize(): Promise<void> {
+    // Seed DB from env vars on first run (no-op if DB already has config)
+    await this.seedConfigFromEnvVars();
+
+    // Load configs from DB (the single source of truth)
+    const [msTeamsConfig, slackConfig] = await Promise.all([
+      ChatOpsConfigModel.getMsTeamsConfig(),
+      ChatOpsConfigModel.getSlackConfig(),
+    ]);
+
+    // Create providers with their config
+    if (msTeamsConfig) {
+      this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
+    }
+    if (slackConfig) {
+      this.slackProvider = new SlackProvider(slackConfig);
+    }
+
     if (!this.isAnyProviderConfigured()) {
       return;
     }
 
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
-      { name: "MS Teams", provider: this.getMSTeamsProvider() },
+      { name: "MS Teams", provider: this.msTeamsProvider },
+      { name: "Slack", provider: this.slackProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -203,6 +225,25 @@ export class ChatOpsManager {
       }
     }
 
+    // Eager channel discovery for providers that support it (fire-and-forget).
+    // Providers that can determine their workspace ID without an incoming message
+    // (e.g., Slack via auth.test) get channels discovered immediately on startup.
+    for (const { name, provider } of providers) {
+      const workspaceId = provider?.getWorkspaceId();
+      if (provider && workspaceId) {
+        this.discoverChannels({
+          provider,
+          context: null,
+          workspaceId,
+        }).catch((error) => {
+          logger.warn(
+            { error: errorMessage(error) },
+            `[ChatOps] Initial ${name} channel discovery failed`,
+          );
+        });
+      }
+    }
+
     this.startProcessedMessageCleanup();
   }
 
@@ -215,6 +256,10 @@ export class ChatOpsManager {
     if (this.msTeamsProvider) {
       await this.msTeamsProvider.cleanup();
       this.msTeamsProvider = null;
+    }
+    if (this.slackProvider) {
+      await this.slackProvider.cleanup();
+      this.slackProvider = null;
     }
     this.stopCleanupInterval();
   }
@@ -296,15 +341,12 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const {
-      agentToUse,
-      cleanedMessageText: _cleanedMessageText,
-      fallbackMessage,
-    } = await this.resolveInlineAgentMention({
-      messageText: message.text,
-      defaultAgent: agent,
-      provider,
-    });
+    const { agentToUse, cleanedMessageText, fallbackMessage } =
+      await this.resolveInlineAgentMention({
+        messageText: message.text,
+        defaultAgent: agent,
+        provider,
+      });
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -332,10 +374,11 @@ export class ChatOpsManager {
     // Build context from thread history
     const contextMessages = await this.fetchThreadHistory(message, provider);
 
-    // Build the full message with context
-    let fullMessage = message.text;
+    // Build the full message with context — use cleanedMessageText so
+    // the "AgentName >" prefix is stripped from what the LLM sees
+    let fullMessage = cleanedMessageText;
     if (contextMessages.length > 0) {
-      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${message.text}`;
+      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
     // Execute the A2A message using the agent
@@ -624,6 +667,72 @@ export class ChatOpsManager {
     }
   }
 
+  /**
+   * Seed chatops config from environment variables into the database.
+   * Only runs on first startup — if DB already has config, this is a no-op.
+   */
+  private async seedConfigFromEnvVars(): Promise<void> {
+    await this.seedMsTeamsConfigFromEnvVars();
+    await this.seedSlackConfigFromEnvVars();
+  }
+
+  private async seedMsTeamsConfigFromEnvVars(): Promise<void> {
+    try {
+      const existing = await ChatOpsConfigModel.getMsTeamsConfig();
+      if (existing) return;
+
+      const appId = process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "";
+      const appSecret = process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET || "";
+      if (!appId || !appSecret) return;
+
+      const tenantId = process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID || "";
+      await ChatOpsConfigModel.saveMsTeamsConfig({
+        enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
+        appId,
+        appSecret,
+        tenantId,
+        graphTenantId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID || tenantId,
+        graphClientId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID || appId,
+        graphClientSecret:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET ||
+          appSecret,
+      });
+      logger.info("[ChatOps] Seeded MS Teams config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed MS Teams config from env vars",
+      );
+    }
+  }
+
+  private async seedSlackConfigFromEnvVars(): Promise<void> {
+    try {
+      const existing = await ChatOpsConfigModel.getSlackConfig();
+      if (existing) return;
+
+      const botToken = process.env.ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN || "";
+      const signingSecret =
+        process.env.ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET || "";
+      if (!botToken || !signingSecret) return;
+
+      await ChatOpsConfigModel.saveSlackConfig({
+        enabled: process.env.ARCHESTRA_CHATOPS_SLACK_ENABLED === "true",
+        botToken,
+        signingSecret,
+        appId: process.env.ARCHESTRA_CHATOPS_SLACK_APP_ID || "",
+      });
+      logger.info("[ChatOps] Seeded Slack config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed Slack config from env vars",
+      );
+    }
+  }
+
   private async executeAndReply(params: {
     agent: { id: string; name: string };
     binding: { organizationId: string };
@@ -722,22 +831,6 @@ async function getDefaultOrganizationId(): Promise<string> {
     throw new Error("No organizations found");
   }
   return org.id;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  // Handle objects that may not convert to string properly
-  try {
-    return String(error);
-  } catch {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
 }
 
 /**

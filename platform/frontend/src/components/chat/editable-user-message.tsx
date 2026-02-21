@@ -13,6 +13,7 @@ import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
   url: string;
@@ -52,6 +53,7 @@ export function EditableUserMessage({
   const [editedText, setEditedText] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
+  const [isRegenerateConfirming, setIsRegenerateConfirming] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset edited text when entering edit mode
@@ -87,6 +89,21 @@ export function EditableUserMessage({
       onCancelEdit();
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleRegenerateClick = async () => {
+    if (!isRegenerateConfirming) {
+      setIsRegenerateConfirming(true);
+      return;
+    }
+    // Second click - confirm and regenerate
+    setIsSaving(true);
+    try {
+      await onSave(messageId, partIndex, text);
+    } finally {
+      setIsSaving(false);
+      setIsRegenerateConfirming(false);
     }
   };
 
@@ -175,7 +192,11 @@ export function EditableUserMessage({
   );
 
   return (
-    <Message from="user" className="group/message">
+    <Message
+      from="user"
+      className="group/message"
+      onMouseLeave={() => setIsRegenerateConfirming(false)}
+    >
       <div className="relative flex flex-col items-end pb-8 w-full">
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
@@ -217,8 +238,15 @@ export function EditableUserMessage({
           <MessageActions
             textToCopy={text}
             onEditClick={handleStartEdit}
+            onRegenerateClick={handleRegenerateClick}
+            isRegenerateConfirming={isRegenerateConfirming}
             editDisabled={editDisabled}
-            className="absolute -bottom-1 right-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
+            className={cn(
+              "absolute -bottom-1 right-0 transition-opacity",
+              isRegenerateConfirming
+                ? "opacity-100"
+                : "opacity-0 group-hover/message:opacity-100",
+            )}
           />
         )}
       </div>

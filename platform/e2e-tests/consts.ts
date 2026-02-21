@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_TEAM_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import dotenv from "dotenv";
@@ -76,11 +77,9 @@ export const MEMBER_PASSWORD = "password";
 /**
  * Team names for e2e tests
  */
-export const DEFAULT_TEAM_NAME = "Default Team";
+export { DEFAULT_TEAM_NAME };
 export const ENGINEERING_TEAM_NAME = "Engineering Team";
 export const MARKETING_TEAM_NAME = "Marketing Team";
-
-export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 export { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 

@@ -192,7 +192,26 @@ describe("IdentityProviderSelector", () => {
       );
     });
 
-    it("should reject paths containing ://", async () => {
+    it("should reject paths with :// in the path portion", async () => {
+      mockSearchParams.get.mockReturnValue(
+        encodeURIComponent("https://evil.com/path"),
+      );
+      const user = userEvent.setup();
+
+      render(<IdentityProviderSelector />);
+
+      await user.click(screen.getByRole("button", { name: /sign in with/i }));
+
+      expect(authClient.signIn.sso).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callbackURL: `${mockOrigin}/`,
+        }),
+      );
+    });
+
+    it("should allow paths with :// in query parameter values", async () => {
+      // Protocol URLs in query params are just data, not redirect targets.
+      // This is needed for OAuth flows (e.g., redirect_uri=cursor://...)
       mockSearchParams.get.mockReturnValue(
         encodeURIComponent("/redirect?url=https://evil.com"),
       );
@@ -204,7 +223,7 @@ describe("IdentityProviderSelector", () => {
 
       expect(authClient.signIn.sso).toHaveBeenCalledWith(
         expect.objectContaining({
-          callbackURL: `${mockOrigin}/`,
+          callbackURL: `${mockOrigin}/redirect?url=https://evil.com`,
         }),
       );
     });

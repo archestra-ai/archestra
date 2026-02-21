@@ -4,6 +4,7 @@ import { archestraApiSdk } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -172,23 +173,36 @@ export default function CompressionPage() {
               Reduce LLM token usage up to 60% by using TOON (Token-Oriented
               Object Notation) compression for tool results.
             </CardDescription>
-            <Select
-              value={compressionMode}
-              onValueChange={(value: "disabled" | "organization" | "team") => {
-                setCompressionMode(value);
-                setHasChanges(checkForChanges(value, selectedTeamIds));
-              }}
-              disabled={updateOrganizationMutation.isPending}
+            <WithPermissions
+              permissions={{ organization: ["update"] }}
+              noPermissionHandle="tooltip"
             >
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="disabled">Disabled</SelectItem>
-                <SelectItem value="organization">Organization level</SelectItem>
-                <SelectItem value="team">Team level</SelectItem>
-              </SelectContent>
-            </Select>
+              {({ hasPermission }) => (
+                <Select
+                  value={compressionMode}
+                  onValueChange={(
+                    value: "disabled" | "organization" | "team",
+                  ) => {
+                    setCompressionMode(value);
+                    setHasChanges(checkForChanges(value, selectedTeamIds));
+                  }}
+                  disabled={
+                    updateOrganizationMutation.isPending || !hasPermission
+                  }
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                    <SelectItem value="organization">
+                      Organization level
+                    </SelectItem>
+                    <SelectItem value="team">Team level</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
           </div>
         </CardHeader>
         {compressionMode === "team" && (

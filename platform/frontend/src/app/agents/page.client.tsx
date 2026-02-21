@@ -39,6 +39,7 @@ import {
   useProfiles,
   useProfilesPaginated,
 } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
@@ -165,7 +166,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     agentTypes: ["agent"],
   });
 
-  const { data: _teams } = useQuery({
+  const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
@@ -173,6 +174,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     },
     initialData: initialData?.teams,
   });
+
+  const { data: isAgentAdmin } = useHasPermissions({
+    agent: ["admin"],
+  });
+  const { data: canCreateAgent } = useHasPermissions({
+    agent: ["create"],
+  });
+
+  // Non-admin users with no teams cannot create agents
+  const cannotCreateDueToNoTeams =
+    !isAgentAdmin && (!teams || teams.length === 0);
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
@@ -430,6 +442,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             permissions={{ agent: ["create"] }}
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
+            disabled={cannotCreateDueToNoTeams}
+            tooltip={
+              canCreateAgent && cannotCreateDueToNoTeams
+                ? "You need to be a member of at least one team to create agents"
+                : undefined
+            }
           >
             <Plus className="mr-2 h-4 w-4" />
             Create Agent

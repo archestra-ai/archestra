@@ -186,19 +186,11 @@ export function RolesList() {
         </CardHeader>
         <CardContent className="space-y-6">
           <PredefinedRoles predefinedRoles={predefinedRoles} />
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
-              Custom Roles
-            </h3>
-            {customRoles.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-                <Shield className="mb-4 h-12 w-12 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  No custom roles yet. Create your first custom role to get
-                  started.
-                </p>
-              </div>
-            ) : (
+          {customRoles.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
+                Custom Roles
+              </h3>
               <div className="space-y-3">
                 {customRoles.map((role) => (
                   <div
@@ -235,8 +227,8 @@ export function RolesList() {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

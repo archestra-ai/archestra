@@ -66,13 +66,6 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isQuickstart: z.boolean(),
             /** ngrok tunnel domain (e.g. "abc123.ngrok-free.app") when ngrok is active */
             ngrokDomain: z.string(),
-            /** ChatOps configuration status (which fields are set) */
-            chatops: z.object({
-              msTeamsEnabled: z.boolean(),
-              msTeamsAppId: z.boolean(),
-              msTeamsAppSecret: z.boolean(),
-              msTeamsTenantId: z.boolean(),
-            }),
           }),
         },
       },
@@ -100,12 +93,6 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
         isQuickstart: config.isQuickstart,
         ngrokDomain: getNgrokDomain(),
-        chatops: {
-          msTeamsEnabled: config.chatops.msTeams.enabled,
-          msTeamsAppId: Boolean(config.chatops.msTeams.appId),
-          msTeamsAppSecret: Boolean(config.chatops.msTeams.appSecret),
-          msTeamsTenantId: Boolean(config.chatops.msTeams.tenantId),
-        },
       });
     },
   );

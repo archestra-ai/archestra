@@ -4,7 +4,7 @@ import { z } from "zod";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams"]);
+export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 /**
@@ -197,6 +197,29 @@ export interface ChatOpsProvider {
   getUserEmail(userId: string): Promise<string | null>;
 
   /**
+   * Send an agent selection card/message to a channel.
+   * Each provider renders the card in its native format (Adaptive Card for MS Teams, Block Kit for Slack).
+   * @param params.message - The incoming message that triggered the selection
+   * @param params.agents - Available agents to choose from
+   * @param params.isWelcome - Whether this is a first-time welcome (true) or a change-agent request (false)
+   * @param params.providerContext - Provider-specific context (e.g., TurnContext for MS Teams)
+   */
+  sendAgentSelectionCard(params: {
+    message: IncomingChatMessage;
+    agents: { id: string; name: string }[];
+    isWelcome: boolean;
+    providerContext?: unknown;
+  }): Promise<void>;
+
+  /**
+   * Get the workspace/team ID for this provider, if known without an incoming message.
+   * Used for eager channel discovery on startup.
+   * Returns null if the workspace ID can only be determined from incoming messages
+   * (e.g., MS Teams requires a TurnContext to know which team).
+   */
+  getWorkspaceId(): string | null;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
@@ -223,9 +246,22 @@ export interface MSTeamsConfig {
 }
 
 /**
+ * Slack specific configuration from environment variables
+ */
+export interface SlackConfig {
+  enabled: boolean;
+  /** Slack Bot User OAuth Token (xoxb-...) */
+  botToken: string;
+  /** Slack Signing Secret for webhook verification */
+  signingSecret: string;
+  /** Slack App ID (used to filter bot's own messages) */
+  appId: string;
+}
+
+/**
  * Overall chatops configuration
  */
 export interface ChatOpsConfig {
   msTeams: MSTeamsConfig;
-  // Future: slack, discord configs
+  slack: SlackConfig;
 }

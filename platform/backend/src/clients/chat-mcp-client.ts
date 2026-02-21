@@ -24,6 +24,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
 import type { AgentType } from "@/types";
@@ -714,6 +715,16 @@ export async function getChatMcpTools({
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,
           inputSchema: jsonSchema(normalizedSchema),
+          needsApproval: async (args: unknown) => {
+            return ToolInvocationPolicyModel.checkApprovalRequired(
+              mcpTool.name,
+              isRecord(args) ? args : {},
+              {
+                teamIds: [],
+                externalAgentId: "Archestra Chat",
+              },
+            );
+          },
           execute: async (args: unknown) => {
             logger.info(
               { agentId, userId, toolName: mcpTool.name, arguments: args },
@@ -889,6 +900,16 @@ export async function getChatMcpTools({
             description:
               agentTool.description || `Agent tool: ${agentTool.name}`,
             inputSchema: jsonSchema(normalizedSchema),
+            needsApproval: async (args: unknown) => {
+              return ToolInvocationPolicyModel.checkApprovalRequired(
+                agentTool.name,
+                isRecord(args) ? args : {},
+                {
+                  teamIds: [],
+                  externalAgentId: "Archestra Chat",
+                },
+              );
+            },
             execute: async (args: Record<string, unknown>) => {
               logger.info(
                 {

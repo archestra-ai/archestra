@@ -676,7 +676,9 @@ export function AgentDialog({
           },
         });
         savedAgentId = updated?.id ?? agent.id;
-        toast.success(getSuccessMessage(agentType, true));
+        if (updated?.id) {
+          toast.success(getSuccessMessage(agentType, true));
+        }
       } else {
         // Create new agent
         const created = await createAgent.mutateAsync({
@@ -698,6 +700,7 @@ export function AgentDialog({
           ...(showSecurity && { considerContextUntrusted }),
           ...emailSettings,
         });
+        if (!created) return;
         savedAgentId = created?.id ?? "";
 
         // Save tool changes with the new agent ID
@@ -785,7 +788,7 @@ export function AgentDialog({
                 }}
                 className="text-xs h-auto p-0 ml-2"
               >
-                Version History
+                Agent's prompts history
               </Button>
             )}
           </DialogTitle>
@@ -1037,7 +1040,7 @@ export function AgentDialog({
                             Users can interact with this agent in{" "}
                             {provider.displayName}, configure channels in{" "}
                             <Link
-                              href="/agent-triggers"
+                              href={`/agent-triggers/${provider.id}`}
                               className="underline hover:text-foreground"
                             >
                               Agent Triggers
@@ -1215,7 +1218,7 @@ export function AgentDialog({
                           Users can interact with this agent via email, first
                           run initial set up in{" "}
                           <Link
-                            href="/agent-triggers"
+                            href="/agent-triggers/email"
                             className="underline hover:text-foreground"
                           >
                             Agent Triggers

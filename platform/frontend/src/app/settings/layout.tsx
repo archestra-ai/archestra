@@ -18,10 +18,6 @@ export default function SettingsLayout({
     identityProvider: ["read"],
   });
 
-  const { data: userCanUpdateOrganization } = useHasPermissions({
-    organization: ["update"],
-  });
-
   const { data: secretsType } = useSecretsType();
 
   const tabs = [
@@ -46,14 +42,13 @@ export default function SettingsLayout({
                 },
               ]
             : []),
-          { label: "Appearance", href: "/settings/appearance" },
         ]
       : []),
+    { label: "Appearance", href: "/settings/appearance" },
     /**
-     * Secrets tab is only shown when using Vault storage (not DB)
-     * and the user has permission to update organization settings.
+     * Secrets tab is only shown when using Vault storage (not DB).
      */
-    ...(userCanUpdateOrganization && secretsType?.type === "Vault"
+    ...(secretsType?.type === "Vault"
       ? [{ label: "Secrets", href: "/settings/secrets" }]
       : []),
   ];

@@ -1,1 +1,0 @@
-ALTER TABLE "virtual_api_keys" ALTER COLUMN "expires_at" SET DATA TYPE timestamp with time zone;

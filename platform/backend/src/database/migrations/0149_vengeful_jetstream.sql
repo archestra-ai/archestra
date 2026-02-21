@@ -4,7 +4,7 @@ CREATE TABLE "virtual_api_keys" (
 	"name" varchar(256) NOT NULL,
 	"secret_id" uuid NOT NULL,
 	"token_start" varchar(16) NOT NULL,
-	"expires_at" timestamp,
+	"expires_at" timestamp with time zone,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"last_used_at" timestamp
 );

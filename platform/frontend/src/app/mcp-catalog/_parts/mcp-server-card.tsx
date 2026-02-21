@@ -14,6 +14,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { LabelTags } from "@/components/label-tags";
 import {
   WithoutPermissions,
   WithPermissions,
@@ -823,6 +824,9 @@ export function McpServerCard({
                 >
                   No auth required
                 </Badge>
+              )}
+              {item.labels && item.labels.length > 0 && (
+                <LabelTags labels={item.labels} />
               )}
             </div>
           </div>

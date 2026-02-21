@@ -2,12 +2,21 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ChevronRight } from "lucide-react";
 import { lazy, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+} from "@/components/agent-labels";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -105,6 +114,12 @@ export function McpCatalogForm({
     null,
   );
 
+  // Labels state (managed separately from react-hook-form)
+  const [labels, setLabels] = useState<ProfileLabel[]>(
+    initialValues?.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
+  );
+  const [labelsOpen, setLabelsOpen] = useState(false);
+
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeatureFlag("byosEnabled");
 
@@ -135,6 +150,13 @@ export function McpCatalogForm({
         localConfigSecret ?? undefined,
       );
       form.reset(transformedValues);
+      // Reset labels state
+      setLabels(
+        initialValues.labels?.map((l) => ({ key: l.key, value: l.value })) ??
+          [],
+      );
+      // Auto-expand labels section if there are existing labels
+      setLabelsOpen((initialValues.labels ?? []).length > 0);
       // Initialize OAuth BYOS state from transformed values (parsed vault references)
       // Note: teamId cannot be derived from path, so we leave it null (user can reselect if needed)
       setOauthVaultTeamId(null);
@@ -147,9 +169,13 @@ export function McpCatalogForm({
     }
   }, [initialValues, localConfigSecret, form]);
 
+  const handleSubmit = (values: McpCatalogFormValues) => {
+    onSubmit({ ...values, labels });
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         {mode === "edit" && (
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -596,6 +622,27 @@ export function McpCatalogForm({
             )}
           </div>
         )}
+
+        <Collapsible open={labelsOpen} onOpenChange={setLabelsOpen}>
+          <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-foreground text-muted-foreground transition-colors pt-4 border-t w-full">
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${labelsOpen ? "rotate-90" : ""}`}
+            />
+            Labels
+            {labels.length > 0 && (
+              <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                {labels.length}
+              </span>
+            )}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
+            <ProfileLabels
+              labels={labels}
+              onLabelsChange={setLabels}
+              showLabel={false}
+            />
+          </CollapsibleContent>
+        </Collapsible>
 
         {footer}
       </form>

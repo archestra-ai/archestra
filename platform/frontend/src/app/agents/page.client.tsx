@@ -4,7 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Search, Tag } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { AgentDialog } from "@/components/agent-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
+import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -294,29 +295,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <div className="flex items-start gap-2">
               <span className="break-words min-w-0">{agent.name}</span>
               {agent.labels && agent.labels.length > 0 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="inline-flex shrink-0">
-                        <Tag className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {agent.labels.map((label) => (
-                          <Badge
-                            key={label.key}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            <span className="font-semibold">{label.key}:</span>
-                            <span className="ml-1">{label.value}</span>
-                          </Badge>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <LabelTags labels={agent.labels} />
               )}
             </div>
           </div>

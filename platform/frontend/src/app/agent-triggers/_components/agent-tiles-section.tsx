@@ -152,7 +152,7 @@ export function AgentTilesSection({
           />
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Assign agents to channels using the dropdown or use{" "}
+          Assign agents to channels using the Add button in agent tiles or use{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             {providerConfig.slashCommand}
           </code>{" "}

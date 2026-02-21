@@ -15175,6 +15175,7 @@ export type ListChatOpsBindingsResponses = {
         workspaceId: string | null;
         channelName: string | null;
         workspaceName: string | null;
+        isDm: boolean;
         agentId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -15344,6 +15345,7 @@ export type UpdateChatOpsBindingResponses = {
         workspaceId: string | null;
         channelName: string | null;
         workspaceName: string | null;
+        isDm: boolean;
         agentId: string | null;
         createdAt: string;
         updatedAt: string;

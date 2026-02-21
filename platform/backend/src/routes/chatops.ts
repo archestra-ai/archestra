@@ -794,6 +794,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         channelId: selection.channelId,
         workspaceId: selection.workspaceId,
         channelName: isSlackDm ? `Direct Message - ${senderEmail}` : undefined,
+        isDm: isSlackDm,
         agentId: selection.agentId,
       });
 
@@ -1061,7 +1062,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Filter out DM bindings that belong to other users
       const userEmail = request.user.email;
       const visibleBindings = bindings.filter((b) => {
-        if (!b.channelName?.startsWith("Direct Message - ")) return true;
+        if (!b.isDm) return true;
         return b.channelName === `Direct Message - ${userEmail}`;
       });
 
@@ -1453,6 +1454,7 @@ async function handleAgentSelection(
     workspaceId: workspaceId || message.workspaceId,
     channelName,
     workspaceName: resolvedNames.workspaceName,
+    isDm: isTeamsDm,
     agentId,
   });
 

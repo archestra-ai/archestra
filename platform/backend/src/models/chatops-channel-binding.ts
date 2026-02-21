@@ -4,9 +4,7 @@ import {
   eq,
   inArray,
   isNull,
-  like,
   ne,
-  not,
   notInArray,
   sql,
 } from "drizzle-orm";
@@ -336,14 +334,7 @@ class ChatOpsChannelBindingModel {
           ),
           // Exclude DM bindings from cleanup — they won't appear in the
           // active channel discovery list but should be preserved.
-          // LIKE on NULL returns NULL (falsy), so null-named channels are
-          // unaffected by this condition and can still be cleaned up.
-          not(
-            like(
-              schema.chatopsChannelBindingsTable.channelName,
-              "Direct Message - %",
-            ),
-          ),
+          eq(schema.chatopsChannelBindingsTable.isDm, false),
         ),
       )
       .returning();

@@ -52862,6 +52862,9 @@
                         "type": "string",
                         "maxLength": 256
                       },
+                      "isDm": {
+                        "type": "boolean"
+                      },
                       "agentId": {
                         "nullable": true,
                         "type": "string",
@@ -52887,6 +52890,7 @@
                       "workspaceId",
                       "channelName",
                       "workspaceName",
+                      "isDm",
                       "agentId",
                       "createdAt",
                       "updatedAt"
@@ -53438,6 +53442,9 @@
                       "type": "string",
                       "maxLength": 256
                     },
+                    "isDm": {
+                      "type": "boolean"
+                    },
                     "agentId": {
                       "nullable": true,
                       "type": "string",
@@ -53463,6 +53470,7 @@
                     "workspaceId",
                     "channelName",
                     "workspaceName",
+                    "isDm",
                     "agentId",
                     "createdAt",
                     "updatedAt"

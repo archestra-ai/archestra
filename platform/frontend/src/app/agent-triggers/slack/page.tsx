@@ -56,7 +56,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
-import { useSession } from "@/lib/auth.query";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
@@ -220,7 +219,6 @@ export default function SlackPage() {
 }
 
 function ChannelBindingsSection() {
-  const { data: session } = useSession();
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const { data: chatOpsProviders } = useChatOpsStatus();
@@ -252,11 +250,9 @@ function ChannelBindingsSection() {
     bindingsByAgentId.set(b.agentId, list);
   }
 
-  // Find current user's DM binding (if any)
-  const userEmail = session?.user?.email;
-  const myDmBinding = slackBindings?.find(
-    (b) => b.channelName === `Direct Message - ${userEmail}`,
-  );
+  // Find current user's DM binding (if any).
+  // The backend already filters DM bindings to only show the current user's.
+  const myDmBinding = slackBindings?.find((b) => b.isDm);
 
   const handleDmClick = (agentId: string, deepLink: string) => {
     if (myDmBinding && myDmBinding.agentId !== agentId) {

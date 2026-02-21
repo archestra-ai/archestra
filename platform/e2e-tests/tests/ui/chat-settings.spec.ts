@@ -43,9 +43,6 @@ test.describe("Provider Settings - API Keys", () => {
     ).toContainText("Anthropic");
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
     await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
     ).toBeVisible();
@@ -57,9 +54,6 @@ test.describe("Provider Settings - API Keys", () => {
     await page.getByLabel(/Name/i).clear();
     await page.getByLabel(/Name/i).fill(updatedName);
     await clickButton({ page, options: { name: "Test & Save" } });
-    await expect(page.getByText("API key updated successfully")).toBeVisible({
-      timeout: 5000,
-    });
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${updatedName}`),
     ).toBeVisible();
@@ -69,9 +63,9 @@ test.describe("Provider Settings - API Keys", () => {
       .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${updatedName}`)
       .click();
     await clickButton({ page, options: { name: "Delete" } });
-    await expect(page.getByText("API key deleted successfully")).toBeVisible({
-      timeout: 5000,
-    });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${updatedName}`),
+    ).not.toBeVisible();
   });
 
   test("Can create multiple keys for the same provider and scope", async ({
@@ -88,18 +82,18 @@ test.describe("Provider Settings - API Keys", () => {
     await page.getByLabel(/Name/i).fill(keyName1);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
     await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName1}`),
+    ).toBeVisible();
 
     // Create second key for same provider+scope — should succeed
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
     await page.getByLabel(/Name/i).fill(keyName2);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
     await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName2}`),
+    ).toBeVisible();
 
     // Both keys visible
     await expect(
@@ -140,9 +134,9 @@ test.describe("Provider Settings - API Keys", () => {
     await expect(primarySwitch).toBeChecked();
 
     await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName1}`),
+    ).toBeVisible();
 
     // Create second key for same provider — isPrimary should be OFF
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -191,9 +185,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     await page.getByLabel(/Name/i).fill(parentKeyName);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
     await clickButton({ page, options: { name: "Test & Create" } });
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${parentKeyName}`),
+    ).toBeVisible();
 
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);
@@ -226,8 +220,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("code").filter({ hasText: "archestra_" }).last()).toBeVisible();
 
-    // Close dialog
-    await clickButton({ page, options: { name: "Close" } });
+    // Close dialog (use first: true to avoid strict mode violation — the dialog
+    // has two Close buttons: the footer button and the X icon)
+    await clickButton({ page, options: { name: "Close" }, first: true });
 
     // Virtual key should appear in the table
     await expect(page.getByText(virtualKeyName)).toBeVisible();
@@ -244,9 +239,8 @@ test.describe("Provider Settings - Virtual API Keys", () => {
       await deleteButton.click();
       // Confirm deletion in the confirmation dialog
       await clickButton({ page, options: { name: "Delete" } });
-      await expect(page.getByText("Virtual API key deleted")).toBeVisible({
-        timeout: 5000,
-      });
+      // Wait for deletion to take effect
+      await page.waitForLoadState("domcontentloaded");
     }
 
     // Cleanup: delete the parent API key

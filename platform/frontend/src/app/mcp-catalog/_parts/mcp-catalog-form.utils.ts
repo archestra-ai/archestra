@@ -123,6 +123,13 @@ export function transformFormToApiData(
     data.oauthConfig = undefined;
   }
 
+  // Handle labels
+  if (values.labels && values.labels.length > 0) {
+    data.labels = values.labels;
+  } else {
+    data.labels = [];
+  }
+
   return data;
 }
 
@@ -260,6 +267,8 @@ export function transformCatalogItemToFormValues(
     // BYOS: Include parsed vault path and key if OAuth secret is a vault reference
     oauthClientSecretVaultPath,
     oauthClientSecretVaultKey,
+    // Labels
+    labels: item.labels ?? [],
   } as McpCatalogFormValues;
 }
 

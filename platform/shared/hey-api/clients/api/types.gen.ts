@@ -19197,6 +19197,10 @@ export type GetInternalMcpCatalogResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+        }> | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -19283,6 +19287,10 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+        }> | null;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -19434,6 +19442,10 @@ export type CreateInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+        }> | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19670,6 +19682,10 @@ export type GetInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+        }> | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19755,6 +19771,10 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+        }> | null;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -19908,6 +19928,10 @@ export type UpdateInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+        }> | null;
         createdAt: string;
         updatedAt: string;
     };

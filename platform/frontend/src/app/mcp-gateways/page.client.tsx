@@ -13,7 +13,6 @@ import {
   Route,
   Search,
   Server,
-  Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -22,6 +21,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
+import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
@@ -304,29 +304,7 @@ function McpGateways({
                 </TooltipProvider>
               )}
               {agent.labels && agent.labels.length > 0 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="inline-flex">
-                        <Tag className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {agent.labels.map((label) => (
-                          <Badge
-                            key={label.key}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            <span className="font-semibold">{label.key}:</span>
-                            <span className="ml-1">{label.value}</span>
-                          </Badge>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <LabelTags labels={agent.labels} />
               )}
             </div>
           </div>

@@ -17,6 +17,7 @@ export interface ProfileLabel {
 interface ProfileLabelsProps {
   labels: ProfileLabel[];
   onLabelsChange: (labels: ProfileLabel[]) => void;
+  showLabel?: boolean;
 }
 
 export interface ProfileLabelsRef {
@@ -24,7 +25,7 @@ export interface ProfileLabelsRef {
 }
 
 export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
-  function ProfileLabels({ labels, onLabelsChange }, ref) {
+  function ProfileLabels({ labels, onLabelsChange, showLabel = true }, ref) {
     const [newLabelKey, setNewLabelKey] = useState("");
     const [newLabelValue, setNewLabelValue] = useState("");
 
@@ -109,7 +110,7 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
 
     return (
       <div className="grid gap-4">
-        <Label>Labels</Label>
+        {showLabel && <Label>Labels</Label>}
 
         <div className="flex gap-2 items-end">
           <div className="flex-1">

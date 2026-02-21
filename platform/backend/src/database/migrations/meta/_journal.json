@@ -1037,6 +1037,13 @@
       "when": 1771510215318,
       "tag": "0147_split_agent_rbac_resources",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1771700000000,
+      "tag": "0148_add_mcp_catalog_labels",
+      "breakpoints": true
     }
   ]
 }

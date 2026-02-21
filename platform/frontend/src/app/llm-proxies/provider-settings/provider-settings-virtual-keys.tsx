@@ -329,8 +329,9 @@ export function ProviderSettingsVirtualKeys() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Name</Label>
+                    <Label htmlFor="virtual-key-name">Name</Label>
                     <Input
+                      id="virtual-key-name"
                       value={newKeyName}
                       onChange={(e) => setNewKeyName(e.target.value)}
                       placeholder="My virtual key"

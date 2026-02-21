@@ -129,9 +129,9 @@ test.describe("Provider Settings - API Keys", () => {
 
     // Create first key — isPrimary should be ON by default
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-    // Select a provider that likely has no existing keys
+    // Select a provider that is very unlikely to have existing keys
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "Cerebras Cerebras" }).click();
+    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
     await page.getByLabel(/Name/i).fill(keyName1);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
 
@@ -147,7 +147,7 @@ test.describe("Provider Settings - API Keys", () => {
     // Create second key for same provider — isPrimary should be OFF
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "Cerebras Cerebras" }).click();
+    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
     await page.getByLabel(/Name/i).fill(keyName2);
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
 

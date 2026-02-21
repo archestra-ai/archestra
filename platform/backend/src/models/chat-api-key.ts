@@ -381,7 +381,7 @@ class ChatApiKeyModel {
       ]),
     );
 
-    // 2. Try personal key (prefer isPrimary, then oldest)
+    // 3. Try personal key (prefer isPrimary, then oldest)
     const [personalKey] = await db
       .select()
       .from(schema.chatApiKeysTable)
@@ -404,7 +404,7 @@ class ChatApiKeyModel {
       return personalKey;
     }
 
-    // 3. Try team key (prefer isPrimary, then oldest)
+    // 4. Try team key (prefer isPrimary, then oldest)
     if (userTeamIds.length > 0) {
       const [teamKey] = await db
         .select()
@@ -429,7 +429,7 @@ class ChatApiKeyModel {
       }
     }
 
-    // 4. Try org-wide key (prefer isPrimary, then oldest)
+    // 5. Try org-wide key (prefer isPrimary, then oldest)
     const [orgWideKey] = await db
       .select()
       .from(schema.chatApiKeysTable)

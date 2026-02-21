@@ -208,6 +208,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
           headers: {
             "Content-Type": "application/json",
             "x-api-key": vk.value,
+            "anthropic-version": "2023-06-01",
           },
           data: {
             model: "claude-3-5-sonnet-20241022",

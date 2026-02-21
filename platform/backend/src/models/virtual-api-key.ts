@@ -182,6 +182,10 @@ class VirtualApiKeyModel {
    *
    * Uses `tokenStart` (first 14 chars) to narrow candidates to typically 1 row,
    * then verifies the full token via the secret manager.
+   *
+   * **Note:** This method does NOT check `expiresAt`. Callers must verify
+   * expiration themselves so they can return an appropriate error
+   * (e.g. 401 "Virtual API key expired").
    */
   static async validateToken(tokenValue: string): Promise<{
     virtualKey: SelectVirtualApiKey;

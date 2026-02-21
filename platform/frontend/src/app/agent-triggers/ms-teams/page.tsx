@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -68,6 +69,8 @@ import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
 import { cn } from "@/lib/utils";
 
+const DM_ENABLED = false;
+
 export default function MsTeamsPage() {
   const publicBaseUrl = usePublicBaseUrl();
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
@@ -96,6 +99,7 @@ export default function MsTeamsPage() {
     bindings.some(
       (b) =>
         b.provider === "ms-teams" &&
+        !b.isDm &&
         b.agentId &&
         msTeamsAgentIds.has(b.agentId),
     );
@@ -230,11 +234,13 @@ export default function MsTeamsPage() {
 function ChannelBindingsSection() {
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
+  const { data: chatOpsProviders } = useChatOpsStatus();
   const updateMutation = useUpdateChatOpsBinding();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
   const [enableDialogOpen, setEnableDialogOpen] = useState(false);
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
 
+  const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const msTeamsAgents =
     agents?.filter((a) =>
       Array.isArray(a.allowedChatops)
@@ -256,6 +262,17 @@ function ChannelBindingsSection() {
     list.push(b);
     bindingsByAgentId.set(b.agentId, list);
   }
+
+  // Find current user's DM binding (if any).
+  // The backend already filters DM bindings to only show the current user's.
+  const myDmBinding = msTeamsBindings?.find((b) => b.isDm);
+
+  const handleDmClick = (agentId: string, deepLink: string) => {
+    if (myDmBinding && myDmBinding.agentId !== agentId) {
+      updateMutation.mutate({ id: myDmBinding.id, agentId });
+    }
+    window.open(deepLink, "_blank", "noopener,noreferrer");
+  };
 
   // All known channels as MultiSelect items
   const channelItems =
@@ -381,7 +398,7 @@ function ChannelBindingsSection() {
                                 <Button
                                   variant="outline"
                                   size="icon-sm"
-                                  aria-label="Open in MS Teams"
+                                  aria-label="Open channel in MS Teams"
                                   asChild
                                 >
                                   <a
@@ -397,7 +414,9 @@ function ChannelBindingsSection() {
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open in MS Teams</TooltipContent>
+                              <TooltipContent>
+                                Open channel in MS Teams
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -410,7 +429,7 @@ function ChannelBindingsSection() {
                                     <Button
                                       variant="outline"
                                       size="icon-sm"
-                                      aria-label="Open in MS Teams"
+                                      aria-label="Open channel in MS Teams"
                                     >
                                       <img
                                         src="/icons/ms-teams.png"
@@ -421,7 +440,7 @@ function ChannelBindingsSection() {
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  Open in MS Teams
+                                  Open channel in MS Teams
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -442,6 +461,28 @@ function ChannelBindingsSection() {
                               ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                        )}
+                        {DM_ENABLED && msTeams?.dmInfo?.appId && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label="DM in Teams"
+                                  onClick={() =>
+                                    handleDmClick(
+                                      agent.id,
+                                      `https://teams.microsoft.com/l/chat/0/0?users=28:${msTeams.dmInfo?.appId}`,
+                                    )
+                                  }
+                                >
+                                  <Send className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>DM in Teams</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                         <TooltipProvider>
                           <Tooltip>

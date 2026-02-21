@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 6
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-02-16
+lastUpdated: 2026-02-20
 ---
 
 Archestra can connect directly to Slack channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Slack threads.
@@ -35,6 +35,10 @@ The manifest pre-configures all required scopes, event subscriptions, and intera
     "description": "Archestra AI Agent"
   },
   "features": {
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
     "bot_user": {
       "display_name": "Archestra",
       "always_online": true
@@ -71,6 +75,8 @@ The manifest pre-configures all required scopes, event subscriptions, and intera
         "groups:history",
         "groups:read",
         "im:history",
+        "im:read",
+        "im:write",
         "users:read",
         "users:read.email"
       ]
@@ -179,6 +185,12 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 | `@BotName Sales > check revenue` | Sales agent |
 | `@BotName support > help me` | Support agent |
 | `@BotName Unknown > test` | Default agent (with fallback notice) |
+
+### Direct Messages
+
+DMs work the same as channels. Click the **DM** button next to any agent in the Agent Triggers page to open a Slack DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
+
+> The Slack app manifest already includes `im:history` and `message.im` scopes/events required for DMs.
 
 ## Troubleshooting
 

@@ -1,6 +1,6 @@
 {
-  "id": "3e262439-51cc-4dda-a4bd-e52ce4f656e8",
-  "prevId": "982e7380-af94-4c8c-afee-4b07098c264f",
+  "id": "bd6ed909-fc5c-4158-929e-3dab57833f03",
+  "prevId": "d032df86-9dd9-4730-9b50-0e76609bf904",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1361,6 +1361,19 @@
         },
         "workspace_name": {
           "name": "workspace_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_dm": {
+          "name": "is_dm",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "dm_owner_email": {
+          "name": "dm_owner_email",
           "type": "varchar(256)",
           "primaryKey": false,
           "notNull": false

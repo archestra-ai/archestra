@@ -258,10 +258,11 @@ export function ChatApiKeyForm({
     );
   }, [existingKeys, existingKey, provider, scope]);
 
-  // Auto-set isPrimary when no keys exist for this provider (create mode only)
+  // Auto-set isPrimary when no user-created keys exist for this provider (create mode only).
+  // System keys are auto-managed and shouldn't prevent the user from marking their key as primary.
   const hasAnyKeyForProvider = useMemo(() => {
     if (!existingKeys) return false;
-    return existingKeys.some((k) => k.provider === provider);
+    return existingKeys.some((k) => k.provider === provider && !k.isSystem);
   }, [existingKeys, provider]);
 
   useEffect(() => {

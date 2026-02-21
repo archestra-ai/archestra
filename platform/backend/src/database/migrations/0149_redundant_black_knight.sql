@@ -1,3 +1,0 @@
-CREATE UNIQUE INDEX "chat_api_keys_primary_personal_unique" ON "chat_api_keys" USING btree ("organization_id","provider","scope","user_id") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."scope" = 'personal';--> statement-breakpoint
-CREATE UNIQUE INDEX "chat_api_keys_primary_team_unique" ON "chat_api_keys" USING btree ("organization_id","provider","scope","team_id") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."scope" = 'team';--> statement-breakpoint
-CREATE UNIQUE INDEX "chat_api_keys_primary_org_wide_unique" ON "chat_api_keys" USING btree ("organization_id","provider","scope") WHERE "chat_api_keys"."is_primary" = true AND "chat_api_keys"."scope" = 'org_wide';

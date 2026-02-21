@@ -424,7 +424,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             if (!binding || !binding.agentId) {
-              // No binding, or discovered channel without agent assigned — show agent selection
+              // No binding — show agent selection
               await awaitDiscovery(provider, context);
               await sendAgentSelectionCard({
                 provider,
@@ -632,6 +632,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           if (!binding || !binding.agentId) {
+            // No binding — show agent selection
             await sendAgentSelectionCard({
               provider,
               message,
@@ -785,11 +786,16 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const organizationId = await getDefaultOrganizationId();
 
       // Create or update binding
+      // Slack DM channel IDs start with "D" — use a readable name for DM bindings
+      const isSlackDm = selection.channelId.startsWith("D");
       await ChatOpsChannelBindingModel.upsertByChannel({
         organizationId,
         provider: "slack",
         channelId: selection.channelId,
         workspaceId: selection.workspaceId,
+        channelName: isSlackDm ? `Direct Message - ${senderEmail}` : undefined,
+        isDm: isSlackDm,
+        dmOwnerEmail: isSlackDm ? senderEmail : undefined,
         agentId: selection.agentId,
       });
 
@@ -809,7 +815,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await provider.sendReply({
         originalMessage: message,
-        text: `Agent *${agent.name}* is now bound to this channel.\nSend a message to start interacting!`,
+        text: `Agent *${agent.name}* is now bound to this ${isSlackDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
       });
 
       return reply.send({ ok: true });
@@ -1010,6 +1016,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 displayName: z.string(),
                 configured: z.boolean(),
                 credentials: z.record(z.string(), z.string()).optional(),
+                dmInfo: z
+                  .object({
+                    botUserId: z.string().optional(),
+                    teamId: z.string().optional(),
+                    appId: z.string().optional(),
+                  })
+                  .optional(),
               }),
             ),
           }),
@@ -1047,8 +1060,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
 
+      // Filter out DM bindings that belong to other users
+      const userEmail = request.user.email;
+      const visibleBindings = bindings.filter((b) => {
+        if (!b.isDm) return true;
+        return b.dmOwnerEmail === userEmail;
+      });
+
       return reply.send(
-        bindings.map((b) => ({
+        visibleBindings.map((b) => ({
           ...b,
           createdAt: b.createdAt.toISOString(),
           updatedAt: b.updatedAt.toISOString(),
@@ -1281,6 +1301,7 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   displayName: string;
   configured: boolean;
   credentials?: Record<string, string>;
+  dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
 }> {
   switch (providerType) {
     case "ms-teams": {
@@ -1295,6 +1316,7 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
           appSecret: dbConfig?.appSecret ? "••••••••" : "",
           tenantId: maskValue(dbConfig?.tenantId ?? ""),
         },
+        dmInfo: dbConfig?.appId ? { appId: dbConfig.appId } : undefined,
       };
     }
     case "slack": {
@@ -1309,6 +1331,13 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
           signingSecret: dbConfig?.signingSecret ? "••••••••" : "",
           appId: maskValue(dbConfig?.appId ?? ""),
         },
+        dmInfo:
+          provider?.getBotUserId() || provider?.getWorkspaceId()
+            ? {
+                botUserId: provider.getBotUserId() ?? undefined,
+                teamId: provider.getWorkspaceId() ?? undefined,
+              }
+            : undefined,
       };
     }
   }
@@ -1411,14 +1440,23 @@ async function handleAgentSelection(
     channelId || message.channelId,
   );
 
+  // DMs have conversationType "personal" — use a readable name for DM bindings
+  const isTeamsDm =
+    context.activity.conversation?.conversationType === "personal";
+  const channelName = isTeamsDm
+    ? `Direct Message - ${message.senderEmail}`
+    : resolvedNames.channelName;
+
   // Create or update the binding
   const binding = await ChatOpsChannelBindingModel.upsertByChannel({
     organizationId,
     provider: "ms-teams",
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
-    channelName: resolvedNames.channelName,
+    channelName,
     workspaceName: resolvedNames.workspaceName,
+    isDm: isTeamsDm,
+    dmOwnerEmail: isTeamsDm ? message.senderEmail : undefined,
     agentId,
   });
 
@@ -1438,7 +1476,7 @@ async function handleAgentSelection(
       "[ChatOps] handleAgentSelection: about to send 'processing' message",
     );
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this channel. Processing your message...`,
+      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}. Processing your message...`,
     );
     logger.debug(
       "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
@@ -1488,7 +1526,7 @@ async function handleAgentSelection(
     }
   } else {
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this channel.\n` +
+      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
         "Send a message (with @mention) to start interacting!",
     );
   }

@@ -124,11 +124,27 @@ export async function attemptJwksAuth(
   const bearerToken = extractBearerToken(request);
   if (!bearerToken || bearerToken.startsWith("archestra_")) return null;
 
-  const jwksResult = await validateExternalIdpToken(
-    resolvedAgent.id,
-    bearerToken,
-    "llmProxy",
-  );
+  let jwksResult: Awaited<ReturnType<typeof validateExternalIdpToken>>;
+  try {
+    jwksResult = await validateExternalIdpToken(
+      resolvedAgent.id,
+      bearerToken,
+      "llmProxy",
+    );
+  } catch (error) {
+    // Convert any unexpected validation error to 401 (not 500)
+    logger.warn(
+      {
+        resolvedAgentId: resolvedAgent.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      `[${providerName}Proxy] JWKS validation error`,
+    );
+    throw new ApiError(
+      401,
+      "JWT validation failed for the configured identity provider.",
+    );
+  }
 
   if (!jwksResult) {
     throw new ApiError(

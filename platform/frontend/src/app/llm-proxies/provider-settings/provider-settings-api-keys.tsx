@@ -96,18 +96,14 @@ export function ProviderSettingsApiKeys() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
 
-  // Reset create form when dialog opens
+  // Reset create form when dialog opens.
+  // isPrimary is handled by the child ChatApiKeyForm component, which watches
+  // the current provider and sets isPrimary based on whether keys exist for it.
   useEffect(() => {
     if (isCreateDialogOpen) {
-      const hasKeyForDefaultProvider = apiKeys.some(
-        (k) => k.provider === DEFAULT_FORM_VALUES.provider,
-      );
-      createForm.reset({
-        ...DEFAULT_FORM_VALUES,
-        isPrimary: !hasKeyForDefaultProvider,
-      });
+      createForm.reset(DEFAULT_FORM_VALUES);
     }
-  }, [isCreateDialogOpen, createForm, apiKeys]);
+  }, [isCreateDialogOpen, createForm]);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {

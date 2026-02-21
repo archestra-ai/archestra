@@ -215,8 +215,10 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     await page.getByLabel(/Name/i).fill(virtualKeyName);
     await clickButton({ page, options: { name: "Create" } });
 
-    // Should show the created key value
-    await expect(page.getByText("Virtual API key created")).toBeVisible({
+    // Should show the created key value (dialog title, not the toast)
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Key Created" }),
+    ).toBeVisible({
       timeout: 10_000,
     });
 

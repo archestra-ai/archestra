@@ -99,9 +99,15 @@ export function ProviderSettingsApiKeys() {
   // Reset create form when dialog opens
   useEffect(() => {
     if (isCreateDialogOpen) {
-      createForm.reset(DEFAULT_FORM_VALUES);
+      const hasKeyForDefaultProvider = apiKeys.some(
+        (k) => k.provider === DEFAULT_FORM_VALUES.provider,
+      );
+      createForm.reset({
+        ...DEFAULT_FORM_VALUES,
+        isPrimary: !hasKeyForDefaultProvider,
+      });
     }
-  }, [isCreateDialogOpen, createForm]);
+  }, [isCreateDialogOpen, createForm, apiKeys]);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
@@ -439,7 +445,7 @@ export function ProviderSettingsApiKeys() {
 
         {/* Create Dialog */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add API Key</DialogTitle>
               <DialogDescription>
@@ -478,7 +484,7 @@ export function ProviderSettingsApiKeys() {
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit API Key</DialogTitle>
               <DialogDescription>

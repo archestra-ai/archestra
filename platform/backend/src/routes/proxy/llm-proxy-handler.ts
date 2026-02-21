@@ -188,8 +188,12 @@ export async function handleLLMProxy<
   }
 
   // 3. Resolve virtual API key (archestra_ prefixed)
-  if (!wasJwksAuthenticated && apiKey?.startsWith("archestra_")) {
-    const virtualResult = await validateVirtualApiKey(apiKey, providerName);
+  // Strip "Bearer " prefix if present — OpenAI's extractApiKey returns the full
+  // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
+  // return the raw key.
+  const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
+  if (!wasJwksAuthenticated && rawApiKey?.startsWith("archestra_")) {
+    const virtualResult = await validateVirtualApiKey(rawApiKey, providerName);
     apiKey = virtualResult.apiKey;
     perKeyBaseUrl = virtualResult.baseUrl;
     wasVirtualKeyResolved = true;

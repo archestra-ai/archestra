@@ -56,6 +56,16 @@ const chatApiKeysTable = pgTable(
     uniqueIndex("chat_api_keys_system_unique")
       .on(table.provider)
       .where(sql`${table.isSystem} = true`),
+    // Partial unique indexes: at most one primary key per provider+scope combination
+    uniqueIndex("chat_api_keys_primary_personal_unique")
+      .on(table.organizationId, table.provider, table.scope, table.userId)
+      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'personal'`),
+    uniqueIndex("chat_api_keys_primary_team_unique")
+      .on(table.organizationId, table.provider, table.scope, table.teamId)
+      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'team'`),
+    uniqueIndex("chat_api_keys_primary_org_wide_unique")
+      .on(table.organizationId, table.provider, table.scope)
+      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'org_wide'`),
   ],
 );
 

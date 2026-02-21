@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../../consts";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 import { loginViaApi } from "../../utils";
 
@@ -24,7 +24,7 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
       // 1. Login and navigate to chat
       await page.goto("about:blank");
       await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-      await page.goto("/chat");
+      await page.goto(`${UI_BASE_URL}/chat`);
       await page.waitForLoadState("domcontentloaded");
 
       // 2. Create an API key from the empty-state prompt

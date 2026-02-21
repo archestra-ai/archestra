@@ -201,19 +201,22 @@ test.describe("Provider Settings - Virtual API Keys", () => {
       page.getByRole("heading", { name: "Virtual API Keys" }),
     ).toBeVisible();
 
-    // Click Create Virtual Key
+    // Click Create Virtual Key (waits for button to be enabled, i.e. parentable keys loaded)
     await clickButton({ page, options: { name: "Create Virtual Key" } });
     await expect(
       page.getByRole("heading", { name: /Create Virtual API Key/i }),
     ).toBeVisible();
 
-    // Select parent key and fill name
+    // Wait for parent key select to have a value (ensures API keys data loaded)
+    await expect(page.getByText(parentKeyName)).toBeVisible({ timeout: 5000 });
+
+    // Fill name and create
     await page.getByLabel(/Name/i).fill(virtualKeyName);
     await clickButton({ page, options: { name: "Create" } });
 
     // Should show the created key value
-    await expect(page.getByText("Virtual key created")).toBeVisible({
-      timeout: 5000,
+    await expect(page.getByText("Virtual API key created")).toBeVisible({
+      timeout: 10_000,
     });
 
     // The token value should be visible (starts with archestra_)

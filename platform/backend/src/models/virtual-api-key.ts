@@ -208,7 +208,12 @@ class VirtualApiKeyModel {
         }
 
         // Update last used (fire and forget)
-        VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch(() => {});
+        VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
+          logger.warn(
+            { virtualKeyId: virtualKey.id, error: String(error) },
+            "Failed to update virtual key lastUsedAt",
+          );
+        });
 
         return { virtualKey, chatApiKey };
       }

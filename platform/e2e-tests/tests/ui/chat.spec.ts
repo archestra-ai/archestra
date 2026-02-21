@@ -171,18 +171,9 @@ for (const config of testConfigs) {
       goToPage,
       makeRandomString,
     }) => {
-      // Skip onboarding if dialog is present
-      const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-
       // Navigate to chat page
       await goToPage(page, "/chat");
       await page.waitForLoadState("domcontentloaded");
-
-      // Skip onboarding if it appears
-      if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await skipButton.click();
-        await page.waitForTimeout(500);
-      }
 
       // Wait for the chat page to load - look for the prompt input area
       const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);

@@ -20,35 +20,57 @@ interface TokenCostLimitTestConfig {
 }
 
 // =============================================================================
+// OpenAI-Compatible Config Factory
+// =============================================================================
+
+/**
+ * Factory for providers that use the OpenAI-compatible chat/completions format.
+ * Only providerName, modelName, and provider enum differ between them.
+ * All use Bearer auth, /chat/completions endpoint, and messages-format requests.
+ */
+function makeOpenAiCompatibleCostConfig(params: {
+  providerName: string;
+  modelName: string;
+  provider: SupportedProvider;
+}): TokenCostLimitTestConfig {
+  return {
+    providerName: params.providerName,
+
+    endpoint: (profileId) =>
+      `/v1/${params.provider}/${profileId}/chat/completions`,
+
+    headers: (wiremockStub) => ({
+      Authorization: `Bearer ${wiremockStub}`,
+      "Content-Type": "application/json",
+    }),
+
+    buildRequest: (content) => ({
+      model: params.modelName,
+      messages: [{ role: "user", content }],
+    }),
+
+    modelName: params.modelName,
+
+    // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+    // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+    tokenPrice: {
+      provider: params.provider,
+      model: params.modelName,
+      pricePerMillionInput: "20000.00",
+      pricePerMillionOutput: "30000.00",
+    },
+  };
+}
+
+// =============================================================================
 // Test Configurations
 // =============================================================================
 
-const openaiConfig: TokenCostLimitTestConfig = {
+const openaiConfig = makeOpenAiCompatibleCostConfig({
   providerName: "OpenAI",
-
-  endpoint: (profileId) => `/v1/openai/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-gpt-4-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-gpt-4-cost-limit",
-
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "openai",
-    model: "test-gpt-4-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
+  provider: "openai",
+});
 
 const anthropicConfig: TokenCostLimitTestConfig = {
   providerName: "Anthropic",
@@ -111,167 +133,41 @@ const geminiConfig: TokenCostLimitTestConfig = {
   },
 };
 
-const cerebrasConfig: TokenCostLimitTestConfig = {
+const cerebrasConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Cerebras",
-
-  endpoint: (profileId) => `/v1/cerebras/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-cerebras-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-cerebras-cost-limit",
+  provider: "cerebras",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "cerebras",
-    model: "test-cerebras-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const mistralConfig: TokenCostLimitTestConfig = {
+const mistralConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Mistral",
-
-  endpoint: (profileId) => `/v1/mistral/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-mistral-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-mistral-cost-limit",
+  provider: "mistral",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "mistral",
-    model: "test-mistral-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const perplexityConfig: TokenCostLimitTestConfig = {
+const perplexityConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Perplexity",
-
-  endpoint: (profileId) => `/v1/perplexity/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-perplexity-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-perplexity-cost-limit",
+  provider: "perplexity",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "perplexity",
-    model: "test-perplexity-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const vllmConfig: TokenCostLimitTestConfig = {
+const vllmConfig = makeOpenAiCompatibleCostConfig({
   providerName: "vLLM",
-
-  endpoint: (profileId) => `/v1/vllm/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-vllm-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-vllm-cost-limit",
+  provider: "vllm",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "vllm",
-    model: "test-vllm-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const ollamaConfig: TokenCostLimitTestConfig = {
+const ollamaConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Ollama",
-
-  endpoint: (profileId) => `/v1/ollama/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-ollama-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-ollama-cost-limit",
+  provider: "ollama",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "ollama",
-    model: "test-ollama-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const zhipuaiConfig: TokenCostLimitTestConfig = {
+const zhipuaiConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Zhipuai",
-
-  endpoint: (profileId) => `/v1/zhipuai/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-zhipuai-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-zhipuai-cost-limit",
-
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "zhipuai",
-    model: "test-zhipuai-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
+  provider: "zhipuai",
+});
 
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",

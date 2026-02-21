@@ -158,13 +158,6 @@ test.describe("Chat - Auth Required Tool", () => {
     await goToMemberPage("/chat");
     await memberPage.waitForLoadState("domcontentloaded");
 
-    // Skip onboarding if present
-    const skipButton = memberPage.getByTestId(E2eTestId.OnboardingSkipButton);
-    if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await skipButton.click();
-      await memberPage.waitForTimeout(500);
-    }
-
     // Wait for the chat page to load
     const textarea = memberPage.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });

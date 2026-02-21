@@ -1,5 +1,10 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
-import { type APIRequestContext, expect, type Page } from "@playwright/test";
+import {
+  type APIRequestContext,
+  expect,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import { archestraApiSdk, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
 import {
@@ -678,6 +683,90 @@ export async function waitForServerInstallation(
   throw new Error(
     `MCP server installation timed out after ${maxAttempts * 2} seconds`,
   );
+}
+
+// =============================================================================
+// UI Test Helpers
+// =============================================================================
+
+/**
+ * Skip the onboarding dialog if it is present.
+ */
+export async function skipOnboarding(page: Page): Promise<void> {
+  const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
+  if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await skipButton.click();
+    await page.waitForTimeout(500);
+  }
+}
+
+/**
+ * Wait for an element to become visible (and optionally enabled) by
+ * polling with page reloads between attempts.
+ */
+export async function waitForElementWithReload(
+  page: Page,
+  locator: Locator,
+  options?: {
+    timeout?: number;
+    intervals?: number[];
+    checkEnabled?: boolean;
+  },
+): Promise<void> {
+  const timeout = options?.timeout ?? 90_000;
+  const intervals = options?.intervals ?? [2000, 5000, 10000];
+  const checkEnabled = options?.checkEnabled ?? true;
+
+  let attempts = 0;
+  await expect(async () => {
+    attempts++;
+    if (attempts > 1) {
+      await page.reload();
+      await page.waitForLoadState("domcontentloaded");
+    }
+    await expect(locator).toBeVisible({ timeout: 5000 });
+    if (checkEnabled) {
+      await expect(locator).toBeEnabled({ timeout: 5000 });
+    }
+  }).toPass({ timeout, intervals });
+}
+
+/**
+ * Navigate to a page and re-authenticate if the session has expired.
+ * Polls with retries until the `verifyLocator` element is visible and enabled.
+ */
+export async function navigateAndVerifyAuth(params: {
+  page: Page;
+  path: string;
+  email: string;
+  password: string;
+  verifyLocator: Locator;
+  goToPage: (page: Page, path: string) => Promise<void>;
+  timeout?: number;
+  intervals?: number[];
+}): Promise<void> {
+  const {
+    page,
+    path,
+    email,
+    password,
+    verifyLocator,
+    timeout = 90_000,
+    intervals = [3000, 5000, 10000],
+  } = params;
+
+  await expect(async () => {
+    await params.goToPage(page, path);
+    await page.waitForLoadState("domcontentloaded");
+    const loginButton = page.getByRole("button", { name: /login/i });
+    if (await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await loginViaApi(page, email, password);
+      await params.goToPage(page, path);
+      await page.waitForLoadState("domcontentloaded");
+    }
+    await expect(verifyLocator).toBeVisible({ timeout: 10_000 });
+    await expect(verifyLocator).toBeEnabled({ timeout: 5_000 });
+  }).toPass({ timeout, intervals });
 }
 
 // =============================================================================

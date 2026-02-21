@@ -22,6 +22,7 @@ const virtualApiKeysTable = pgTable(
   },
   (table) => [
     index("idx_virtual_api_key_chat_api_key_id").on(table.chatApiKeyId),
+    index("idx_virtual_api_key_token_start").on(table.tokenStart),
   ],
 );
 

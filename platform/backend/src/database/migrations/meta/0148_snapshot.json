@@ -1,5 +1,5 @@
 {
-  "id": "27f58e25-9069-4a1d-8140-d0ae3ec64761",
+  "id": "982e7380-af94-4c8c-afee-4b07098c264f",
   "prevId": "52855d3a-aa1f-47fd-8f38-faca0b68fb8b",
   "version": "7",
   "dialect": "postgresql",
@@ -5983,6 +5983,21 @@
           "columns": [
             {
               "expression": "chat_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_virtual_api_key_token_start": {
+          "name": "idx_virtual_api_key_token_start",
+          "columns": [
+            {
+              "expression": "token_start",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

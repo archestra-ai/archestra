@@ -11,37 +11,34 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { resolveProviderApiKey } from "@/clients/llm-client";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import logger from "@/logging";
 import {
-  AgentModel,
   AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
   UserModel,
-  VirtualApiKeyModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import {
-  extractBearerToken,
-  validateExternalIdpToken,
-} from "@/routes/mcp-gateway.utils";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Agent,
   ApiError,
   type InteractionRequest,
   type InteractionResponse,
-  isSupportedChatProvider,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
   type ToonSkipReason,
 } from "@/types";
+import {
+  assertAuthenticatedForKeylessProvider,
+  attemptJwksAuth,
+  resolveAgent,
+  validateVirtualApiKey,
+} from "./llm-proxy-auth";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 
@@ -135,33 +132,7 @@ export async function handleLLMProxy<
   );
 
   // Resolve agent
-  let resolvedAgent: Agent;
-  if (agentId) {
-    logger.debug(
-      { agentId },
-      `[${providerName}Proxy] Resolving explicit agent by ID`,
-    );
-    const agent = await AgentModel.findById(agentId);
-    if (!agent) {
-      logger.debug({ agentId }, `[${providerName}Proxy] Agent not found`);
-      return reply.status(404).send({
-        error: {
-          message: `Agent with ID ${agentId} not found`,
-          type: "not_found",
-        },
-      });
-    }
-    resolvedAgent = agent;
-  } else {
-    logger.debug(`[${providerName}Proxy] Resolving default profile`);
-    const defaultProfile = await AgentModel.getDefaultProfile();
-    if (!defaultProfile) {
-      logger.debug(`[${providerName}Proxy] No default profile found`);
-      throw new ApiError(400, "Please specify an LLMProxy ID in the URL path.");
-    }
-    resolvedAgent = defaultProfile;
-  }
-
+  const resolvedAgent = await resolveAgent(agentId);
   const resolvedAgentId = resolvedAgent.id;
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
@@ -188,137 +159,48 @@ export async function handleLLMProxy<
     }
   }
 
-  // Try JWKS auth if the agent has an external identity provider configured.
-  // When JWKS auth succeeds, the bearer token is a JWT (not a provider API key),
-  // so we resolve the actual provider key from the user's/org's configured keys.
+  // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
   let wasJwksAuthenticated = false;
+  let wasVirtualKeyResolved = false;
 
-  if (resolvedAgent.identityProviderId) {
-    const bearerToken = extractBearerToken(request);
-
-    if (bearerToken && !bearerToken.startsWith("archestra_")) {
-      const jwksAuthResult = await validateExternalIdpToken(
-        resolvedAgentId,
-        bearerToken,
-        "llmProxy",
-      );
-
-      if (!jwksAuthResult) {
-        return reply.status(401).send({
-          error: {
-            message: "Invalid JWT token for the configured identity provider.",
-            type: "authentication_error",
-          },
-        });
-      }
-
-      logger.info(
-        {
-          resolvedAgentId,
-          userId: jwksAuthResult.userId,
-          identityProviderId: resolvedAgent.identityProviderId,
-        },
-        `[${providerName}Proxy] JWKS authentication succeeded`,
-      );
-
-      wasJwksAuthenticated = true;
-
-      // Override userId from JWKS result for observability
-      if (jwksAuthResult.userId) {
-        userId = jwksAuthResult.userId;
-        resolvedUser = await UserModel.getById(userId);
-      }
-
-      // Resolve the actual provider API key from the org's configured keys
-      if (isSupportedChatProvider(providerName)) {
-        const resolved = await resolveProviderApiKey({
-          organizationId: jwksAuthResult.organizationId,
-          userId: jwksAuthResult.userId,
-          provider: providerName,
-        });
-        apiKey = resolved.apiKey;
-        perKeyBaseUrl = resolved.baseUrl ?? undefined;
-      }
-    } else {
-      // No bearer token (or it's an archestra_ virtual key) — fall through to standard auth
+  // 1. Try JWKS auth if the agent has an external identity provider configured
+  const jwksResult = await attemptJwksAuth(
+    request,
+    resolvedAgent,
+    providerName,
+  );
+  if (jwksResult) {
+    wasJwksAuthenticated = true;
+    apiKey = jwksResult.apiKey;
+    perKeyBaseUrl = jwksResult.baseUrl;
+    if (jwksResult.userId) {
+      userId = jwksResult.userId;
+      resolvedUser = await UserModel.getById(userId);
     }
   }
 
-  // Extract API key from headers if not already resolved via JWKS
+  // 2. Extract API key from headers if not already resolved via JWKS
   if (!wasJwksAuthenticated) {
     apiKey = provider.extractApiKey(headers);
   }
 
-  // Detect virtual API key (archestra_ prefixed)
+  // 3. Resolve virtual API key (archestra_ prefixed)
   if (!wasJwksAuthenticated && apiKey?.startsWith("archestra_")) {
-    const resolved = await VirtualApiKeyModel.validateToken(apiKey);
-    if (!resolved) {
-      return reply.status(401).send({
-        error: {
-          message: "Invalid virtual API key",
-          type: "authentication_error",
-        },
-      });
-    }
-    if (
-      resolved.virtualKey.expiresAt &&
-      resolved.virtualKey.expiresAt < new Date()
-    ) {
-      return reply.status(401).send({
-        error: {
-          message: "Virtual API key expired",
-          type: "authentication_error",
-        },
-      });
-    }
-    // Validate provider matches
-    if (resolved.chatApiKey.provider !== providerName) {
-      return reply.status(400).send({
-        error: {
-          message: `Virtual API key is for provider "${resolved.chatApiKey.provider}", but request is for "${providerName}"`,
-          type: "invalid_request_error",
-        },
-      });
-    }
-    // Resolve the real provider API key from the secret
-    if (resolved.chatApiKey.secretId) {
-      const secretValue = await getSecretValueForLlmProviderApiKey(
-        resolved.chatApiKey.secretId,
-      );
-      if (secretValue) {
-        apiKey = secretValue as string;
-      }
-    }
-    perKeyBaseUrl = resolved.chatApiKey.baseUrl ?? undefined;
+    const virtualResult = await validateVirtualApiKey(apiKey, providerName);
+    apiKey = virtualResult.apiKey;
+    perKeyBaseUrl = virtualResult.baseUrl;
+    wasVirtualKeyResolved = true;
   }
 
-  // For keyless providers (e.g. Gemini with Vertex AI, Ollama, vLLM), require that
-  // the request was authenticated via a virtual API key or JWKS. Without this check,
-  // anyone who knows the proxy URL can call the endpoint without any credentials.
-  // The `perKeyBaseUrl` check confirms a virtual key was resolved (sets the base URL).
-  const wasVirtualKeyResolved = perKeyBaseUrl !== undefined;
-  if (!apiKey && !wasVirtualKeyResolved && !wasJwksAuthenticated) {
-    // Allow internal requests from the chat route (localhost → proxy).
-    // Check the request IP rather than headers, since headers like traceparent
-    // can be spoofed by external clients.
-    const requestIp = request.ip;
-    const isLocalhost =
-      requestIp === "127.0.0.1" ||
-      requestIp === "::1" ||
-      requestIp === "::ffff:127.0.0.1";
-
-    if (!isLocalhost) {
-      return reply.status(401).send({
-        error: {
-          message:
-            "Authentication required. Use a virtual API key (archestra_...) or pass a provider API key.",
-          type: "authentication_error",
-        },
-      });
-    }
-  }
+  // 4. Enforce authentication for keyless providers on external requests
+  assertAuthenticatedForKeylessProvider(
+    apiKey,
+    wasVirtualKeyResolved,
+    wasJwksAuthenticated,
+    request.ip,
+  );
 
   // Check usage limits
   try {

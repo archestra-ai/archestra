@@ -75,84 +75,107 @@ const READ_FILE_TOOL: ToolDefinition = {
 };
 
 // =============================================================================
+// OpenAI-Compatible Config Factory
+// =============================================================================
+
+/**
+ * Factory for providers that use the OpenAI-compatible chat/completions format.
+ * OpenAI, Cerebras, Mistral, vLLM, Ollama, and Zhipuai all share identical
+ * response structures and assertion logic — only endpoint, model, and headers differ.
+ */
+function makeOpenAiCompatibleToolConfig(params: {
+  providerName: string;
+  endpoint: (agentId: string) => string;
+  model: string;
+  trustedDataPolicyAttributePath?: string;
+}): ToolInvocationTestConfig {
+  return {
+    providerName: params.providerName,
+
+    endpoint: params.endpoint,
+
+    headers: (wiremockStub) => ({
+      Authorization: `Bearer ${wiremockStub}`,
+      "Content-Type": "application/json",
+    }),
+
+    buildRequest: (content, tools) => ({
+      model: params.model,
+      messages: [{ role: "user", content }],
+      tools: tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      })),
+    }),
+
+    trustedDataPolicyAttributePath:
+      params.trustedDataPolicyAttributePath ?? "$.content",
+
+    assertToolCallBlocked: (response) => {
+      expect(response.choices).toBeDefined();
+      expect(response.choices[0]).toBeDefined();
+      expect(response.choices[0].message).toBeDefined();
+
+      const message = response.choices[0].message;
+      const refusalOrContent = message.refusal || message.content;
+
+      expect(refusalOrContent).toBeTruthy();
+      expect(refusalOrContent).toContain("read_file");
+      expect(refusalOrContent).toContain("denied");
+
+      if (message.tool_calls) {
+        expect(refusalOrContent).toContain("tool invocation policy");
+      }
+    },
+
+    assertToolCallsPresent: (response, expectedTools) => {
+      expect(response.choices).toBeDefined();
+      expect(response.choices[0]).toBeDefined();
+      expect(response.choices[0].message).toBeDefined();
+      expect(response.choices[0].message.tool_calls).toBeDefined();
+
+      const toolCalls = response.choices[0].message.tool_calls;
+      expect(toolCalls.length).toBe(expectedTools.length);
+
+      for (const toolName of expectedTools) {
+        const found = toolCalls.find(
+          (tc: { function: { name: string } }) => tc.function.name === toolName,
+        );
+        expect(found).toBeDefined();
+      }
+    },
+
+    assertToolArgument: (response, toolName, argName, matcher) => {
+      const toolCalls = response.choices[0].message.tool_calls;
+      const toolCall = toolCalls.find(
+        (tc: { function: { name: string } }) => tc.function.name === toolName,
+      );
+      const args = JSON.parse(toolCall.function.arguments);
+      matcher(args[argName]);
+    },
+
+    findInteractionByContent: (interactions, content) =>
+      interactions.find((i) =>
+        i.request?.messages?.some((m: { content?: string }) =>
+          m.content?.includes(content),
+        ),
+      ),
+  };
+}
+
+// =============================================================================
 // Test Configurations
 // =============================================================================
 
-const openaiConfig: ToolInvocationTestConfig = {
+const openaiConfig = makeOpenAiCompatibleToolConfig({
   providerName: "OpenAI",
-
   endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content, tools) => ({
-    model: "gpt-4",
-    messages: [{ role: "user", content }],
-    tools: tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    })),
-  }),
-
-  trustedDataPolicyAttributePath: "$.content",
-
-  assertToolCallBlocked: (response) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-
-    const message = response.choices[0].message;
-    const refusalOrContent = message.refusal || message.content;
-
-    expect(refusalOrContent).toBeTruthy();
-    expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-
-    if (message.tool_calls) {
-      expect(refusalOrContent).toContain("tool invocation policy");
-    }
-  },
-
-  assertToolCallsPresent: (response, expectedTools) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-    expect(response.choices[0].message.tool_calls).toBeDefined();
-
-    const toolCalls = response.choices[0].message.tool_calls;
-    expect(toolCalls.length).toBe(expectedTools.length);
-
-    for (const toolName of expectedTools) {
-      const found = toolCalls.find(
-        (tc: { function: { name: string } }) => tc.function.name === toolName,
-      );
-      expect(found).toBeDefined();
-    }
-  },
-
-  assertToolArgument: (response, toolName, argName, matcher) => {
-    const toolCalls = response.choices[0].message.tool_calls;
-    const toolCall = toolCalls.find(
-      (tc: { function: { name: string } }) => tc.function.name === toolName,
-    );
-    const args = JSON.parse(toolCall.function.arguments);
-    matcher(args[argName]);
-  },
-
-  findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
-    ),
-};
+  model: "gpt-4",
+});
 
 const anthropicConfig: ToolInvocationTestConfig = {
   providerName: "Anthropic",
@@ -392,385 +415,35 @@ const cohereConfig: ToolInvocationTestConfig = {
     ),
 };
 
-const cerebrasConfig: ToolInvocationTestConfig = {
+const cerebrasConfig = makeOpenAiCompatibleToolConfig({
   providerName: "Cerebras",
-
   endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
+  model: "llama-4-scout-17b-16e-instruct",
+});
 
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content, tools) => ({
-    model: "llama-4-scout-17b-16e-instruct",
-    messages: [{ role: "user", content }],
-    tools: tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    })),
-  }),
-
-  trustedDataPolicyAttributePath: "$.content",
-
-  assertToolCallBlocked: (response) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-
-    const message = response.choices[0].message;
-    const refusalOrContent = message.refusal || message.content;
-
-    expect(refusalOrContent).toBeTruthy();
-    expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-
-    if (message.tool_calls) {
-      expect(refusalOrContent).toContain("tool invocation policy");
-    }
-  },
-
-  assertToolCallsPresent: (response, expectedTools) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-    expect(response.choices[0].message.tool_calls).toBeDefined();
-
-    const toolCalls = response.choices[0].message.tool_calls;
-    expect(toolCalls.length).toBe(expectedTools.length);
-
-    for (const toolName of expectedTools) {
-      const found = toolCalls.find(
-        (tc: { function: { name: string } }) => tc.function.name === toolName,
-      );
-      expect(found).toBeDefined();
-    }
-  },
-
-  assertToolArgument: (response, toolName, argName, matcher) => {
-    const toolCalls = response.choices[0].message.tool_calls;
-    const toolCall = toolCalls.find(
-      (tc: { function: { name: string } }) => tc.function.name === toolName,
-    );
-    const args = JSON.parse(toolCall.function.arguments);
-    matcher(args[argName]);
-  },
-
-  findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
-    ),
-};
-
-const mistralConfig: ToolInvocationTestConfig = {
+const mistralConfig = makeOpenAiCompatibleToolConfig({
   providerName: "Mistral",
-
   endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
+  model: "mistral-large-latest",
+});
 
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content, tools) => ({
-    model: "mistral-large-latest",
-    messages: [{ role: "user", content }],
-    tools: tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    })),
-  }),
-
-  trustedDataPolicyAttributePath: "$.content",
-
-  assertToolCallBlocked: (response) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-
-    const message = response.choices[0].message;
-    const refusalOrContent = message.refusal || message.content;
-
-    expect(refusalOrContent).toBeTruthy();
-    expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-
-    if (message.tool_calls) {
-      expect(refusalOrContent).toContain("tool invocation policy");
-    }
-  },
-
-  assertToolCallsPresent: (response, expectedTools) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-    expect(response.choices[0].message.tool_calls).toBeDefined();
-
-    const toolCalls = response.choices[0].message.tool_calls;
-    expect(toolCalls.length).toBe(expectedTools.length);
-
-    for (const toolName of expectedTools) {
-      const found = toolCalls.find(
-        (tc: { function: { name: string } }) => tc.function.name === toolName,
-      );
-      expect(found).toBeDefined();
-    }
-  },
-
-  assertToolArgument: (response, toolName, argName, matcher) => {
-    const toolCalls = response.choices[0].message.tool_calls;
-    const toolCall = toolCalls.find(
-      (tc: { function: { name: string } }) => tc.function.name === toolName,
-    );
-    const args = JSON.parse(toolCall.function.arguments);
-    matcher(args[argName]);
-  },
-
-  findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
-    ),
-};
-
-const vllmConfig: ToolInvocationTestConfig = {
+const vllmConfig = makeOpenAiCompatibleToolConfig({
   providerName: "vLLM",
-
   endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+  model: "meta-llama/Llama-3.1-8B-Instruct",
+});
 
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content, tools) => ({
-    model: "meta-llama/Llama-3.1-8B-Instruct",
-    messages: [{ role: "user", content }],
-    tools: tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    })),
-  }),
-
-  trustedDataPolicyAttributePath: "$.content",
-
-  assertToolCallBlocked: (response) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-
-    const message = response.choices[0].message;
-    const refusalOrContent = message.refusal || message.content;
-
-    expect(refusalOrContent).toBeTruthy();
-    expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-
-    if (message.tool_calls) {
-      expect(refusalOrContent).toContain("tool invocation policy");
-    }
-  },
-
-  assertToolCallsPresent: (response, expectedTools) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-    expect(response.choices[0].message.tool_calls).toBeDefined();
-
-    const toolCalls = response.choices[0].message.tool_calls;
-    expect(toolCalls.length).toBe(expectedTools.length);
-
-    for (const toolName of expectedTools) {
-      const found = toolCalls.find(
-        (tc: { function: { name: string } }) => tc.function.name === toolName,
-      );
-      expect(found).toBeDefined();
-    }
-  },
-
-  assertToolArgument: (response, toolName, argName, matcher) => {
-    const toolCalls = response.choices[0].message.tool_calls;
-    const toolCall = toolCalls.find(
-      (tc: { function: { name: string } }) => tc.function.name === toolName,
-    );
-    const args = JSON.parse(toolCall.function.arguments);
-    matcher(args[argName]);
-  },
-
-  findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
-    ),
-};
-
-const ollamaConfig: ToolInvocationTestConfig = {
+const ollamaConfig = makeOpenAiCompatibleToolConfig({
   providerName: "Ollama",
-
   endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
+  model: "qwen2:0.5b",
+});
 
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content, tools) => ({
-    model: "qwen2:0.5b",
-    messages: [{ role: "user", content }],
-    tools: tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    })),
-  }),
-
-  trustedDataPolicyAttributePath: "$.content",
-
-  assertToolCallBlocked: (response) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-
-    const message = response.choices[0].message;
-    const refusalOrContent = message.refusal || message.content;
-
-    expect(refusalOrContent).toBeTruthy();
-    expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-
-    if (message.tool_calls) {
-      expect(refusalOrContent).toContain("tool invocation policy");
-    }
-  },
-
-  assertToolCallsPresent: (response, expectedTools) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-    expect(response.choices[0].message.tool_calls).toBeDefined();
-
-    const toolCalls = response.choices[0].message.tool_calls;
-    expect(toolCalls.length).toBe(expectedTools.length);
-
-    for (const toolName of expectedTools) {
-      const found = toolCalls.find(
-        (tc: { function: { name: string } }) => tc.function.name === toolName,
-      );
-      expect(found).toBeDefined();
-    }
-  },
-
-  assertToolArgument: (response, toolName, argName, matcher) => {
-    const toolCalls = response.choices[0].message.tool_calls;
-    const toolCall = toolCalls.find(
-      (tc: { function: { name: string } }) => tc.function.name === toolName,
-    );
-    const args = JSON.parse(toolCall.function.arguments);
-    matcher(args[argName]);
-  },
-
-  findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
-    ),
-};
-
-const zhipuaiConfig: ToolInvocationTestConfig = {
+const zhipuaiConfig = makeOpenAiCompatibleToolConfig({
   providerName: "Zhipuai",
-
   endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content, tools) => ({
-    model: "glm-4.5-flash",
-    messages: [{ role: "user", content }],
-    tools: tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    })),
-  }),
-
-  trustedDataPolicyAttributePath: "$.content",
-
-  assertToolCallBlocked: (response) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-
-    const message = response.choices[0].message;
-    const refusalOrContent = message.refusal || message.content;
-
-    expect(refusalOrContent).toBeTruthy();
-    expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-
-    if (message.tool_calls) {
-      expect(refusalOrContent).toContain("tool invocation policy");
-    }
-  },
-
-  assertToolCallsPresent: (response, expectedTools) => {
-    expect(response.choices).toBeDefined();
-    expect(response.choices[0]).toBeDefined();
-    expect(response.choices[0].message).toBeDefined();
-    expect(response.choices[0].message.tool_calls).toBeDefined();
-
-    const toolCalls = response.choices[0].message.tool_calls;
-    expect(toolCalls.length).toBe(expectedTools.length);
-
-    for (const toolName of expectedTools) {
-      const found = toolCalls.find(
-        (tc: { function: { name: string } }) => tc.function.name === toolName,
-      );
-      expect(found).toBeDefined();
-    }
-  },
-
-  assertToolArgument: (response, toolName, argName, matcher) => {
-    const toolCalls = response.choices[0].message.tool_calls;
-    const toolCall = toolCalls.find(
-      (tc: { function: { name: string } }) => tc.function.name === toolName,
-    );
-    const args = JSON.parse(toolCall.function.arguments);
-    matcher(args[argName]);
-  },
-
-  findInteractionByContent: (interactions, content) =>
-    interactions.find((i) =>
-      i.request?.messages?.some((m: { content?: string }) =>
-        m.content?.includes(content),
-      ),
-    ),
-};
+  model: "glm-4.5-flash",
+});
 
 const bedrockConfig: ToolInvocationTestConfig = {
   providerName: "Bedrock",

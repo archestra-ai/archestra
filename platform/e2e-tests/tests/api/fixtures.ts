@@ -36,6 +36,8 @@ export interface TestFixtures {
   uninstallMcpServer: typeof uninstallMcpServer;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
+  createTeam: typeof createTeam;
+  deleteTeam: typeof deleteTeam;
   waitForAgentTool: typeof waitForAgentTool;
   getTeamByName: typeof getTeamByName;
   addTeamMember: typeof addTeamMember;
@@ -402,6 +404,33 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
     request,
     method: "delete",
     urlSuffix: `/api/roles/${roleId}`,
+  });
+
+/**
+ * Create a team
+ * (authnz is handled by the authenticated session)
+ */
+const createTeam = async (
+  request: APIRequestContext,
+  name: string,
+  description?: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/teams",
+    data: { name, ...(description != null && { description }) },
+  });
+
+/**
+ * Delete a team by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteTeam = async (request: APIRequestContext, teamId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/teams/${teamId}`,
   });
 
 /**
@@ -890,6 +919,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteRole: async ({}, use) => {
     await use(deleteRole);
+  },
+  createTeam: async ({}, use) => {
+    await use(createTeam);
+  },
+  deleteTeam: async ({}, use) => {
+    await use(deleteTeam);
   },
   waitForAgentTool: async ({}, use) => {
     await use(waitForAgentTool);

@@ -409,7 +409,9 @@ function ChannelBindingsSection() {
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open channel in Slack</TooltipContent>
+                              <TooltipContent>
+                                Open channel in Slack
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -433,7 +435,9 @@ function ChannelBindingsSection() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
-                                <TooltipContent>Open channel in Slack</TooltipContent>
+                                <TooltipContent>
+                                  Open channel in Slack
+                                </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <DropdownMenuContent align="start">
@@ -454,28 +458,30 @@ function ChannelBindingsSection() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
-                        {DM_ENABLED && slack?.dmInfo?.botUserId && slack.dmInfo.teamId && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label="DM in Slack"
-                                  onClick={() =>
-                                    handleDmClick(
-                                      agent.id,
-                                      `slack://user?team=${slack.dmInfo?.teamId}&id=${slack.dmInfo?.botUserId}`,
-                                    )
-                                  }
-                                >
-                                  <Send className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>DM in Slack</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
+                        {DM_ENABLED &&
+                          slack?.dmInfo?.botUserId &&
+                          slack.dmInfo.teamId && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label="DM in Slack"
+                                    onClick={() =>
+                                      handleDmClick(
+                                        agent.id,
+                                        `slack://user?team=${slack.dmInfo?.teamId}&id=${slack.dmInfo?.botUserId}`,
+                                      )
+                                    }
+                                  >
+                                    <Send className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>DM in Slack</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>

@@ -417,7 +417,9 @@ function ChannelBindingsSection() {
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open channel in MS Teams</TooltipContent>
+                              <TooltipContent>
+                                Open channel in MS Teams
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}

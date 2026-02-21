@@ -3,7 +3,6 @@ import {
   desc,
   eq,
   inArray,
-  isNotNull,
   isNull,
   like,
   ne,
@@ -335,16 +334,14 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.channelId,
             params.activeChannelIds,
           ),
-          // Exclude DM bindings — they won't appear in the active channel
-          // discovery list, but should not be cleaned up.
-          // DMs are identified by channelName being null or starting with "Direct Message - ".
-          and(
-            isNotNull(schema.chatopsChannelBindingsTable.channelName),
-            not(
-              like(
-                schema.chatopsChannelBindingsTable.channelName,
-                "Direct Message - %",
-              ),
+          // Exclude DM bindings from cleanup — they won't appear in the
+          // active channel discovery list but should be preserved.
+          // LIKE on NULL returns NULL (falsy), so null-named channels are
+          // unaffected by this condition and can still be cleaned up.
+          not(
+            like(
+              schema.chatopsChannelBindingsTable.channelName,
+              "Direct Message - %",
             ),
           ),
         ),

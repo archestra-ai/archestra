@@ -87,16 +87,10 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
       "isNotificationOnly": false,
       "commandLists": [
         {
-          "scopes": ["team", "groupchat"],
+          "scopes": ["team", "groupchat", "personal"],
           "commands": [
-            { "title": "/select-agent", "description": "Change which agent handles this channel" },
-            { "title": "/status", "description": "Show current agent for this channel" },
-            { "title": "/help", "description": "Show available commands" }
-          ]
-        },
-        {
-          "scopes": ["personal"],
-          "commands": [
+            { "title": "/select-agent", "description": "Change which agent handles this conversation" },
+            { "title": "/status", "description": "Show current agent for this conversation" },
             { "title": "/help", "description": "Show available commands" }
           ]
         }

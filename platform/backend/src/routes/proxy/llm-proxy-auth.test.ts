@@ -87,10 +87,10 @@ describe("validateVirtualApiKey", () => {
           chatApiKeyId: "ck-1",
           name: "test",
           tokenStart: "archestra_",
+          secretId: "secret-1",
           expiresAt: new Date("2020-01-01"),
           lastUsedAt: null,
           createdAt: new Date(),
-          updatedAt: new Date(),
         },
         chatApiKey: {
           id: "ck-1",

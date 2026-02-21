@@ -138,17 +138,20 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     await cleanupChatApiKey(makeApiRequest, request);
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
-    // Create a virtual key that already expired
+    // Create a virtual key that expires in 1 second, then wait for it to expire
     const vkResp = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
       data: {
         name: "expired-vk",
-        expiresAt: new Date(Date.now() - 86400000).toISOString(), // yesterday
+        expiresAt: new Date(Date.now() + 1000).toISOString(), // 1s from now
       },
     });
     const vk = (await vkResp.json()) as { id: string; value: string };
+
+    // Wait for the key to expire
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     try {
       const proxyResponse = await request.post(

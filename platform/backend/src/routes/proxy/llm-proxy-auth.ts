@@ -15,6 +15,7 @@ import {
 } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { type Agent, ApiError, isSupportedChatProvider } from "@/types";
+import { isLoopbackAddress } from "@/utils/network";
 
 // =========================================================================
 // Agent Resolution
@@ -185,12 +186,7 @@ export function assertAuthenticatedForKeylessProvider(
 ): void {
   if (apiKey || wasVirtualKeyResolved || wasJwksAuthenticated) return;
 
-  const isLocalhost =
-    requestIp === "127.0.0.1" ||
-    requestIp === "::1" ||
-    requestIp === "::ffff:127.0.0.1";
-
-  if (!isLocalhost) {
+  if (!isLoopbackAddress(requestIp)) {
     throw new ApiError(
       401,
       "Authentication required. Use a virtual API key (archestra_...) or pass a provider API key.",

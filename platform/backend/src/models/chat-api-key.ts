@@ -3,7 +3,7 @@ import {
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   parseVaultReference,
 } from "@shared";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
@@ -502,6 +502,10 @@ class ChatApiKeyModel {
       .select()
       .from(schema.chatApiKeysTable)
       .where(and(...conditions))
+      .orderBy(
+        desc(schema.chatApiKeysTable.isPrimary),
+        asc(schema.chatApiKeysTable.createdAt),
+      )
       .limit(1);
 
     return apiKey ?? null;

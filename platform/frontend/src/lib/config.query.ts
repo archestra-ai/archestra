@@ -13,6 +13,7 @@ export function useConfig() {
   return useQuery({
     queryKey: ["config"],
     queryFn: async () => (await getConfig()).data ?? null,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

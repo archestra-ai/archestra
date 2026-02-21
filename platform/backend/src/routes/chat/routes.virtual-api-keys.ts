@@ -85,6 +85,11 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Chat API key not found");
       }
 
+      // Validate expiration is in the future
+      if (body.expiresAt && body.expiresAt <= new Date()) {
+        throw new ApiError(400, "Expiration date must be in the future");
+      }
+
       // Enforce max limit
       const count = await VirtualApiKeyModel.countByChatApiKeyId(
         params.chatApiKeyId,

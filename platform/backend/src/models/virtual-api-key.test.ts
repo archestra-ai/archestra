@@ -25,7 +25,7 @@ describe("VirtualApiKeyModel", () => {
     expect(virtualKey.chatApiKeyId).toBe(chatApiKey.id);
     expect(virtualKey.name).toBe("Test Virtual Key");
     expect(virtualKey.expiresAt).toBeNull();
-    expect(value).toMatch(/^archestra_[a-f0-9]{32}$/);
+    expect(value).toMatch(/^archestra_[a-f0-9]{64}$/);
     expect(virtualKey.tokenStart).toBe(value.substring(0, 14));
   });
 

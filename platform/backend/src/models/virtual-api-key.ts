@@ -10,10 +10,10 @@ import type {
 } from "@/types";
 
 /** Token prefix for identification */
-const TOKEN_PREFIX = "archestra_";
+export const TOKEN_PREFIX = "archestra_";
 
-/** Length of random part (16 bytes = 32 hex chars) */
-const TOKEN_RANDOM_LENGTH = 16;
+/** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
+const TOKEN_RANDOM_LENGTH = 32;
 
 /** Length of token start to store (for display) */
 const TOKEN_START_LENGTH = 14;

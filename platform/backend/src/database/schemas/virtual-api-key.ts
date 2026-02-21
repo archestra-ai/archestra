@@ -16,7 +16,7 @@ const virtualApiKeysTable = pgTable(
       .references(() => secretsTable.id, { onDelete: "cascade" }),
     /** First 14 chars of token (archestra_xxxx) for display */
     tokenStart: varchar("token_start", { length: 16 }).notNull(),
-    expiresAt: timestamp("expires_at", { mode: "date" }),
+    expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },

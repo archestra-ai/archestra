@@ -18,6 +18,7 @@ import {
   AgentTeamModel,
   InteractionModel,
   LimitValidationService,
+  TOKEN_PREFIX,
   TokenPriceModel,
   UserModel,
 } from "@/models";
@@ -39,6 +40,7 @@ import {
   attemptJwksAuth,
   resolveAgent,
   validateVirtualApiKey,
+  virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -48,6 +50,31 @@ const {
     otel: { captureContent, contentMaxLength },
   },
 } = config;
+
+/**
+ * Shared context passed to streaming and non-streaming handlers.
+ * Groups the 15+ parameters that both handlers need into a single object
+ * for maintainability and readability.
+ */
+interface LLMProxyContext<TRequest> {
+  agent: Agent;
+  originalRequest: TRequest;
+  baselineModel: string;
+  actualModel: string;
+  contextIsTrusted: boolean;
+  enabledToolNames: Set<string>;
+  globalToolPolicy: "permissive" | "restrictive";
+  toonStats: ToolCompressionStats;
+  toonSkipReason: ToonSkipReason | null;
+  externalAgentId?: string;
+  userId?: string;
+  resolvedUser?: { id: string; email: string; name: string } | null;
+  sessionId?: string | null;
+  sessionSource?: SessionSource;
+  executionId?: string;
+  parentContext?: Context;
+  teamIds?: string[];
+}
 
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
@@ -192,11 +219,22 @@ export async function handleLLMProxy<
   // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
   // return the raw key.
   const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
-  if (!wasJwksAuthenticated && rawApiKey?.startsWith("archestra_")) {
-    const virtualResult = await validateVirtualApiKey(rawApiKey, providerName);
-    apiKey = virtualResult.apiKey;
-    perKeyBaseUrl = virtualResult.baseUrl;
-    wasVirtualKeyResolved = true;
+  if (!wasJwksAuthenticated && rawApiKey?.startsWith(TOKEN_PREFIX)) {
+    virtualKeyRateLimiter.check(request.ip);
+    try {
+      const virtualResult = await validateVirtualApiKey(
+        rawApiKey,
+        providerName,
+      );
+      apiKey = virtualResult.apiKey;
+      perKeyBaseUrl = virtualResult.baseUrl;
+      wasVirtualKeyResolved = true;
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        virtualKeyRateLimiter.recordFailure(request.ip);
+      }
+      throw error;
+    }
   }
 
   // 4. Enforce authentication for keyless providers on external requests
@@ -469,6 +507,26 @@ export async function handleLLMProxy<
       }
     }
 
+    const ctx: LLMProxyContext<TRequest> = {
+      agent: resolvedAgent,
+      originalRequest: requestAdapter.getOriginalRequest(),
+      baselineModel,
+      actualModel,
+      contextIsTrusted,
+      enabledToolNames,
+      globalToolPolicy,
+      toonStats,
+      toonSkipReason,
+      externalAgentId,
+      userId,
+      resolvedUser,
+      sessionId,
+      sessionSource,
+      executionId,
+      parentContext,
+      teamIds,
+    };
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -476,49 +534,11 @@ export async function handleLLMProxy<
         reply,
         provider,
         streamAdapter,
-        resolvedAgent,
-        contextIsTrusted,
-        baselineModel,
-        actualModel,
-        requestAdapter.getOriginalRequest(),
-        toonStats,
-        toonSkipReason,
-        enabledToolNames,
-        globalToolPolicy,
+        ctx,
         ensureStreamHeaders,
-        externalAgentId,
-        userId,
-        sessionId,
-        sessionSource,
-        teamIds,
-        executionId,
-        parentContext,
-        resolvedUser,
       );
     } else {
-      return handleNonStreaming(
-        client,
-        finalRequest,
-        reply,
-        provider,
-        resolvedAgent,
-        contextIsTrusted,
-        baselineModel,
-        actualModel,
-        requestAdapter.getOriginalRequest(),
-        toonStats,
-        toonSkipReason,
-        enabledToolNames,
-        globalToolPolicy,
-        externalAgentId,
-        userId,
-        sessionId,
-        sessionSource,
-        teamIds,
-        executionId,
-        parentContext,
-        resolvedUser,
-      );
+      return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
   } catch (error) {
     return handleError(
@@ -546,25 +566,29 @@ async function handleStreaming<
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
   streamAdapter: LLMStreamAdapter<TChunk, TResponse>,
-  agent: Agent,
-  contextIsTrusted: boolean,
-  baselineModel: string,
-  actualModel: string,
-  originalRequest: TRequest,
-  toonStats: ToolCompressionStats,
-  toonSkipReason: ToonSkipReason | null,
-  enabledToolNames: Set<string>,
-  globalToolPolicy: "permissive" | "restrictive",
+  ctx: LLMProxyContext<TRequest>,
   ensureStreamHeaders: () => void,
-  externalAgentId?: string,
-  userId?: string,
-  sessionId?: string | null,
-  sessionSource?: SessionSource,
-  teamIds?: string[],
-  executionId?: string,
-  parentContext?: Context,
-  resolvedUser?: { id: string; email: string; name: string } | null,
 ): Promise<FastifyReply> {
+  const {
+    agent,
+    originalRequest,
+    baselineModel,
+    actualModel,
+    contextIsTrusted,
+    enabledToolNames,
+    globalToolPolicy,
+    toonStats,
+    toonSkipReason,
+    externalAgentId,
+    userId,
+    resolvedUser,
+    sessionId,
+    sessionSource,
+    executionId,
+    parentContext,
+    teamIds,
+  } = ctx;
+
   const providerName = provider.provider;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
@@ -869,24 +893,28 @@ async function handleNonStreaming<
   request: TRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
-  agent: Agent,
-  contextIsTrusted: boolean,
-  baselineModel: string,
-  actualModel: string,
-  originalRequest: TRequest,
-  toonStats: ToolCompressionStats,
-  toonSkipReason: ToonSkipReason | null,
-  enabledToolNames: Set<string>,
-  globalToolPolicy: "permissive" | "restrictive",
-  externalAgentId?: string,
-  userId?: string,
-  sessionId?: string | null,
-  sessionSource?: SessionSource,
-  teamIds?: string[],
-  executionId?: string,
-  parentContext?: Context,
-  resolvedUser?: { id: string; email: string; name: string } | null,
+  ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
+  const {
+    agent,
+    originalRequest,
+    baselineModel,
+    actualModel,
+    contextIsTrusted,
+    enabledToolNames,
+    globalToolPolicy,
+    toonStats,
+    toonSkipReason,
+    externalAgentId,
+    userId,
+    resolvedUser,
+    sessionId,
+    sessionSource,
+    executionId,
+    parentContext,
+    teamIds,
+  } = ctx;
+
   const providerName = provider.provider;
 
   logger.debug(

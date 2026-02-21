@@ -8,7 +8,7 @@
 import type { FastifyRequest } from "fastify";
 import { resolveProviderApiKey } from "@/clients/llm-client";
 import logger from "@/logging";
-import { AgentModel, VirtualApiKeyModel } from "@/models";
+import { AgentModel, TOKEN_PREFIX, VirtualApiKeyModel } from "@/models";
 import {
   extractBearerToken,
   validateExternalIdpToken,
@@ -53,7 +53,7 @@ export interface VirtualKeyValidationResult {
 
 /**
  * Validate an `archestra_` prefixed virtual API key.
- * Checks: token validity, expiration, provider match.
+ * Checks: token validity, expiration, provider match, parent key health.
  * Returns the resolved real API key and optional base URL.
  *
  * Throws ApiError on validation failure.
@@ -81,7 +81,11 @@ export async function validateVirtualApiKey(
     );
   }
 
-  // Resolve the real provider API key from the secret
+  // Resolve the real provider API key from the secret.
+  // If the parent key's secret was removed (orphaned row), apiKey will be
+  // undefined. For providers that require keys, the upstream call will fail
+  // with a clear error. For keyless providers the virtual key alone is
+  // sufficient authentication.
   let apiKey: string | undefined;
   if (resolved.chatApiKey.secretId) {
     const secretValue = await getSecretValueForLlmProviderApiKey(
@@ -89,6 +93,15 @@ export async function validateVirtualApiKey(
     );
     if (secretValue) {
       apiKey = secretValue as string;
+    } else {
+      logger.warn(
+        {
+          virtualKeyId: resolved.virtualKey.id,
+          chatApiKeyId: resolved.chatApiKey.id,
+          secretId: resolved.chatApiKey.secretId,
+        },
+        "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
+      );
     }
   }
 
@@ -122,7 +135,7 @@ export async function attemptJwksAuth(
   if (!resolvedAgent.identityProviderId) return null;
 
   const bearerToken = extractBearerToken(request);
-  if (!bearerToken || bearerToken.startsWith("archestra_")) return null;
+  if (!bearerToken || bearerToken.startsWith(TOKEN_PREFIX)) return null;
 
   let jwksResult: Awaited<ReturnType<typeof validateExternalIdpToken>>;
   try {
@@ -209,3 +222,50 @@ export function assertAuthenticatedForKeylessProvider(
     );
   }
 }
+
+// =========================================================================
+// Virtual Key Rate Limiter
+// =========================================================================
+
+const RATE_LIMIT_MAX_FAILURES = 10;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * In-memory rate limiter for failed virtual API key validation attempts.
+ * Prevents brute-force enumeration of valid tokens by tracking failures per
+ * client IP and rejecting further attempts after exceeding the threshold.
+ */
+class VirtualKeyRateLimiter {
+  private failures = new Map<string, { count: number; resetAt: number }>();
+
+  check(ip: string): void {
+    const entry = this.failures.get(ip);
+    if (!entry) return;
+
+    if (Date.now() > entry.resetAt) {
+      this.failures.delete(ip);
+      return;
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX_FAILURES) {
+      throw new ApiError(
+        429,
+        "Too many failed virtual API key attempts. Please try again later.",
+      );
+    }
+  }
+
+  recordFailure(ip: string): void {
+    const entry = this.failures.get(ip);
+    if (!entry || Date.now() > entry.resetAt) {
+      this.failures.set(ip, {
+        count: 1,
+        resetAt: Date.now() + RATE_LIMIT_WINDOW_MS,
+      });
+    } else {
+      entry.count++;
+    }
+  }
+}
+
+export const virtualKeyRateLimiter = new VirtualKeyRateLimiter();

@@ -222,8 +222,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
       timeout: 10_000,
     });
 
-    // The token value should be visible (starts with archestra_)
-    await expect(page.locator("code").filter({ hasText: "archestra_" })).toBeVisible();
+    // The token value should be visible inside the dialog (starts with archestra_)
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator("code").filter({ hasText: "archestra_" }).last()).toBeVisible();
 
     // Close dialog
     await clickButton({ page, options: { name: "Close" } });

@@ -49,3 +49,17 @@ Local servers run as containers within your Kubernetes cluster:
 - **Environment Configuration**: Inject API keys and configuration
 - **Command Arguments**: Configure startup commands and arguments
 - **Resource Management**: Control CPU and memory allocation
+
+## Troubleshooting catalog installs
+
+If an MCP server added from **Online Catalog** shows `Failed to start MCP server`, use this quick checklist:
+
+1. Open the server entry in **MCP Registry** and check deployment logs.
+2. If logs show **"No pod found for this deployment"**, verify:
+   - The **MCP Orchestrator** is installed and healthy.
+   - Your Kubernetes cluster has available CPU/memory for new pods.
+   - The selected credentials were saved correctly for the server.
+3. Re-open the server config and validate required fields (client ID/secret, scopes, redirect URLs, or other provider-specific settings).
+4. Retry install after saving config changes.
+
+> Tip: For OAuth-based catalog servers (for example Google Workspace integrations), missing or invalid credential config commonly causes startup failures that appear as generic deployment errors.

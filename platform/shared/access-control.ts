@@ -736,9 +736,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/appearance": {
     organization: ["read"],
   },
-  "/settings/llm-api-keys": {
-    chatSettings: ["read"],
-  },
   "/llm-proxies/provider-settings": {
     chatSettings: ["read"],
   },

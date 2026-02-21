@@ -171,13 +171,6 @@ test.describe("Provider Settings - API Keys", () => {
     await clickButton({ page, options: { name: "Delete" } });
   });
 
-  test("Old /settings/llm-api-keys redirects to new page", async ({
-    page,
-  }) => {
-    await goToPage(page, "/settings/llm-api-keys");
-    await page.waitForURL("**/llm-proxies/provider-settings");
-    await expect(page.getByText("Provider Settings")).toBeVisible();
-  });
 });
 
 test.describe("Provider Settings - Virtual API Keys", () => {

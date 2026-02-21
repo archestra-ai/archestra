@@ -39,7 +39,7 @@ export function useUpdateChatOpsBinding() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("Binding updated");
+      toast.success("Channels updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
   });

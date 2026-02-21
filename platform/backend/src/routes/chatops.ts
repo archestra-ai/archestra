@@ -815,7 +815,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await provider.sendReply({
         originalMessage: message,
-        text: `Agent *${agent.name}* is now bound to this channel.\nSend a message to start interacting!`,
+        text: `Agent *${agent.name}* is now bound to this ${isSlackDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
       });
 
       return reply.send({ ok: true });
@@ -1476,7 +1476,7 @@ async function handleAgentSelection(
       "[ChatOps] handleAgentSelection: about to send 'processing' message",
     );
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this channel. Processing your message...`,
+      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}. Processing your message...`,
     );
     logger.debug(
       "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
@@ -1526,7 +1526,7 @@ async function handleAgentSelection(
     }
   } else {
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this channel.\n` +
+      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
         "Send a message (with @mention) to start interacting!",
     );
   }

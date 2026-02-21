@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { useFeatures } from "@/lib/features.query";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -24,9 +23,6 @@ export function MsTeamsSetupDialog({
   open,
   onOpenChange,
 }: MsTeamsSetupDialogProps) {
-  const { data: features } = useFeatures();
-  const ngrokDomain = features?.ngrokDomain ?? "";
-
   const mutation = useUpdateChatOpsConfigInQuickstart();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
@@ -61,7 +57,6 @@ export function MsTeamsSetupDialog({
             key={step.title}
             stepNumber={index + 1}
             video={step.video}
-            ngrokDomain={ngrokDomain}
             appId={sharedAppId}
             appSecret={sharedAppSecret}
             tenantId={sharedTenantId}
@@ -103,7 +98,7 @@ export function MsTeamsSetupDialog({
         />
       );
     });
-  }, [ngrokDomain, sharedAppId, sharedAppSecret, sharedTenantId, creds]);
+  }, [sharedAppId, sharedAppSecret, sharedTenantId, creds]);
 
   const lastStepAction = {
     label: saving ? "Connecting..." : "Connect",
@@ -275,7 +270,6 @@ function StepSlide({
 function StepBotSettings({
   stepNumber,
   video,
-  ngrokDomain,
   appId,
   appSecret,
   tenantId,
@@ -285,7 +279,6 @@ function StepBotSettings({
 }: {
   stepNumber: number;
   video?: string;
-  ngrokDomain: string;
   appId: string;
   appSecret: string;
   tenantId: string;

@@ -3,14 +3,14 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Key, Loader2, Plus, Trash2 } from "lucide-react";
+import { Key, Loader2, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 import {
   type ChatApiKeyResponse,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
+import { CopyableCode } from "@/components/copyable-code";
 import { LoadingWrapper } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -108,13 +108,6 @@ export function ProviderSettingsVirtualKeys() {
       // Handled by mutation
     }
   }, [newKeyName, selectedParentKeyId, expiresAt, createMutation]);
-
-  const handleCopy = useCallback(() => {
-    if (createdKeyValue) {
-      navigator.clipboard.writeText(createdKeyValue);
-      toast.success("Copied to clipboard");
-    }
-  }, [createdKeyValue]);
 
   const columns: ColumnDef<VirtualKeyWithParent>[] = useMemo(
     () => [
@@ -291,19 +284,7 @@ export function ProviderSettingsVirtualKeys() {
                     <Key className="h-4 w-4" />
                     Copy this key now. It won&apos;t be shown again.
                   </div>
-                  <div className="flex items-center gap-2 bg-muted rounded px-3 py-2">
-                    <code className="text-xs break-all flex-1 min-w-0">
-                      {createdKeyValue}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="shrink-0"
-                      onClick={handleCopy}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  <CopyableCode value={createdKeyValue} />
                   <div className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">
                       Expires:

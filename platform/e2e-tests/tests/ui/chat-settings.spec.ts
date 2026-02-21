@@ -197,7 +197,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);
-    await expect(page.getByText("Virtual API Keys")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Keys" }),
+    ).toBeVisible();
 
     // Click Create Virtual Key
     await clickButton({ page, options: { name: "Create Virtual Key" } });

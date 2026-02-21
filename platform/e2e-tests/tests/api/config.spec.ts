@@ -30,7 +30,7 @@ test.describe("Config endpoint", () => {
     expect(features).toHaveProperty("incomingEmail");
     expect(features).toHaveProperty("knowledgeGraph");
     expect(features).toHaveProperty("mcpServerBaseImage");
-    expect(features).toHaveProperty("chatops");
+    expect(features).toHaveProperty("virtualKeyDefaultExpirationSeconds");
 
     // Verify providerBaseUrls has an entry for every supported provider
     const urls = data.providerBaseUrls;

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -102,7 +102,18 @@ class VirtualApiKeyModel {
       .delete(schema.virtualApiKeysTable)
       .where(eq(schema.virtualApiKeysTable.id, id));
 
-    await secretManager().deleteSecret(virtualKey.secretId);
+    try {
+      await secretManager().deleteSecret(virtualKey.secretId);
+    } catch (error) {
+      logger.warn(
+        {
+          virtualKeyId: id,
+          secretId: virtualKey.secretId,
+          error: String(error),
+        },
+        "VirtualApiKeyModel.delete: failed to delete secret (orphaned). DB record already removed.",
+      );
+    }
 
     logger.info(
       { virtualKeyId: id },
@@ -185,10 +196,8 @@ class VirtualApiKeyModel {
 
     for (const virtualKey of candidates) {
       const secret = await secretManager().getSecret(virtualKey.secretId);
-      if (
-        secret?.secret &&
-        (secret.secret as { token?: string }).token === tokenValue
-      ) {
+      const storedToken = (secret?.secret as { token?: string })?.token;
+      if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
         // Found the match — look up the parent chat API key
         const [chatApiKey] = await db
           .select()
@@ -236,4 +245,11 @@ function generateToken(): string {
 
 function getTokenStart(token: string): string {
   return token.substring(0, TOKEN_START_LENGTH);
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
 }

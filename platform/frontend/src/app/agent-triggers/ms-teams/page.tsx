@@ -9,7 +9,6 @@ import { DefaultAgentSetupDialog } from "@/components/default-agent-setup-dialog
 import Divider from "@/components/divider";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,

@@ -1329,6 +1329,12 @@
           "notNull": true,
           "default": false
         },
+        "dm_owner_email": {
+          "name": "dm_owner_email",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "agent_id": {
           "name": "agent_id",
           "type": "uuid",

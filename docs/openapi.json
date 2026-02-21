@@ -52865,6 +52865,11 @@
                       "isDm": {
                         "type": "boolean"
                       },
+                      "dmOwnerEmail": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      },
                       "agentId": {
                         "nullable": true,
                         "type": "string",
@@ -52891,6 +52896,7 @@
                       "channelName",
                       "workspaceName",
                       "isDm",
+                      "dmOwnerEmail",
                       "agentId",
                       "createdAt",
                       "updatedAt"
@@ -53445,6 +53451,11 @@
                     "isDm": {
                       "type": "boolean"
                     },
+                    "dmOwnerEmail": {
+                      "nullable": true,
+                      "type": "string",
+                      "maxLength": 256
+                    },
                     "agentId": {
                       "nullable": true,
                       "type": "string",
@@ -53471,6 +53482,7 @@
                     "channelName",
                     "workspaceName",
                     "isDm",
+                    "dmOwnerEmail",
                     "agentId",
                     "createdAt",
                     "updatedAt"

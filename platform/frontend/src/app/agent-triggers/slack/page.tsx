@@ -97,7 +97,10 @@ export default function SlackPage() {
     !!bindings &&
     bindings.some(
       (b) =>
-        b.provider === "slack" && b.agentId && slackAgentIds.has(b.agentId),
+        b.provider === "slack" &&
+        !b.isDm &&
+        b.agentId &&
+        slackAgentIds.has(b.agentId),
     );
 
   const localDevOrQuickstartFirstStep = (

@@ -99,6 +99,7 @@ export default function MsTeamsPage() {
     bindings.some(
       (b) =>
         b.provider === "ms-teams" &&
+        !b.isDm &&
         b.agentId &&
         msTeamsAgentIds.has(b.agentId),
     );

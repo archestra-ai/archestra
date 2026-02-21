@@ -248,28 +248,30 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isPrimary: body.isPrimary ?? false,
       });
 
-      // Sync models for the new API key in background (non-blocking)
-      // For optional-key providers (Ollama, vLLM), sync even without an API key value
+      // Sync models for the new API key before returning so the frontend
+      // can immediately show available models after creation.
+      // For optional-key providers (Ollama, vLLM), sync even without an API key value.
       const canSync =
         actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
       if (canSync && modelSyncService.hasFetcher(body.provider)) {
-        modelSyncService
-          .syncModelsForApiKey(
+        try {
+          await modelSyncService.syncModelsForApiKey(
             createdApiKey.id,
             body.provider,
             actualApiKeyValue ?? "",
-          )
-          .catch((error) => {
-            logger.error(
-              {
-                apiKeyId: createdApiKey.id,
-                provider: body.provider,
-                errorMessage:
-                  error instanceof Error ? error.message : String(error),
-              },
-              "Failed to sync models for new API key",
-            );
-          });
+          );
+        } catch (error) {
+          // Model sync failure shouldn't block API key creation
+          logger.error(
+            {
+              apiKeyId: createdApiKey.id,
+              provider: body.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to sync models for new API key",
+          );
+        }
       }
 
       return reply.send(createdApiKey);

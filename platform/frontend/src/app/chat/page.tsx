@@ -150,6 +150,8 @@ export default function ChatPage() {
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useModelsByProvider();
+  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
+    useChatApiKeys();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
@@ -223,11 +225,27 @@ export default function ChatPage() {
     const allModels = Object.values(modelsByProvider).flat();
     if (allModels.length === 0) return;
 
+    // Helper: auto-select the first API key for a given provider
+    const autoSelectKeyForProvider = (provider: string) => {
+      if (initialApiKeyId) return; // Already have a key selected
+      const matchingKey = chatApiKeys.find((k) => k.provider === provider);
+      if (matchingKey) {
+        setInitialApiKeyId(matchingKey.id);
+      }
+    };
+
     const savedModelId = localStorage.getItem(
       LocalStorageKeys.selectedChatModel,
     );
     if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
       setInitialModel(savedModelId);
+      // Find provider for saved model and auto-select key
+      for (const [provider, models] of Object.entries(modelsByProvider)) {
+        if (models?.some((m) => m.id === savedModelId)) {
+          autoSelectKeyForProvider(provider);
+          break;
+        }
+      }
       return;
     }
 
@@ -239,9 +257,16 @@ export default function ChatPage() {
         modelsByProvider[firstProvider as keyof typeof modelsByProvider];
       if (models && models.length > 0) {
         setInitialModel(models[0].id);
+        autoSelectKeyForProvider(firstProvider);
       }
     }
-  }, [initialAgentId, initialModel, modelsByProvider]);
+  }, [
+    initialAgentId,
+    initialModel,
+    initialApiKeyId,
+    modelsByProvider,
+    chatApiKeys,
+  ]);
 
   // Save model to localStorage when changed
   const handleInitialModelChange = useCallback((modelId: string) => {
@@ -284,9 +309,6 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  // Check if API key is configured for any provider
-  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useChatApiKeys();
   const { isLoading: isLoadingFeatures } = useFeatures();
   const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModels();

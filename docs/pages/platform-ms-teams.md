@@ -198,9 +198,7 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 ### Direct Messages
 
-Click the **DM** button next to any agent in the Agent Triggers page. This stores a short-lived intent (5 minutes) and opens a Teams DM with the bot. Send any message — the bot auto-binds the DM to that agent for all subsequent messages. No `@mention` or special syntax is needed.
-
-If you open a DM directly (not via the button) or the intent has expired, the bot shows an agent selection card instead.
+DMs work the same as channels. Click the **DM** button next to any agent in the Agent Triggers page to open a Teams DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
 
 > If you update from a previous manifest without the `"personal"` scope, re-upload the updated manifest to enable DMs.
 

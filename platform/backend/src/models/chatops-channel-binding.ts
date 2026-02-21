@@ -5,7 +5,9 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   ne,
+  not,
   notInArray,
   sql,
 } from "drizzle-orm";
@@ -333,9 +335,18 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.channelId,
             params.activeChannelIds,
           ),
-          // Exclude DM bindings — they have channelName: null and won't appear
-          // in the active channel discovery list, but should not be cleaned up
-          isNotNull(schema.chatopsChannelBindingsTable.channelName),
+          // Exclude DM bindings — they won't appear in the active channel
+          // discovery list, but should not be cleaned up.
+          // DMs are identified by channelName being null or starting with "Direct Message - ".
+          and(
+            isNotNull(schema.chatopsChannelBindingsTable.channelName),
+            not(
+              like(
+                schema.chatopsChannelBindingsTable.channelName,
+                "Direct Message - %",
+              ),
+            ),
+          ),
         ),
       )
       .returning();

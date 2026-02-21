@@ -66,24 +66,6 @@ export function useDeleteChatOpsBinding() {
   });
 }
 
-export function useCreateDmIntent() {
-  return useMutation({
-    mutationFn: async (params: {
-      provider: "slack" | "ms-teams";
-      agentId: string;
-    }) => {
-      const { error } = await archestraApiSdk.createDmIntent({
-        body: params,
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return true;
-    },
-  });
-}
-
 export function useRefreshChatOpsChannelDiscovery() {
   return useMutation({
     mutationFn: async (provider: string) => {

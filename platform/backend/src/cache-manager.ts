@@ -34,8 +34,6 @@ export const CacheKey = {
   ChannelDiscovery: "channel-discovery",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
-  /** Short-lived DM intent for auto-binding */
-  DmIntent: "dm-intent",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

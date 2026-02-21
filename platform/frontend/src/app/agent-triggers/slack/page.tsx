@@ -56,10 +56,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
+import { useSession } from "@/lib/auth.query";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
-  useCreateDmIntent,
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
@@ -67,6 +67,8 @@ import config from "@/lib/config";
 import { usePublicBaseUrl } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
 import { cn } from "@/lib/utils";
+
+const DM_ENABLED = false;
 
 export default function SlackPage() {
   const publicBaseUrl = usePublicBaseUrl();
@@ -218,11 +220,11 @@ export default function SlackPage() {
 }
 
 function ChannelBindingsSection() {
+  const { data: session } = useSession();
   const { data: bindings, isLoading } = useChatOpsBindings();
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const { data: chatOpsProviders } = useChatOpsStatus();
   const updateMutation = useUpdateChatOpsBinding();
-  const dmIntentMutation = useCreateDmIntent();
   const queryClient = useQueryClient();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
   const [enableDialogOpen, setEnableDialogOpen] = useState(false);
@@ -249,6 +251,19 @@ function ChannelBindingsSection() {
     list.push(b);
     bindingsByAgentId.set(b.agentId, list);
   }
+
+  // Find current user's DM binding (if any)
+  const userEmail = session?.user?.email;
+  const myDmBinding = slackBindings?.find(
+    (b) => b.channelName === `Direct Message - ${userEmail}`,
+  );
+
+  const handleDmClick = (agentId: string, deepLink: string) => {
+    if (myDmBinding && myDmBinding.agentId !== agentId) {
+      updateMutation.mutate({ id: myDmBinding.id, agentId });
+    }
+    window.open(deepLink, "_blank", "noopener,noreferrer");
+  };
 
   // All known channels as MultiSelect items
   const channelItems =
@@ -377,7 +392,7 @@ function ChannelBindingsSection() {
                                 <Button
                                   variant="outline"
                                   size="icon-sm"
-                                  aria-label="Open in Slack"
+                                  aria-label="Open channel in Slack"
                                   asChild
                                 >
                                   <a
@@ -394,7 +409,7 @@ function ChannelBindingsSection() {
                                   </a>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Open in Slack</TooltipContent>
+                              <TooltipContent>Open channel in Slack</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -407,7 +422,7 @@ function ChannelBindingsSection() {
                                     <Button
                                       variant="outline"
                                       size="icon-sm"
-                                      aria-label="Open in Slack"
+                                      aria-label="Open channel in Slack"
                                     >
                                       <Image
                                         src="/icons/slack.png"
@@ -418,7 +433,7 @@ function ChannelBindingsSection() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
-                                <TooltipContent>Open in Slack</TooltipContent>
+                                <TooltipContent>Open channel in Slack</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <DropdownMenuContent align="start">
@@ -439,7 +454,7 @@ function ChannelBindingsSection() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
-                        {slack?.dmInfo?.botUserId && slack.dmInfo.teamId && (
+                        {DM_ENABLED && slack?.dmInfo?.botUserId && slack.dmInfo.teamId && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -447,17 +462,12 @@ function ChannelBindingsSection() {
                                   variant="outline"
                                   size="icon-sm"
                                   aria-label="DM in Slack"
-                                  disabled={dmIntentMutation.isPending}
-                                  onClick={async () => {
-                                    await dmIntentMutation.mutateAsync({
-                                      provider: "slack",
-                                      agentId: agent.id,
-                                    });
-                                    window.open(
+                                  onClick={() =>
+                                    handleDmClick(
+                                      agent.id,
                                       `slack://user?team=${slack.dmInfo?.teamId}&id=${slack.dmInfo?.botUserId}`,
-                                      "_blank",
-                                    );
-                                  }}
+                                    )
+                                  }
                                 >
                                   <Send className="h-4 w-4" />
                                 </Button>

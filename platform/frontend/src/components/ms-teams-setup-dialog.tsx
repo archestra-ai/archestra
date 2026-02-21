@@ -504,13 +504,14 @@ function buildManifest(params: {
   botAppId: string;
   nameShort: string;
   nameFull: string;
+  version: string;
 }) {
-  const { botAppId, nameShort, nameFull } = params;
+  const { botAppId, nameShort, nameFull, version } = params;
   return {
     $schema:
       "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
     manifestVersion: "1.16",
-    version: "1.0.0",
+    version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     packageName: "com.archestra.bot",
     developer: {
@@ -531,22 +532,16 @@ function buildManifest(params: {
         isNotificationOnly: false,
         commandLists: [
           {
-            scopes: ["team", "groupchat"],
+            scopes: ["team", "groupchat", "personal"],
             commands: [
               {
                 title: "/select-agent",
-                description: "Change which agent handles this channel",
+                description: "Change which agent handles this conversation",
               },
               {
                 title: "/status",
-                description: "Show current agent for this channel",
+                description: "Show current agent for this conversation",
               },
-              { title: "/help", description: "Show available commands" },
-            ],
-          },
-          {
-            scopes: ["personal"],
-            commands: [
               { title: "/help", description: "Show available commands" },
             ],
           },
@@ -582,6 +577,7 @@ function StepManifest({
   const [botAppId, setBotAppId] = useState("");
   const [nameShort, setNameShort] = useState("Archestra");
   const [nameFull, setNameFull] = useState("Archestra Bot");
+  const [version, setVersion] = useState("1.0.0");
   const [downloading, setDownloading] = useState(false);
 
   const effectiveAppId = botAppId || prefillAppId || "";
@@ -589,6 +585,7 @@ function StepManifest({
     botAppId: effectiveAppId,
     nameShort,
     nameFull,
+    version,
   });
   const manifestJson = JSON.stringify(manifest, null, 2);
 
@@ -661,6 +658,16 @@ function StepManifest({
               placeholder="Archestra Bot"
             />
           </div>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="manifest-version">Version</Label>
+          <Input
+            id="manifest-version"
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="1.0.0"
+          />
         </div>
 
         <Button

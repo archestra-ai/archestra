@@ -307,7 +307,6 @@ export const RouteId = {
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
-  CreateDmIntent: "createDmIntent",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

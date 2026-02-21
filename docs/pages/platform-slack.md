@@ -182,9 +182,7 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 ### Direct Messages
 
-Click the **DM** button next to any agent in the Agent Triggers page. This stores a short-lived intent (5 minutes) and opens a Slack DM with the bot. Send any message — the bot auto-binds the DM to that agent for all subsequent messages. No `@mention` or special syntax is needed.
-
-If you open a DM directly (not via the button) or the intent has expired, the bot shows an agent selection card instead.
+DMs work the same as channels. Click the **DM** button next to any agent in the Agent Triggers page to open a Slack DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
 
 > The Slack app manifest already includes `im:history` and `message.im` scopes/events required for DMs.
 

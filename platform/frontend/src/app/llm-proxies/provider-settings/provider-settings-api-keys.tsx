@@ -68,7 +68,6 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
-  virtualKeyNames: [],
   isPrimary: false,
 };
 
@@ -117,9 +116,7 @@ export function ProviderSettingsApiKeys() {
         teamId: selectedApiKey.teamId ?? "",
         vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
         vaultSecretKey: selectedApiKey.vaultSecretKey ?? null,
-        isPrimary:
-          (selectedApiKey as ChatApiKeyResponse & { isPrimary?: boolean })
-            .isPrimary ?? false,
+        isPrimary: selectedApiKey.isPrimary ?? false,
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);
@@ -135,7 +132,7 @@ export function ProviderSettingsApiKeys() {
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
-        isPrimary: values.isPrimary || undefined,
+        isPrimary: values.isPrimary,
         vaultSecretPath:
           byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath

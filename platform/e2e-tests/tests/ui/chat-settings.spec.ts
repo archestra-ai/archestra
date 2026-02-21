@@ -207,8 +207,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
       page.getByRole("heading", { name: /Create Virtual API Key/i }),
     ).toBeVisible();
 
-    // Wait for parent key select to have a value (ensures API keys data loaded)
-    await expect(page.getByText(parentKeyName)).toBeVisible({ timeout: 5000 });
+    // Select the correct parent key from the dropdown
+    await page.getByRole("combobox").first().click();
+    await page.getByRole("option", { name: new RegExp(parentKeyName) }).click();
 
     // Fill name and create
     await page.getByLabel(/Name/i).fill(virtualKeyName);
@@ -238,6 +239,8 @@ test.describe("Provider Settings - Virtual API Keys", () => {
       .first();
     if (await deleteButton.isVisible()) {
       await deleteButton.click();
+      // Confirm deletion in the confirmation dialog
+      await clickButton({ page, options: { name: "Delete" } });
       await expect(page.getByText("Virtual API key deleted")).toBeVisible({
         timeout: 5000,
       });

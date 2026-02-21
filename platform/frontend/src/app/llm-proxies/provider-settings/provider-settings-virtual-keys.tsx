@@ -81,6 +81,10 @@ export function ProviderSettingsVirtualKeys() {
   );
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingKey, setDeletingKey] = useState<VirtualKeyWithParent | null>(
+    null,
+  );
   const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
   const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<Date | null>(
     null,
@@ -178,20 +182,17 @@ export function ProviderSettingsVirtualKeys() {
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() =>
-              deleteMutation.mutate({
-                chatApiKeyId: row.original.chatApiKeyId,
-                id: row.original.id,
-              })
-            }
-            disabled={deleteMutation.isPending}
+            onClick={() => {
+              setDeletingKey(row.original);
+              setIsDeleteDialogOpen(true);
+            }}
           >
             <Trash2 className="h-3 w-3 text-destructive" />
           </Button>
         ),
       },
     ],
-    [deleteMutation],
+    [],
   );
 
   // Non-system API keys that can have virtual keys
@@ -399,6 +400,52 @@ export function ProviderSettingsVirtualKeys() {
                   Create
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete Virtual Key</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete &quot;{deletingKey?.name}&quot;?
+                This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsDeleteDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (deletingKey) {
+                    deleteMutation.mutate(
+                      {
+                        chatApiKeyId: deletingKey.chatApiKeyId,
+                        id: deletingKey.id,
+                      },
+                      {
+                        onSuccess: () => {
+                          setIsDeleteDialogOpen(false);
+                          setDeletingKey(null);
+                        },
+                      },
+                    );
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Delete
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

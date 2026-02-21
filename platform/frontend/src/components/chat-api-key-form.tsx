@@ -50,8 +50,6 @@ export type ChatApiKeyFormValues = {
   teamId: string | null;
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
-  /** Virtual key names to create alongside the API key (create mode only) */
-  virtualKeyNames: string[];
   /** When multiple keys exist for the same provider+scope, the primary key is preferred */
   isPrimary: boolean;
 };
@@ -253,17 +251,24 @@ export function ChatApiKeyForm({
         (k) =>
           k.provider === provider &&
           k.scope === scope &&
-          (k as ChatApiKeyResponse & { isPrimary?: boolean }).isPrimary,
+          (scope !== "team" || k.teamId === teamId) &&
+          k.isPrimary,
       ) ?? null
     );
-  }, [existingKeys, existingKey, provider, scope]);
+  }, [existingKeys, existingKey, provider, scope, teamId]);
 
-  // Auto-set isPrimary when no user-created keys exist for this provider (create mode only).
+  // Auto-set isPrimary when no user-created keys exist for this provider+scope (create mode only).
   // System keys are auto-managed and shouldn't prevent the user from marking their key as primary.
   const hasAnyKeyForProvider = useMemo(() => {
     if (!existingKeys) return false;
-    return existingKeys.some((k) => k.provider === provider && !k.isSystem);
-  }, [existingKeys, provider]);
+    return existingKeys.some(
+      (k) =>
+        k.provider === provider &&
+        k.scope === scope &&
+        (scope !== "team" || k.teamId === teamId) &&
+        !k.isSystem,
+    );
+  }, [existingKeys, provider, scope, teamId]);
 
   useEffect(() => {
     if (isEditMode) return;

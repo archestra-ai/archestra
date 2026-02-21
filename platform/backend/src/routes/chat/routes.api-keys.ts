@@ -6,7 +6,12 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
-import { ApiKeyModelModel, ChatApiKeyModel, TeamModel } from "@/models";
+import {
+  ApiKeyModelModel,
+  ChatApiKeyModel,
+  TeamModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
 import {
   assertByosEnabled,
@@ -539,7 +544,28 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
-      // Delete the associated secret
+      // Delete virtual key secrets before deleting the parent API key.
+      // The DB cascades the virtual key rows, but their secrets in the
+      // secret manager would be orphaned without explicit cleanup.
+      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId(
+        params.id,
+      );
+      for (const vk of virtualKeys) {
+        try {
+          await secretManager().deleteSecret(vk.secretId);
+        } catch (error) {
+          logger.warn(
+            {
+              virtualKeyId: vk.id,
+              secretId: vk.secretId,
+              error: String(error),
+            },
+            "Failed to delete virtual key secret during parent key deletion",
+          );
+        }
+      }
+
+      // Delete the parent key's associated secret
       if (apiKey.secretId) {
         await secretManager().deleteSecret(apiKey.secretId);
       }

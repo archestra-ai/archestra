@@ -1455,7 +1455,6 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
-  virtualKeyNames: [],
   isPrimary: true,
 };
 
@@ -1496,7 +1495,7 @@ function NoApiKeySetup() {
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
-        isPrimary: values.isPrimary || undefined,
+        isPrimary: values.isPrimary,
         vaultSecretPath:
           byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath

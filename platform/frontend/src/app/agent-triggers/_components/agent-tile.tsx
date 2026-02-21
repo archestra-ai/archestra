@@ -155,8 +155,24 @@ export function AgentTile({
 
         <Divider className="mt-auto" />
 
-        {/* Action buttons */}
+        {/* Action buttons: DM → Open channel → Chat */}
         <div className="flex items-stretch gap-2">
+          {dmDeepLink && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 min-w-0 text-xs h-7 truncate"
+              onClick={() => onDmClick(agent.id, dmDeepLink)}
+            >
+              <Image
+                src={providerConfig.providerIcon}
+                alt={providerConfig.providerLabel}
+                width={14}
+                height={14}
+              />
+              DM
+            </Button>
+          )}
           {nonDmBindings.length <= 1 ? (
             <Button
               variant="outline"
@@ -223,22 +239,6 @@ export function AgentTile({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-          {dmDeepLink && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 min-w-0 text-xs h-7 truncate"
-              onClick={() => onDmClick(agent.id, dmDeepLink)}
-            >
-              <Image
-                src={providerConfig.providerIcon}
-                alt={providerConfig.providerLabel}
-                width={14}
-                height={14}
-              />
-              DM
-            </Button>
           )}
           <Button
             variant="outline"

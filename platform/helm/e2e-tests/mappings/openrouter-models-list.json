@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPath": "/v1/models",
+    "urlPath": "/openrouter/v1/models",
     "headers": {
       "Authorization": {
         "contains": "openrouter-models"

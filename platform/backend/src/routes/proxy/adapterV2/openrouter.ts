@@ -199,6 +199,10 @@ class OpenRouterRequestAdapter
       messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
 
+    if (config.features.browserStreamingEnabled) {
+      messages = this.convertToolResultContent(messages);
+    }
+
     return {
       ...this.request,
       model: this.getModel(),
@@ -397,10 +401,16 @@ class OpenRouterResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.prompt_tokens ?? 0,
-      outputTokens: this.response.usage?.completion_tokens ?? 0,
-    };
+    if (!this.response.usage) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
+  }
+
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
   }
 
   getOriginalResponse(): OpenRouterResponse {
@@ -762,6 +772,17 @@ async function convertToolResultsToToon(
       wasEffective: totalTokensAfter < totalTokensBefore,
       hadToolResults: toolResultCount > 0,
     },
+  };
+}
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: OpenRouter.Types.Usage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
   };
 }
 

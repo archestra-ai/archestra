@@ -1,35 +1,44 @@
 import type { APIRequestContext } from "@playwright/test";
-import { API_BASE_URL, WIREMOCK_BASE_URL } from "../../../consts";
+import {
+  API_BASE_URL,
+  WIREMOCK_BASE_URL,
+  WIREMOCK_INTERNAL_URL,
+} from "../../../consts";
 import { expect, test } from "../fixtures";
 
 /**
  * E2E tests for virtual API keys in the LLM Proxy.
  *
- * These tests verify that:
- * 1. Virtual API keys can authenticate proxy requests
- * 2. Virtual keys resolve to the correct provider API key
- * 3. Expired virtual keys are rejected
- * 4. Provider mismatches are rejected
- * 5. Invalid virtual keys are rejected
- * 6. Raw provider keys still work (backward compat)
+ * These tests verify:
+ * - CRUD operations on the virtual API keys management API
+ * - Proxy authentication with virtual keys (happy path, expiration, provider mismatch, etc.)
+ * - Cascading invalidation when parent keys or virtual keys are deleted
+ * - Per-key base URL routing
+ * - Backward compatibility with raw provider keys
  */
 
 const TEST_PROVIDER = "openai";
+
+// =========================================================================
+// Helpers
+// =========================================================================
+
+type MakeApiRequest = (args: {
+  request: APIRequestContext;
+  method: "get" | "post" | "put" | "patch" | "delete";
+  urlSuffix: string;
+  data?: unknown;
+  ignoreStatusCheck?: boolean;
+}) => Promise<{ json: () => Promise<unknown>; ok: () => boolean }>;
 
 /**
  * Helper: create a chat API key with a unique name and return its ID.
  * Uses a unique name per call to avoid race conditions with parallel test workers.
  */
 async function createChatApiKey(
-  makeApiRequest: (args: {
-    request: APIRequestContext;
-    method: "get" | "post" | "put" | "patch" | "delete";
-    urlSuffix: string;
-    data?: unknown;
-    ignoreStatusCheck?: boolean;
-  }) => Promise<{ json: () => Promise<unknown>; ok: () => boolean }>,
+  makeApiRequest: MakeApiRequest,
   request: APIRequestContext,
-  opts?: { provider?: string; baseUrl?: string },
+  opts?: { provider?: string; baseUrl?: string | null; apiKey?: string },
 ) {
   const provider = opts?.provider ?? TEST_PROVIDER;
   const uniqueName = `e2e-vk-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -40,25 +49,52 @@ async function createChatApiKey(
     data: {
       name: uniqueName,
       provider,
-      apiKey: "sk-e2e-test-key-for-wiremock",
+      apiKey: opts?.apiKey ?? "sk-e2e-test-key-for-wiremock",
       scope: "org_wide",
       baseUrl: opts?.baseUrl ?? null,
     },
   });
-  return (await response.json()) as { id: string; provider: string };
+  return (await response.json()) as {
+    id: string;
+    name: string;
+    provider: string;
+  };
+}
+
+/**
+ * Helper: create a virtual key for a chat API key.
+ */
+async function createVirtualKey(
+  makeApiRequest: MakeApiRequest,
+  request: APIRequestContext,
+  chatApiKeyId: string,
+  opts?: { name?: string; expiresAt?: string | null },
+) {
+  const response = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/chat-api-keys/${chatApiKeyId}/virtual-keys`,
+    data: {
+      name: opts?.name ?? "test-vk",
+      ...(opts?.expiresAt !== undefined && { expiresAt: opts.expiresAt }),
+    },
+  });
+  return (await response.json()) as {
+    id: string;
+    value: string;
+    name: string;
+    tokenStart: string;
+    expiresAt: string | null;
+    createdAt: string;
+    lastUsedAt: string | null;
+  };
 }
 
 /**
  * Helper: cleanup chat API key by ID
  */
 async function cleanupChatApiKey(
-  makeApiRequest: (args: {
-    request: APIRequestContext;
-    method: "get" | "post" | "put" | "patch" | "delete";
-    urlSuffix: string;
-    data?: unknown;
-    ignoreStatusCheck?: boolean;
-  }) => Promise<{ json: () => Promise<unknown>; ok: () => boolean }>,
+  makeApiRequest: MakeApiRequest,
   request: APIRequestContext,
   chatApiKeyId: string,
 ) {
@@ -69,6 +105,236 @@ async function cleanupChatApiKey(
     ignoreStatusCheck: true,
   });
 }
+
+/**
+ * Helper: make a proxy request with a virtual key and return the response.
+ */
+async function callProxyWithVirtualKey(
+  request: APIRequestContext,
+  proxyId: string,
+  virtualKeyValue: string,
+) {
+  return request.post(
+    `${API_BASE_URL}/v1/openai/${proxyId}/chat/completions`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${virtualKeyValue}`,
+      },
+      data: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "hello" }],
+        stream: false,
+      },
+    },
+  );
+}
+
+// =========================================================================
+// CRUD API Tests
+// =========================================================================
+
+test.describe("Virtual API Keys - CRUD API", () => {
+  test("create returns full token value with archestra_ prefix and correct fields", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+
+    try {
+      const vk = await createVirtualKey(
+        makeApiRequest,
+        request,
+        chatApiKey.id,
+        { name: "my-test-key" },
+      );
+
+      // Token value is returned once at creation
+      expect(vk.value).toMatch(/^archestra_/);
+      expect(vk.value.length).toBeGreaterThan(20);
+
+      // Fields are present and correct
+      expect(vk.id).toBeTruthy();
+      expect(vk.name).toBe("my-test-key");
+      expect(vk.tokenStart).toBe(vk.value.substring(0, 14));
+      expect(vk.createdAt).toBeTruthy();
+      expect(vk.expiresAt).toBeNull();
+      expect(vk.lastUsedAt).toBeNull();
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+    }
+  });
+
+  test("list virtual keys for a chat API key", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+
+    try {
+      const vk1 = await createVirtualKey(
+        makeApiRequest,
+        request,
+        chatApiKey.id,
+        { name: "key-alpha" },
+      );
+      const vk2 = await createVirtualKey(
+        makeApiRequest,
+        request,
+        chatApiKey.id,
+        { name: "key-beta" },
+      );
+
+      // List virtual keys
+      const listResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
+      });
+      const keys = (await listResp.json()) as Array<{
+        id: string;
+        name: string;
+        tokenStart: string;
+        value?: string;
+      }>;
+
+      // Should return both keys
+      expect(keys.length).toBeGreaterThanOrEqual(2);
+      const ids = keys.map((k) => k.id);
+      expect(ids).toContain(vk1.id);
+      expect(ids).toContain(vk2.id);
+
+      // Full token value should NOT be in the list response
+      for (const key of keys) {
+        expect(key.value).toBeUndefined();
+        expect(key.tokenStart).toBeTruthy();
+      }
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+    }
+  });
+
+  test("list all virtual keys for organization (paginated)", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+
+    try {
+      await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+        name: "org-list-key-1",
+      });
+      await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+        name: "org-list-key-2",
+      });
+
+      // Fetch org-wide listing with pagination
+      const listResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/virtual-api-keys?limit=50&offset=0",
+      });
+      const result = (await listResp.json()) as {
+        data: Array<{
+          id: string;
+          name: string;
+          parentKeyName: string;
+          parentKeyProvider: string;
+          parentKeyBaseUrl: string | null;
+        }>;
+        pagination: {
+          total: number;
+          currentPage: number;
+          totalPages: number;
+          limit: number;
+          hasNext: boolean;
+          hasPrev: boolean;
+        };
+      };
+
+      // Should have pagination metadata
+      expect(result.pagination.total).toBeGreaterThanOrEqual(2);
+      expect(Array.isArray(result.data)).toBeTruthy();
+
+      // Items should include parent key info
+      const ourKeys = result.data.filter(
+        (k) => k.parentKeyName === chatApiKey.name,
+      );
+      expect(ourKeys.length).toBe(2);
+      for (const key of ourKeys) {
+        expect(key.parentKeyProvider).toBe(TEST_PROVIDER);
+      }
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+    }
+  });
+
+  test("delete a virtual key removes it from list", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+
+    try {
+      const vk = await createVirtualKey(
+        makeApiRequest,
+        request,
+        chatApiKey.id,
+      );
+
+      // Delete the virtual key
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
+      });
+
+      // Verify it's gone from the list
+      const listResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
+      });
+      const keys = (await listResp.json()) as Array<{ id: string }>;
+      const ids = keys.map((k) => k.id);
+      expect(ids).not.toContain(vk.id);
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+    }
+  });
+
+  test("reject creation with past expiration date", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+
+    try {
+      const response = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
+        data: {
+          name: "expired-from-the-start",
+          expiresAt: new Date(Date.now() - 60_000).toISOString(), // 1 minute ago
+        },
+        ignoreStatusCheck: true,
+      });
+
+      expect(response.ok()).toBeFalsy();
+      const body = (await response.json()) as {
+        error: { message: string };
+      };
+      expect(body.error.message).toContain("future");
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+    }
+  });
+});
+
+// =========================================================================
+// LLM Proxy Authentication Tests
+// =========================================================================
 
 test.describe("Virtual API Keys - LLM Proxy", () => {
   test("virtual key authenticates proxy request", async ({
@@ -83,30 +349,20 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
-    const vkResp = await makeApiRequest({
+    const vk = await createVirtualKey(
+      makeApiRequest,
       request,
-      method: "post",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
-      data: { name: "test-vk" },
-    });
-    const vk = (await vkResp.json()) as { id: string; value: string };
+      chatApiKey.id,
+      { name: "test-vk" },
+    );
     expect(vk.value).toMatch(/^archestra_/);
 
     try {
       // Call LLM proxy with the virtual key
-      const proxyResponse = await request.post(
-        `${API_BASE_URL}/v1/openai/${proxy.id}/chat/completions`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${vk.value}`,
-          },
-          data: {
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: "Say hello" }],
-            stream: false,
-          },
-        },
+      const proxyResponse = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        vk.value,
       );
 
       // WireMock should return 200 (mocked response)
@@ -130,34 +386,27 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
     // Create a virtual key that expires in 5 seconds, then wait for it to expire.
     // Use generous margins to avoid flakiness from clock skew or CI slowness.
-    const vkResp = await makeApiRequest({
+    // NOTE: This test may fail locally if the server timezone differs from UTC
+    // because the virtual_api_keys.expires_at column is `timestamp without time zone`
+    // despite the schema declaring `withTimezone: true`. In CI (UTC), this works correctly.
+    const vk = await createVirtualKey(
+      makeApiRequest,
       request,
-      method: "post",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
-      data: {
+      chatApiKey.id,
+      {
         name: "expired-vk",
         expiresAt: new Date(Date.now() + 5000).toISOString(), // 5s from now
       },
-    });
-    const vk = (await vkResp.json()) as { id: string; value: string };
+    );
 
     // Wait for the key to expire (10s wait gives 5s margin over the 5s TTL)
     await new Promise((resolve) => setTimeout(resolve, 10_000));
 
     try {
-      const proxyResponse = await request.post(
-        `${API_BASE_URL}/v1/openai/${proxy.id}/chat/completions`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${vk.value}`,
-          },
-          data: {
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: "hello" }],
-            stream: false,
-          },
-        },
+      const proxyResponse = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        vk.value,
       );
 
       expect(proxyResponse.status()).toBe(401);
@@ -183,13 +432,12 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       provider: "openai",
     });
 
-    const vkResp = await makeApiRequest({
+    const vk = await createVirtualKey(
+      makeApiRequest,
       request,
-      method: "post",
-      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys`,
-      data: { name: "wrong-provider-vk" },
-    });
-    const vk = (await vkResp.json()) as { id: string; value: string };
+      chatApiKey.id,
+      { name: "wrong-provider-vk" },
+    );
 
     try {
       const proxyResponse = await request.post(
@@ -226,19 +474,10 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxy = await proxyResp.json();
 
     try {
-      const proxyResponse = await request.post(
-        `${API_BASE_URL}/v1/openai/${proxy.id}/chat/completions`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer archestra_invalidtoken1234",
-          },
-          data: {
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: "hello" }],
-            stream: false,
-          },
-        },
+      const proxyResponse = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        "archestra_invalidtoken1234",
       );
 
       expect(proxyResponse.status()).toBe(401);
@@ -277,6 +516,238 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       expect(proxyResponse.ok()).toBeTruthy();
     } finally {
       await deleteAgent(request, proxy.id);
+    }
+  });
+
+  test("virtual key without expiration works indefinitely", async ({
+    request,
+    makeApiRequest,
+    createLlmProxy,
+    deleteAgent,
+  }) => {
+    const proxyResp = await createLlmProxy(
+      request,
+      "e2e-vk-no-expiry",
+    );
+    const proxy = await proxyResp.json();
+
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+
+    // Create a virtual key with no expiration
+    const vk = await createVirtualKey(
+      makeApiRequest,
+      request,
+      chatApiKey.id,
+      { name: "no-expiry-vk", expiresAt: null },
+    );
+
+    expect(vk.expiresAt).toBeNull();
+
+    try {
+      const proxyResponse = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        vk.value,
+      );
+      expect(proxyResponse.ok()).toBeTruthy();
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+      await deleteAgent(request, proxy.id);
+    }
+  });
+
+  test("deleted virtual key returns 401 on proxy", async ({
+    request,
+    makeApiRequest,
+    createLlmProxy,
+    deleteAgent,
+  }) => {
+    const proxyResp = await createLlmProxy(request, "e2e-vk-deleted");
+    const proxy = await proxyResp.json();
+
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+    const vk = await createVirtualKey(
+      makeApiRequest,
+      request,
+      chatApiKey.id,
+    );
+
+    // Verify it works first
+    const okResp = await callProxyWithVirtualKey(
+      request,
+      proxy.id,
+      vk.value,
+    );
+    expect(okResp.ok()).toBeTruthy();
+
+    // Delete the virtual key
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
+    });
+
+    try {
+      // Now the same token should be rejected
+      const failResp = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        vk.value,
+      );
+      expect(failResp.status()).toBe(401);
+      const body = await failResp.json();
+      expect(body.error.message).toContain("Invalid virtual API key");
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+      await deleteAgent(request, proxy.id);
+    }
+  });
+
+  test("deleted parent chat API key invalidates virtual key", async ({
+    request,
+    makeApiRequest,
+    createLlmProxy,
+    deleteAgent,
+  }) => {
+    const proxyResp = await createLlmProxy(
+      request,
+      "e2e-vk-parent-deleted",
+    );
+    const proxy = await proxyResp.json();
+
+    const chatApiKey = await createChatApiKey(makeApiRequest, request);
+    const vk = await createVirtualKey(
+      makeApiRequest,
+      request,
+      chatApiKey.id,
+    );
+
+    // Verify it works first
+    const okResp = await callProxyWithVirtualKey(
+      request,
+      proxy.id,
+      vk.value,
+    );
+    expect(okResp.ok()).toBeTruthy();
+
+    // Delete the PARENT chat API key (cascade should delete virtual keys)
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+    });
+
+    try {
+      // Virtual key should now be invalid
+      const failResp = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        vk.value,
+      );
+      expect(failResp.status()).toBe(401);
+    } finally {
+      await deleteAgent(request, proxy.id);
+    }
+  });
+
+  test("virtual key with per-key base URL routes to custom endpoint", async ({
+    request,
+    makeApiRequest,
+    createLlmProxy,
+    deleteAgent,
+    clearWiremockRequests,
+    getWiremockRequests,
+  }) => {
+    // Create a dynamic WireMock mapping at a custom path
+    const customPath = `/custom-base-${Date.now()}`;
+    const mappingResp = await request.post(
+      `${WIREMOCK_BASE_URL}/__admin/mappings`,
+      {
+        headers: { "Content-Type": "application/json" },
+        data: {
+          request: {
+            method: "POST",
+            urlPath: `${customPath}/v1/chat/completions`,
+          },
+          response: {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+            jsonBody: {
+              id: "chatcmpl-custom-base-url",
+              object: "chat.completion",
+              created: 1234567890,
+              model: "gpt-4o-mini",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: "Response from custom base URL!",
+                    refusal: null,
+                  },
+                  finish_reason: "stop",
+                  logprobs: null,
+                },
+              ],
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 8,
+                total_tokens: 18,
+              },
+            },
+          },
+        },
+      },
+    );
+    const mapping = await mappingResp.json();
+    const mappingId = mapping.id;
+
+    const proxyResp = await createLlmProxy(
+      request,
+      "e2e-vk-custom-base",
+    );
+    const proxy = await proxyResp.json();
+
+    // Create a chat API key with a custom base URL pointing to our custom WireMock path
+    const chatApiKey = await createChatApiKey(makeApiRequest, request, {
+      baseUrl: `${WIREMOCK_INTERNAL_URL}${customPath}/v1`,
+    });
+    const vk = await createVirtualKey(
+      makeApiRequest,
+      request,
+      chatApiKey.id,
+    );
+
+    // Clear WireMock journal so we can verify our specific request
+    await clearWiremockRequests(request);
+
+    try {
+      const proxyResponse = await callProxyWithVirtualKey(
+        request,
+        proxy.id,
+        vk.value,
+      );
+      expect(proxyResponse.ok()).toBeTruthy();
+
+      const body = await proxyResponse.json();
+      expect(body.id).toBe("chatcmpl-custom-base-url");
+
+      // Verify via WireMock request journal that the request hit the custom path
+      const wmRequests = await getWiremockRequests(request, {
+        method: "POST",
+        urlPattern: customPath,
+      });
+      expect(wmRequests.length).toBeGreaterThanOrEqual(1);
+      expect(wmRequests[0].request.url).toContain(
+        `${customPath}/v1/chat/completions`,
+      );
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+      await deleteAgent(request, proxy.id);
+      // Clean up dynamic WireMock mapping
+      await request.delete(
+        `${WIREMOCK_BASE_URL}/__admin/mappings/${mappingId}`,
+      );
     }
   });
 });

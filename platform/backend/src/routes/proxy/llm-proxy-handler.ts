@@ -13,13 +13,12 @@ import {
 import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
-import getDefaultPricing from "@/default-model-prices";
 import logger from "@/logging";
 import {
   AgentTeamModel,
   InteractionModel,
   LimitValidationService,
-  TokenPriceModel,
+  ModelModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
@@ -321,19 +320,11 @@ export async function handleLLMProxy<
 
     const actualModel = requestAdapter.getModel();
 
-    // Ensure token prices exist
-    const baselinePricing = getDefaultPricing(baselineModel);
-    await TokenPriceModel.createIfNotExists(baselineModel, {
-      provider: providerName,
-      ...baselinePricing,
-    });
+    // Ensure model entries exist for cost tracking
+    await ModelModel.ensureModelExists(baselineModel, providerName);
 
     if (actualModel !== baselineModel) {
-      const optimizedPricing = getDefaultPricing(actualModel);
-      await TokenPriceModel.createIfNotExists(actualModel, {
-        provider: providerName,
-        ...optimizedPricing,
-      });
+      await ModelModel.ensureModelExists(actualModel, providerName);
     }
 
     // Prepare SSE headers for lazy commitment if streaming.

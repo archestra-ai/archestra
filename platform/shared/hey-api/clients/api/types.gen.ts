@@ -13466,6 +13466,8 @@ export type GetChatModelsResponses = {
             supportsToolCalling: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
+            isCustomPrice: boolean;
+            priceSource: 'custom' | 'models_dev' | 'default';
         };
     }>;
 };
@@ -13631,6 +13633,8 @@ export type GetModelsWithApiKeysResponses = {
         supportsToolCalling: boolean | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;
@@ -13650,11 +13654,110 @@ export type GetModelsWithApiKeysResponses = {
             supportsToolCalling: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
+            isCustomPrice: boolean;
+            priceSource: 'custom' | 'models_dev' | 'default';
         };
     }>;
 };
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type UpdateModelPricingData = {
+    body: {
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/models/{id}/pricing';
+};
+
+export type UpdateModelPricingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateModelPricingError = UpdateModelPricingErrors[keyof UpdateModelPricingErrors];
+
+export type UpdateModelPricingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateModelPricingResponse = UpdateModelPricingResponses[keyof UpdateModelPricingResponses];
 
 export type StreamChatData = {
     body: {
@@ -27267,431 +27370,6 @@ export type RemoveTeamExternalGroupResponses = {
 };
 
 export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
-
-export type GetTokenPricesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/token-prices';
-};
-
-export type GetTokenPricesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetTokenPricesError = GetTokenPricesErrors[keyof GetTokenPricesErrors];
-
-export type GetTokenPricesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPricesResponses];
-
-export type CreateTokenPriceData = {
-    body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/token-prices';
-};
-
-export type CreateTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateTokenPriceError = CreateTokenPriceErrors[keyof CreateTokenPriceErrors];
-
-export type CreateTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateTokenPriceResponse = CreateTokenPriceResponses[keyof CreateTokenPriceResponses];
-
-export type DeleteTokenPriceData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/token-prices/{id}';
-};
-
-export type DeleteTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteTokenPriceError = DeleteTokenPriceErrors[keyof DeleteTokenPriceErrors];
-
-export type DeleteTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteTokenPriceResponse = DeleteTokenPriceResponses[keyof DeleteTokenPriceResponses];
-
-export type GetTokenPriceData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/token-prices/{id}';
-};
-
-export type GetTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetTokenPriceError = GetTokenPriceErrors[keyof GetTokenPriceErrors];
-
-export type GetTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceResponses];
-
-export type UpdateTokenPriceData = {
-    body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model?: string;
-        pricePerMillionInput?: string;
-        pricePerMillionOutput?: string;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/token-prices/{id}';
-};
-
-export type UpdateTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateTokenPriceError = UpdateTokenPriceErrors[keyof UpdateTokenPriceErrors];
-
-export type UpdateTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
 export type GetTokensData = {
     body?: never;

@@ -72,7 +72,7 @@ export const resourceLabels: Record<Resource, string> = {
   ac: "Access Control",
   conversation: "Conversations",
   limit: "Limits",
-  tokenPrice: "Token Prices",
+  tokenPrice: "Model Pricing",
   chatSettings: "Chat Settings",
 };
 

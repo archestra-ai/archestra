@@ -24,13 +24,17 @@ import { modelSyncService } from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   type Anthropic,
+  ApiError,
   constructResponseSchema,
   type Gemini,
   type ModelCapabilities,
   ModelCapabilitiesSchema,
   ModelWithApiKeysSchema,
   type OpenAi,
+  SelectModelSchema,
   SupportedChatProviderSchema,
+  UpdateModelPricingSchema,
+  UuidIdSchema,
 } from "@/types";
 
 // Response schema for models
@@ -1094,6 +1098,37 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(response);
+    },
+  );
+
+  // Update custom pricing for a model
+  fastify.patch(
+    "/api/models/:id/pricing",
+    {
+      schema: {
+        operationId: RouteId.UpdateModelPricing,
+        description:
+          "Update custom pricing for a model. Set prices to null to reset to default pricing.",
+        tags: ["Models"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: UpdateModelPricingSchema,
+        response: constructResponseSchema(SelectModelSchema),
+      },
+    },
+    async ({ params: { id }, body }, reply) => {
+      const existing = await ModelModel.findById(id);
+      if (!existing) {
+        throw new ApiError(404, "Model not found");
+      }
+
+      const updated = await ModelModel.updatePricing(id, body);
+      if (!updated) {
+        throw new ApiError(500, "Failed to update model pricing");
+      }
+
+      return reply.send(updated);
     },
   );
 };

@@ -33,6 +33,17 @@ Set spending limits to prevent budget overruns:
 - Configure data retention (hourly to monthly)
 - Keep costs database optimized
 
+## Model Pricing
+
+Model pricing is configured on the **Provider Settings > Models** tab (`/llm-proxies/provider-settings?tab=models`). Pricing determines how token costs are calculated for statistics, limits, and optimization rules.
+
+**Pricing resolution (in priority order):**
+1. **Custom override** - Admin-set price per million tokens (editable on the Models tab)
+2. **models.dev** - Automatically synced from models.dev when model metadata is available
+3. **Default fallback** - $30/M for small models (mini, haiku, nano), $50/M for others
+
+Custom prices can be set or cleared per model. Clearing resets to the next available source.
+
 ## Optimization Rules
 
 ![Optimization Rules](/docs/automated_screenshots/platform_cost_optimization.png)

@@ -61,6 +61,18 @@ const modelsTable = pgTable(
       scale: 12,
     }),
 
+    /** Custom admin-set price per million tokens for input (nullable, overrides models.dev price) */
+    customPricePerMillionInput: numeric("custom_price_per_million_input", {
+      precision: 10,
+      scale: 2,
+    }),
+
+    /** Custom admin-set price per million tokens for output (nullable, overrides models.dev price) */
+    customPricePerMillionOutput: numeric("custom_price_per_million_output", {
+      precision: 10,
+      scale: 2,
+    }),
+
     /** When this metadata was last synced from external source */
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" })
       .notNull()

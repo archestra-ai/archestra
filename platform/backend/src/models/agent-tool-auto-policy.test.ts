@@ -36,6 +36,8 @@ const MOCK_MODEL = {
   supportsToolCalling: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
+  customPricePerMillionInput: null,
+  customPricePerMillionOutput: null,
   lastSyncedAt: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),

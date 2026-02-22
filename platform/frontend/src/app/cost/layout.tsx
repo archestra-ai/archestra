@@ -14,7 +14,6 @@ export default function CostLayout({
       tabs={[
         { label: "Statistics", href: "/cost/statistics" },
         { label: "Limits", href: "/cost/limits" },
-        { label: "Token Price", href: "/cost/token-price" },
         { label: "Optimization Rules", href: "/cost/optimization-rules" },
         { label: "Tool Results Compression", href: "/cost/compression" },
       ]}

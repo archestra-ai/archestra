@@ -49,7 +49,6 @@ export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
 export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
-export { default as tokenPricesTable } from "./token-price";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";

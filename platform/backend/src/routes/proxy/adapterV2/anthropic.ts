@@ -3,7 +3,7 @@ import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -1052,12 +1052,10 @@ export async function convertToolResultsToToon(
   let toonCostSavings = 0;
   const tokensSaved = totalTokensBefore - totalTokensAfter;
   if (tokensSaved > 0) {
-    const tokenPrice = await TokenPriceModel.findByModel(model);
-    if (tokenPrice) {
-      const inputPricePerToken =
-        Number(tokenPrice.pricePerMillionInput) / 1000000;
-      toonCostSavings = tokensSaved * inputPricePerToken;
-    }
+    const modelEntry = await ModelModel.findByModelId(model);
+    const pricing = ModelModel.getEffectivePricing(modelEntry, model);
+    const inputPricePerToken = Number(pricing.pricePerMillionInput) / 1000000;
+    toonCostSavings = tokensSaved * inputPricePerToken;
   }
 
   return {

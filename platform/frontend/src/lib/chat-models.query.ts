@@ -3,11 +3,13 @@ import {
   type archestraApiTypes,
   type SupportedProvider,
 } from "@shared";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
-const { getChatModels, getModelsWithApiKeys } = archestraApiSdk;
+const { getChatModels, getModelsWithApiKeys, updateModelPricing } =
+  archestraApiSdk;
 
 /**
  * Chat model type from the API response.
@@ -90,6 +92,38 @@ export function useModelsWithApiKeys() {
         return [];
       }
       return data ?? [];
+    },
+  });
+}
+
+/**
+ * Update custom pricing for a model.
+ * Set prices to null to reset to default pricing.
+ */
+export function useUpdateModelPricing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      params: archestraApiTypes.UpdateModelPricingData["body"] & { id: string },
+    ) => {
+      const { id, ...body } = params;
+      const { data, error } = await updateModelPricing({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Model pricing updated");
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+    },
+    onError: () => {
+      toast.error("Failed to update model pricing");
     },
   });
 }

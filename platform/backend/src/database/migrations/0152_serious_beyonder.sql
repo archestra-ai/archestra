@@ -1,0 +1,1 @@
+DROP TABLE "token_price" CASCADE;

@@ -74,6 +74,24 @@ function FastestModelBadge() {
   );
 }
 
+function PriceSourceBadge({ source }: { source: string }) {
+  if (source === "custom") {
+    return (
+      <span className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+        custom
+      </span>
+    );
+  }
+  if (source === "default") {
+    return (
+      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+        default
+      </span>
+    );
+  }
+  return null;
+}
+
 function BestModelBadge() {
   return (
     <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 rounded whitespace-nowrap">
@@ -230,7 +248,14 @@ export function ProviderSettingsModels() {
           if (hasUnknownCapabilities(row.original)) return null;
           const price = row.original.capabilities?.pricePerMillionInput;
           if (!price) return null;
-          return <span className="text-sm font-mono">${price}</span>;
+          const source = (row.original.capabilities as Record<string, unknown>)
+            ?.priceSource as string | undefined;
+          return (
+            <div className="flex items-center gap-1">
+              <span className="text-sm font-mono">${price}</span>
+              {source && <PriceSourceBadge source={source} />}
+            </div>
+          );
         },
       },
       {

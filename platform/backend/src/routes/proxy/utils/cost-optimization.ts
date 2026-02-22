@@ -1,9 +1,9 @@
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  ModelModel,
   OptimizationRuleModel,
   TeamModel,
-  TokenPriceModel,
 } from "@/models";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -136,10 +136,8 @@ export async function calculateCost(
     return undefined;
   }
 
-  const pricing = await TokenPriceModel.findByModel(model);
-  if (!pricing) {
-    return undefined;
-  }
+  const model_entry = await ModelModel.findByModelId(model);
+  const pricing = ModelModel.getEffectivePricing(model_entry, model);
 
   const inputCost =
     (inputTokens / 1_000_000) * Number.parseFloat(pricing.pricePerMillionInput);

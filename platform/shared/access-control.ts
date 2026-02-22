@@ -579,20 +579,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTokenPrices]: {
-    tokenPrice: ["read"],
-  },
-  [RouteId.CreateTokenPrice]: {
-    tokenPrice: ["create"],
-  },
-  [RouteId.GetTokenPrice]: {
-    tokenPrice: ["read"],
-  },
-  [RouteId.UpdateTokenPrice]: {
+  [RouteId.UpdateModelPricing]: {
     tokenPrice: ["update"],
-  },
-  [RouteId.DeleteTokenPrice]: {
-    tokenPrice: ["delete"],
   },
   [RouteId.GetTeamStatistics]: {
     interaction: ["read"],
@@ -768,9 +756,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
   "/cost/limits": {
     limit: ["read"],
-  },
-  "/cost/token-price": {
-    tokenPrice: ["read"],
   },
   "/cost/optimization-rules": {
     llmProxy: ["read"],

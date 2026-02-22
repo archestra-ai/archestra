@@ -138,6 +138,7 @@ export function ProviderSettingsModels() {
       {
         accessorKey: "modelId",
         header: "Model ID",
+        size: 300,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm">{row.original.modelId}</span>

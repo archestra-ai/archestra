@@ -6,6 +6,7 @@ import {
   AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
+  ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
   OrganizationModel,
   UserModel,
@@ -14,12 +15,11 @@ import {
   RouteCategory,
   startActiveChatSpan,
 } from "@/routes/proxy/utils/tracing";
-import {
-  type ChatOpsProcessingResult,
-  type ChatOpsProvider,
-  type ChatOpsProviderType,
-  ChatOpsProviderTypeSchema,
-  type IncomingChatMessage,
+import type {
+  ChatOpsProcessingResult,
+  ChatOpsProvider,
+  ChatOpsProviderType,
+  IncomingChatMessage,
 } from "@/types/chatops";
 import {
   CHATOPS_CHANNEL_DISCOVERY,
@@ -38,22 +38,10 @@ export class ChatOpsManager {
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   getMSTeamsProvider(): MSTeamsProvider | null {
-    if (!this.msTeamsProvider) {
-      this.msTeamsProvider = new MSTeamsProvider();
-      if (!this.msTeamsProvider.isConfigured()) {
-        return null;
-      }
-    }
     return this.msTeamsProvider;
   }
 
   getSlackProvider(): SlackProvider | null {
-    if (!this.slackProvider) {
-      this.slackProvider = new SlackProvider();
-      if (!this.slackProvider.isConfigured()) {
-        return null;
-      }
-    }
     return this.slackProvider;
   }
 
@@ -114,8 +102,9 @@ export class ChatOpsManager {
    * Check if any chatops provider is configured and enabled.
    */
   isAnyProviderConfigured(): boolean {
-    return ChatOpsProviderTypeSchema.options.some((type) =>
-      this.getChatOpsProvider(type)?.isConfigured(),
+    return (
+      (this.msTeamsProvider?.isConfigured() ?? false) ||
+      (this.slackProvider?.isConfigured() ?? false)
     );
   }
 
@@ -196,13 +185,30 @@ export class ChatOpsManager {
   }
 
   async initialize(): Promise<void> {
+    // Seed DB from env vars on first run (no-op if DB already has config)
+    await this.seedConfigFromEnvVars();
+
+    // Load configs from DB (the single source of truth)
+    const [msTeamsConfig, slackConfig] = await Promise.all([
+      ChatOpsConfigModel.getMsTeamsConfig(),
+      ChatOpsConfigModel.getSlackConfig(),
+    ]);
+
+    // Create providers with their config
+    if (msTeamsConfig) {
+      this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
+    }
+    if (slackConfig) {
+      this.slackProvider = new SlackProvider(slackConfig);
+    }
+
     if (!this.isAnyProviderConfigured()) {
       return;
     }
 
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
-      { name: "MS Teams", provider: this.getMSTeamsProvider() },
-      { name: "Slack", provider: this.getSlackProvider() },
+      { name: "MS Teams", provider: this.msTeamsProvider },
+      { name: "Slack", provider: this.slackProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -657,6 +663,72 @@ export class ChatOpsManager {
       logger.error(
         { error: errorMessage(error) },
         "[ChatOps] Failed to send security error reply",
+      );
+    }
+  }
+
+  /**
+   * Seed chatops config from environment variables into the database.
+   * Only runs on first startup — if DB already has config, this is a no-op.
+   */
+  private async seedConfigFromEnvVars(): Promise<void> {
+    await this.seedMsTeamsConfigFromEnvVars();
+    await this.seedSlackConfigFromEnvVars();
+  }
+
+  private async seedMsTeamsConfigFromEnvVars(): Promise<void> {
+    try {
+      const existing = await ChatOpsConfigModel.getMsTeamsConfig();
+      if (existing) return;
+
+      const appId = process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "";
+      const appSecret = process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET || "";
+      if (!appId || !appSecret) return;
+
+      const tenantId = process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID || "";
+      await ChatOpsConfigModel.saveMsTeamsConfig({
+        enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
+        appId,
+        appSecret,
+        tenantId,
+        graphTenantId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID || tenantId,
+        graphClientId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID || appId,
+        graphClientSecret:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET ||
+          appSecret,
+      });
+      logger.info("[ChatOps] Seeded MS Teams config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed MS Teams config from env vars",
+      );
+    }
+  }
+
+  private async seedSlackConfigFromEnvVars(): Promise<void> {
+    try {
+      const existing = await ChatOpsConfigModel.getSlackConfig();
+      if (existing) return;
+
+      const botToken = process.env.ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN || "";
+      const signingSecret =
+        process.env.ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET || "";
+      if (!botToken || !signingSecret) return;
+
+      await ChatOpsConfigModel.saveSlackConfig({
+        enabled: process.env.ARCHESTRA_CHATOPS_SLACK_ENABLED === "true",
+        botToken,
+        signingSecret,
+        appId: process.env.ARCHESTRA_CHATOPS_SLACK_APP_ID || "",
+      });
+      logger.info("[ChatOps] Seeded Slack config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed Slack config from env vars",
       );
     }
   }

@@ -15,6 +15,7 @@ import {
   BaseNodeHeader,
   BaseNodeHeaderTitle,
 } from "@/components/base-node";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -56,21 +57,31 @@ export const AgentNode = memo(({ data }: NodeProps<AgentNodeType>) => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEditAgent(data.promptId)}>
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
+            <WithPermissions
+              permissions={{ agent: ["update"] }}
+              noPermissionHandle="hide"
+            >
+              <DropdownMenuItem onClick={() => onEditAgent(data.promptId)}>
+                <Pencil className="mr-2 size-4" />
+                Edit
+              </DropdownMenuItem>
+            </WithPermissions>
             <DropdownMenuItem onClick={() => onConnectAgent(data.promptId)}>
               <Link2 className="mr-2 size-4" />
               Connect
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onDeleteAgent(data.promptId)}
-              className="text-destructive focus:text-destructive"
+            <WithPermissions
+              permissions={{ agent: ["delete"] }}
+              noPermissionHandle="hide"
             >
-              <Trash2 className="mr-2 size-4" />
-              Delete
-            </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDeleteAgent(data.promptId)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </WithPermissions>
           </DropdownMenuContent>
         </DropdownMenu>
       </BaseNodeHeader>

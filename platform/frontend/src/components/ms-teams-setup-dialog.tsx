@@ -1,13 +1,7 @@
 "use client";
 
 import JSZip from "jszip";
-import {
-  Download,
-  ExternalLink,
-  Info,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react";
+import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -18,8 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
-import config from "@/lib/config";
-import { useFeatures } from "@/lib/features.query";
+import { usePublicBaseUrl } from "@/lib/features.hook";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -30,9 +23,6 @@ export function MsTeamsSetupDialog({
   open,
   onOpenChange,
 }: MsTeamsSetupDialogProps) {
-  const { data: features } = useFeatures();
-  const ngrokDomain = features?.ngrokDomain ?? "";
-
   const mutation = useUpdateChatOpsConfigInQuickstart();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
@@ -44,9 +34,6 @@ export function MsTeamsSetupDialog({
   const [sharedAppId, setSharedAppId] = useState("");
   const [sharedAppSecret, setSharedAppSecret] = useState("");
   const [sharedTenantId, setSharedTenantId] = useState("");
-
-  const isLocalEnvOrQuickstart =
-    features?.isQuickstart || config.environment === "development";
 
   const hasAppId = Boolean(sharedAppId || creds?.appId);
   const hasAppSecret = Boolean(sharedAppSecret || creds?.appSecret);
@@ -70,7 +57,6 @@ export function MsTeamsSetupDialog({
             key={step.title}
             stepNumber={index + 1}
             video={step.video}
-            ngrokDomain={ngrokDomain}
             appId={sharedAppId}
             appSecret={sharedAppSecret}
             tenantId={sharedTenantId}
@@ -89,79 +75,58 @@ export function MsTeamsSetupDialog({
           />
         );
       }
-      if (index < slides.length - 1) {
+      if (step.component === "install-and-connect") {
         return (
-          <StepSlide
+          <StepInstallAndConnect
             key={step.title}
-            title={step.title}
             stepNumber={index + 1}
             video={step.video}
-            instructions={step.instructions}
-          />
-        );
-      }
-      // Last step
-      if (isLocalEnvOrQuickstart) {
-        return (
-          <StepConfigForm
-            key={step.title}
             appId={sharedAppId}
             appSecret={sharedAppSecret}
             tenantId={sharedTenantId}
-            onAppIdChange={setSharedAppId}
-            onAppSecretChange={setSharedAppSecret}
-            onTenantIdChange={setSharedTenantId}
             creds={creds}
           />
         );
       }
       return (
-        <StepEnvVarsInfo
+        <StepSlide
           key={step.title}
-          appId={sharedAppId}
-          appSecret={sharedAppSecret}
-          tenantId={sharedTenantId}
+          title={step.title}
+          stepNumber={index + 1}
+          video={step.video}
+          instructions={step.instructions}
         />
       );
     });
-  }, [
-    ngrokDomain,
-    isLocalEnvOrQuickstart,
-    sharedAppId,
-    sharedAppSecret,
-    sharedTenantId,
-    creds,
-  ]);
+  }, [sharedAppId, sharedAppSecret, sharedTenantId, creds]);
 
-  const lastStepAction = isLocalEnvOrQuickstart
-    ? {
-        label: saving ? "Connecting..." : "Connect",
-        disabled: saving || !canSave,
-        loading: saving,
-        onClick: async () => {
-          setSaving(true);
-          try {
-            const body: Record<string, unknown> = { enabled: true };
-            if (sharedAppId) body.appId = sharedAppId;
-            if (sharedAppSecret) body.appSecret = sharedAppSecret;
-            if (sharedTenantId) body.tenantId = sharedTenantId;
-            const updateResult = await mutation.mutateAsync(
-              body as {
-                enabled?: boolean;
-                appId?: string;
-                appSecret?: string;
-                tenantId?: string;
-              },
-            );
-            if (updateResult?.success) {
-              handleOpenChange(false);
-            }
-          } finally {
-            setSaving(false);
-          }
-        },
+  const lastStepAction = {
+    label: saving ? "Connecting..." : "Connect",
+    disabled: saving || !canSave,
+    loading: saving,
+    onClick: async () => {
+      setSaving(true);
+      try {
+        const body: Record<string, unknown> = { enabled: true };
+        if (sharedAppId) body.appId = sharedAppId;
+        if (sharedAppSecret) body.appSecret = sharedAppSecret;
+        if (sharedTenantId) body.tenantId = sharedTenantId;
+        const updateResult = await mutation.mutateAsync(
+          body as {
+            enabled?: boolean;
+            appId?: string;
+            appSecret?: string;
+            tenantId?: string;
+          },
+        );
+        if (updateResult?.success) {
+          handleOpenChange(false);
+        }
+      } finally {
+        setSaving(false);
       }
-    : undefined;
+    },
+  };
 
   return (
     <SetupDialog
@@ -245,23 +210,9 @@ function buildSteps() {
       component: "manifest" as const,
     },
     {
-      title: "Install in MS Teams",
+      title: "Install in MS Teams and connect Archestra",
+      component: "install-and-connect" as const,
       video: "/ms-teams/ms-teams-upload-app.mp4",
-      instructions: [
-        <>
-          In Teams, go to <strong>Apps</strong> →{" "}
-          <strong>Manage your apps</strong> → <strong>Upload an app</strong>
-        </>,
-        <>
-          Select your <strong>archestra-teams-app.zip</strong> file
-        </>,
-        <>
-          <strong>Add the app</strong> to a team or channel
-        </>,
-      ],
-    },
-    {
-      title: "Connect to Archestra",
     },
   ];
 }
@@ -319,7 +270,6 @@ function StepSlide({
 function StepBotSettings({
   stepNumber,
   video,
-  ngrokDomain,
   appId,
   appSecret,
   tenantId,
@@ -329,7 +279,6 @@ function StepBotSettings({
 }: {
   stepNumber: number;
   video?: string;
-  ngrokDomain: string;
   appId: string;
   appSecret: string;
   tenantId: string;
@@ -358,7 +307,7 @@ function StepBotSettings({
               2
             </span>
             <span className="pt-0.5">
-              <WebhookUrlInstruction ngrokDomain={ngrokDomain} />
+              <WebhookUrlInstruction />
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -426,184 +375,42 @@ function StepBotSettings({
   );
 }
 
-function StepConfigForm({
+function StepInstallAndConnect({
+  stepNumber,
+  video,
   appId,
   appSecret,
   tenantId,
-  onAppIdChange,
-  onAppSecretChange,
-  onTenantIdChange,
   creds,
 }: {
+  stepNumber: number;
+  video?: string;
   appId: string;
   appSecret: string;
   tenantId: string;
-  onAppIdChange: (v: string) => void;
-  onAppSecretChange: (v: string) => void;
-  onTenantIdChange: (v: string) => void;
   creds?: { appId?: string; appSecret?: string; tenantId?: string };
 }) {
-  return (
-    <div
-      className="grid flex-1 gap-6"
-      style={{ gridTemplateColumns: "1fr 1fr" }}
-    >
-      <StepCard stepNumber={6} title="Connect to Archestra">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Enter the credentials you copied from the Azure Bot resource.
-        </p>
-        <ol className="space-y-3">
-          <li className="flex gap-3 text-sm leading-relaxed">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-              1
-            </span>
-            <span className="pt-0.5 flex-1">
-              <strong>App ID</strong> — from the Azure Bot Configuration page
-              <Input
-                id="setup-app-id"
-                value={appId}
-                onChange={(e) => onAppIdChange(e.target.value)}
-                placeholder={
-                  creds?.appId ? `Current: ${creds.appId}` : "Azure Bot App ID"
-                }
-                className="mt-1.5"
-              />
-            </span>
-          </li>
-          <li className="flex gap-3 text-sm leading-relaxed">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-              2
-            </span>
-            <span className="pt-0.5 flex-1">
-              <strong>App Secret</strong> — the client secret you created
-              <Input
-                id="setup-app-secret"
-                type="password"
-                value={appSecret}
-                onChange={(e) => onAppSecretChange(e.target.value)}
-                placeholder={
-                  creds?.appSecret
-                    ? `Current: ${creds.appSecret}`
-                    : "Azure Bot App Secret"
-                }
-                className="mt-1.5"
-              />
-            </span>
-          </li>
-          <li className="flex gap-3 text-sm leading-relaxed">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-              3
-            </span>
-            <span className="pt-0.5 flex-1">
-              <strong>Tenant ID</strong>{" "}
-              <span className="text-muted-foreground">(optional)</span> — only
-              needed for single-tenant bots
-              <Input
-                id="setup-tenant-id"
-                value={tenantId}
-                onChange={(e) => onTenantIdChange(e.target.value)}
-                placeholder={
-                  creds?.tenantId
-                    ? `Current: ${creds.tenantId}`
-                    : "Azure AD Tenant ID"
-                }
-                className="mt-1.5"
-              />
-            </span>
-          </li>
-        </ol>
-      </StepCard>
-
-      <EnvVarsInfo appId={appId} appSecret={appSecret} tenantId={tenantId} />
-    </div>
-  );
-}
-
-function EnvVarsInfo({
-  appId,
-  appSecret,
-  tenantId,
-}: {
-  appId: string;
-  appSecret: string;
-  tenantId: string;
-}) {
-  const envVarsText = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<your-app-id>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret || "<your-app-secret>"}`,
-    tenantId
-      ? `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId}`
-      : "ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<your-tenant-id>",
-  ].join("\n");
-
-  const maskedDisplay = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<your-app-id>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret ? "********" : "<your-app-secret>"}`,
-    tenantId
-      ? `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId}`
-      : "ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<your-tenant-id>",
-  ].join("\n");
-
-  return (
-    <div className="flex items-start gap-2.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 text-sm text-muted-foreground">
-      <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
-      <div className="min-w-0 flex-1">
-        <p>
-          Values that are set or edited here are stored in memory and will be
-          reset after server restart. For persistent configuration, set these
-          environment variables:
-        </p>
-        <div className="relative mt-2">
-          <pre className="bg-muted rounded-md px-3 py-2 text-xs font-mono leading-relaxed overflow-x-auto">
-            {maskedDisplay}
-          </pre>
-          <div className="absolute top-1 right-1">
-            <CopyButton text={envVarsText} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StepEnvVarsInfo({
-  appId,
-  appSecret,
-  tenantId,
-}: {
-  appId?: string;
-  appSecret?: string;
-  tenantId?: string;
-}) {
-  const envVarsText = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<Microsoft App ID>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret || "<Client Secret>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId || "<Tenant ID>"}`,
-  ].join("\n");
-
-  const maskedEnvVarsDisplay = [
-    "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true",
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=${appId || "<Microsoft App ID>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=${appSecret ? "********" : "<Client Secret>"}`,
-    `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=${tenantId || "<Tenant ID>"}`,
-  ].join("\n");
+  const displayAppId = appId || creds?.appId || "";
+  const displayTenantId = tenantId || creds?.tenantId || "";
+  const hasSecret = Boolean(appSecret || creds?.appSecret);
 
   return (
     <div
       className="grid flex-1 gap-6"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
-      <StepCard stepNumber={6} title="Configure Archestra">
+      <StepCard
+        stepNumber={stepNumber}
+        title="Install in MS Teams and connect Archestra"
+      >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               1
             </span>
             <span className="pt-0.5">
-              Set the environment variables shown on the right
+              In Teams, go to <strong>Apps</strong> →{" "}
+              <strong>Manage your apps</strong> → <strong>Upload an app</strong>
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -611,7 +418,7 @@ function StepEnvVarsInfo({
               2
             </span>
             <span className="pt-0.5">
-              <strong>Restart Archestra</strong> for changes to take effect
+              Select your <strong>archestra-teams-app.zip</strong> file
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -619,31 +426,69 @@ function StepEnvVarsInfo({
               3
             </span>
             <span className="pt-0.5">
-              Edit an agent and enable the <strong>Microsoft Teams</strong>{" "}
-              toggle
+              <strong>Add the app</strong> to a team or channel
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              4
+            </span>
+            <span className="pt-0.5 flex-1">
+              Click <strong>Connect</strong> in the bottom right corner
+              <div className="mt-2 space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono">
+                <div className="flex gap-1.5">
+                  <span className="text-muted-foreground shrink-0">
+                    App ID:
+                  </span>
+                  {displayAppId ? (
+                    <span className="break-all">{displayAppId}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">
+                  <span className="text-muted-foreground shrink-0">
+                    Tenant ID:
+                  </span>
+                  {displayTenantId ? (
+                    <span className="break-all">{displayTenantId}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">
+                  <span className="text-muted-foreground shrink-0">
+                    App Secret:
+                  </span>
+                  {hasSecret ? (
+                    <span>{"••••••••"}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </div>
+              </div>
             </span>
           </li>
         </ol>
       </StepCard>
 
-      <div className="flex flex-col justify-center gap-5 rounded-lg border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Set the following environment variables and restart Archestra to
-          enable MS Teams integration.
-        </p>
-        <div className="relative rounded bg-muted px-4 py-3 font-mono text-sm leading-loose">
-          <div className="absolute top-2 right-2">
-            <CopyButton text={envVarsText} />
-          </div>
-          <pre className="text-xs leading-loose whitespace-pre-wrap">
-            {maskedEnvVarsDisplay}
-          </pre>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          After setting these variables, restart Archestra for the changes to
-          take effect. The MS Teams toggle will then appear on agents.
-        </p>
-      </div>
+      {video && (
+        <video
+          src={video}
+          controls
+          muted
+          autoPlay
+          loop
+          playsInline
+          className="rounded-md w-full"
+        />
+      )}
     </div>
   );
 }
@@ -652,13 +497,14 @@ function buildManifest(params: {
   botAppId: string;
   nameShort: string;
   nameFull: string;
+  version: string;
 }) {
-  const { botAppId, nameShort, nameFull } = params;
+  const { botAppId, nameShort, nameFull, version } = params;
   return {
     $schema:
       "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
     manifestVersion: "1.16",
-    version: "1.0.0",
+    version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     packageName: "com.archestra.bot",
     developer: {
@@ -674,20 +520,20 @@ function buildManifest(params: {
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupchat"],
+        scopes: ["team", "groupchat", "personal"],
         supportsFiles: false,
         isNotificationOnly: false,
         commandLists: [
           {
-            scopes: ["team", "groupchat"],
+            scopes: ["team", "groupchat", "personal"],
             commands: [
               {
                 title: "/select-agent",
-                description: "Change which agent handles this channel",
+                description: "Change which agent handles this conversation",
               },
               {
                 title: "/status",
-                description: "Show current agent for this channel",
+                description: "Show current agent for this conversation",
               },
               { title: "/help", description: "Show available commands" },
             ],
@@ -724,6 +570,7 @@ function StepManifest({
   const [botAppId, setBotAppId] = useState("");
   const [nameShort, setNameShort] = useState("Archestra");
   const [nameFull, setNameFull] = useState("Archestra Bot");
+  const [version, setVersion] = useState("1.0.0");
   const [downloading, setDownloading] = useState(false);
 
   const effectiveAppId = botAppId || prefillAppId || "";
@@ -731,6 +578,7 @@ function StepManifest({
     botAppId: effectiveAppId,
     nameShort,
     nameFull,
+    version,
   });
   const manifestJson = JSON.stringify(manifest, null, 2);
 
@@ -805,6 +653,16 @@ function StepManifest({
           </div>
         </div>
 
+        <div className="space-y-1">
+          <Label htmlFor="manifest-version">Version</Label>
+          <Input
+            id="manifest-version"
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="1.0.0"
+          />
+        </div>
+
         <Button
           onClick={handleDownload}
           disabled={!effectiveAppId || downloading}
@@ -841,13 +699,9 @@ function StepManifest({
   );
 }
 
-function WebhookUrlInstruction({ ngrokDomain }: { ngrokDomain: string }) {
-  const [customDomain, setCustomDomain] = useState("");
-  const hasKnownDomain = Boolean(ngrokDomain);
-  const domain = hasKnownDomain ? ngrokDomain : customDomain || "your-domain";
-  const webhookUrl = `https://${domain}/api/webhooks/chatops/ms-teams`;
-
-  const canCopy = hasKnownDomain || Boolean(customDomain);
+function WebhookUrlInstruction() {
+  const publicBaseUrl = usePublicBaseUrl();
+  const webhookUrl = `${publicBaseUrl}/api/webhooks/chatops/ms-teams`;
 
   return (
     <>
@@ -857,33 +711,9 @@ function WebhookUrlInstruction({ ngrokDomain }: { ngrokDomain: string }) {
           {webhookUrl}
         </code>
         <span className="shrink-0">
-          {canCopy && <CopyButton text={webhookUrl} />}
+          <CopyButton text={webhookUrl} />
         </span>
       </span>
-      {!hasKnownDomain && (
-        <>
-          <label
-            htmlFor="webhook-custom-domain"
-            className="mt-2 flex items-center gap-2 text-xs"
-          >
-            <span className="shrink-0 text-muted-foreground">Your domain:</span>
-            <Input
-              id="webhook-custom-domain"
-              type="text"
-              value={customDomain}
-              onChange={(e) => setCustomDomain(e.target.value)}
-              placeholder="e.g. myapp.example.com"
-              className="h-6 rounded border bg-background px-2 text-xs font-mono w-48 placeholder:text-muted-foreground/50"
-            />
-          </label>
-          {!customDomain && (
-            <span className="mt-1 flex items-center gap-1 text-xs text-amber-500">
-              <TriangleAlert className="h-3 w-3 shrink-0" />
-              Enter your public Archestra domain above
-            </span>
-          )}
-        </>
-      )}
     </>
   );
 }

@@ -55140,6 +55140,21 @@
                             "additionalProperties": {
                               "type": "string"
                             }
+                          },
+                          "dmInfo": {
+                            "type": "object",
+                            "properties": {
+                              "botUserId": {
+                                "type": "string"
+                              },
+                              "teamId": {
+                                "type": "string"
+                              },
+                              "appId": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -55423,6 +55438,14 @@
                         "type": "string",
                         "maxLength": 256
                       },
+                      "isDm": {
+                        "type": "boolean"
+                      },
+                      "dmOwnerEmail": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      },
                       "agentId": {
                         "nullable": true,
                         "type": "string",
@@ -55448,6 +55471,8 @@
                       "workspaceId",
                       "channelName",
                       "workspaceName",
+                      "isDm",
+                      "dmOwnerEmail",
                       "agentId",
                       "createdAt",
                       "updatedAt"
@@ -55999,6 +56024,14 @@
                       "type": "string",
                       "maxLength": 256
                     },
+                    "isDm": {
+                      "type": "boolean"
+                    },
+                    "dmOwnerEmail": {
+                      "nullable": true,
+                      "type": "string",
+                      "maxLength": 256
+                    },
                     "agentId": {
                       "nullable": true,
                       "type": "string",
@@ -56024,6 +56057,8 @@
                     "workspaceId",
                     "channelName",
                     "workspaceName",
+                    "isDm",
+                    "dmOwnerEmail",
                     "agentId",
                     "createdAt",
                     "updatedAt"
@@ -56252,7 +56287,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update MS Teams chatops configuration (quickstart mode only)",
+        "description": "Update MS Teams chatops configuration",
         "requestBody": {
           "content": {
             "application/json": {
@@ -56521,7 +56556,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update Slack chatops configuration (quickstart mode only)",
+        "description": "Update Slack chatops configuration",
         "requestBody": {
           "content": {
             "application/json": {
@@ -60005,30 +60040,6 @@
                     },
                     "ngrokDomain": {
                       "type": "string"
-                    },
-                    "chatops": {
-                      "type": "object",
-                      "properties": {
-                        "msTeamsEnabled": {
-                          "type": "boolean"
-                        },
-                        "msTeamsAppId": {
-                          "type": "boolean"
-                        },
-                        "msTeamsAppSecret": {
-                          "type": "boolean"
-                        },
-                        "msTeamsTenantId": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "msTeamsEnabled",
-                        "msTeamsAppId",
-                        "msTeamsAppSecret",
-                        "msTeamsTenantId"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -60047,8 +60058,7 @@
                     "mcpServerBaseImage",
                     "orchestratorK8sNamespace",
                     "isQuickstart",
-                    "ngrokDomain",
-                    "chatops"
+                    "ngrokDomain"
                   ],
                   "additionalProperties": false
                 }

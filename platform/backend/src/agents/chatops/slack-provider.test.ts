@@ -1,19 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, test, vi } from "vitest";
-
-vi.mock("@/config", () => ({
-  default: {
-    chatops: {
-      slack: {
-        enabled: true,
-        botToken: "xoxb-test",
-        signingSecret: "test-signing-secret",
-        appId: "A12345",
-      },
-    },
-  },
-}));
-
+import { describe, expect, test } from "vitest";
 import SlackProvider from "./slack-provider";
 
 // =============================================================================
@@ -23,7 +9,12 @@ import SlackProvider from "./slack-provider";
 const SIGNING_SECRET = "test-signing-secret";
 
 function createProvider(overrides?: { botUserId?: string }): SlackProvider {
-  const provider = new SlackProvider();
+  const provider = new SlackProvider({
+    enabled: true,
+    botToken: "xoxb-test",
+    signingSecret: SIGNING_SECRET,
+    appId: "A12345",
+  });
   // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
   (provider as any).botUserId = overrides?.botUserId || "UBOT123";
   // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field

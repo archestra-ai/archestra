@@ -1,4 +1,5 @@
 import type { archestraApiTypes } from "@shared";
+import config, { DEFAULT_BACKEND_URL } from "./config";
 import { useFeatures } from "./features.query";
 
 type Features = archestraApiTypes.GetFeaturesResponses["200"];
@@ -25,4 +26,18 @@ export function useFeatureValue<K extends keyof Features>(
   }
 
   return features[flag];
+}
+
+export function usePublicBaseUrl(): string {
+  const { data: features, isLoading } = useFeatures();
+  if (isLoading || !features) {
+    return "";
+  }
+  if (features.ngrokDomain) {
+    return `https://${features.ngrokDomain}`;
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return config.api.externalProxyUrls[0] ?? DEFAULT_BACKEND_URL;
 }

@@ -5,7 +5,7 @@ const environment: "development" | "production" =
   (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
   "development";
 
-const DEFAULT_BACKEND_URL = "http://localhost:9000";
+export const DEFAULT_BACKEND_URL = "http://localhost:9000";
 
 /**
  * Get the backend API base URL.

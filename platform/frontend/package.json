@@ -20,7 +20,7 @@
     "@ai-sdk/react": "^3.0.74",
     "@better-auth/oauth-provider": "1.4.17",
     "@better-auth/sso": "1.4.17",
-    "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#d2ca7c6",
+    "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#516664e",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-accordion": "^1.2.12",

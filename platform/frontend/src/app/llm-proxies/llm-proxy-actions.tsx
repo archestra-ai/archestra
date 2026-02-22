@@ -25,7 +25,7 @@ export function LlmProxyActions({
   return (
     <ButtonGroup>
       <PermissionButton
-        permissions={{ llmProxy: ["update"] }}
+        permissions={{ llmProxy: ["read"] }}
         aria-label="Connect"
         variant="outline"
         size="icon-sm"

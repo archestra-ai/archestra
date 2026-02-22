@@ -16,7 +16,7 @@ import {
   DEFAULT_TOOLS_PAGE_SIZE,
   handleApiError,
 } from "@/lib/utils";
-import { ToolsClient } from "./page.client";
+import { ToolPoliciesClient } from "./page.client";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,7 @@ export type ToolsInitialData = {
   toolResultPolicies: ReturnType<typeof transformToolResultPolicies>;
 };
 
-export default async function ToolsPage() {
+export default async function ToolPoliciesPage() {
   let initialData: ToolsInitialData = {
     toolsWithAssignments: {
       data: [],
@@ -91,5 +91,5 @@ export default async function ToolsPage() {
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
-  return <ToolsClient initialData={initialData} />;
+  return <ToolPoliciesClient initialData={initialData} />;
 }

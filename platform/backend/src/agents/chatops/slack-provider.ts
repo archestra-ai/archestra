@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { TimeInMs } from "@shared";
 import { WebClient } from "@slack/web-api";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
+import type { SlackConfig } from "@/models";
 import type {
   ChatOpsProvider,
   ChatOpsProviderType,
@@ -30,10 +30,18 @@ class SlackProvider implements ChatOpsProvider {
   private client: WebClient | null = null;
   private botUserId: string | null = null;
   private teamId: string | null = null;
+  private config: SlackConfig;
+
+  constructor(slackConfig: SlackConfig) {
+    this.config = slackConfig;
+  }
 
   isConfigured(): boolean {
-    const { enabled, botToken, signingSecret } = config.chatops.slack;
-    return enabled && Boolean(botToken) && Boolean(signingSecret);
+    return (
+      this.config.enabled &&
+      Boolean(this.config.botToken) &&
+      Boolean(this.config.signingSecret)
+    );
   }
 
   async initialize(): Promise<void> {
@@ -42,7 +50,7 @@ class SlackProvider implements ChatOpsProvider {
       return;
     }
 
-    const { botToken } = config.chatops.slack;
+    const { botToken } = this.config;
     this.client = new WebClient(botToken);
 
     try {
@@ -99,7 +107,7 @@ class SlackProvider implements ChatOpsProvider {
     // Compute expected signature
     // rawBody must be the exact bytes captured by the preParsing hook
     const sigBaseString = `v0:${timestamp}:${rawBody}`;
-    const expectedSignature = `v0=${createHmac("sha256", config.chatops.slack.signingSecret).update(sigBaseString).digest("hex")}`;
+    const expectedSignature = `v0=${createHmac("sha256", this.config.signingSecret).update(sigBaseString).digest("hex")}`;
 
     // Timing-safe comparison
     try {

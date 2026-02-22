@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 5
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-02-05
+lastUpdated: 2026-02-20
 ---
 
 <!--
@@ -82,15 +82,15 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
   "bots": [
     {
       "botId": "{{BOT_MS_APP_ID}}",
-      "scopes": ["team", "groupchat"],
+      "scopes": ["team", "groupchat", "personal"],
       "supportsFiles": false,
       "isNotificationOnly": false,
       "commandLists": [
         {
-          "scopes": ["team", "groupchat"],
+          "scopes": ["team", "groupchat", "personal"],
           "commands": [
-            { "title": "/select-agent", "description": "Change which agent handles this channel" },
-            { "title": "/status", "description": "Show current agent for this channel" },
+            { "title": "/select-agent", "description": "Change which agent handles this conversation" },
+            { "title": "/status", "description": "Show current agent for this conversation" },
             { "title": "/help", "description": "Show available commands" }
           ]
         }
@@ -189,6 +189,12 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 | `@Archestra Sales > check revenue` | Sales agent |
 | `@Archestra support > help me` | Support agent |
 | `@Archestra Unknown > test` | Default agent (with fallback notice) |
+
+### Direct Messages
+
+DMs work the same as channels. Click the **DM** button next to any agent in the Agent Triggers page to open a Teams DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
+
+> If you update from a previous manifest without the `"personal"` scope, re-upload the updated manifest to enable DMs.
 
 ## Troubleshooting
 

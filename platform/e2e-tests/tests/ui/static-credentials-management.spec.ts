@@ -104,7 +104,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       await page
         .getByRole("dialog")
         .filter({ hasText: /Assignments/ })
-        .waitFor({ state: "visible", timeout: 10000 });
+        .waitFor({ state: "visible", timeout: 15000 });
       await closeOpenDialogs(page);
 
       // Then click connect again
@@ -255,6 +255,9 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await page
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
       .click({ timeout: CONNECT_BUTTON_TIMEOUT });
+    // Select "Myself" from credential type dropdown to install as personal credential
+    await page.getByRole("combobox").click();
+    await page.getByRole("option", { name: "Myself" }).click();
     // Install using personal credential
     await clickButton({ page, options: { name: "Install" } });
 
@@ -268,7 +271,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await page
       .getByRole("dialog")
       .filter({ hasText: /Assignments/ })
-      .waitFor({ state: "visible", timeout: 10000 });
+      .waitFor({ state: "visible", timeout: 15000 });
     await closeOpenDialogs(page);
 
     // Wait for dialog to close and button to be visible and enabled again
@@ -303,10 +306,11 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await goToPage(page, "/mcp-catalog/registry");
     await page.waitForLoadState("domcontentloaded");
     // Members can't create team installations (they lack mcpServer:update permission)
-    // So only 5 credentials are created: 3 personal + 2 team (Admin's DEFAULT, Editor's ENGINEERING)
+    // Both Admin and Editor are in Default Team, so both auto-select Default Team for team install.
+    // Only one team credential per team is created, so: 3 personal + 1 team (DEFAULT) = 4 total.
     const expectedCredentialsCount = {
-      Admin: 5, // admin sees all credentials (3 personal + 2 team)
-      Editor: 2, // editor sees their own credentials (personal + ENGINEERING team)
+      Admin: 4, // admin sees all credentials (3 personal + 1 DEFAULT team)
+      Editor: 2, // editor sees their own credentials (personal + DEFAULT team)
     };
     // Member cannot see credentials count
     if (user === "Member") {

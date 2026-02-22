@@ -75,7 +75,8 @@ export function useCreateChatApiKey() {
       }
       return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
@@ -105,7 +106,8 @@ export function useUpdateChatApiKey() {
       }
       return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
@@ -126,7 +128,8 @@ export function useDeleteChatApiKey() {
       }
       return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("API key deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
@@ -147,7 +150,8 @@ export function useSyncChatModels() {
       }
       return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("Models synced");
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });

@@ -132,6 +132,16 @@ export async function attemptJwksAuth(
   resolvedAgent: Agent,
   providerName: string,
 ): Promise<JwksAuthResult | null> {
+  logger.info(
+    {
+      resolvedAgentId: resolvedAgent.id,
+      identityProviderId: resolvedAgent.identityProviderId,
+      hasIdentityProviderId: !!resolvedAgent.identityProviderId,
+      identityProviderIdType: typeof resolvedAgent.identityProviderId,
+      agentKeys: Object.keys(resolvedAgent).sort(),
+    },
+    `[${providerName}Proxy] attemptJwksAuth: checking identityProviderId`,
+  );
   if (!resolvedAgent.identityProviderId) return null;
 
   const bearerToken = extractBearerToken(request);

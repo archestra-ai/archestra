@@ -77,9 +77,12 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
         },
       );
 
-      // WireMock returns a mocked OpenAI response
-      expect(response.status()).toBe(200);
+      // Read the body FIRST so we can include it in the assertion error message
       const body = await response.json();
+      expect(
+        response.status(),
+        `Expected 200 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
+      ).toBe(200);
       expect(body.choices).toBeDefined();
       expect(body.choices.length).toBeGreaterThan(0);
     } finally {
@@ -136,7 +139,12 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
         },
       );
 
-      expect(response.status()).toBe(401);
+      // Read the body FIRST so we can include it in the assertion error message
+      const body = await response.json();
+      expect(
+        response.status(),
+        `Expected 401 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
+      ).toBe(401);
     } finally {
       if (proxyId) {
         await deleteAgent(request, proxyId);
@@ -175,8 +183,11 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
       );
 
       // WireMock accepts any API key and returns a mocked response
-      expect(response.status()).toBe(200);
       const body = await response.json();
+      expect(
+        response.status(),
+        `Expected 200 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
+      ).toBe(200);
       expect(body.choices).toBeDefined();
     } finally {
       await deleteAgent(request, proxyId);

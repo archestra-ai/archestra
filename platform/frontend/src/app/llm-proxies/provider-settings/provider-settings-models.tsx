@@ -5,13 +5,11 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Check,
   Loader2,
-  Pencil,
   RefreshCw,
   RotateCcw,
-  Save,
+  Search,
   Server,
   Star,
-  X,
   Zap,
 } from "lucide-react";
 import Image from "next/image";
@@ -28,6 +26,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
@@ -48,23 +53,49 @@ export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
   const syncModelsMutation = useSyncChatModels();
   const updatePricing = useUpdateModelPricing();
-  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [providerFilter, setProviderFilter] = useState<string>("all");
+
+  const filteredModels = useMemo(() => {
+    let result = models;
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((m) => m.modelId.toLowerCase().includes(q));
+    }
+    if (providerFilter !== "all") {
+      result = result.filter((m) => m.provider === providerFilter);
+    }
+    return result;
+  }, [models, search, providerFilter]);
+
+  const availableProviders = useMemo(() => {
+    const providers = new Set(models.map((m) => m.provider));
+    return Array.from(providers).sort();
+  }, [models]);
 
   const handleRefresh = useCallback(async () => {
     await syncModelsMutation.mutateAsync();
     await refetch();
   }, [syncModelsMutation, refetch]);
 
-  const handleSave = useCallback(
-    async (modelId: string, input: string, output: string) => {
+  const handleSaveField = useCallback(
+    async (
+      modelId: string,
+      field: "input" | "output",
+      value: string | null,
+    ) => {
+      const model = models.find((m) => m.id === modelId);
+      const currentInput = model?.capabilities?.pricePerMillionInput ?? null;
+      const currentOutput = model?.capabilities?.pricePerMillionOutput ?? null;
       await updatePricing.mutateAsync({
         id: modelId,
-        customPricePerMillionInput: input || null,
-        customPricePerMillionOutput: output || null,
+        customPricePerMillionInput:
+          field === "input" ? value || null : currentInput || null,
+        customPricePerMillionOutput:
+          field === "output" ? value || null : currentOutput || null,
       });
-      setEditingModelId(null);
     },
-    [updatePricing],
+    [updatePricing, models],
   );
 
   const handleReset = useCallback(
@@ -74,7 +105,6 @@ export function ProviderSettingsModels() {
         customPricePerMillionInput: null,
         customPricePerMillionOutput: null,
       });
-      setEditingModelId(null);
     },
     [updatePricing],
   );
@@ -147,6 +177,25 @@ export function ProviderSettingsModels() {
         },
       },
       {
+        id: "pricingInput",
+        header: "$/M Input",
+        cell: ({ row }) => (
+          <PricingValueCell model={row.original} field="input" />
+        ),
+      },
+      {
+        id: "pricingOutput",
+        header: "$/M Output",
+        cell: ({ row }) => (
+          <PricingValueCell model={row.original} field="output" />
+        ),
+      },
+      {
+        id: "pricingActions",
+        header: "",
+        cell: ({ row }) => <PricingResetCell model={row.original} />,
+      },
+      {
         accessorKey: "capabilities.contextLength",
         header: "Context",
         cell: ({ row }) => {
@@ -211,11 +260,6 @@ export function ProviderSettingsModels() {
           ) : null;
         },
       },
-      {
-        id: "pricing",
-        header: "$/M (Input / Output)",
-        cell: ({ row }) => <PricingCell model={row.original} />,
-      },
     ],
     [],
   );
@@ -223,11 +267,8 @@ export function ProviderSettingsModels() {
   return (
     <PricingEditContext.Provider
       value={{
-        editingModelId,
-        setEditingModelId,
-        onSave: handleSave,
+        onSaveField: handleSaveField,
         onReset: handleReset,
-        isSaving: updatePricing.isPending,
       }}
     >
       <LoadingWrapper
@@ -272,12 +313,56 @@ export function ProviderSettingsModels() {
               </p>
             </div>
           ) : (
-            <DataTable
-              columns={columns}
-              data={models}
-              getRowId={(row) => row.id}
-              hideSelectedCount
-            />
+            <>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search models..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Select
+                  value={providerFilter}
+                  onValueChange={setProviderFilter}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All providers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All providers</SelectItem>
+                    {availableProviders.map((provider) => {
+                      const config =
+                        PROVIDER_CONFIG[provider as SupportedProvider];
+                      return (
+                        <SelectItem key={provider} value={provider}>
+                          <div className="flex items-center gap-2">
+                            {config && (
+                              <Image
+                                src={config.icon}
+                                alt={config.name}
+                                width={16}
+                                height={16}
+                                className="rounded dark:invert"
+                              />
+                            )}
+                            <span>{config?.name ?? provider}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DataTable
+                columns={columns}
+                data={filteredModels}
+                getRowId={(row) => row.id}
+                hideSelectedCount
+              />
+            </>
           )}
         </div>
       </LoadingWrapper>
@@ -288,158 +373,110 @@ export function ProviderSettingsModels() {
 // --- Pricing edit context ---
 
 type PricingEditContextValue = {
-  editingModelId: string | null;
-  setEditingModelId: (id: string | null) => void;
-  onSave: (modelId: string, input: string, output: string) => Promise<void>;
+  onSaveField: (
+    modelId: string,
+    field: "input" | "output",
+    value: string | null,
+  ) => Promise<void>;
   onReset: (modelId: string) => Promise<void>;
-  isSaving: boolean;
 };
 
 const PricingEditContext = createContext<PricingEditContextValue>({
-  editingModelId: null,
-  setEditingModelId: () => {},
-  onSave: async () => {},
+  onSaveField: async () => {},
   onReset: async () => {},
-  isSaving: false,
 });
 
-// --- Pricing cell with integrated editing ---
+// --- Pricing cells (click-to-edit, blur-to-save) ---
 
-function PricingCell({ model }: { model: ModelWithApiKeys }) {
-  const { editingModelId, setEditingModelId, onSave, onReset, isSaving } =
-    useContext(PricingEditContext);
-  const isEditing = editingModelId === model.id;
-  const isCustom =
-    (model.capabilities as Record<string, unknown>)?.priceSource === "custom";
-
-  if (hasUnknownCapabilities(model)) return null;
-
-  if (isEditing) {
-    return (
-      <PricingEditForm
-        model={model}
-        onSave={onSave}
-        onCancel={() => setEditingModelId(null)}
-        isSaving={isSaving}
-      />
-    );
-  }
-
-  const inputPrice = model.capabilities?.pricePerMillionInput;
-  const outputPrice = model.capabilities?.pricePerMillionOutput;
+function PricingValueCell({
+  model,
+  field,
+}: {
+  model: ModelWithApiKeys;
+  field: "input" | "output";
+}) {
+  const { onSaveField } = useContext(PricingEditContext);
+  const currentPrice =
+    field === "input"
+      ? model.capabilities?.pricePerMillionInput
+      : model.capabilities?.pricePerMillionOutput;
   const source = (model.capabilities as Record<string, unknown>)?.priceSource as
     | string
     | undefined;
 
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(currentPrice ?? "");
+
+  if (hasUnknownCapabilities(model)) return null;
+
+  if (editing) {
+    return (
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          const newVal = value || null;
+          const oldVal = currentPrice || null;
+          if (newVal !== oldVal) {
+            onSaveField(model.id, field, value || null);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            (e.target as HTMLInputElement).blur();
+          }
+          if (e.key === "Escape") {
+            setValue(currentPrice ?? "");
+            setEditing(false);
+          }
+        }}
+        className="h-7 w-20 text-sm font-mono"
+        placeholder={field === "input" ? "Input" : "Output"}
+        autoFocus
+      />
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-1">
-        {inputPrice || outputPrice ? (
-          <span className="text-sm font-mono">
-            ${inputPrice ?? "-"} / ${outputPrice ?? "-"}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        )}
-        {source && <PriceSourceBadge source={source} />}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0"
-        onClick={() => setEditingModelId(model.id)}
-        disabled={editingModelId !== null}
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
-      {isCustom && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 text-muted-foreground"
-          onClick={() => onReset(model.id)}
-          disabled={editingModelId !== null}
-          title="Reset to default pricing"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </Button>
+    <button
+      type="button"
+      className="flex items-center gap-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
+      onClick={() => {
+        setValue(currentPrice ?? "");
+        setEditing(true);
+      }}
+    >
+      {currentPrice ? (
+        <span className="text-sm font-mono">${currentPrice}</span>
+      ) : (
+        <span className="text-sm text-muted-foreground">-</span>
       )}
-    </div>
+      {field === "output" && source && <PriceSourceBadge source={source} />}
+    </button>
   );
 }
 
-/**
- * Self-contained editing form with local state.
- * Owns its own input/output values so typing doesn't
- * cause column re-definition or cell remounting.
- */
-function PricingEditForm({
-  model,
-  onSave,
-  onCancel,
-  isSaving,
-}: {
-  model: ModelWithApiKeys;
-  onSave: (modelId: string, input: string, output: string) => Promise<void>;
-  onCancel: () => void;
-  isSaving: boolean;
-}) {
-  const [input, setInput] = useState(
-    model.capabilities?.pricePerMillionInput ?? "",
-  );
-  const [output, setOutput] = useState(
-    model.capabilities?.pricePerMillionOutput ?? "",
-  );
+function PricingResetCell({ model }: { model: ModelWithApiKeys }) {
+  const { onReset } = useContext(PricingEditContext);
+  const isCustom =
+    (model.capabilities as Record<string, unknown>)?.priceSource === "custom";
+
+  if (hasUnknownCapabilities(model) || !isCustom) return null;
 
   return (
-    <form
-      className="flex items-center gap-1"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave(model.id, input, output);
-      }}
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 w-7 p-0 text-muted-foreground"
+      onClick={() => onReset(model.id)}
+      title="Reset to default pricing"
     >
-      <Input
-        type="number"
-        min="0"
-        step="0.01"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        className="h-7 w-20 text-sm font-mono"
-        placeholder="Input"
-        autoFocus
-        disabled={isSaving}
-      />
-      <span className="text-muted-foreground">/</span>
-      <Input
-        type="number"
-        min="0"
-        step="0.01"
-        value={output}
-        onChange={(e) => setOutput(e.target.value)}
-        className="h-7 w-20 text-sm font-mono"
-        placeholder="Output"
-        disabled={isSaving}
-      />
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0"
-        type="submit"
-        disabled={isSaving}
-      >
-        <Save className="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0"
-        type="button"
-        onClick={onCancel}
-      >
-        <X className="h-3.5 w-3.5" />
-      </Button>
-    </form>
+      <RotateCcw className="h-3.5 w-3.5" />
+    </Button>
   );
 }
 

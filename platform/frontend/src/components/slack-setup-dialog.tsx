@@ -354,6 +354,10 @@ function buildSlackManifest(params: {
       description: "Archestra AI Agent",
     },
     features: {
+      app_home: {
+        messages_tab_enabled: true,
+        messages_tab_read_only_enabled: false,
+      },
       bot_user: {
         display_name: appName,
         always_online: true,
@@ -387,6 +391,8 @@ function buildSlackManifest(params: {
           "groups:history",
           "groups:read",
           "im:history",
+          "im:read",
+          "im:write",
           "users:read",
           "users:read.email",
         ],

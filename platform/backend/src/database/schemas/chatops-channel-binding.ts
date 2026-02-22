@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   pgTable,
   text,
@@ -37,6 +38,10 @@ const chatopsChannelBindingsTable = pgTable(
     channelName: varchar("channel_name", { length: 256 }),
     /** Human-readable workspace/team name (resolved via TeamsInfo) */
     workspaceName: varchar("workspace_name", { length: 256 }),
+    /** Whether this binding is for a direct message conversation */
+    isDm: boolean("is_dm").notNull().default(false),
+    /** Email of the user who owns this DM binding (null for channel bindings) */
+    dmOwnerEmail: varchar("dm_owner_email", { length: 256 }),
     /** The internal agent to route messages to */
     agentId: uuid("agent_id").references(() => agentsTable.id, {
       onDelete: "cascade",

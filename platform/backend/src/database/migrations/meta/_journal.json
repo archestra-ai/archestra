@@ -1037,6 +1037,13 @@
       "when": 1771510215318,
       "tag": "0147_split_agent_rbac_resources",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1771685778768,
+      "tag": "0148_pale_raider",
+      "breakpoints": true
     }
   ]
 }

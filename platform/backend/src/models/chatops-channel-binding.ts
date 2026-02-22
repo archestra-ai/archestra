@@ -37,6 +37,8 @@ class ChatOpsChannelBindingModel {
         channelName: input.channelName ?? null,
         workspaceName: input.workspaceName ?? null,
         agentId: input.agentId,
+        isDm: input.isDm ?? false,
+        dmOwnerEmail: input.dmOwnerEmail ?? null,
       })
       .returning();
 
@@ -198,27 +200,25 @@ class ChatOpsChannelBindingModel {
     });
 
     if (existing) {
-      const updated = await ChatOpsChannelBindingModel.update(existing.id, {
-        agentId: input.agentId,
-      });
-      if (!updated) {
-        throw new Error("Failed to update binding");
+      const setFields: Record<string, unknown> = {};
+      if (input.agentId !== undefined) setFields.agentId = input.agentId;
+      if (input.channelName !== undefined)
+        setFields.channelName = input.channelName;
+      if (input.workspaceName !== undefined)
+        setFields.workspaceName = input.workspaceName;
+      if (input.isDm !== undefined) setFields.isDm = input.isDm;
+      if (input.dmOwnerEmail !== undefined)
+        setFields.dmOwnerEmail = input.dmOwnerEmail;
+
+      if (Object.keys(setFields).length > 0) {
+        const [updated] = await db
+          .update(schema.chatopsChannelBindingsTable)
+          .set(setFields)
+          .where(eq(schema.chatopsChannelBindingsTable.id, existing.id))
+          .returning();
+        return (updated as ChatOpsChannelBinding) ?? existing;
       }
-      // Also update names if provided
-      if (
-        input.channelName !== undefined ||
-        input.workspaceName !== undefined
-      ) {
-        const namesUpdated = await ChatOpsChannelBindingModel.updateNames(
-          existing.id,
-          {
-            channelName: input.channelName ?? undefined,
-            workspaceName: input.workspaceName ?? undefined,
-          },
-        );
-        return namesUpdated ?? updated;
-      }
-      return updated;
+      return existing;
     }
 
     return ChatOpsChannelBindingModel.create(input);
@@ -332,6 +332,9 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.channelId,
             params.activeChannelIds,
           ),
+          // Exclude DM bindings from cleanup — they won't appear in the
+          // active channel discovery list but should be preserved.
+          eq(schema.chatopsChannelBindingsTable.isDm, false),
         ),
       )
       .returning();

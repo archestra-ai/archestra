@@ -9,10 +9,7 @@ import type { FastifyRequest } from "fastify";
 import { resolveProviderApiKey } from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel, TOKEN_PREFIX, VirtualApiKeyModel } from "@/models";
-import {
-  extractBearerToken,
-  validateExternalIdpToken,
-} from "@/routes/mcp-gateway.utils";
+import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { type Agent, ApiError, isSupportedChatProvider } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
@@ -132,19 +129,18 @@ export async function attemptJwksAuth(
   resolvedAgent: Agent,
   providerName: string,
 ): Promise<JwksAuthResult | null> {
-  logger.info(
-    {
-      resolvedAgentId: resolvedAgent.id,
-      identityProviderId: resolvedAgent.identityProviderId,
-      hasIdentityProviderId: !!resolvedAgent.identityProviderId,
-      identityProviderIdType: typeof resolvedAgent.identityProviderId,
-      agentKeys: Object.keys(resolvedAgent).sort(),
-    },
-    `[${providerName}Proxy] attemptJwksAuth: checking identityProviderId`,
-  );
   if (!resolvedAgent.identityProviderId) return null;
 
-  const bearerToken = extractBearerToken(request);
+  // Read the bearer token from the RAW request headers. We cannot use
+  // extractBearerToken(request) here because some provider routes (e.g.
+  // OpenAI) define a headers schema with a .transform() that strips the
+  // "Bearer " prefix. After Fastify applies the schema transform,
+  // request.headers.authorization no longer starts with "Bearer ", causing
+  // extractBearerToken to return null and silently skipping JWKS auth.
+  // Reading from request.raw.headers bypasses schema transforms.
+  const rawAuthHeader = request.raw.headers.authorization;
+  const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
+  const bearerToken = tokenMatch?.[1] ?? null;
   if (!bearerToken || bearerToken.startsWith(TOKEN_PREFIX)) return null;
 
   let jwksResult: Awaited<ReturnType<typeof validateExternalIdpToken>>;

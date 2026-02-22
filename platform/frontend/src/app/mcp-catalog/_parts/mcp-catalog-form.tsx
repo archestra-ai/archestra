@@ -3,9 +3,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { AlertCircle, ChevronRight } from "lucide-react";
-import { lazy, useEffect, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
-import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -116,6 +120,7 @@ export function McpCatalogForm({
     initialValues?.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
   );
   const [labelsOpen, setLabelsOpen] = useState(false);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeatureFlag("byosEnabled");
@@ -167,7 +172,9 @@ export function McpCatalogForm({
   }, [initialValues, localConfigSecret, form]);
 
   const handleSubmit = (values: McpCatalogFormValues) => {
-    onSubmit({ ...values, labels });
+    // Save any unsaved label before submitting
+    const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
+    onSubmit({ ...values, labels: updatedLabels });
   };
 
   return (
@@ -634,6 +641,7 @@ export function McpCatalogForm({
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-4">
             <ProfileLabels
+              ref={labelsRef}
               labels={labels}
               onLabelsChange={setLabels}
               showLabel={false}

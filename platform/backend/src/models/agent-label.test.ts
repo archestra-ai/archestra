@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@/test";
 import AgentLabelModel from "./agent-label";
+import McpCatalogLabelModel from "./mcp-catalog-label";
 
 describe("AgentLabelModel", () => {
   describe("getOrCreateKey", () => {
@@ -155,6 +156,52 @@ describe("AgentLabelModel", () => {
       const values = await AgentLabelModel.getAllValues();
       expect(values).toContain("staging");
       expect(values).not.toContain("production");
+    });
+
+    test("does not prune key/value still referenced by mcp_catalog_labels", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent = await makeAgent();
+      const catalog = await makeInternalMcpCatalog();
+
+      // Assign same key/value to both agent and catalog item
+      await AgentLabelModel.syncAgentLabels(agent.id, [
+        { key: "shared-env", value: "shared-prod", keyId: "", valueId: "" },
+      ]);
+      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
+        { key: "shared-env", value: "shared-prod" },
+      ]);
+
+      // Remove from agent — catalog still references it
+      await AgentLabelModel.syncAgentLabels(agent.id, []);
+
+      const keys = await AgentLabelModel.getAllKeys();
+      const values = await AgentLabelModel.getAllValues();
+      expect(keys).toContain("shared-env");
+      expect(values).toContain("shared-prod");
+    });
+
+    test("prunes key/value when removed from agent and no catalog references", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      await AgentLabelModel.syncAgentLabels(agent.id, [
+        {
+          key: "agent-only-key",
+          value: "agent-only-val",
+          keyId: "",
+          valueId: "",
+        },
+      ]);
+
+      await AgentLabelModel.syncAgentLabels(agent.id, []);
+
+      const keys = await AgentLabelModel.getAllKeys();
+      const values = await AgentLabelModel.getAllValues();
+      expect(keys).not.toContain("agent-only-key");
+      expect(values).not.toContain("agent-only-val");
     });
   });
 

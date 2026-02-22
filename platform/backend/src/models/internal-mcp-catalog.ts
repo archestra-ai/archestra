@@ -320,13 +320,22 @@ class InternalMcpCatalogModel {
   ): Promise<InternalMcpCatalog | null> {
     const { labels, ...dbValues } = catalogItem;
 
-    const [updatedItem] = await db
-      .update(schema.internalMcpCatalogTable)
-      .set(dbValues)
-      .where(eq(schema.internalMcpCatalogTable.id, id))
-      .returning();
+    let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
-    if (!updatedItem) {
+    if (Object.keys(dbValues).length > 0) {
+      [dbItem] = await db
+        .update(schema.internalMcpCatalogTable)
+        .set(dbValues)
+        .where(eq(schema.internalMcpCatalogTable.id, id))
+        .returning();
+    } else {
+      [dbItem] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+    }
+
+    if (!dbItem) {
       return null;
     }
 
@@ -338,7 +347,7 @@ class InternalMcpCatalogModel {
     }
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
-    return { ...updatedItem, labels: itemLabels };
+    return { ...dbItem, labels: itemLabels };
   }
 
   /**

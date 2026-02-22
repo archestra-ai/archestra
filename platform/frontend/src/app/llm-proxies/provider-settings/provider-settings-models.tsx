@@ -315,7 +315,7 @@ export function ProviderSettingsModels() {
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <div className="relative max-w-xs">
+                <div className="relative w-72">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search models..."

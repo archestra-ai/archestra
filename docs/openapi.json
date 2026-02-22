@@ -68555,10 +68555,12 @@
                           "type": "object",
                           "properties": {
                             "key": {
-                              "type": "string"
+                              "type": "string",
+                              "minLength": 1
                             },
                             "value": {
-                              "type": "string"
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -69166,10 +69168,12 @@
                       "type": "object",
                       "properties": {
                         "key": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "value": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
@@ -69563,10 +69567,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           }
                         },
                         "required": [
@@ -70201,10 +70207,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           }
                         },
                         "required": [
@@ -70806,10 +70814,12 @@
                       "type": "object",
                       "properties": {
                         "key": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "value": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
@@ -71210,10 +71220,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           }
                         },
                         "required": [

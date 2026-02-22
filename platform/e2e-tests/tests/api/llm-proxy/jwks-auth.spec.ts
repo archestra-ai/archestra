@@ -15,7 +15,6 @@ import { expect, test } from "../fixtures";
 test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
   test("should authenticate with external IdP JWT and get model response", async ({
     request,
-    createLlmProxy,
     deleteAgent,
     createIdentityProvider,
     deleteIdentityProvider,
@@ -37,21 +36,31 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
 
     let proxyId: string | undefined;
     try {
-      // STEP 3: Create an LLM Proxy profile
-      const proxyResponse = await createLlmProxy(
+      // STEP 3: Create an LLM Proxy profile with IdP linked directly
+      const proxyResponse = await makeApiRequest({
         request,
-        `JWKS LLM Proxy E2E ${Date.now()}`,
-      );
-      const proxy = await proxyResponse.json();
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `JWKS LLM Proxy E2E ${Date.now()}`,
+          teams: [],
+          agentType: "llm_proxy",
+          identityProviderId,
+        },
+      });
+      const proxy = (await proxyResponse.json()) as { id: string };
       proxyId = proxy.id;
 
-      // STEP 4: Link the IdP to the LLM Proxy profile
-      await makeApiRequest({
+      // STEP 4: Verify the agent has identityProviderId set
+      const agentResp = await makeApiRequest({
         request,
-        method: "put",
+        method: "get",
         urlSuffix: `/api/agents/${proxyId}`,
-        data: { identityProviderId },
       });
+      const agentData = (await agentResp.json()) as {
+        identityProviderId: string | null;
+      };
+      expect(agentData.identityProviderId).toBe(identityProviderId);
 
       // STEP 5: Call the OpenAI proxy endpoint with the JWT as Bearer token
       const response = await request.post(
@@ -83,7 +92,6 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
 
   test("should reject invalid JWT with 401", async ({
     request,
-    createLlmProxy,
     deleteAgent,
     createIdentityProvider,
     deleteIdentityProvider,
@@ -98,20 +106,20 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
 
     let proxyId: string | undefined;
     try {
-      const proxyResponse = await createLlmProxy(
+      // Create LLM Proxy with IdP linked directly (avoids separate PUT)
+      const proxyResponse = await makeApiRequest({
         request,
-        `JWKS Reject LLM Proxy ${Date.now()}`,
-      );
-      const proxy = await proxyResponse.json();
-      proxyId = proxy.id;
-
-      // Link the IdP to the profile
-      await makeApiRequest({
-        request,
-        method: "put",
-        urlSuffix: `/api/agents/${proxyId}`,
-        data: { identityProviderId },
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `JWKS Reject LLM Proxy ${Date.now()}`,
+          teams: [],
+          agentType: "llm_proxy",
+          identityProviderId,
+        },
       });
+      const proxy = (await proxyResponse.json()) as { id: string };
+      proxyId = proxy.id;
 
       // Call with an invalid JWT
       const response = await request.post(

@@ -15,10 +15,10 @@ import { expect, test } from "../fixtures";
  */
 
 const TEST_PROVIDER = "openai";
-const TEST_API_KEY_NAME = "e2e-virtual-key-test";
 
 /**
- * Helper: create a chat API key and return its ID
+ * Helper: create a chat API key with a unique name and return its ID.
+ * Uses a unique name per call to avoid race conditions with parallel test workers.
  */
 async function createChatApiKey(
   makeApiRequest: (args: {
@@ -32,12 +32,13 @@ async function createChatApiKey(
   opts?: { provider?: string; baseUrl?: string },
 ) {
   const provider = opts?.provider ?? TEST_PROVIDER;
+  const uniqueName = `e2e-vk-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const response = await makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/chat-api-keys",
     data: {
-      name: TEST_API_KEY_NAME,
+      name: uniqueName,
       provider,
       apiKey: "sk-e2e-test-key-for-wiremock",
       scope: "org_wide",
@@ -48,7 +49,7 @@ async function createChatApiKey(
 }
 
 /**
- * Helper: cleanup chat API key by name
+ * Helper: cleanup chat API key by ID
  */
 async function cleanupChatApiKey(
   makeApiRequest: (args: {
@@ -59,23 +60,14 @@ async function cleanupChatApiKey(
     ignoreStatusCheck?: boolean;
   }) => Promise<{ json: () => Promise<unknown>; ok: () => boolean }>,
   request: APIRequestContext,
+  chatApiKeyId: string,
 ) {
-  const keysResp = await makeApiRequest({
+  await makeApiRequest({
     request,
-    method: "get",
-    urlSuffix: "/api/chat-api-keys",
+    method: "delete",
+    urlSuffix: `/api/chat-api-keys/${chatApiKeyId}`,
+    ignoreStatusCheck: true,
   });
-  const keys = (await keysResp.json()) as { id: string; name: string }[];
-  for (const key of keys) {
-    if (key.name === TEST_API_KEY_NAME) {
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/chat-api-keys/${key.id}`,
-        ignoreStatusCheck: true,
-      });
-    }
-  }
 }
 
 test.describe("Virtual API Keys - LLM Proxy", () => {
@@ -89,7 +81,6 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxyResp = await createLlmProxy(request, "e2e-vk-proxy");
     const proxy = await proxyResp.json();
 
-    await cleanupChatApiKey(makeApiRequest, request);
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
     const vkResp = await makeApiRequest({
@@ -121,7 +112,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       // WireMock should return 200 (mocked response)
       expect(proxyResponse.ok()).toBeTruthy();
     } finally {
-      await cleanupChatApiKey(makeApiRequest, request);
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
     }
   });
@@ -135,7 +126,6 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxyResp = await createLlmProxy(request, "e2e-vk-expired");
     const proxy = await proxyResp.json();
 
-    await cleanupChatApiKey(makeApiRequest, request);
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
     // Create a virtual key that expires in 5 seconds, then wait for it to expire.
@@ -174,7 +164,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       const body = await proxyResponse.json();
       expect(body.error.message).toContain("expired");
     } finally {
-      await cleanupChatApiKey(makeApiRequest, request);
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
     }
   });
@@ -188,7 +178,6 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxyResp = await createLlmProxy(request, "e2e-vk-wrong-provider");
     const proxy = await proxyResp.json();
 
-    await cleanupChatApiKey(makeApiRequest, request);
     // Create an OpenAI key but call the Anthropic proxy
     const chatApiKey = await createChatApiKey(makeApiRequest, request, {
       provider: "openai",
@@ -223,7 +212,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       const body = await proxyResponse.json();
       expect(body.error.message).toContain("openai");
     } finally {
-      await cleanupChatApiKey(makeApiRequest, request);
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
     }
   });

@@ -35,7 +35,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpToolCall: ["read"],
   conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
-  tokenPrice: ["create", "read", "update", "delete"],
+  llmModels: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
   /**
    * Better-auth access control resource - needed for organization role management
@@ -64,7 +64,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpToolCall: ["read"],
   conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
-  tokenPrice: ["create", "read", "update", "delete"],
+  llmModels: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
@@ -90,7 +90,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpToolCall: ["read"],
   conversation: ["create", "read", "update", "delete"],
   limit: ["read"],
-  tokenPrice: ["read"],
+  llmModels: ["read"],
   chatSettings: ["read"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
@@ -580,7 +580,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
   [RouteId.UpdateModelPricing]: {
-    tokenPrice: ["update"],
+    llmModels: ["update"],
   },
   [RouteId.GetTeamStatistics]: {
     interaction: ["read"],

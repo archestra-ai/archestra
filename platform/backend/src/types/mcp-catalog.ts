@@ -77,7 +77,8 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
-  labels: z.array(CatalogLabelSchema).nullable(),
+  // Labels are loaded from the junction table, not from the DB row
+  labels: z.array(CatalogLabelSchema).default([]),
 });
 
 export const InsertInternalMcpCatalogSchema = createInsertSchema(
@@ -95,7 +96,8 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
       .optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
-    labels: z.array(CatalogLabelSchema).nullable().optional(),
+    // Labels are synced separately via McpCatalogLabelModel
+    labels: z.array(CatalogLabelSchema).optional(),
   })
   .omit({
     createdAt: true,
@@ -115,7 +117,8 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
       .optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
-    labels: z.array(CatalogLabelSchema).nullable().optional(),
+    // Labels are synced separately via McpCatalogLabelModel
+    labels: z.array(CatalogLabelSchema).optional(),
   })
   .omit({
     id: true,

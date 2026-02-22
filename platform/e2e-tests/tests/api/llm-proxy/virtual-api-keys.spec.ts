@@ -110,20 +110,17 @@ async function callProxyWithVirtualKey(
   proxyId: string,
   virtualKeyValue: string,
 ) {
-  return request.post(
-    `${API_BASE_URL}/v1/openai/${proxyId}/chat/completions`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${virtualKeyValue}`,
-      },
-      data: {
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: "hello" }],
-        stream: false,
-      },
+  return request.post(`${API_BASE_URL}/v1/openai/${proxyId}/chat/completions`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${virtualKeyValue}`,
     },
-  );
+    data: {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "hello" }],
+      stream: false,
+    },
+  });
 }
 
 // =========================================================================
@@ -272,11 +269,7 @@ test.describe("Virtual API Keys - CRUD API", () => {
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
     try {
-      const vk = await createVirtualKey(
-        makeApiRequest,
-        request,
-        chatApiKey.id,
-      );
+      const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
 
       // Delete the virtual key
       await makeApiRequest({
@@ -345,12 +338,9 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-      { name: "test-vk" },
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+      name: "test-vk",
+    });
     expect(vk.value).toMatch(/^archestra_/);
 
     try {
@@ -385,15 +375,10 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     // NOTE: This test may fail locally if the server timezone differs from UTC
     // because the virtual_api_keys.expires_at column is `timestamp without time zone`
     // despite the schema declaring `withTimezone: true`. In CI (UTC), this works correctly.
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-      {
-        name: "expired-vk",
-        expiresAt: new Date(Date.now() + 5000).toISOString(), // 5s from now
-      },
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+      name: "expired-vk",
+      expiresAt: new Date(Date.now() + 5000).toISOString(), // 5s from now
+    });
 
     // Wait for the key to expire (10s wait gives 5s margin over the 5s TTL)
     await new Promise((resolve) => setTimeout(resolve, 10_000));
@@ -428,12 +413,9 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       provider: "openai",
     });
 
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-      { name: "wrong-provider-vk" },
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+      name: "wrong-provider-vk",
+    });
 
     try {
       const proxyResponse = await request.post(
@@ -521,21 +503,16 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(
-      request,
-      "e2e-vk-no-expiry",
-    );
+    const proxyResp = await createLlmProxy(request, "e2e-vk-no-expiry");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
     // Create a virtual key with no expiration
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-      { name: "no-expiry-vk", expiresAt: null },
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+      name: "no-expiry-vk",
+      expiresAt: null,
+    });
 
     expect(vk.expiresAt).toBeNull();
 
@@ -562,18 +539,10 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
 
     // Verify it works first
-    const okResp = await callProxyWithVirtualKey(
-      request,
-      proxy.id,
-      vk.value,
-    );
+    const okResp = await callProxyWithVirtualKey(request, proxy.id, vk.value);
     expect(okResp.ok()).toBeTruthy();
 
     // Delete the virtual key
@@ -605,25 +574,14 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(
-      request,
-      "e2e-vk-parent-deleted",
-    );
+    const proxyResp = await createLlmProxy(request, "e2e-vk-parent-deleted");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
 
     // Verify it works first
-    const okResp = await callProxyWithVirtualKey(
-      request,
-      proxy.id,
-      vk.value,
-    );
+    const okResp = await callProxyWithVirtualKey(request, proxy.id, vk.value);
     expect(okResp.ok()).toBeTruthy();
 
     // Delete the PARENT chat API key (cascade should delete virtual keys)
@@ -654,21 +612,14 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
   }) => {
     // Uses the static WireMock mapping at /custom-base-url-test/v1/chat/completions
     // which returns a distinct response ID ("chatcmpl-custom-base-url")
-    const proxyResp = await createLlmProxy(
-      request,
-      "e2e-vk-custom-base",
-    );
+    const proxyResp = await createLlmProxy(request, "e2e-vk-custom-base");
     const proxy = await proxyResp.json();
 
     // Create a chat API key with a custom base URL pointing to the static WireMock mapping path
     const chatApiKey = await createChatApiKey(makeApiRequest, request, {
       baseUrl: `${WIREMOCK_INTERNAL_URL}/custom-base-url-test/v1`,
     });
-    const vk = await createVirtualKey(
-      makeApiRequest,
-      request,
-      chatApiKey.id,
-    );
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
 
     try {
       const proxyResponse = await callProxyWithVirtualKey(

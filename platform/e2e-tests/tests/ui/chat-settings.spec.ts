@@ -164,7 +164,6 @@ test.describe("Provider Settings - API Keys", () => {
       .click();
     await clickButton({ page, options: { name: "Delete" } });
   });
-
 });
 
 test.describe("Provider Settings - Virtual API Keys", () => {
@@ -218,7 +217,9 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
     // The token value should be visible inside the dialog (starts with archestra_)
     const dialog = page.getByRole("dialog");
-    await expect(dialog.locator("code").filter({ hasText: "archestra_" }).last()).toBeVisible();
+    await expect(
+      dialog.locator("code").filter({ hasText: "archestra_" }).last(),
+    ).toBeVisible();
 
     // Close dialog (use first: true to avoid strict mode violation — the dialog
     // has two Close buttons: the footer button and the X icon)
@@ -232,9 +233,7 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     await goToVirtualKeysPage(page);
 
     // Find a delete button in the virtual keys table and click it
-    const deleteButton = page
-      .getByRole("button", { name: /delete/i })
-      .first();
+    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
     if (await deleteButton.isVisible()) {
       await deleteButton.click();
       // Confirm deletion in the confirmation dialog

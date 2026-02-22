@@ -1,4 +1,4 @@
-import { asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentLabelWithDetails } from "@/types";
 
@@ -121,14 +121,14 @@ class AgentLabelModel {
 
   /**
    * Prune orphaned label keys and values that are no longer referenced
-   * by any agent labels
+   * by any label junction table (agent_labels or mcp_catalog_labels)
    */
   static async pruneKeysAndValues(): Promise<{
     deletedKeys: number;
     deletedValues: number;
   }> {
     return await db.transaction(async (tx) => {
-      // Find orphaned keys (not referenced in agent_labels)
+      // Find orphaned keys (not referenced in agent_labels OR mcp_catalog_labels)
       const orphanedKeys = await tx
         .select({ id: schema.labelKeysTable.id })
         .from(schema.labelKeysTable)
@@ -136,9 +136,18 @@ class AgentLabelModel {
           schema.agentLabelsTable,
           eq(schema.labelKeysTable.id, schema.agentLabelsTable.keyId),
         )
-        .where(isNull(schema.agentLabelsTable.keyId));
+        .leftJoin(
+          schema.mcpCatalogLabelsTable,
+          eq(schema.labelKeysTable.id, schema.mcpCatalogLabelsTable.keyId),
+        )
+        .where(
+          and(
+            isNull(schema.agentLabelsTable.keyId),
+            isNull(schema.mcpCatalogLabelsTable.keyId),
+          ),
+        );
 
-      // Find orphaned values (not referenced in agent_labels)
+      // Find orphaned values (not referenced in agent_labels OR mcp_catalog_labels)
       const orphanedValues = await tx
         .select({ id: schema.labelValuesTable.id })
         .from(schema.labelValuesTable)
@@ -146,7 +155,16 @@ class AgentLabelModel {
           schema.agentLabelsTable,
           eq(schema.labelValuesTable.id, schema.agentLabelsTable.valueId),
         )
-        .where(isNull(schema.agentLabelsTable.valueId));
+        .leftJoin(
+          schema.mcpCatalogLabelsTable,
+          eq(schema.labelValuesTable.id, schema.mcpCatalogLabelsTable.valueId),
+        )
+        .where(
+          and(
+            isNull(schema.agentLabelsTable.valueId),
+            isNull(schema.mcpCatalogLabelsTable.valueId),
+          ),
+        );
 
       let deletedKeys = 0;
       let deletedValues = 0;

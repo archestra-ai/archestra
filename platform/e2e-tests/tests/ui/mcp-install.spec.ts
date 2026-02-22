@@ -12,76 +12,83 @@ import { clickButton } from "../../utils";
  */
 
 test.describe("MCP Install", () => {
-  test("Self-hosted from catalog", { tag: "@quickstart" }, async ({
-    adminPage,
-    extractCookieHeaders,
-  }) => {
-    const CONTEXT7_CATALOG_ITEM_NAME = "upstash__context7";
+  test(
+    "Self-hosted from catalog",
+    { tag: "@quickstart" },
+    async ({ adminPage, extractCookieHeaders }) => {
+      const CONTEXT7_CATALOG_ITEM_NAME = "upstash__context7";
 
-    await deleteCatalogItem(
-      adminPage,
-      extractCookieHeaders,
-      CONTEXT7_CATALOG_ITEM_NAME,
-    );
+      await deleteCatalogItem(
+        adminPage,
+        extractCookieHeaders,
+        CONTEXT7_CATALOG_ITEM_NAME,
+      );
 
-    await goToPage(adminPage, "/mcp-catalog/registry");
-    await adminPage.waitForLoadState("domcontentloaded");
+      await goToPage(adminPage, "/mcp-catalog/registry");
+      await adminPage.waitForLoadState("domcontentloaded");
 
-    // Open "Add MCP Server" dialog
-    await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
-    await adminPage.waitForLoadState("domcontentloaded");
+      // Open "Add MCP Server" dialog
+      await clickButton({
+        page: adminPage,
+        options: { name: "Add MCP Server" },
+      });
+      await adminPage.waitForLoadState("domcontentloaded");
 
-    // Search for context7
-    await adminPage
-      .getByRole("textbox", { name: "Search servers by name..." })
-      .fill("context7");
-    await adminPage.waitForLoadState("domcontentloaded");
-    // Timeout needed so filter is applied on UI
-    await adminPage.waitForTimeout(3_000);
+      // Search for context7
+      await adminPage
+        .getByRole("textbox", { name: "Search servers by name..." })
+        .fill("context7");
+      await adminPage.waitForLoadState("domcontentloaded");
+      // Timeout needed so filter is applied on UI
+      await adminPage.waitForTimeout(3_000);
 
-    // wait for the server to be visible and add to registry
-    await adminPage
-      .getByLabel("Add MCP Server to the Private")
-      .getByText(CONTEXT7_CATALOG_ITEM_NAME)
-      .waitFor({ state: "visible", timeout: 30000 });
-    await adminPage.waitForLoadState("domcontentloaded");
-    await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
-    await adminPage.waitForLoadState("domcontentloaded");
+      // wait for the server to be visible and add to registry
+      await adminPage
+        .getByLabel("Add MCP Server to the Private")
+        .getByText(CONTEXT7_CATALOG_ITEM_NAME)
+        .waitFor({ state: "visible", timeout: 30000 });
+      await adminPage.waitForLoadState("domcontentloaded");
+      await adminPage
+        .getByTestId(E2eTestId.AddCatalogItemButton)
+        .first()
+        .click();
+      await adminPage.waitForLoadState("domcontentloaded");
 
-    // Install dialog opens automatically after adding to registry
-    // Wait for the install dialog to be visible
-    await adminPage
-      .getByRole("dialog")
-      .filter({ hasText: /Install -/ })
-      .waitFor({ state: "visible", timeout: 30000 });
+      // Install dialog opens automatically after adding to registry
+      // Wait for the install dialog to be visible
+      await adminPage
+        .getByRole("dialog")
+        .filter({ hasText: /Install -/ })
+        .waitFor({ state: "visible", timeout: 30000 });
 
-    // fill the api key (just fake value)
-    await adminPage
-      .getByRole("textbox", { name: "context7_api_key *" })
-      .fill("fake-api-key");
+      // fill the api key (just fake value)
+      await adminPage
+        .getByRole("textbox", { name: "context7_api_key *" })
+        .fill("fake-api-key");
 
-    // install the server
-    await clickButton({ page: adminPage, options: { name: "Install" } });
-    await adminPage.waitForLoadState("domcontentloaded");
+      // install the server
+      await clickButton({ page: adminPage, options: { name: "Install" } });
+      await adminPage.waitForLoadState("domcontentloaded");
 
-    // Wait for the card to appear in the registry after installation
-    const serverCard = adminPage.getByTestId(
-      `${E2eTestId.McpServerCard}-${CONTEXT7_CATALOG_ITEM_NAME}`,
-    );
-    await serverCard.waitFor({ state: "visible", timeout: 30000 });
+      // Wait for the card to appear in the registry after installation
+      const serverCard = adminPage.getByTestId(
+        `${E2eTestId.McpServerCard}-${CONTEXT7_CATALOG_ITEM_NAME}`,
+      );
+      await serverCard.waitFor({ state: "visible", timeout: 30000 });
 
-    // Check that tools are discovered
-    await serverCard
-      .getByText("/2")
-      .waitFor({ state: "visible", timeout: 60_000 });
+      // Check that tools are discovered
+      await serverCard
+        .getByText("/2")
+        .waitFor({ state: "visible", timeout: 60_000 });
 
-    // cleanup
-    await deleteCatalogItem(
-      adminPage,
-      extractCookieHeaders,
-      CONTEXT7_CATALOG_ITEM_NAME,
-    );
-  });
+      // cleanup
+      await deleteCatalogItem(
+        adminPage,
+        extractCookieHeaders,
+        CONTEXT7_CATALOG_ITEM_NAME,
+      );
+    },
+  );
 
   test.describe("Custom remote", () => {
     test.describe.configure({ mode: "serial" });

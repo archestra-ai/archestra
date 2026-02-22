@@ -5,10 +5,7 @@ import type { archestraApiTypes } from "@shared";
 import { AlertCircle, ChevronRight } from "lucide-react";
 import { lazy, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-} from "@/components/agent-labels";
+import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";

@@ -317,6 +317,7 @@ const createMcpCatalogItem = async (
     localConfig?: unknown;
     serverUrl?: string;
     authFields?: unknown;
+    labels?: Array<{ key: string; value: string }>;
   },
 ) =>
   makeApiRequest({

@@ -89,9 +89,6 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
     streamable_http_url?: string;
     streamable_http_port?: number;
   }>(),
-  labels: jsonb("labels")
-    .$type<Array<{ key: string; value: string }>>()
-    .default([]),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

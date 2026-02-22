@@ -2,17 +2,30 @@
 
 import type { SupportedProvider } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, Loader2, RefreshCw, Server, Star, Zap } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Server,
+  Star,
+  X,
+  Zap,
+} from "lucide-react";
 import Image from "next/image";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
+  useUpdateModelPricing,
 } from "@/lib/chat-models.query";
 import {
   type ChatApiKeyScope,
@@ -25,90 +38,55 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   org_wide: null,
 };
 
-function formatContextLength(contextLength: number | null): string {
-  if (contextLength === null) return "-";
-  if (contextLength >= 1000000) {
-    return `${(contextLength / 1000000).toFixed(contextLength % 1000000 === 0 ? 0 : 1)}M`;
-  }
-  if (contextLength >= 1000) {
-    return `${(contextLength / 1000).toFixed(contextLength % 1000 === 0 ? 0 : 1)}K`;
-  }
-  return contextLength.toString();
-}
-
-function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
-  const capabilities = model.capabilities;
-  if (!capabilities) return true;
-  const hasInputModalities =
-    capabilities.inputModalities && capabilities.inputModalities.length > 0;
-  const hasOutputModalities =
-    capabilities.outputModalities && capabilities.outputModalities.length > 0;
-  const hasToolCalling = capabilities.supportsToolCalling !== null;
-  const hasContextLength = capabilities.contextLength !== null;
-  const hasPricing =
-    capabilities.pricePerMillionInput !== null ||
-    capabilities.pricePerMillionOutput !== null;
-  return (
-    !hasInputModalities &&
-    !hasOutputModalities &&
-    !hasToolCalling &&
-    !hasContextLength &&
-    !hasPricing
-  );
-}
-
-function UnknownCapabilitiesBadge() {
-  return (
-    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-      capabilities unknown
-    </span>
-  );
-}
-
-function FastestModelBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-      <Zap className="h-3 w-3" />
-      fastest
-    </span>
-  );
-}
-
-function PriceSourceBadge({ source }: { source: string }) {
-  if (source === "custom") {
-    return (
-      <span className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-        custom
-      </span>
-    );
-  }
-  if (source === "default") {
-    return (
-      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-        default
-      </span>
-    );
-  }
-  return null;
-}
-
-function BestModelBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-      <Star className="h-3 w-3" />
-      best
-    </span>
-  );
-}
-
 export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
   const syncModelsMutation = useSyncChatModels();
+  const updatePricing = useUpdateModelPricing();
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [editInput, setEditInput] = useState("");
+  const [editOutput, setEditOutput] = useState("");
 
   const handleRefresh = useCallback(async () => {
     await syncModelsMutation.mutateAsync();
     await refetch();
   }, [syncModelsMutation, refetch]);
+
+  const startEditing = useCallback((model: ModelWithApiKeys) => {
+    setEditingModelId(model.id);
+    const caps = model.capabilities;
+    setEditInput(caps?.pricePerMillionInput ?? "");
+    setEditOutput(caps?.pricePerMillionOutput ?? "");
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingModelId(null);
+    setEditInput("");
+    setEditOutput("");
+  }, []);
+
+  const saveEditing = useCallback(
+    async (modelId: string) => {
+      await updatePricing.mutateAsync({
+        id: modelId,
+        customPricePerMillionInput: editInput || null,
+        customPricePerMillionOutput: editOutput || null,
+      });
+      setEditingModelId(null);
+    },
+    [updatePricing, editInput, editOutput],
+  );
+
+  const resetPricing = useCallback(
+    async (modelId: string) => {
+      await updatePricing.mutateAsync({
+        id: modelId,
+        customPricePerMillionInput: null,
+        customPricePerMillionOutput: null,
+      });
+      setEditingModelId(null);
+    },
+    [updatePricing],
+  );
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
@@ -246,6 +224,20 @@ export function ProviderSettingsModels() {
         header: "$/M Input",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) return null;
+          const isEditing = editingModelId === row.original.id;
+          if (isEditing) {
+            return (
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={editInput}
+                onChange={(e) => setEditInput(e.target.value)}
+                className="h-7 w-24 text-sm font-mono"
+                placeholder="0.00"
+              />
+            );
+          }
           const price = row.original.capabilities?.pricePerMillionInput;
           if (!price) return null;
           const source = (row.original.capabilities as Record<string, unknown>)
@@ -263,13 +255,94 @@ export function ProviderSettingsModels() {
         header: "$/M Output",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) return null;
+          const isEditing = editingModelId === row.original.id;
+          if (isEditing) {
+            return (
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={editOutput}
+                onChange={(e) => setEditOutput(e.target.value)}
+                className="h-7 w-24 text-sm font-mono"
+                placeholder="0.00"
+              />
+            );
+          }
           const price = row.original.capabilities?.pricePerMillionOutput;
           if (!price) return null;
           return <span className="text-sm font-mono">${price}</span>;
         },
       },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => {
+          const isEditing = editingModelId === row.original.id;
+          const isCustom =
+            (row.original.capabilities as Record<string, unknown>)
+              ?.priceSource === "custom";
+          if (isEditing) {
+            return (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => saveEditing(row.original.id)}
+                  disabled={updatePricing.isPending}
+                >
+                  <Save className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={cancelEditing}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            );
+          }
+          return (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => startEditing(row.original)}
+                disabled={editingModelId !== null}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              {isCustom && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground"
+                  onClick={() => resetPricing(row.original.id)}
+                  disabled={editingModelId !== null}
+                  title="Reset to default pricing"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
     ],
-    [],
+    [
+      editingModelId,
+      editInput,
+      editOutput,
+      startEditing,
+      cancelEditing,
+      saveEditing,
+      resetPricing,
+      updatePricing.isPending,
+    ],
   );
 
   return (
@@ -325,4 +398,82 @@ export function ProviderSettingsModels() {
       </div>
     </LoadingWrapper>
   );
+}
+
+// --- Internal helpers and components ---
+
+function formatContextLength(contextLength: number | null): string {
+  if (contextLength === null) return "-";
+  if (contextLength >= 1000000) {
+    return `${(contextLength / 1000000).toFixed(contextLength % 1000000 === 0 ? 0 : 1)}M`;
+  }
+  if (contextLength >= 1000) {
+    return `${(contextLength / 1000).toFixed(contextLength % 1000 === 0 ? 0 : 1)}K`;
+  }
+  return contextLength.toString();
+}
+
+function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
+  const capabilities = model.capabilities;
+  if (!capabilities) return true;
+  const hasInputModalities =
+    capabilities.inputModalities && capabilities.inputModalities.length > 0;
+  const hasOutputModalities =
+    capabilities.outputModalities && capabilities.outputModalities.length > 0;
+  const hasToolCalling = capabilities.supportsToolCalling !== null;
+  const hasContextLength = capabilities.contextLength !== null;
+  const hasPricing =
+    capabilities.pricePerMillionInput !== null ||
+    capabilities.pricePerMillionOutput !== null;
+  return (
+    !hasInputModalities &&
+    !hasOutputModalities &&
+    !hasToolCalling &&
+    !hasContextLength &&
+    !hasPricing
+  );
+}
+
+function UnknownCapabilitiesBadge() {
+  return (
+    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+      capabilities unknown
+    </span>
+  );
+}
+
+function FastestModelBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+      <Zap className="h-3 w-3" />
+      fastest
+    </span>
+  );
+}
+
+function BestModelBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+      <Star className="h-3 w-3" />
+      best
+    </span>
+  );
+}
+
+function PriceSourceBadge({ source }: { source: string }) {
+  if (source === "custom") {
+    return (
+      <span className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+        custom
+      </span>
+    );
+  }
+  if (source === "default") {
+    return (
+      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+        default
+      </span>
+    );
+  }
+  return null;
 }

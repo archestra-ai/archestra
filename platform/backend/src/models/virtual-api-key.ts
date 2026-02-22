@@ -1,16 +1,17 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { count, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { PaginatedResult } from "@/database/utils/pagination";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
   ChatApiKey,
+  PaginationQuery,
   SelectVirtualApiKey,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
-
-/** Token prefix for identification */
-export const TOKEN_PREFIX = "archestra_";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -128,42 +129,69 @@ class VirtualApiKeyModel {
    */
   static async countByChatApiKeyId(chatApiKeyId: string): Promise<number> {
     const [result] = await db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ total: count() })
       .from(schema.virtualApiKeysTable)
       .where(eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId));
 
-    return result?.count ?? 0;
+    return Number(result?.total ?? 0);
   }
 
   /**
    * Find all virtual keys for an organization, joined with parent API key info.
+   * Supports pagination.
    */
-  static async findAllByOrganization(
-    organizationId: string,
-  ): Promise<VirtualApiKeyWithParentInfo[]> {
-    const rows = await db
-      .select({
-        id: schema.virtualApiKeysTable.id,
-        chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
-        name: schema.virtualApiKeysTable.name,
-        secretId: schema.virtualApiKeysTable.secretId,
-        tokenStart: schema.virtualApiKeysTable.tokenStart,
-        expiresAt: schema.virtualApiKeysTable.expiresAt,
-        lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
-        createdAt: schema.virtualApiKeysTable.createdAt,
-        parentKeyName: schema.chatApiKeysTable.name,
-        parentKeyProvider: schema.chatApiKeysTable.provider,
-        parentKeyBaseUrl: schema.chatApiKeysTable.baseUrl,
-      })
-      .from(schema.virtualApiKeysTable)
-      .innerJoin(
-        schema.chatApiKeysTable,
-        eq(schema.virtualApiKeysTable.chatApiKeyId, schema.chatApiKeysTable.id),
-      )
-      .where(eq(schema.chatApiKeysTable.organizationId, organizationId))
-      .orderBy(schema.virtualApiKeysTable.createdAt);
+  static async findAllByOrganization(params: {
+    organizationId: string;
+    pagination: PaginationQuery;
+  }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
+    const { organizationId, pagination } = params;
 
-    return rows;
+    const whereClause = eq(
+      schema.chatApiKeysTable.organizationId,
+      organizationId,
+    );
+
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: schema.virtualApiKeysTable.id,
+          chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
+          name: schema.virtualApiKeysTable.name,
+          secretId: schema.virtualApiKeysTable.secretId,
+          tokenStart: schema.virtualApiKeysTable.tokenStart,
+          expiresAt: schema.virtualApiKeysTable.expiresAt,
+          lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
+          createdAt: schema.virtualApiKeysTable.createdAt,
+          parentKeyName: schema.chatApiKeysTable.name,
+          parentKeyProvider: schema.chatApiKeysTable.provider,
+          parentKeyBaseUrl: schema.chatApiKeysTable.baseUrl,
+        })
+        .from(schema.virtualApiKeysTable)
+        .innerJoin(
+          schema.chatApiKeysTable,
+          eq(
+            schema.virtualApiKeysTable.chatApiKeyId,
+            schema.chatApiKeysTable.id,
+          ),
+        )
+        .where(whereClause)
+        .orderBy(schema.virtualApiKeysTable.createdAt)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.virtualApiKeysTable)
+        .innerJoin(
+          schema.chatApiKeysTable,
+          eq(
+            schema.virtualApiKeysTable.chatApiKeyId,
+            schema.chatApiKeysTable.id,
+          ),
+        )
+        .where(whereClause),
+    ]);
+
+    return createPaginatedResult(rows, Number(total), pagination);
   }
 
   /**
@@ -244,7 +272,7 @@ export default VirtualApiKeyModel;
 
 function generateToken(): string {
   const randomPart = randomBytes(TOKEN_RANDOM_LENGTH).toString("hex");
-  return `${TOKEN_PREFIX}${randomPart}`;
+  return `${ARCHESTRA_TOKEN_PREFIX}${randomPart}`;
 }
 
 function getTokenStart(token: string): string {

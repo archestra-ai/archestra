@@ -1,3 +1,4 @@
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -30,9 +31,6 @@ export const UpdateTeamTokenSchema = createUpdateSchema(
 export const TeamTokenValueSchema = z.object({
   token: z.string(),
 });
-
-// Token prefix constant
-export const TEAM_TOKEN_PREFIX = "archestra_";
 
 // Types
 export type SelectTeamToken = z.infer<typeof SelectTeamTokenSchema>;
@@ -87,5 +85,5 @@ export type TokensListResponse = z.infer<typeof TokensListResponseSchema>;
 
 // Helper function to check if a token has the archestra prefix
 export function isArchestraPrefixedToken(value: string): boolean {
-  return value.startsWith(TEAM_TOKEN_PREFIX);
+  return value.startsWith(ARCHESTRA_TOKEN_PREFIX);
 }

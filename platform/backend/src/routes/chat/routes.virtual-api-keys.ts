@@ -6,13 +6,15 @@ import { ChatApiKeyModel, VirtualApiKeyModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
   SelectVirtualApiKeySchema,
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
 } from "@/types";
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // List all virtual keys for the organization
+  // List all virtual keys for the organization (paginated)
   fastify.get(
     "/api/virtual-api-keys",
     {
@@ -21,15 +23,18 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all virtual API keys for the organization, with parent API key info",
         tags: ["Virtual API Keys"],
+        querystring: PaginationQuerySchema,
         response: constructResponseSchema(
-          z.array(VirtualApiKeyWithParentInfoSchema),
+          createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const virtualKeys =
-        await VirtualApiKeyModel.findAllByOrganization(organizationId);
-      return reply.send(virtualKeys);
+    async ({ query: { limit, offset }, organizationId }, reply) => {
+      const result = await VirtualApiKeyModel.findAllByOrganization({
+        organizationId,
+        pagination: { limit, offset },
+      });
+      return reply.send(result);
     },
   );
 

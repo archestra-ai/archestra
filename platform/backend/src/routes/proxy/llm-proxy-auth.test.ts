@@ -6,6 +6,7 @@ import {
   assertAuthenticatedForKeylessProvider,
   attemptJwksAuth,
   resolveAgent,
+  VirtualKeyRateLimiter,
   validateVirtualApiKey,
 } from "./llm-proxy-auth";
 
@@ -206,6 +207,11 @@ describe("attemptJwksAuth", () => {
       headers: {
         authorization: authorizationHeader,
       },
+      raw: {
+        headers: {
+          authorization: authorizationHeader,
+        },
+      },
     } as FastifyRequest;
   }
 
@@ -366,9 +372,9 @@ describe("attemptJwksAuth", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result!.userId).toBe(user.id);
-    expect(result!.organizationId).toBe(org.id);
-    expect(result!.apiKey).toBe("sk-provider-key");
+    expect(result?.userId).toBe(user.id);
+    expect(result?.organizationId).toBe(org.id);
+    expect(result?.apiKey).toBe("sk-provider-key");
 
     spy.mockRestore();
   });
@@ -407,10 +413,10 @@ describe("attemptJwksAuth", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result!.apiKey).toBeUndefined();
-    expect(result!.baseUrl).toBeUndefined();
-    expect(result!.userId).toBe(user.id);
-    expect(result!.organizationId).toBe(org.id);
+    expect(result?.apiKey).toBeUndefined();
+    expect(result?.baseUrl).toBeUndefined();
+    expect(result?.userId).toBe(user.id);
+    expect(result?.organizationId).toBe(org.id);
 
     spy.mockRestore();
   });
@@ -487,5 +493,101 @@ describe("assertAuthenticatedForKeylessProvider", () => {
         "10.0.0.5",
       ),
     ).toThrow("Authentication required");
+  });
+});
+
+// =========================================================================
+// VirtualKeyRateLimiter
+// =========================================================================
+
+/** Create a VirtualKeyRateLimiter backed by a simple in-memory Map (no DB needed). */
+function createTestLimiter() {
+  const store = new Map<string, unknown>();
+  const mockCache = {
+    get: vi.fn(async <T>(key: string) => store.get(key) as T | undefined),
+    set: vi.fn(async <T>(key: string, value: T, _ttl?: number) => {
+      store.set(key, value);
+      return value;
+    }),
+  };
+  return {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock doesn't need strict AllowedCacheKey typing
+    limiter: new VirtualKeyRateLimiter(mockCache as any),
+    store,
+    mockCache,
+  };
+}
+
+describe("VirtualKeyRateLimiter", () => {
+  test("allows requests under the failure threshold", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 9; i++) {
+      await limiter.recordFailure("1.2.3.4");
+    }
+    await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+  });
+
+  test("blocks requests at the failure threshold", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure("1.2.3.4");
+    }
+    await expect(limiter.check("1.2.3.4")).rejects.toThrow(
+      "Too many failed virtual API key attempts",
+    );
+  });
+
+  test("does not block unrelated IPs", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure("1.2.3.4");
+    }
+    await expect(limiter.check("5.6.7.8")).resolves.toBeUndefined();
+  });
+
+  test("increments failure count correctly", async () => {
+    const { limiter, mockCache } = createTestLimiter();
+    await limiter.recordFailure("1.2.3.4");
+    await limiter.recordFailure("1.2.3.4");
+    await limiter.recordFailure("1.2.3.4");
+
+    // Verify cache.set was called with incrementing counts
+    const setCalls = mockCache.set.mock.calls;
+    const counts = setCalls.map((call) => (call[1] as { count: number }).count);
+    expect(counts).toEqual([1, 2, 3]);
+  });
+
+  test("passes TTL to cache set", async () => {
+    const { limiter, mockCache } = createTestLimiter();
+    await limiter.recordFailure("1.2.3.4");
+
+    // Verify TTL (60_000 ms) is passed
+    expect(mockCache.set).toHaveBeenCalledWith(
+      expect.any(String),
+      { count: 1 },
+      60_000,
+    );
+  });
+
+  test("allows requests when cache returns undefined (entry expired)", async () => {
+    const { limiter, store } = createTestLimiter();
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure("1.2.3.4");
+    }
+    // Simulate TTL expiration by clearing the store
+    store.clear();
+    await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+  });
+
+  test("resets counter when cache entry expires and new failure recorded", async () => {
+    const { limiter, store } = createTestLimiter();
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure("1.2.3.4");
+    }
+    // Simulate TTL expiration
+    store.clear();
+    // New failure starts fresh
+    await limiter.recordFailure("1.2.3.4");
+    await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
   });
 });

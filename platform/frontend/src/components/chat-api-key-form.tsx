@@ -557,8 +557,26 @@ export function ChatApiKeyForm({
               "https://..."
             }
             disabled={isPending}
-            {...form.register("baseUrl")}
+            {...form.register("baseUrl", {
+              validate: (value) => {
+                if (!value) return true;
+                try {
+                  const url = new URL(value);
+                  if (!["http:", "https:"].includes(url.protocol)) {
+                    return "URL must use http or https protocol";
+                  }
+                  return true;
+                } catch {
+                  return "Please enter a valid URL (e.g. https://api.example.com)";
+                }
+              },
+            })}
           />
+          {form.formState.errors.baseUrl && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.baseUrl.message}
+            </p>
+          )}
         </div>
       </div>
     </div>

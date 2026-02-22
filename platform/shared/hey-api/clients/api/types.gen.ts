@@ -28422,7 +28422,10 @@ export type RotateUserTokenResponse = RotateUserTokenResponses[keyof RotateUserT
 export type GetAllVirtualApiKeysData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/virtual-api-keys';
 };
 
@@ -28489,19 +28492,29 @@ export type GetAllVirtualApiKeysResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        chatApiKeyId: string;
-        name: string;
-        secretId: string;
-        tokenStart: string;
-        expiresAt: string | null;
-        createdAt: string;
-        lastUsedAt: string | null;
-        parentKeyName: string;
-        parentKeyProvider: string;
-        parentKeyBaseUrl: string | null;
-    }>;
+    200: {
+        data: Array<{
+            id: string;
+            chatApiKeyId: string;
+            name: string;
+            secretId: string;
+            tokenStart: string;
+            expiresAt: string | null;
+            createdAt: string;
+            lastUsedAt: string | null;
+            parentKeyName: string;
+            parentKeyProvider: string;
+            parentKeyBaseUrl: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetAllVirtualApiKeysResponse = GetAllVirtualApiKeysResponses[keyof GetAllVirtualApiKeysResponses];

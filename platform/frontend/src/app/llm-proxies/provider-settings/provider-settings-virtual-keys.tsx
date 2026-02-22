@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   type ChatApiKeyResponse,
   PROVIDER_CONFIG,
@@ -22,7 +22,7 @@ import { CreateVirtualKeyDialog } from "./create-virtual-key-dialog";
 import { DeleteVirtualKeyDialog } from "./delete-virtual-key-dialog";
 
 type VirtualKeyWithParent =
-  archestraApiTypes.GetAllVirtualApiKeysResponses["200"][number];
+  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 
 /**
  * Format an expiration date as a human-readable relative string.
@@ -35,8 +35,19 @@ function formatExpiration(date: Date | string | null): string {
   return formatDistanceToNow(d, { addSuffix: true });
 }
 
+const DEFAULT_PAGE_SIZE = 20;
+
 export function ProviderSettingsVirtualKeys() {
-  const { data: virtualKeys = [], isPending } = useAllVirtualApiKeys();
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  const { data: response, isPending } = useAllVirtualApiKeys({
+    limit: pageSize,
+    offset: pageIndex * pageSize,
+  });
+  const virtualKeys = response?.data ?? [];
+  const paginationMeta = response?.pagination;
+
   const { data: apiKeys = [] } = useChatApiKeys();
   const defaultExpirationSeconds = useFeatureValue(
     "virtualKeyDefaultExpirationSeconds",
@@ -46,6 +57,14 @@ export function ProviderSettingsVirtualKeys() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingKey, setDeletingKey] = useState<VirtualKeyWithParent | null>(
     null,
+  );
+
+  const handlePaginationChange = useCallback(
+    (pagination: { pageIndex: number; pageSize: number }) => {
+      setPageIndex(pagination.pageIndex);
+      setPageSize(pagination.pageSize);
+    },
+    [],
   );
 
   const columns: ColumnDef<VirtualKeyWithParent>[] = useMemo(
@@ -174,12 +193,19 @@ export function ProviderSettingsVirtualKeys() {
           </div>
         )}
 
-        {virtualKeys.length > 0 && (
+        {(paginationMeta?.total ?? 0) > 0 && (
           <DataTable
             columns={columns}
             data={virtualKeys}
             getRowId={(row) => row.id}
             hideSelectedCount
+            manualPagination
+            pagination={{
+              pageIndex,
+              pageSize,
+              total: paginationMeta?.total ?? 0,
+            }}
+            onPaginationChange={handlePaginationChange}
           />
         )}
 

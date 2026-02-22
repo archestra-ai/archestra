@@ -31,9 +31,6 @@ export const UserTokenValueSchema = z.object({
   token: z.string(),
 });
 
-// Token prefix constant (shared with team tokens)
-export const USER_TOKEN_PREFIX = "archestra_";
-
 // Types
 export type SelectUserToken = z.infer<typeof SelectUserTokenSchema>;
 export type InsertUserToken = z.infer<typeof InsertUserTokenSchema>;

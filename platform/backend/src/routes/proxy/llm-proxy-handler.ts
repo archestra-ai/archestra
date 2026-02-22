@@ -10,6 +10,7 @@ import {
   context as otelContext,
   propagation,
 } from "@opentelemetry/api";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
@@ -18,7 +19,6 @@ import {
   AgentTeamModel,
   InteractionModel,
   LimitValidationService,
-  TOKEN_PREFIX,
   TokenPriceModel,
   UserModel,
 } from "@/models";
@@ -219,8 +219,8 @@ export async function handleLLMProxy<
   // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
   // return the raw key.
   const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
-  if (!wasJwksAuthenticated && rawApiKey?.startsWith(TOKEN_PREFIX)) {
-    virtualKeyRateLimiter.check(request.ip);
+  if (!wasJwksAuthenticated && rawApiKey?.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+    await virtualKeyRateLimiter.check(request.ip);
     try {
       const virtualResult = await validateVirtualApiKey(
         rawApiKey,
@@ -231,7 +231,7 @@ export async function handleLLMProxy<
       wasVirtualKeyResolved = true;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
-        virtualKeyRateLimiter.recordFailure(request.ip);
+        await virtualKeyRateLimiter.recordFailure(request.ip);
       }
       throw error;
     }
@@ -1211,8 +1211,16 @@ function handleError(
         message: errorMessage,
       },
     };
-    reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
-    reply.raw.end();
+    try {
+      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+      reply.raw.end();
+    } catch (writeError) {
+      // Connection already closed by the client — nothing more we can do.
+      logger.debug(
+        { err: writeError },
+        "Failed to write SSE error event (connection likely closed)",
+      );
+    }
     return reply;
   }
 

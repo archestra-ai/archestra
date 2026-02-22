@@ -224,16 +224,45 @@ export function useDeleteVirtualApiKey() {
   });
 }
 
-export function useAllVirtualApiKeys() {
+export function useAllVirtualApiKeys(params?: {
+  limit?: number;
+  offset?: number;
+}) {
+  const limit = params?.limit ?? 20;
+  const offset = params?.offset ?? 0;
   return useQuery({
-    queryKey: ["all-virtual-api-keys"],
+    queryKey: ["all-virtual-api-keys", limit, offset],
     queryFn: async () => {
-      const { data, error } = await getAllVirtualApiKeys();
+      const { data, error } = await getAllVirtualApiKeys({
+        query: { limit, offset },
+      });
       if (error) {
         handleApiError(error);
-        return [];
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        };
       }
-      return data ?? [];
+      return (
+        data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
     },
   });
 }

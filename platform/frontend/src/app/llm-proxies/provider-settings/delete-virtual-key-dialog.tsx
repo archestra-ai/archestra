@@ -14,7 +14,7 @@ import {
 import { useDeleteVirtualApiKey } from "@/lib/chat-settings.query";
 
 type VirtualKeyWithParent =
-  archestraApiTypes.GetAllVirtualApiKeysResponses["200"][number];
+  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 
 interface DeleteVirtualKeyDialogProps {
   open: boolean;

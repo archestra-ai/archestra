@@ -5,10 +5,12 @@
  * request/response orchestration. Each function is independently testable.
  */
 
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import type { FastifyRequest } from "fastify";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import { resolveProviderApiKey } from "@/clients/llm-client";
 import logger from "@/logging";
-import { AgentModel, TOKEN_PREFIX, VirtualApiKeyModel } from "@/models";
+import { AgentModel, VirtualApiKeyModel } from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { type Agent, ApiError, isSupportedChatProvider } from "@/types";
@@ -141,7 +143,8 @@ export async function attemptJwksAuth(
   const rawAuthHeader = request.raw.headers.authorization;
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1] ?? null;
-  if (!bearerToken || bearerToken.startsWith(TOKEN_PREFIX)) return null;
+  if (!bearerToken || bearerToken.startsWith(ARCHESTRA_TOKEN_PREFIX))
+    return null;
 
   let jwksResult: Awaited<ReturnType<typeof validateExternalIdpToken>>;
   try {
@@ -236,22 +239,42 @@ export function assertAuthenticatedForKeylessProvider(
 const RATE_LIMIT_MAX_FAILURES = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
+interface RateLimitEntry {
+  count: number;
+}
+
 /**
- * In-memory rate limiter for failed virtual API key validation attempts.
+ * Distributed rate limiter for failed virtual API key validation attempts.
  * Prevents brute-force enumeration of valid tokens by tracking failures per
  * client IP and rejecting further attempts after exceeding the threshold.
+ *
+ * Uses the PostgreSQL-backed CacheManager (Keyv) so rate limit state is
+ * shared across all application pods. Entries expire automatically via TTL.
  */
-class VirtualKeyRateLimiter {
-  private failures = new Map<string, { count: number; resetAt: number }>();
+export class VirtualKeyRateLimiter {
+  private cacheManager: {
+    get: <T>(key: AllowedCacheKey) => Promise<T | undefined>;
+    set: <T>(
+      key: AllowedCacheKey,
+      value: T,
+      ttl?: number,
+    ) => Promise<T | undefined>;
+  };
 
-  check(ip: string): void {
-    const entry = this.failures.get(ip);
+  constructor(cacheManager: {
+    get: <T>(key: AllowedCacheKey) => Promise<T | undefined>;
+    set: <T>(
+      key: AllowedCacheKey,
+      value: T,
+      ttl?: number,
+    ) => Promise<T | undefined>;
+  }) {
+    this.cacheManager = cacheManager;
+  }
+
+  async check(ip: string): Promise<void> {
+    const entry = await this.cacheManager.get<RateLimitEntry>(this.key(ip));
     if (!entry) return;
-
-    if (Date.now() > entry.resetAt) {
-      this.failures.delete(ip);
-      return;
-    }
 
     if (entry.count >= RATE_LIMIT_MAX_FAILURES) {
       throw new ApiError(
@@ -261,17 +284,19 @@ class VirtualKeyRateLimiter {
     }
   }
 
-  recordFailure(ip: string): void {
-    const entry = this.failures.get(ip);
-    if (!entry || Date.now() > entry.resetAt) {
-      this.failures.set(ip, {
-        count: 1,
-        resetAt: Date.now() + RATE_LIMIT_WINDOW_MS,
-      });
-    } else {
-      entry.count++;
-    }
+  async recordFailure(ip: string): Promise<void> {
+    const entry = await this.cacheManager.get<RateLimitEntry>(this.key(ip));
+    const newCount = (entry?.count ?? 0) + 1;
+    await this.cacheManager.set<RateLimitEntry>(
+      this.key(ip),
+      { count: newCount },
+      RATE_LIMIT_WINDOW_MS,
+    );
+  }
+
+  private key(ip: string): AllowedCacheKey {
+    return `${CacheKey.VirtualKeyRateLimit}-${ip}`;
   }
 }
 
-export const virtualKeyRateLimiter = new VirtualKeyRateLimiter();
+export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);

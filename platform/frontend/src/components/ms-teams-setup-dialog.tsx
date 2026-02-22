@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
-import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
 
 interface MsTeamsSetupDialogProps {

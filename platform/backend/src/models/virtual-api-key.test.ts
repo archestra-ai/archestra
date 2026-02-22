@@ -234,19 +234,27 @@ describe("VirtualApiKeyModel", () => {
       name: "Virtual B",
     });
 
-    const results = await VirtualApiKeyModel.findAllByOrganization(org.id);
-    expect(results).toHaveLength(2);
-    expect(results[0].parentKeyName).toBe("Parent Key");
-    expect(results[0].parentKeyProvider).toBe("anthropic");
-    expect(results.map((r) => r.name)).toContain("Virtual A");
-    expect(results.map((r) => r.name)).toContain("Virtual B");
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+    });
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0].parentKeyName).toBe("Parent Key");
+    expect(result.data[0].parentKeyProvider).toBe("anthropic");
+    expect(result.data.map((r) => r.name)).toContain("Virtual A");
+    expect(result.data.map((r) => r.name)).toContain("Virtual B");
+    expect(result.pagination.total).toBe(2);
   });
 
   test("findAllByOrganization: returns empty for org with no virtual keys", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    const results = await VirtualApiKeyModel.findAllByOrganization(org.id);
-    expect(results).toHaveLength(0);
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+    });
+    expect(result.data).toHaveLength(0);
+    expect(result.pagination.total).toBe(0);
   });
 });

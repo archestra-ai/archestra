@@ -391,11 +391,13 @@ export const parseContentMaxLength = (
  * Parse virtual key default expiration from environment variable.
  * Must be a non-negative integer (seconds). 0 means "never expires".
  * Returns the default (30 days) for invalid or negative values.
+ * Capped at 1 year (31,536,000 seconds) to prevent unreasonably long expirations.
  */
 export const parseVirtualKeyDefaultExpiration = (
   envValue: string | undefined,
 ): number => {
   const DEFAULT_EXPIRATION = 2592000; // 30 days in seconds
+  const MAX_EXPIRATION = 31_536_000; // 1 year in seconds
   if (!envValue) return DEFAULT_EXPIRATION;
 
   const trimmed = envValue.trim();
@@ -413,7 +415,16 @@ export const parseVirtualKeyDefaultExpiration = (
     logger.info(
       "ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS set to 0: virtual keys will not expire by default",
     );
+    return 0;
   }
+
+  if (parsed > MAX_EXPIRATION) {
+    logger.warn(
+      `ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "${trimmed}" exceeds maximum (${MAX_EXPIRATION}s / 1 year), capping to ${MAX_EXPIRATION}`,
+    );
+    return MAX_EXPIRATION;
+  }
+
   return parsed;
 };
 

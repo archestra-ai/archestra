@@ -655,6 +655,8 @@ jobs:
       - name: Install Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/install-kind-cluster
+        with:
+          config: .github/kind-no-calico.yaml
 
       - name: Load Docker image into Kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

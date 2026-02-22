@@ -169,7 +169,12 @@ export function CreateVirtualKeyDialog({
               </div>
 
               <div className="space-y-2">
-                <Label>Expiration</Label>
+                <Label>
+                  Expiration{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+                  </span>
+                </Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="datetime-local"

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { SupportedProvider } from "./model-constants";
 
+/** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
+export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
+
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",

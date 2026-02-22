@@ -1,7 +1,12 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
-import { OAUTH_PAGES, OAUTH_SCOPES, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  OAUTH_PAGES,
+  OAUTH_SCOPES,
+  SSO_TRUSTED_PROVIDER_IDS,
+} from "@shared";
 import {
   allAvailableActions,
   editorPermissions,
@@ -118,7 +123,7 @@ export const auth: any = betterAuth({
     apiKey({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],
-      defaultPrefix: "archestra_",
+      defaultPrefix: ARCHESTRA_TOKEN_PREFIX,
       rateLimit: {
         enabled: false,
       },

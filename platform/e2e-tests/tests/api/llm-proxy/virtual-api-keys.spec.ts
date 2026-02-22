@@ -1,9 +1,5 @@
 import type { APIRequestContext } from "@playwright/test";
-import {
-  API_BASE_URL,
-  WIREMOCK_BASE_URL,
-  WIREMOCK_INTERNAL_URL,
-} from "../../../consts";
+import { API_BASE_URL, WIREMOCK_INTERNAL_URL } from "../../../consts";
 import { expect, test } from "../fixtures";
 
 /**
@@ -655,71 +651,24 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     makeApiRequest,
     createLlmProxy,
     deleteAgent,
-    clearWiremockRequests,
-    getWiremockRequests,
   }) => {
-    // Create a dynamic WireMock mapping at a custom path
-    const customPath = `/custom-base-${Date.now()}`;
-    const mappingResp = await request.post(
-      `${WIREMOCK_BASE_URL}/__admin/mappings`,
-      {
-        headers: { "Content-Type": "application/json" },
-        data: {
-          request: {
-            method: "POST",
-            urlPath: `${customPath}/v1/chat/completions`,
-          },
-          response: {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-            jsonBody: {
-              id: "chatcmpl-custom-base-url",
-              object: "chat.completion",
-              created: 1234567890,
-              model: "gpt-4o-mini",
-              choices: [
-                {
-                  index: 0,
-                  message: {
-                    role: "assistant",
-                    content: "Response from custom base URL!",
-                    refusal: null,
-                  },
-                  finish_reason: "stop",
-                  logprobs: null,
-                },
-              ],
-              usage: {
-                prompt_tokens: 10,
-                completion_tokens: 8,
-                total_tokens: 18,
-              },
-            },
-          },
-        },
-      },
-    );
-    const mapping = await mappingResp.json();
-    const mappingId = mapping.id;
-
+    // Uses the static WireMock mapping at /custom-base-url-test/v1/chat/completions
+    // which returns a distinct response ID ("chatcmpl-custom-base-url")
     const proxyResp = await createLlmProxy(
       request,
       "e2e-vk-custom-base",
     );
     const proxy = await proxyResp.json();
 
-    // Create a chat API key with a custom base URL pointing to our custom WireMock path
+    // Create a chat API key with a custom base URL pointing to the static WireMock mapping path
     const chatApiKey = await createChatApiKey(makeApiRequest, request, {
-      baseUrl: `${WIREMOCK_INTERNAL_URL}${customPath}/v1`,
+      baseUrl: `${WIREMOCK_INTERNAL_URL}/custom-base-url-test/v1`,
     });
     const vk = await createVirtualKey(
       makeApiRequest,
       request,
       chatApiKey.id,
     );
-
-    // Clear WireMock journal so we can verify our specific request
-    await clearWiremockRequests(request);
 
     try {
       const proxyResponse = await callProxyWithVirtualKey(
@@ -729,25 +678,13 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       );
       expect(proxyResponse.ok()).toBeTruthy();
 
+      // The distinct response ID proves the request was routed to the custom base URL
+      // (the default WireMock mapping returns "chatcmpl-virtual-api-key-e2e" instead)
       const body = await proxyResponse.json();
       expect(body.id).toBe("chatcmpl-custom-base-url");
-
-      // Verify via WireMock request journal that the request hit the custom path
-      const wmRequests = await getWiremockRequests(request, {
-        method: "POST",
-        urlPattern: customPath,
-      });
-      expect(wmRequests.length).toBeGreaterThanOrEqual(1);
-      expect(wmRequests[0].request.url).toContain(
-        `${customPath}/v1/chat/completions`,
-      );
     } finally {
       await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
-      // Clean up dynamic WireMock mapping
-      await request.delete(
-        `${WIREMOCK_BASE_URL}/__admin/mappings/${mappingId}`,
-      );
     }
   });
 });

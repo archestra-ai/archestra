@@ -277,19 +277,19 @@ runs:
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
 
           echo "Verifying Keycloak is accessible..."
-          # Use --retry-all-errors to retry on HTTP errors (not just connection failures).
-          # Keycloak may return 5xx briefly after pod is Ready but before NodePort routes fully.
+          # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).
+          # The NodePort service routes to 8080, so we check the OIDC discovery endpoint instead.
           for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:30081/health/ready 2>/dev/null || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:30081/realms/archestra/.well-known/openid-configuration 2>/dev/null || echo "000")
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "Keycloak health check passed (HTTP $HTTP_CODE)"
+              echo "Keycloak is accessible (HTTP $HTTP_CODE)"
               break
             fi
-            echo "Keycloak health check returned HTTP $HTTP_CODE, retrying... ($i/30)"
+            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/30)"
             sleep 5
           done
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: Keycloak health check failed after 30 attempts (last HTTP $HTTP_CODE)"
+            echo "ERROR: Keycloak not accessible after 30 attempts (last HTTP $HTTP_CODE)"
             kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
             kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
             exit 1

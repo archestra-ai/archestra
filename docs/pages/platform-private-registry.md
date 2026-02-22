@@ -6,7 +6,7 @@ description: Managing your organization's MCP servers in a private registry
 lastUpdated: 2025-10-31
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 -->
@@ -49,3 +49,7 @@ Local servers run as containers within your Kubernetes cluster:
 - **Environment Configuration**: Inject API keys and configuration
 - **Command Arguments**: Configure startup commands and arguments
 - **Resource Management**: Control CPU and memory allocation
+
+### Labels
+
+Labels are key-value pairs that you can assign to MCP servers in the registry to organize and categorize them. For example, you might label servers by category (`database`, `ai`, `communication`), environment (`production`, `staging`), or team ownership.

@@ -65,8 +65,8 @@ const LocalConfigSelectSchema = z.object({
 });
 
 const CatalogLabelSchema = z.object({
-  key: z.string(),
-  value: z.string(),
+  key: z.string().min(1),
+  value: z.string().min(1),
 });
 
 export const SelectInternalMcpCatalogSchema = createSelectSchema(

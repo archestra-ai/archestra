@@ -15,7 +15,13 @@ import {
   Zap,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
@@ -43,40 +49,25 @@ export function ProviderSettingsModels() {
   const syncModelsMutation = useSyncChatModels();
   const updatePricing = useUpdateModelPricing();
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
-  const [editInput, setEditInput] = useState("");
-  const [editOutput, setEditOutput] = useState("");
 
   const handleRefresh = useCallback(async () => {
     await syncModelsMutation.mutateAsync();
     await refetch();
   }, [syncModelsMutation, refetch]);
 
-  const startEditing = useCallback((model: ModelWithApiKeys) => {
-    setEditingModelId(model.id);
-    const caps = model.capabilities;
-    setEditInput(caps?.pricePerMillionInput ?? "");
-    setEditOutput(caps?.pricePerMillionOutput ?? "");
-  }, []);
-
-  const cancelEditing = useCallback(() => {
-    setEditingModelId(null);
-    setEditInput("");
-    setEditOutput("");
-  }, []);
-
-  const saveEditing = useCallback(
-    async (modelId: string) => {
+  const handleSave = useCallback(
+    async (modelId: string, input: string, output: string) => {
       await updatePricing.mutateAsync({
         id: modelId,
-        customPricePerMillionInput: editInput || null,
-        customPricePerMillionOutput: editOutput || null,
+        customPricePerMillionInput: input || null,
+        customPricePerMillionOutput: output || null,
       });
       setEditingModelId(null);
     },
-    [updatePricing, editInput, editOutput],
+    [updatePricing],
   );
 
-  const resetPricing = useCallback(
+  const handleReset = useCallback(
     async (modelId: string) => {
       await updatePricing.mutateAsync({
         id: modelId,
@@ -88,6 +79,7 @@ export function ProviderSettingsModels() {
     [updatePricing],
   );
 
+  // Column defs are stable — no editing state in deps
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
       {
@@ -220,187 +212,238 @@ export function ProviderSettingsModels() {
         },
       },
       {
-        accessorKey: "capabilities.pricePerMillionInput",
-        header: "$/M Input",
-        cell: ({ row }) => {
-          if (hasUnknownCapabilities(row.original)) return null;
-          const isEditing = editingModelId === row.original.id;
-          if (isEditing) {
-            return (
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={editInput}
-                onChange={(e) => setEditInput(e.target.value)}
-                className="h-7 w-24 text-sm font-mono"
-                placeholder="0.00"
-              />
-            );
-          }
-          const price = row.original.capabilities?.pricePerMillionInput;
-          if (!price) return null;
-          const source = (row.original.capabilities as Record<string, unknown>)
-            ?.priceSource as string | undefined;
-          return (
-            <div className="flex items-center gap-1">
-              <span className="text-sm font-mono">${price}</span>
-              {source && <PriceSourceBadge source={source} />}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "capabilities.pricePerMillionOutput",
-        header: "$/M Output",
-        cell: ({ row }) => {
-          if (hasUnknownCapabilities(row.original)) return null;
-          const isEditing = editingModelId === row.original.id;
-          if (isEditing) {
-            return (
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={editOutput}
-                onChange={(e) => setEditOutput(e.target.value)}
-                className="h-7 w-24 text-sm font-mono"
-                placeholder="0.00"
-              />
-            );
-          }
-          const price = row.original.capabilities?.pricePerMillionOutput;
-          if (!price) return null;
-          return <span className="text-sm font-mono">${price}</span>;
-        },
-      },
-      {
-        id: "actions",
-        header: "",
-        cell: ({ row }) => {
-          const isEditing = editingModelId === row.original.id;
-          const isCustom =
-            (row.original.capabilities as Record<string, unknown>)
-              ?.priceSource === "custom";
-          if (isEditing) {
-            return (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => saveEditing(row.original.id)}
-                  disabled={updatePricing.isPending}
-                >
-                  <Save className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={cancelEditing}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            );
-          }
-          return (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={() => startEditing(row.original)}
-                disabled={editingModelId !== null}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              {isCustom && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0 text-muted-foreground"
-                  onClick={() => resetPricing(row.original.id)}
-                  disabled={editingModelId !== null}
-                  title="Reset to default pricing"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          );
-        },
+        id: "pricing",
+        header: "$/M (Input / Output)",
+        cell: ({ row }) => <PricingCell model={row.original} />,
       },
     ],
-    [
-      editingModelId,
-      editInput,
-      editOutput,
-      startEditing,
-      cancelEditing,
-      saveEditing,
-      resetPricing,
-      updatePricing.isPending,
-    ],
+    [],
   );
 
   return (
-    <LoadingWrapper
-      isPending={isPending}
-      loadingFallback={
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      }
+    <PricingEditContext.Provider
+      value={{
+        editingModelId,
+        setEditingModelId,
+        onSave: handleSave,
+        onReset: handleReset,
+        isSaving: updatePricing.isPending,
+      }}
     >
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-lg font-semibold">Available Models</h2>
-            <p className="text-sm text-muted-foreground">
-              Models available from your configured API keys
-            </p>
+      <LoadingWrapper
+        isPending={isPending}
+        loadingFallback={
+          <div className="flex items-center justify-center h-32">
+            <Loader2 className="h-6 w-6 animate-spin" />
           </div>
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            disabled={syncModelsMutation.isPending}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${syncModelsMutation.isPending ? "animate-spin" : ""}`}
-            />
-            Refresh models
-          </Button>
-        </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold">Available Models</h2>
+              <p className="text-sm text-muted-foreground">
+                Models available from your configured API keys
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={syncModelsMutation.isPending}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${syncModelsMutation.isPending ? "animate-spin" : ""}`}
+              />
+              Refresh models
+            </Button>
+          </div>
 
-        {models.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>
-              No models available.{" "}
-              <a
-                href="/llm-proxies/provider-settings"
-                className="underline hover:text-foreground"
-              >
-                Add an API key
-              </a>{" "}
-              to see available models.
-            </p>
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={models}
-            getRowId={(row) => row.id}
-            hideSelectedCount
-          />
-        )}
-      </div>
-    </LoadingWrapper>
+          {models.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>
+                No models available.{" "}
+                <a
+                  href="/llm-proxies/provider-settings"
+                  className="underline hover:text-foreground"
+                >
+                  Add an API key
+                </a>{" "}
+                to see available models.
+              </p>
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={models}
+              getRowId={(row) => row.id}
+              hideSelectedCount
+            />
+          )}
+        </div>
+      </LoadingWrapper>
+    </PricingEditContext.Provider>
   );
 }
 
-// --- Internal helpers and components ---
+// --- Pricing edit context ---
+
+type PricingEditContextValue = {
+  editingModelId: string | null;
+  setEditingModelId: (id: string | null) => void;
+  onSave: (modelId: string, input: string, output: string) => Promise<void>;
+  onReset: (modelId: string) => Promise<void>;
+  isSaving: boolean;
+};
+
+const PricingEditContext = createContext<PricingEditContextValue>({
+  editingModelId: null,
+  setEditingModelId: () => {},
+  onSave: async () => {},
+  onReset: async () => {},
+  isSaving: false,
+});
+
+// --- Pricing cell with integrated editing ---
+
+function PricingCell({ model }: { model: ModelWithApiKeys }) {
+  const { editingModelId, setEditingModelId, onSave, onReset, isSaving } =
+    useContext(PricingEditContext);
+  const isEditing = editingModelId === model.id;
+  const isCustom =
+    (model.capabilities as Record<string, unknown>)?.priceSource === "custom";
+
+  if (hasUnknownCapabilities(model)) return null;
+
+  if (isEditing) {
+    return (
+      <PricingEditForm
+        model={model}
+        onSave={onSave}
+        onCancel={() => setEditingModelId(null)}
+        isSaving={isSaving}
+      />
+    );
+  }
+
+  const inputPrice = model.capabilities?.pricePerMillionInput;
+  const outputPrice = model.capabilities?.pricePerMillionOutput;
+  const source = (model.capabilities as Record<string, unknown>)?.priceSource as
+    | string
+    | undefined;
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        {inputPrice || outputPrice ? (
+          <span className="text-sm font-mono">
+            ${inputPrice ?? "-"} / ${outputPrice ?? "-"}
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">-</span>
+        )}
+        {source && <PriceSourceBadge source={source} />}
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        onClick={() => setEditingModelId(model.id)}
+        disabled={editingModelId !== null}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+      {isCustom && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-muted-foreground"
+          onClick={() => onReset(model.id)}
+          disabled={editingModelId !== null}
+          title="Reset to default pricing"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Self-contained editing form with local state.
+ * Owns its own input/output values so typing doesn't
+ * cause column re-definition or cell remounting.
+ */
+function PricingEditForm({
+  model,
+  onSave,
+  onCancel,
+  isSaving,
+}: {
+  model: ModelWithApiKeys;
+  onSave: (modelId: string, input: string, output: string) => Promise<void>;
+  onCancel: () => void;
+  isSaving: boolean;
+}) {
+  const [input, setInput] = useState(
+    model.capabilities?.pricePerMillionInput ?? "",
+  );
+  const [output, setOutput] = useState(
+    model.capabilities?.pricePerMillionOutput ?? "",
+  );
+
+  return (
+    <form
+      className="flex items-center gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(model.id, input, output);
+      }}
+    >
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        className="h-7 w-20 text-sm font-mono"
+        placeholder="Input"
+        autoFocus
+        disabled={isSaving}
+      />
+      <span className="text-muted-foreground">/</span>
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        value={output}
+        onChange={(e) => setOutput(e.target.value)}
+        className="h-7 w-20 text-sm font-mono"
+        placeholder="Output"
+        disabled={isSaving}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        type="submit"
+        disabled={isSaving}
+      >
+        <Save className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        type="button"
+        onClick={onCancel}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </form>
+  );
+}
+
+// --- Internal helpers and badge components ---
 
 function formatContextLength(contextLength: number | null): string {
   if (contextLength === null) return "-";

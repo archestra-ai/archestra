@@ -214,7 +214,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cerebras: "cerebras",
   mistral: "mistral",
   llama: "openai",
-  deepseek: "openai",
+  deepseek: "deepseek",
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",

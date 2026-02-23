@@ -77,6 +77,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   ollama: "llama3.2",
   vllm: "default",
   cerebras: "llama-4-scout-17b-16e-instruct",
+  deepseek: "deepseek-chat",
   mistral: "mistral-large-latest",
   perplexity: "sonar-pro",
   zhipuai: "glm-4-plus",

@@ -7,6 +7,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
   InsertMcpServerInstallationRequest,
+  LocalConfig,
   McpServerInstallationRequest,
   McpServerInstallationRequestStatus,
   UpdateMcpServerInstallationRequest,
@@ -33,6 +34,85 @@ function rewriteOAuthRedirectUris(
         : uri,
     ),
   };
+}
+
+function transformExternalServerToCatalogItem(
+  externalServer: archestraCatalogTypes.ArchestraMcpServerManifest,
+): {
+  serverType: "local" | "remote";
+  serverUrl?: string;
+  docsUrl?: string;
+  localConfig?: LocalConfig;
+} {
+  const server = externalServer.server;
+  if (server.type === "remote") {
+    return {
+      serverType: "remote",
+      serverUrl: server.url,
+      docsUrl: server.docs_url ?? undefined,
+    };
+  } else {
+    // local server
+    const localConfig: LocalConfig = {};
+    // Use archestra_config.client_config_permutations if available for better defaults
+    const archestraConfig = externalServer.archestra_config;
+    let preferredCommand = server.command;
+    let preferredArgs = server.args;
+    let preferredEnv = server.env;
+    let preferredDockerImage = server.docker_image;
+    let preferredServiceAccount = server.service_account;
+
+    if (archestraConfig?.client_config_permutations) {
+      const permutations = archestraConfig.client_config_permutations;
+      // Pick the first permutation (usually the recommended one for Archestra)
+      const firstKey = Object.keys(permutations)[0];
+      if (firstKey) {
+        const perm = permutations[firstKey];
+        if (perm) {
+          preferredCommand = perm.command ?? preferredCommand;
+          preferredArgs = perm.args ?? preferredArgs;
+          preferredEnv = { ...preferredEnv, ...perm.env };
+          preferredDockerImage = perm.docker_image ?? preferredDockerImage;
+        }
+      }
+    }
+
+    if (preferredCommand) {
+      localConfig.command = preferredCommand;
+    }
+    if (preferredArgs && preferredArgs.length > 0) {
+      localConfig.arguments = preferredArgs;
+    }
+    if (preferredEnv && Object.keys(preferredEnv).length > 0) {
+      localConfig.environment = Object.entries(preferredEnv).map(([key, value]) => ({
+        key,
+        type: "plain_text" as const,
+        value: value,
+        promptOnInstallation: true,
+        required: false,
+        description: "",
+      }));
+    }
+    if (preferredDockerImage) {
+      localConfig.dockerImage = preferredDockerImage;
+    }
+    if (preferredServiceAccount) {
+      localConfig.serviceAccount = preferredServiceAccount;
+    }
+    // Determine transport type based on args or oauth config
+    const oauthConfig = externalServer.oauth_config;
+    if (oauthConfig?.streamable_http_port) {
+      localConfig.transportType = "streamable-http";
+      localConfig.httpPort = oauthConfig.streamable_http_port;
+    } else if (server.args?.some(arg => arg.includes("streamable-http"))) {
+      localConfig.transportType = "streamable-http";
+      localConfig.httpPort = 8000; // default
+    }
+    return {
+      serverType: "local",
+      localConfig,
+    };
+  }
 }
 
 class McpServerInstallationRequestModel {
@@ -161,20 +241,18 @@ class McpServerInstallationRequestModel {
         if (externalServerResponse.data) {
           const externalServer = externalServerResponse.data;
 
+          // Transform external server to catalog item
+          const { serverType, serverUrl, docsUrl, localConfig } =
+            transformExternalServerToCatalogItem(externalServer);
           // Create internal catalog item from external server data
           await InternalMcpCatalogModel.create({
             name: externalServer.display_name || externalServer.name,
             version: undefined,
             instructions: externalServer.instructions,
-            serverType: externalServer.server.type,
-            serverUrl:
-              externalServer.server.type === "remote"
-                ? externalServer.server.url
-                : undefined,
-            docsUrl:
-              externalServer.server.type === "remote"
-                ? externalServer.server.docs_url
-                : undefined,
+            serverType,
+            serverUrl,
+            docsUrl,
+            localConfig,
             userConfig: externalServer.user_config,
             oauthConfig: rewriteOAuthRedirectUris(externalServer.oauth_config),
           });

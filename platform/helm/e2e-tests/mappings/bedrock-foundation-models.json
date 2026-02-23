@@ -17,6 +17,7 @@
           "providerName": "Anthropic",
           "inputModalities": ["TEXT"],
           "outputModalities": ["TEXT"],
+          "inferenceTypesSupported": ["ON_DEMAND"],
           "modelLifecycle": {
             "status": "ACTIVE"
           }

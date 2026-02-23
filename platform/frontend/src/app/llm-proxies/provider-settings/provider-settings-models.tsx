@@ -42,16 +42,7 @@ import {
   useModelsWithApiKeys,
   useUpdateModelPricing,
 } from "@/lib/chat-models.query";
-import {
-  type ChatApiKeyScope,
-  useSyncChatModels,
-} from "@/lib/chat-settings.query";
-
-const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
-  personal: null,
-  team: null,
-  org_wide: null,
-};
+import { useSyncChatModels } from "@/lib/chat-settings.query";
 
 export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
@@ -184,13 +175,7 @@ export function ProviderSettingsModels() {
                   variant={apiKey.isSystem ? "secondary" : "outline"}
                   className="text-xs gap-1 max-w-full"
                 >
-                  {apiKey.isSystem ? (
-                    <Server className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <span className="shrink-0">
-                      {SCOPE_ICONS[apiKey.scope as ChatApiKeyScope]}
-                    </span>
-                  )}
+                  {apiKey.isSystem && <Server className="h-3 w-3 shrink-0" />}
                   <span className="truncate">{apiKey.name}</span>
                 </Badge>
               ))}

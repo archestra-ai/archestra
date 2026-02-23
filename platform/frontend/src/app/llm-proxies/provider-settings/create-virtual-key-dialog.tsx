@@ -3,7 +3,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { Key, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ChatApiKeyResponse,
   PROVIDER_CONFIG,
@@ -55,15 +55,19 @@ export function CreateVirtualKeyDialog({
   );
 
   const defaultParentKeyId = parentableKeys[0]?.id ?? "";
+  const prevOpenRef = useRef(open);
 
-  // Reset form state whenever dialog opens (fixes stale "key created" state on reopen)
+  // Reset form state only on open transition (false → true)
   useEffect(() => {
-    if (!open) return;
-    setCreatedKeyValue(null);
-    setCreatedKeyExpiresAt(null);
-    setNewKeyName("");
-    setSelectedParentKeyId(defaultParentKeyId);
-    setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (open && !wasOpen) {
+      setCreatedKeyValue(null);
+      setCreatedKeyExpiresAt(null);
+      setNewKeyName("");
+      setSelectedParentKeyId(defaultParentKeyId);
+      setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
+    }
   }, [open, defaultParentKeyId, defaultExpirationSeconds]);
 
   const handleCreate = useCallback(async () => {

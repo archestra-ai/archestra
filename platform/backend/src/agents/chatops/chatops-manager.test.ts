@@ -680,6 +680,8 @@ describe("ChatOpsManager.initialize — partial config", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
   });
 
   afterEach(() => {
@@ -755,6 +757,8 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
   });
 
   afterEach(() => {
@@ -881,5 +885,145 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const config = await ChatOpsConfigModel.getMsTeamsConfig();
     expect(config).toBeNull();
+  });
+
+  test("seeds Slack socket mode config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-socket-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "socket");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "xapp-test-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "A_SOCKET");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config).not.toBeNull();
+    expect(config?.enabled).toBe(true);
+    expect(config?.botToken).toBe("xoxb-socket-token");
+    expect(config?.connectionMode).toBe("socket");
+    expect(config?.appLevelToken).toBe("xapp-test-token");
+    expect(config?.appId).toBe("A_SOCKET");
+  });
+
+  test("does not seed Slack socket mode when appLevelToken is missing", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "socket");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-token");
+    // No signing secret and no app-level token
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config).toBeNull();
+  });
+});
+
+// =============================================================================
+// Slack Socket Mode — isConfigured validation
+// =============================================================================
+
+describe("ChatOpsManager.initialize — Slack socket mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("socket mode config is configured when botToken and appLevelToken are set", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      connectionMode: "socket",
+      appLevelToken: "xapp-test-token",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isConfigured()).toBe(true);
+    expect(provider?.isSocketMode()).toBe(true);
+    expect(provider?.getConnectionMode()).toBe("socket");
+
+    await manager.cleanup();
+  });
+
+  test("socket mode config is not configured when appLevelToken is missing", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      connectionMode: "socket",
+      // no appLevelToken
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isConfigured()).toBe(false);
+
+    await manager.cleanup();
+  });
+
+  test("webhook mode config is not configured when signingSecret is missing", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      connectionMode: "webhook",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isConfigured()).toBe(false);
+    expect(provider?.isSocketMode()).toBe(false);
+
+    await manager.cleanup();
+  });
+
+  test("defaults to webhook mode when connectionMode is not set", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "test-secret",
+      appId: "A123",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isSocketMode()).toBe(false);
+    expect(provider?.getConnectionMode()).toBe("webhook");
+
+    await manager.cleanup();
   });
 });

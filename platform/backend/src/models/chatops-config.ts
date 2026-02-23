@@ -28,6 +28,8 @@ export interface SlackConfig {
   botToken: string;
   signingSecret: string;
   appId: string;
+  connectionMode?: "webhook" | "socket";
+  appLevelToken?: string;
 }
 
 class ChatOpsConfigModel {
@@ -36,7 +38,13 @@ class ChatOpsConfigModel {
   }
 
   async getSlackConfig(): Promise<SlackConfig | null> {
-    return this.getConfig<SlackConfig>(SLACK_SECRET_NAME);
+    const raw = await this.getConfig<SlackConfig>(SLACK_SECRET_NAME);
+    if (!raw) return null;
+    return {
+      ...raw,
+      connectionMode: raw.connectionMode ?? "webhook",
+      appLevelToken: raw.appLevelToken ?? "",
+    };
   }
 
   async saveMsTeamsConfig(value: MsTeamsConfig): Promise<void> {

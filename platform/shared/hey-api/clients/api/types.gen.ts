@@ -15526,6 +15526,8 @@ export type UpdateSlackChatOpsConfigData = {
         botToken?: string;
         signingSecret?: string;
         appId?: string;
+        connectionMode?: 'webhook' | 'socket';
+        appLevelToken?: string;
     };
     path?: never;
     query?: never;

@@ -928,6 +928,44 @@ These environment variables configure the ChatOps feature, which allows users to
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
 
+#### Slack
+
+See [Slack](/docs/platform-slack) for setup instructions.
+
+- **`ARCHESTRA_CHATOPS_SLACK_ENABLED`** - Enable Slack integration.
+
+  - Default: `false`
+  - Set to `true` to enable the Slack chatops provider
+
+- **`ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN`** - Slack Bot User OAuth Token.
+
+  - Required when: `ARCHESTRA_CHATOPS_SLACK_ENABLED=true`
+  - Starts with `xoxb-`
+  - Found in: OAuth & Permissions page → Bot User OAuth Token
+
+- **`ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET`** - Slack app signing secret for webhook signature verification.
+
+  - Required when: using webhook mode (default)
+  - Found in: Basic Information page → App Credentials → Signing Secret
+
+- **`ARCHESTRA_CHATOPS_SLACK_APP_ID`** - Slack App ID.
+
+  - Optional but recommended for DM deep links
+  - Found in: Basic Information page → App ID
+
+- **`ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE`** - Connection mode for Slack integration.
+
+  - Default: `webhook`
+  - Options: `webhook`, `socket`
+  - `webhook`: Slack sends events to your public webhook URLs (requires a publicly accessible Archestra instance)
+  - `socket`: Archestra connects to Slack via an outbound WebSocket (no public URL required)
+
+- **`ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN`** - Slack App-Level Token for socket mode.
+
+  - Required when: `ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE=socket`
+  - Starts with `xapp-`
+  - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
+
 ### Knowledge Graph Configuration
 
 These environment variables configure the Knowledge Graph feature, which automatically ingests documents uploaded via chat into a knowledge graph for enhanced retrieval. See [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.

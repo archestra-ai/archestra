@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { TimeInMs } from "@shared";
+import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -32,17 +33,41 @@ class SlackProvider implements ChatOpsProvider {
   private teamId: string | null = null;
   private teamName: string | null = null;
   private config: SlackConfig;
+  private socketModeClient: SocketModeClient | null = null;
+  private onSocketEvent:
+    | ((
+        type: "event" | "interactive" | "slash_command",
+        payload: unknown,
+      ) => void)
+    | null = null;
 
   constructor(slackConfig: SlackConfig) {
     this.config = slackConfig;
   }
 
   isConfigured(): boolean {
-    return (
-      this.config.enabled &&
-      Boolean(this.config.botToken) &&
-      Boolean(this.config.signingSecret)
-    );
+    if (!this.config.enabled || !this.config.botToken) return false;
+    if (this.isSocketMode()) {
+      return Boolean(this.config.appLevelToken);
+    }
+    return Boolean(this.config.signingSecret);
+  }
+
+  isSocketMode(): boolean {
+    return this.config.connectionMode === "socket";
+  }
+
+  getConnectionMode(): "webhook" | "socket" {
+    return this.config.connectionMode === "socket" ? "socket" : "webhook";
+  }
+
+  setSocketEventHandler(
+    handler: (
+      type: "event" | "interactive" | "slash_command",
+      payload: unknown,
+    ) => void,
+  ): void {
+    this.onSocketEvent = handler;
   }
 
   async initialize(): Promise<void> {
@@ -70,6 +95,10 @@ class SlackProvider implements ChatOpsProvider {
       );
       throw error;
     }
+
+    if (this.isSocketMode()) {
+      await this.startSocketMode();
+    }
   }
 
   getWorkspaceId(): string | null {
@@ -81,6 +110,18 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async cleanup(): Promise<void> {
+    if (this.socketModeClient) {
+      try {
+        await this.socketModeClient.disconnect();
+      } catch (error) {
+        logger.warn(
+          { error: errorMessage(error) },
+          "[SlackProvider] Error disconnecting socket mode client",
+        );
+      }
+      this.socketModeClient = null;
+    }
+    this.onSocketEvent = null;
     this.client = null;
     this.botUserId = null;
     this.teamId = null;
@@ -463,6 +504,53 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  private async startSocketMode(): Promise<void> {
+    const appToken = this.config.appLevelToken;
+    if (!appToken) {
+      logger.error(
+        "[SlackProvider] Cannot start socket mode: appLevelToken is missing",
+      );
+      return;
+    }
+
+    this.socketModeClient = new SocketModeClient({
+      appToken,
+      autoReconnectEnabled: true,
+    });
+
+    this.socketModeClient.on("events_api", async ({ ack, body }) => {
+      await ack();
+      if (this.onSocketEvent) {
+        this.onSocketEvent("event", body);
+      }
+    });
+
+    this.socketModeClient.on("interactive", async ({ ack, body }) => {
+      await ack();
+      if (this.onSocketEvent) {
+        this.onSocketEvent("interactive", body);
+      }
+    });
+
+    this.socketModeClient.on("slash_commands", async ({ ack, body }) => {
+      await ack();
+      if (this.onSocketEvent) {
+        this.onSocketEvent("slash_command", body);
+      }
+    });
+
+    try {
+      await this.socketModeClient.start();
+      logger.info("[SlackProvider] Socket mode connected");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to start socket mode",
+      );
+      throw error;
+    }
+  }
 
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;

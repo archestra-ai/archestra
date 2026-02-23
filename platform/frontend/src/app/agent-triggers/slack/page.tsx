@@ -57,13 +57,18 @@ export default function SlackPage() {
   const ngrokDomain = features?.ngrokDomain;
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
   const slackCreds = slack?.credentials as Record<string, string> | undefined;
+  const isSocketMode = slackCreds?.connectionMode === "socket";
 
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
-  const allStepsCompleted = isLocalDev
-    ? !!ngrokDomain && !!slack?.configured
-    : !!slack?.configured;
+
+  // Socket mode doesn't require ngrok or a public URL
+  const allStepsCompleted = isSocketMode
+    ? !!slack?.configured
+    : isLocalDev
+      ? !!ngrokDomain && !!slack?.configured
+      : !!slack?.configured;
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,7 +78,7 @@ export default function SlackPage() {
         providerLabel="Slack"
         docsUrl="https://archestra.ai/docs/platform-slack"
       >
-        {isLocalDev ? (
+        {!isSocketMode && isLocalDev ? (
           <SetupStep
             title="Make Archestra reachable from the Internet"
             description="The Slack bot needs to connect to an Archestra webhook — your instance must be publicly accessible"
@@ -100,7 +105,7 @@ export default function SlackPage() {
               </>
             )}
           </SetupStep>
-        ) : (
+        ) : !isSocketMode ? (
           <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
             <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
             <div className="flex flex-col gap-1">
@@ -117,7 +122,7 @@ export default function SlackPage() {
               </span>
             </div>
           </div>
-        )}
+        ) : null}
         <SetupStep
           title="Setup Slack"
           description="Create a Slack App from manifest and connect it to Archestra"
@@ -129,11 +134,22 @@ export default function SlackPage() {
         >
           <div className="flex items-center flex-wrap gap-4">
             <CredentialField label="Bot Token" value={slackCreds?.botToken} />
-            <CredentialField
-              label="Signing Secret"
-              value={slackCreds?.signingSecret}
-            />
+            {isSocketMode ? (
+              <CredentialField
+                label="App-Level Token"
+                value={slackCreds?.appLevelToken}
+              />
+            ) : (
+              <CredentialField
+                label="Signing Secret"
+                value={slackCreds?.signingSecret}
+              />
+            )}
             <CredentialField label="App ID" value={slackCreds?.appId} />
+            <CredentialField
+              label="Mode"
+              value={isSocketMode ? "Socket" : "Webhook"}
+            />
           </div>
         </SetupStep>
       </CollapsibleSetupSection>

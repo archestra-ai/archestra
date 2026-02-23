@@ -35,25 +35,24 @@ class ToolInvocationPolicyModel {
   static async create(
     policy: ToolInvocation.InsertToolInvocationPolicy,
   ): Promise<ToolInvocation.ToolInvocationPolicy> {
-    // TODO: uncomment after finding the source of duplicate default policies
-    // // If this is a default policy (empty conditions), upsert to prevent duplicates
-    // if (policy.conditions.length === 0) {
-    //   const [existingDefault] = await db
-    //     .select()
-    //     .from(schema.toolInvocationPoliciesTable)
-    //     .where(eq(schema.toolInvocationPoliciesTable.toolId, policy.toolId))
-    //     .then((rows) => rows.filter((r) => r.conditions.length === 0));
+    // If this is a default policy (empty conditions), upsert to prevent duplicates
+    if (policy.conditions.length === 0) {
+      const [existingDefault] = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, policy.toolId))
+        .then((rows) => rows.filter((r) => r.conditions.length === 0));
 
-    //   if (existingDefault) {
-    //     const [updatedPolicy] = await db
-    //       .update(schema.toolInvocationPoliciesTable)
-    //       .set({ action: policy.action, reason: policy.reason ?? null })
-    //       .where(eq(schema.toolInvocationPoliciesTable.id, existingDefault.id))
-    //       .returning();
+      if (existingDefault) {
+        const [updatedPolicy] = await db
+          .update(schema.toolInvocationPoliciesTable)
+          .set({ action: policy.action, reason: policy.reason ?? null })
+          .where(eq(schema.toolInvocationPoliciesTable.id, existingDefault.id))
+          .returning();
 
-    //     return updatedPolicy;
-    //   }
-    // }
+        return updatedPolicy;
+      }
+    }
 
     const [createdPolicy] = await db
       .insert(schema.toolInvocationPoliciesTable)

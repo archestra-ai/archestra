@@ -690,6 +690,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       authUrl.searchParams.set("scope", scopesToUse.join(" "));
       authUrl.searchParams.set("redirect_uri", redirectUri);
 
+      // RFC 8707: Include resource parameter for audience binding
+      // Required by MCP servers like Windmill that need to know which
+      // protected resource the token is intended for
+      if (oauthConfig.server_url) {
+        authUrl.searchParams.set("resource", oauthConfig.server_url);
+      }
+
       return reply.send({
         authorizationUrl: authUrl.toString(),
         state,

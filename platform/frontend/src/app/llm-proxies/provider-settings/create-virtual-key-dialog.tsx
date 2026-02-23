@@ -1,9 +1,9 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
-import { Key, Loader2 } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { CalendarIcon, Key, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   type ChatApiKeyResponse,
   PROVIDER_CONFIG,
@@ -11,6 +11,7 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -29,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateVirtualApiKey } from "@/lib/chat-settings.query";
+import { cn } from "@/lib/utils";
 
 interface CreateVirtualKeyDialogProps {
   open: boolean;
@@ -53,20 +60,17 @@ export function CreateVirtualKeyDialog({
     null,
   );
 
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (nextOpen) {
-        // Reset form state when opening
-        setCreatedKeyValue(null);
-        setCreatedKeyExpiresAt(null);
-        setNewKeyName("");
-        setSelectedParentKeyId(parentableKeys[0]?.id ?? "");
-        setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
-      }
-      onOpenChange(nextOpen);
-    },
-    [onOpenChange, parentableKeys, defaultExpirationSeconds],
-  );
+  const defaultParentKeyId = parentableKeys[0]?.id ?? "";
+
+  // Reset form state whenever dialog opens (fixes stale "key created" state on reopen)
+  useEffect(() => {
+    if (!open) return;
+    setCreatedKeyValue(null);
+    setCreatedKeyExpiresAt(null);
+    setNewKeyName("");
+    setSelectedParentKeyId(defaultParentKeyId);
+    setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
+  }, [open, defaultParentKeyId, defaultExpirationSeconds]);
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim() || !selectedParentKeyId) return;
@@ -89,7 +93,7 @@ export function CreateVirtualKeyDialog({
   }, [newKeyName, selectedParentKeyId, expiresAt, createMutation]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
@@ -176,17 +180,71 @@ export function CreateVirtualKeyDialog({
                   </span>
                 </Label>
                 <div className="flex items-center gap-2">
-                  <Input
-                    type="datetime-local"
-                    value={expiresAt ? toDatetimeLocalValue(expiresAt) : ""}
-                    min={toDatetimeLocalValue(new Date())}
-                    onChange={(e) =>
-                      setExpiresAt(
-                        e.target.value ? new Date(e.target.value) : null,
-                      )
-                    }
-                    className="flex-1"
-                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "flex-1 justify-start text-left font-normal",
+                          !expiresAt && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {expiresAt
+                          ? format(expiresAt, "PP 'at' p")
+                          : "No expiration"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={expiresAt ?? undefined}
+                        defaultMonth={expiresAt ?? new Date()}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          const newDate = new Date(date);
+                          if (expiresAt) {
+                            newDate.setHours(
+                              expiresAt.getHours(),
+                              expiresAt.getMinutes(),
+                            );
+                          } else {
+                            newDate.setHours(23, 59);
+                          }
+                          setExpiresAt(newDate);
+                        }}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return date < today;
+                        }}
+                      />
+                      <div className="border-t p-3 space-y-1">
+                        <Label
+                          htmlFor="expiration-time"
+                          className="text-xs font-medium"
+                        >
+                          Time
+                        </Label>
+                        <Input
+                          id="expiration-time"
+                          type="time"
+                          value={expiresAt ? format(expiresAt, "HH:mm") : ""}
+                          onChange={(e) => {
+                            if (!e.target.value || !expiresAt) return;
+                            const [hours, minutes] = e.target.value
+                              .split(":")
+                              .map(Number);
+                            const newDate = new Date(expiresAt);
+                            newDate.setHours(hours, minutes);
+                            setExpiresAt(newDate);
+                          }}
+                          disabled={!expiresAt}
+                          className="mt-1"
+                        />
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   {expiresAt && (
                     <Button
                       variant="ghost"
@@ -249,12 +307,4 @@ function formatExpiration(date: Date | string | null): string {
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
   if (!defaultSeconds) return null;
   return new Date(Date.now() + defaultSeconds * 1000);
-}
-
-/**
- * Format a Date to a datetime-local input value (YYYY-MM-DDTHH:mm).
- */
-function toDatetimeLocalValue(date: Date): string {
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

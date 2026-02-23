@@ -22,6 +22,7 @@ import {
 } from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
+import { UnknownCapabilitiesBadge } from "@/components/model-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -530,14 +531,6 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
     !hasToolCalling &&
     !hasContextLength &&
     !hasPricing
-  );
-}
-
-function UnknownCapabilitiesBadge() {
-  return (
-    <InlineTag className="text-muted-foreground bg-muted">
-      capabilities unknown
-    </InlineTag>
   );
 }
 

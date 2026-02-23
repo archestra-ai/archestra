@@ -1,7 +1,7 @@
 "use client";
 
-import { format, formatDistanceToNow } from "date-fns";
-import { CalendarIcon, Key, Loader2 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { Key, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -11,7 +11,7 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Dialog,
   DialogContent,
@@ -23,11 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -35,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateVirtualApiKey } from "@/lib/chat-settings.query";
-import { cn } from "@/lib/utils";
 
 interface CreateVirtualKeyDialogProps {
   open: boolean;
@@ -180,71 +174,17 @@ export function CreateVirtualKeyDialog({
                   </span>
                 </Label>
                 <div className="flex items-center gap-2">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "flex-1 justify-start text-left font-normal",
-                          !expiresAt && "text-muted-foreground",
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {expiresAt
-                          ? format(expiresAt, "PP 'at' p")
-                          : "No expiration"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={expiresAt ?? undefined}
-                        defaultMonth={expiresAt ?? new Date()}
-                        onSelect={(date) => {
-                          if (!date) return;
-                          const newDate = new Date(date);
-                          if (expiresAt) {
-                            newDate.setHours(
-                              expiresAt.getHours(),
-                              expiresAt.getMinutes(),
-                            );
-                          } else {
-                            newDate.setHours(23, 59);
-                          }
-                          setExpiresAt(newDate);
-                        }}
-                        disabled={(date) => {
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          return date < today;
-                        }}
-                      />
-                      <div className="border-t p-3 space-y-1">
-                        <Label
-                          htmlFor="expiration-time"
-                          className="text-xs font-medium"
-                        >
-                          Time
-                        </Label>
-                        <Input
-                          id="expiration-time"
-                          type="time"
-                          value={expiresAt ? format(expiresAt, "HH:mm") : ""}
-                          onChange={(e) => {
-                            if (!e.target.value || !expiresAt) return;
-                            const [hours, minutes] = e.target.value
-                              .split(":")
-                              .map(Number);
-                            const newDate = new Date(expiresAt);
-                            newDate.setHours(hours, minutes);
-                            setExpiresAt(newDate);
-                          }}
-                          disabled={!expiresAt}
-                          className="mt-1"
-                        />
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <DateTimePicker
+                    value={expiresAt ?? undefined}
+                    onChange={(date) => setExpiresAt(date ?? null)}
+                    disabledDate={(date) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return date < today;
+                    }}
+                    placeholder="No expiration"
+                    className="flex-1"
+                  />
                   {expiresAt && (
                     <Button
                       variant="ghost"

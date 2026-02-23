@@ -51,6 +51,7 @@ export interface TestFixtures {
   deleteLimit: typeof deleteLimit;
   getLimits: typeof getLimits;
   getModels: typeof getModels;
+  syncModels: typeof syncModels;
   updateModelPricing: typeof updateModelPricing;
   getOrganization: typeof getOrganization;
   updateOrganization: typeof updateOrganization;
@@ -751,6 +752,19 @@ const getModels = async (request: APIRequestContext) =>
   });
 
 /**
+ * Trigger a model sync from all providers.
+ * Useful in tests to ensure models are synced when WireMock may not have been
+ * ready during backend startup seed.
+ * (authnz is handled by the authenticated session)
+ */
+const syncModels = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/chat/models/sync",
+  });
+
+/**
  * Update custom pricing for a model by its internal UUID.
  * Set prices to null to reset to default pricing.
  * (authnz is handled by the authenticated session)
@@ -995,6 +1009,9 @@ export const test = base.extend<TestFixtures>({
   },
   getModels: async ({}, use) => {
     await use(getModels);
+  },
+  syncModels: async ({}, use) => {
+    await use(syncModels);
   },
   updateModelPricing: async ({}, use) => {
     await use(updateModelPricing);

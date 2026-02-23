@@ -261,6 +261,7 @@ for (const config of testConfigs) {
         request,
         createAgent,
         createLimit,
+        syncModels,
         getModels,
         updateModelPricing,
         makeApiRequest,
@@ -291,7 +292,14 @@ for (const config of testConfigs) {
           );
         }
 
-        // 3. Find the model by modelId via GET /api/models and set custom pricing
+        // 3. Sync models from providers to ensure WireMock-backed providers are linked.
+        //    On CI, the backend seed may run before WireMock is ready, causing some
+        //    providers (e.g. bedrock) to have zero linked models. This sync ensures
+        //    the provider appears in configuredProviders so GET /api/models returns
+        //    unlinked models created by ensureModelExists.
+        await syncModels(request);
+
+        // 4. Find the model by modelId via GET /api/models and set custom pricing
         const modelsResponse = await getModels(request);
         const allModels = await modelsResponse.json();
         const targetModel = allModels.find(
@@ -312,7 +320,7 @@ for (const config of testConfigs) {
             config.customPricing.pricePerMillionOutput,
         });
 
-        // 4. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after next request)
+        // 5. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after next request)
         const limitResponse = await createLimit(request, {
           entityType: "agent",
           entityId: profileId,
@@ -323,7 +331,7 @@ for (const config of testConfigs) {
         const limit = await limitResponse.json();
         limitId = limit.id;
 
-        // 5. Make first tracked request with custom pricing (with long content to bypass optimization rules)
+        // 6. Make first tracked request with custom pricing (with long content to bypass optimization rules)
         const longContent =
           "This is a very long message to bypass optimization rules that typically only apply to short content under 1000 tokens. ".repeat(
             100,
@@ -397,7 +405,7 @@ for (const config of testConfigs) {
           );
         }
 
-        // 6. Next request should be blocked (limit exceeded)
+        // 7. Next request should be blocked (limit exceeded)
         const blockedResponse = await makeApiRequest({
           request,
           method: "post",
@@ -409,7 +417,7 @@ for (const config of testConfigs) {
           ignoreStatusCheck: true,
         });
 
-        // 7. Verify 429 response with token_cost_limit_exceeded code
+        // 8. Verify 429 response with token_cost_limit_exceeded code
         expect(blockedResponse.status()).toBe(429);
         const errorBody = await blockedResponse.json();
         expect(errorBody.error.code).toBe("token_cost_limit_exceeded");
@@ -420,6 +428,7 @@ for (const config of testConfigs) {
         request,
         createAgent,
         createLimit,
+        syncModels,
         getModels,
         updateModelPricing,
         makeApiRequest,
@@ -448,7 +457,10 @@ for (const config of testConfigs) {
           );
         }
 
-        // 3. Find the model and set custom pricing
+        // 3. Sync models from providers (see comment in "blocks request" test)
+        await syncModels(request);
+
+        // 4. Find the model and set custom pricing
         const modelsResponse = await getModels(request);
         const allModels = await modelsResponse.json();
         const targetModel = allModels.find(
@@ -465,7 +477,7 @@ for (const config of testConfigs) {
           });
         }
 
-        // 4. Create profile-level limit with high value
+        // 5. Create profile-level limit with high value
         const limitResponse = await createLimit(request, {
           entityType: "agent",
           entityId: profileId,
@@ -476,7 +488,7 @@ for (const config of testConfigs) {
         const limit = await limitResponse.json();
         limitId = limit.id;
 
-        // 5. First request should succeed
+        // 6. First request should succeed
         const response1 = await makeApiRequest({
           request,
           method: "post",
@@ -486,7 +498,7 @@ for (const config of testConfigs) {
         });
         expect(response1.ok()).toBeTruthy();
 
-        // 6. Second request should also succeed (still under limit)
+        // 7. Second request should also succeed (still under limit)
         const response2 = await makeApiRequest({
           request,
           method: "post",

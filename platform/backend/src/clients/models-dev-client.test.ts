@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { ModelModel, TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import type {
   ModelsDevApiResponse,
   ModelsDevModel,
@@ -107,7 +107,6 @@ describe("ModelsDevClient", () => {
 
   afterEach(async () => {
     await ModelModel.deleteAll();
-    await TokenPriceModel.deleteAll();
   });
 
   describe("fetchModelsFromApi", () => {
@@ -419,143 +418,6 @@ describe("ModelsDevClient", () => {
         "gpt-3.5-turbo-instruct",
       );
       expect(instructMetadata?.supportsToolCalling).toBe(false);
-    });
-  });
-
-  describe("syncTokenPrices", () => {
-    test("creates token prices for models with pricing data", async () => {
-      const mockResponse = createMockApiResponse({
-        openai: createMockProvider("openai", {
-          "gpt-4o": createMockModel({
-            id: "gpt-4o",
-            name: "GPT-4o",
-            cost: { input: 5, output: 15 },
-          }),
-        }),
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await modelsDevClient.syncModelMetadata(true);
-
-      const tokenPrice = await TokenPriceModel.findByProviderAndModelId(
-        "openai",
-        "gpt-4o",
-      );
-      expect(tokenPrice).not.toBeNull();
-      expect(tokenPrice?.pricePerMillionInput).toBe("5.00");
-      expect(tokenPrice?.pricePerMillionOutput).toBe("15.00");
-    });
-
-    test("does not overwrite existing token prices", async () => {
-      // Create an existing token price entry
-      await TokenPriceModel.create({
-        model: "gpt-4o",
-        provider: "openai",
-        pricePerMillionInput: "10.00",
-        pricePerMillionOutput: "20.00",
-      });
-
-      const mockResponse = createMockApiResponse({
-        openai: createMockProvider("openai", {
-          "gpt-4o": createMockModel({
-            id: "gpt-4o",
-            name: "GPT-4o",
-            cost: { input: 5, output: 15 },
-          }),
-        }),
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await modelsDevClient.syncModelMetadata(true);
-
-      const tokenPrice = await TokenPriceModel.findByProviderAndModelId(
-        "openai",
-        "gpt-4o",
-      );
-      // Should keep the original prices
-      expect(tokenPrice?.pricePerMillionInput).toBe("10.00");
-      expect(tokenPrice?.pricePerMillionOutput).toBe("20.00");
-    });
-
-    test("creates token prices for multiple models", async () => {
-      const mockResponse = createMockApiResponse({
-        openai: createMockProvider("openai", {
-          "gpt-4o": createMockModel({
-            id: "gpt-4o",
-            name: "GPT-4o",
-            cost: { input: 5, output: 15 },
-          }),
-        }),
-        anthropic: createMockProvider("anthropic", {
-          "claude-3-opus": createMockModel({
-            id: "claude-3-opus",
-            name: "Claude 3 Opus",
-            cost: { input: 15, output: 75 },
-          }),
-        }),
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await modelsDevClient.syncModelMetadata(true);
-
-      const gpt4Price = await TokenPriceModel.findByProviderAndModelId(
-        "openai",
-        "gpt-4o",
-      );
-      expect(gpt4Price?.pricePerMillionInput).toBe("5.00");
-      expect(gpt4Price?.pricePerMillionOutput).toBe("15.00");
-
-      const claudePrice = await TokenPriceModel.findByProviderAndModelId(
-        "anthropic",
-        "claude-3-opus",
-      );
-      expect(claudePrice?.pricePerMillionInput).toBe("15.00");
-      expect(claudePrice?.pricePerMillionOutput).toBe("75.00");
-    });
-
-    test("skips token price creation for invalid pricing data (NaN)", async () => {
-      // Create a model with valid cost to test normal flow
-      const validModel = createMockModel({
-        id: "valid-model",
-        name: "Valid Model",
-        cost: { input: 5, output: 15 },
-      });
-
-      // Override convertToModel to simulate invalid pricing scenario
-      // by directly calling syncModelMetadata with mocked response that will
-      // produce NaN when converted (this shouldn't happen in real API but tests defense)
-      const mockResponse = createMockApiResponse({
-        openai: createMockProvider("openai", {
-          "valid-model": validModel,
-        }),
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await modelsDevClient.syncModelMetadata(true);
-
-      // Valid model should have token price created
-      const validPrice = await TokenPriceModel.findByProviderAndModelId(
-        "openai",
-        "valid-model",
-      );
-      expect(validPrice?.pricePerMillionInput).toBe("5.00");
-      expect(validPrice?.pricePerMillionOutput).toBe("15.00");
     });
   });
 

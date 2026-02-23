@@ -14,7 +14,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import config from "@/config";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
@@ -78,11 +78,15 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       await app.register(openAiProxyRoutesV2);
 
       // Create token pricing for mock model
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4o",
         provider: "openai",
-        model: "gpt-4o",
-        pricePerMillionInput: "2.50",
-        pricePerMillionOutput: "10.00",
+        modelId: "gpt-4o",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "2.50",
+        customPricePerMillionOutput: "10.00",
+        lastSyncedAt: new Date(),
       });
     });
 
@@ -249,11 +253,15 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       await app.register(anthropicProxyRoutesV2);
 
       // Create token pricing for mock model
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-3-5-sonnet-20241022",
         provider: "anthropic",
-        model: "claude-3-5-sonnet-20241022",
-        pricePerMillionInput: "3.00",
-        pricePerMillionOutput: "15.00",
+        modelId: "claude-3-5-sonnet-20241022",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "3.00",
+        customPricePerMillionOutput: "15.00",
+        lastSyncedAt: new Date(),
       });
     });
 
@@ -368,11 +376,15 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       await app.register(geminiProxyRoutesV2);
 
       // Create token pricing for mock model
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "gemini/gemini-2.5-pro",
         provider: "gemini",
-        model: "gemini-2.5-pro",
-        pricePerMillionInput: "1.25",
-        pricePerMillionOutput: "5.00",
+        modelId: "gemini-2.5-pro",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "1.25",
+        customPricePerMillionOutput: "5.00",
+        lastSyncedAt: new Date(),
       });
     });
 

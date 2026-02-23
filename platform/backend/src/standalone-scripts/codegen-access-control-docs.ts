@@ -32,7 +32,7 @@ function getResourceDescription(resource: Resource): string {
     team: "Teams for organizing members and access control",
     conversation: "Chat conversations with automation experts",
     limit: "Usage limits and quotas",
-    tokenPrice: "Token pricing configuration",
+    llmModels: "LLM models and pricing configuration",
     chatSettings: "Chat feature configuration and settings",
     ac: "RBAC roles",
   };

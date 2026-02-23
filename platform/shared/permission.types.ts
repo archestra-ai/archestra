@@ -38,7 +38,7 @@ export const resources = [
   "team",
   "conversation",
   "limit",
-  "tokenPrice",
+  "llmModels",
   "chatSettings",
   /**
    * Better-auth access control resource - needed for organization role management
@@ -72,7 +72,7 @@ export const resourceLabels: Record<Resource, string> = {
   ac: "Access Control",
   conversation: "Conversations",
   limit: "Limits",
-  tokenPrice: "Token Prices",
+  llmModels: "LLM Models",
   chatSettings: "Chat Settings",
 };
 

@@ -265,12 +265,8 @@ export const RouteId = {
   // User Routes
   GetUserPermissions: "getUserPermissions",
 
-  // Token Price Routes
-  GetTokenPrices: "getTokenPrices",
-  CreateTokenPrice: "createTokenPrice",
-  GetTokenPrice: "getTokenPrice",
-  UpdateTokenPrice: "updateTokenPrice",
-  DeleteTokenPrice: "deleteTokenPrice",
+  // Model Pricing Routes
+  UpdateModelPricing: "updateModelPricing",
 
   // Team Token Routes
   GetTokens: "getTokens",

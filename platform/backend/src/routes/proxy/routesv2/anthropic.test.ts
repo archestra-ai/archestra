@@ -28,7 +28,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { MockAnthropicClient } from "../mock-anthropic-client";
 import anthropicProxyRoutesV2 from "./anthropic";
@@ -46,11 +46,15 @@ describe("Anthropic V2 cost tracking", () => {
     await app.register(anthropicProxyRoutesV2);
     config.benchmark.mockMode = true;
 
-    await TokenPriceModel.create({
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-4-20250514",
       provider: "anthropic",
-      model: "claude-opus-4-20250514",
-      pricePerMillionInput: "15.00",
-      pricePerMillionOutput: "75.00",
+      modelId: "claude-opus-4-20250514",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "15.00",
+      customPricePerMillionOutput: "75.00",
+      lastSyncedAt: new Date(),
     });
 
     const agent = await makeAgent({ name: "Test Cost Agent" });
@@ -104,11 +108,15 @@ describe("Anthropic V2 streaming mode", () => {
     await app.register(anthropicProxyRoutesV2);
     config.benchmark.mockMode = true;
 
-    await TokenPriceModel.create({
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-4-20250514",
       provider: "anthropic",
-      model: "claude-opus-4-20250514",
-      pricePerMillionInput: "15.00",
-      pricePerMillionOutput: "75.00",
+      modelId: "claude-opus-4-20250514",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "15.00",
+      customPricePerMillionOutput: "75.00",
+      lastSyncedAt: new Date(),
     });
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
@@ -179,11 +187,15 @@ describe("Anthropic V2 streaming mode", () => {
       try {
         await app.register(anthropicProxyRoutesV2);
 
-        await TokenPriceModel.create({
+        await ModelModel.upsert({
+          externalId: "anthropic/claude-opus-4-20250514",
           provider: "anthropic",
-          model: "claude-opus-4-20250514",
-          pricePerMillionInput: "15.00",
-          pricePerMillionOutput: "75.00",
+          modelId: "claude-opus-4-20250514",
+          inputModalities: null,
+          outputModalities: null,
+          customPricePerMillionInput: "15.00",
+          customPricePerMillionOutput: "75.00",
+          lastSyncedAt: new Date(),
         });
 
         const agent = await makeAgent({
@@ -256,11 +268,15 @@ describe("Anthropic V2 tool call accumulation", () => {
     MockAnthropicClient.setStreamOptions({ includeToolUse: true });
 
     try {
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-opus-4-20250514",
         provider: "anthropic",
-        model: "claude-opus-4-20250514",
-        pricePerMillionInput: "15.00",
-        pricePerMillionOutput: "75.00",
+        modelId: "claude-opus-4-20250514",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "15.00",
+        customPricePerMillionOutput: "75.00",
+        lastSyncedAt: new Date(),
       });
 
       const agent = await makeAgent({ name: "Test Tool Call Agent" });

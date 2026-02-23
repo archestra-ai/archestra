@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { useModelsWithApiKeys } from "@/lib/chat-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -33,7 +34,6 @@ import {
 } from "@/lib/optimization-rule.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { useTokenPrices } from "@/lib/token-price.query";
 import { cn } from "@/lib/utils";
 
 // Form data type for inline editing
@@ -129,7 +129,13 @@ export default function OptimizationRulesPage() {
 
   const { data: allRules = [], isLoading: rulesLoading } =
     useOptimizationRules();
-  const { data: tokenPrices = [] } = useTokenPrices();
+  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const tokenPrices = modelsWithApiKeys.map((m) => ({
+    model: m.modelId,
+    provider: m.provider,
+    pricePerMillionInput: m.capabilities?.pricePerMillionInput ?? "0",
+    pricePerMillionOutput: m.capabilities?.pricePerMillionOutput ?? "0",
+  }));
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
 

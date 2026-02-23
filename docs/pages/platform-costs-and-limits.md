@@ -13,6 +13,7 @@ Monitor and control AI model expenses with real-time tracking, spending limits, 
 Track usage and costs across teams, profiles, and models with time-based filtering (hour to 12 months).
 
 **Key metrics:**
+
 - Team costs with member/profile counts
 - Individual profile usage
 - Model breakdown by cost percentage
@@ -25,13 +26,19 @@ Track usage and costs across teams, profiles, and models with time-based filteri
 Set spending limits to prevent budget overruns:
 
 **LLM Limits**
+
 - Apply to organization, teams, or profiles
 - Daily/monthly reset periods
 - Actions when limit reached (block, alert, fallback)
 
 **Auto-cleanup**
+
 - Configure data retention (hourly to monthly)
 - Keep costs database optimized
+
+## Model Pricing
+
+Model pricing is configured on the **Provider Settings > Models** page. Pricing determines how token costs are calculated for statistics, limits, and optimization rules.
 
 ## Optimization Rules
 
@@ -40,6 +47,7 @@ Set spending limits to prevent budget overruns:
 Automatically switch to cheaper models based on conditions:
 
 **Rule Types:**
+
 - **Content Length** - Use cheaper models for short prompts (<500 tokens)
 - **Tool Presence** - Simpler models when no tools required
 - **Time-based** - Off-peak optimizations

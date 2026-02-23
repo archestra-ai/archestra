@@ -5,7 +5,7 @@ import { encode as toonEncode } from "@toon-format/toon";
 import { BedrockClient } from "@/clients/bedrock-client";
 import config from "@/config";
 import logger from "@/logging";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
 import type {
   Bedrock,
@@ -1167,12 +1167,11 @@ export async function convertToolResultsToToon(
   if (toolResultCount > 0) {
     const tokensSaved = totalTokensBefore - totalTokensAfter;
     if (tokensSaved > 0) {
-      const tokenPrice = await TokenPriceModel.findByModel(model);
-      if (tokenPrice) {
-        const inputPricePerToken =
-          Number(tokenPrice.pricePerMillionInput) / 1000000;
-        toonCostSavings = tokensSaved * inputPricePerToken;
-      }
+      toonCostSavings = await ModelModel.calculateCostSavings(
+        model,
+        tokensSaved,
+        "bedrock",
+      );
     }
   }
 

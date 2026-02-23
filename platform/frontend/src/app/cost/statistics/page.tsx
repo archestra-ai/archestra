@@ -457,7 +457,16 @@ export default function StatisticsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-muted-foreground">
+            View and edit model token prices{" "}
+            <a
+              href="/llm-proxies/provider-settings?tab=models"
+              className="underline hover:text-foreground transition-colors"
+            >
+              on Provider Settings
+            </a>
+          </p>
           <a
             href="https://archestra.ai/docs/platform-observability"
             target="_blank"

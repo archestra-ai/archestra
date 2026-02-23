@@ -42,7 +42,6 @@ export {
   default as TeamTokenModel,
   isArchestraPrefixedToken,
 } from "./team-token";
-export { default as TokenPriceModel } from "./token-price";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";

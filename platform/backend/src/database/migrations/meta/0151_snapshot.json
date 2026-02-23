@@ -1,5 +1,5 @@
 {
-  "id": "58673e86-74af-4b5e-b58c-1ea30dcc59d8",
+  "id": "b8ed0de5-0dfa-4d53-a5f5-b1aefbb308e3",
   "prevId": "386c8794-a215-4e43-b75e-f7032bfcc0ae",
   "version": "7",
   "dialect": "postgresql",
@@ -3788,6 +3788,18 @@
         "completion_price_per_token": {
           "name": "completion_price_per_token",
           "type": "numeric(20, 12)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "custom_price_per_million_input": {
+          "name": "custom_price_per_million_input",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "custom_price_per_million_output": {
+          "name": "custom_price_per_million_output",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false
         },

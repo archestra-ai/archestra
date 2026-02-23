@@ -31,7 +31,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
 import { MockOpenAIClient } from "../mock-openai-client";
@@ -135,11 +135,15 @@ describe("OpenAI V2 cost tracking", () => {
     await app.register(openAiProxyRoutesV2);
     config.benchmark.mockMode = true;
 
-    await TokenPriceModel.create({
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
       provider: "openai",
-      model: "gpt-4o",
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "10.00",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
     });
 
     const agent = await makeAgent({ name: "Test Cost Agent" });
@@ -191,11 +195,15 @@ describe("OpenAI V2 streaming mode", () => {
     await app.register(openAiProxyRoutesV2);
     config.benchmark.mockMode = true;
 
-    await TokenPriceModel.create({
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
       provider: "openai",
-      model: "gpt-4o",
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "10.00",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
     });
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
@@ -262,11 +270,15 @@ describe("OpenAI V2 streaming mode", () => {
       try {
         await app.register(openAiProxyRoutesV2);
 
-        await TokenPriceModel.create({
+        await ModelModel.upsert({
+          externalId: "openai/gpt-4o",
           provider: "openai",
-          model: "gpt-4o",
-          pricePerMillionInput: "2.50",
-          pricePerMillionOutput: "10.00",
+          modelId: "gpt-4o",
+          inputModalities: null,
+          outputModalities: null,
+          customPricePerMillionInput: "2.50",
+          customPricePerMillionOutput: "10.00",
+          lastSyncedAt: new Date(),
         });
 
         const agent = await makeAgent({
@@ -334,11 +346,15 @@ describe("OpenAI V2 streaming mode", () => {
       try {
         await app.register(openAiProxyRoutesV2);
 
-        await TokenPriceModel.create({
+        await ModelModel.upsert({
+          externalId: "openai/gpt-4o",
           provider: "openai",
-          model: "gpt-4o",
-          pricePerMillionInput: "2.50",
-          pricePerMillionOutput: "10.00",
+          modelId: "gpt-4o",
+          inputModalities: null,
+          outputModalities: null,
+          customPricePerMillionInput: "2.50",
+          customPricePerMillionOutput: "10.00",
+          lastSyncedAt: new Date(),
         });
 
         const agent = await makeAgent({

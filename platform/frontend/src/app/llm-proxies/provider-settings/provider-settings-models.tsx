@@ -38,6 +38,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
   useUpdateModelPricing,
@@ -469,15 +474,19 @@ function PricingValueCell({
         {field === "output" && source && <PriceSourceBadge source={source} />}
       </button>
       {field === "output" && isCustom && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 text-muted-foreground"
-          onClick={() => onReset(model.id)}
-          title="Reset to default pricing"
-        >
-          <RotateCcw className="h-3 w-3" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-muted-foreground"
+              onClick={() => onReset(model.id)}
+            >
+              <RotateCcw className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Reset token prices to defaults</TooltipContent>
+        </Tooltip>
       )}
     </div>
   );

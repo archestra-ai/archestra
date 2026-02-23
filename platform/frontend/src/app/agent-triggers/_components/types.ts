@@ -12,14 +12,11 @@ export interface ProviderConfig {
     channelName?: string | null;
     workspaceId?: string | null;
   }) => string;
-  getDmDeepLink?: (
-    providerStatus: {
-      dmInfo?: {
-        botUserId?: string;
-        teamId?: string;
-        appId?: string;
-      } | null;
-    },
-    agentId: string,
-  ) => string | null;
+  getDmDeepLink?: (providerStatus: {
+    dmInfo?: {
+      botUserId?: string;
+      teamId?: string;
+      appId?: string;
+    } | null;
+  }) => string | null;
 }

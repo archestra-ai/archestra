@@ -146,9 +146,5 @@ jobs:
             --set archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY="${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}" \
             --set archestra.env.ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER="lightrag" \
             --set archestra.env.ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL="http://lightrag.knowledge-graph.svc.cluster.local:9621" \
-            --set archestra.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED="true" \
-            --set archestra.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID="${{ secrets.ARCHESTRA_STAGING_MS_TEAMS_APP_ID }}" \
-            --set archestra.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET="${{ secrets.ARCHESTRA_STAGING_MS_TEAMS_APP_SECRET }}" \
-            --set archestra.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID="${{ secrets.ARCHESTRA_STAGING_MS_TEAMS_TENANT_ID }}" \
             --values .github/values-staging.yaml \
             --wait

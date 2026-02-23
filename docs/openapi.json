@@ -23910,39 +23910,6 @@
                               }
                             ]
                           },
-                          "allowedChatops": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -24135,7 +24102,6 @@
                           "userPrompt",
                           "promptVersion",
                           "promptHistory",
-                          "allowedChatops",
                           "description",
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
@@ -24458,39 +24424,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "allowedChatops": {
-                    "nullable": true,
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "string",
-                            "nullable": true,
-                            "enum": [
-                              null
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
-                      {
-                        "type": "array",
-                        "items": {}
-                      }
-                    ]
-                  },
                   "description": {
                     "nullable": true,
                     "type": "string"
@@ -24620,39 +24553,6 @@
                       "maximum": 2147483647
                     },
                     "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
-                    "allowedChatops": {
                       "nullable": true,
                       "anyOf": [
                         {
@@ -24877,7 +24777,6 @@
                     "userPrompt",
                     "promptVersion",
                     "promptHistory",
-                    "allowedChatops",
                     "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
@@ -25237,39 +25136,6 @@
                           }
                         ]
                       },
-                      "allowedChatops": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
-                      },
                       "description": {
                         "nullable": true,
                         "type": "string"
@@ -25462,7 +25328,6 @@
                       "userPrompt",
                       "promptVersion",
                       "promptHistory",
-                      "allowedChatops",
                       "description",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
@@ -25786,39 +25651,6 @@
                         }
                       ]
                     },
-                    "allowedChatops": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -26011,7 +25843,6 @@
                     "userPrompt",
                     "promptVersion",
                     "promptHistory",
-                    "allowedChatops",
                     "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
@@ -26334,39 +26165,6 @@
                         }
                       ]
                     },
-                    "allowedChatops": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -26559,7 +26357,6 @@
                     "userPrompt",
                     "promptVersion",
                     "promptHistory",
-                    "allowedChatops",
                     "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
@@ -26894,39 +26691,6 @@
                         }
                       ]
                     },
-                    "allowedChatops": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -27119,7 +26883,6 @@
                     "userPrompt",
                     "promptVersion",
                     "promptHistory",
-                    "allowedChatops",
                     "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
@@ -27394,39 +27157,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "allowedChatops": {
-                    "nullable": true,
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "string",
-                            "nullable": true,
-                            "enum": [
-                              null
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
-                      {
-                        "type": "array",
-                        "items": {}
-                      }
-                    ]
-                  },
                   "description": {
                     "nullable": true,
                     "type": "string"
@@ -27563,39 +27293,6 @@
                       "maximum": 2147483647
                     },
                     "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
-                    "allowedChatops": {
                       "nullable": true,
                       "anyOf": [
                         {
@@ -27820,7 +27517,6 @@
                     "userPrompt",
                     "promptVersion",
                     "promptHistory",
-                    "allowedChatops",
                     "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
@@ -28408,39 +28104,6 @@
                             }
                           ]
                         },
-                        "allowedChatops": {
-                          "nullable": true,
-                          "anyOf": [
-                            {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
-                                },
-                                {
-                                  "type": "string",
-                                  "nullable": true,
-                                  "enum": [
-                                    null
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "additionalProperties": {}
-                            },
-                            {
-                              "type": "array",
-                              "items": {}
-                            }
-                          ]
-                        },
                         "description": {
                           "nullable": true,
                           "type": "string"
@@ -28633,7 +28296,6 @@
                         "userPrompt",
                         "promptVersion",
                         "promptHistory",
-                        "allowedChatops",
                         "description",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
@@ -29025,39 +28687,6 @@
                         }
                       ]
                     },
-                    "allowedChatops": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -29250,7 +28879,6 @@
                     "userPrompt",
                     "promptVersion",
                     "promptHistory",
-                    "allowedChatops",
                     "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",

@@ -740,6 +740,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     organization: ["read"],
   },
   // Agent Triggers
+  "/agent-triggers": {
+    organization: ["update"],
+  },
+  "/agent-triggers/slack": {
+    organization: ["update"],
+  },
   "/agent-triggers/ms-teams": {
     organization: ["update"],
   },

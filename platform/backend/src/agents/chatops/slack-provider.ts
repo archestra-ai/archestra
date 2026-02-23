@@ -30,6 +30,7 @@ class SlackProvider implements ChatOpsProvider {
   private client: WebClient | null = null;
   private botUserId: string | null = null;
   private teamId: string | null = null;
+  private teamName: string | null = null;
   private config: SlackConfig;
 
   constructor(slackConfig: SlackConfig) {
@@ -57,6 +58,7 @@ class SlackProvider implements ChatOpsProvider {
       const authResult = await this.client.auth.test();
       this.botUserId = (authResult.user_id as string) || null;
       this.teamId = (authResult.team_id as string) || null;
+      this.teamName = (authResult.team as string) || null;
       logger.info(
         { botUserId: this.botUserId, teamId: this.teamId },
         "[SlackProvider] Authenticated successfully",
@@ -74,10 +76,15 @@ class SlackProvider implements ChatOpsProvider {
     return this.teamId;
   }
 
+  getWorkspaceName(): string | null {
+    return this.teamName;
+  }
+
   async cleanup(): Promise<void> {
     this.client = null;
     this.botUserId = null;
     this.teamId = null;
+    this.teamName = null;
     logger.info("[SlackProvider] Cleaned up");
   }
 
@@ -405,7 +412,7 @@ class SlackProvider implements ChatOpsProvider {
           channelId: ch.id as string,
           channelName: ch.name || null,
           workspaceId: ch.shared_team_ids?.[0] || this.teamId || "default",
-          workspaceName: null,
+          workspaceName: this.teamName,
         }));
     } catch (error) {
       logger.warn(

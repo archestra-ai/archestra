@@ -125,15 +125,6 @@ Finding these values:
 - **Signing Secret**: Basic Information page → App Credentials → Signing Secret
 - **App ID**: Basic Information page → App ID
 
-Then enable Agent for Slack:
-
-1. In Archestra, go to **Chat** → open the **Agent Library**
-2. **Edit** the agent you want to use with Slack
-3. Under **Integrations**, check **Slack**
-4. **Save**
-
-Only agents with **Slack enabled** will appear in the channel selection dropdown.
-
 ## Usage
 
 ### First Message
@@ -188,7 +179,7 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 ### Direct Messages
 
-DMs work the same as channels. Click the **DM** button next to any agent in the Agent Triggers page to open a Slack DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
+DMs work the same as channels. In the **Agent Triggers** → **Slack** page, click **Start DM** in the channels section to open a Slack DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/archestra-select-agent` to change it later.
 
 > The Slack app manifest already includes `im:history` and `message.im` scopes/events required for DMs.
 

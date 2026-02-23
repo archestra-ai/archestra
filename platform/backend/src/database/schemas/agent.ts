@@ -10,7 +10,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AgentHistoryEntry, AgentType } from "@/types/agent";
-import type { ChatOpsProviderType } from "@/types/chatops";
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
 
@@ -56,11 +55,6 @@ const agentsTable = pgTable(
     promptHistory: jsonb("prompt_history")
       .$type<AgentHistoryEntry[]>()
       .default([]),
-    /** Which chatops providers can trigger this agent (empty = none, only for internal agents) */
-    allowedChatops: jsonb("allowed_chatops")
-      .$type<ChatOpsProviderType[]>()
-      .default([]),
-
     // Description (only used when agentType = 'agent')
     /** Human-readable description of the agent */
     description: text("description"),

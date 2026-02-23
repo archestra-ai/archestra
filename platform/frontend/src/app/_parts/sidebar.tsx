@@ -268,11 +268,13 @@ const MainSideBarSection = ({
   const groups = getNavigationGroups(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
 
+  if (!permissionMap) return null;
+
   return (
     <>
       {groups.map((group, groupIndex) => {
         const permittedItems = group.items.filter(
-          (item) => permissionMap?.[item.url] ?? true,
+          (item) => permissionMap[item.url] ?? true,
         );
         if (permittedItems.length === 0) return null;
 

@@ -9,8 +9,6 @@ import {
   RotateCcw,
   Search,
   Server,
-  Star,
-  Zap,
 } from "lucide-react";
 import Image from "next/image";
 import {
@@ -22,11 +20,15 @@ import {
 } from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
-import { UnknownCapabilitiesBadge } from "@/components/model-badges";
+import {
+  BestModelBadge,
+  FastestModelBadge,
+  PriceSourceBadge,
+  UnknownCapabilitiesBadge,
+} from "@/components/model-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { InlineTag } from "@/components/ui/inline-tag";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -532,42 +534,4 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
     !hasContextLength &&
     !hasPricing
   );
-}
-
-function FastestModelBadge() {
-  return (
-    <InlineTag
-      icon={<Zap />}
-      className="text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950"
-    >
-      fastest
-    </InlineTag>
-  );
-}
-
-function BestModelBadge() {
-  return (
-    <InlineTag
-      icon={<Star />}
-      className="text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950"
-    >
-      best
-    </InlineTag>
-  );
-}
-
-function PriceSourceBadge({ source }: { source: string }) {
-  if (source === "custom") {
-    return (
-      <InlineTag className="text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950">
-        custom
-      </InlineTag>
-    );
-  }
-  if (source === "default") {
-    return (
-      <InlineTag className="text-muted-foreground bg-muted">default</InlineTag>
-    );
-  }
-  return null;
 }

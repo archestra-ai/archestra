@@ -55,20 +55,6 @@ class ModelModel {
   }
 
   /**
-   * Find model by model ID string (e.g., "claude-3-opus").
-   * Looks up by modelId column. Used by cost calculation which only has the model name string.
-   */
-  static async findByModelId(modelId: string): Promise<Model | null> {
-    const [result] = await db
-      .select()
-      .from(schema.modelsTable)
-      .where(eq(schema.modelsTable.modelId, modelId))
-      .limit(1);
-
-    return result || null;
-  }
-
-  /**
    * Find model by provider and model ID
    */
   static async findByProviderAndModelId(
@@ -363,11 +349,31 @@ class ModelModel {
   static async calculateCostSavings(
     modelId: string,
     tokensSaved: number,
+    provider: SupportedProvider,
   ): Promise<number> {
-    const modelEntry = await ModelModel.findByModelId(modelId);
+    const modelEntry = await ModelModel.findByProviderAndModelId(
+      provider,
+      modelId,
+    );
     const pricing = ModelModel.getEffectivePricing(modelEntry, modelId);
     const inputPricePerToken = Number(pricing.pricePerMillionInput) / 1_000_000;
     return tokensSaved * inputPricePerToken;
+  }
+
+  /**
+   * Find model by modelId only, without provider disambiguation.
+   * WARNING: Prefer `findByProviderAndModelId` — this method may return an
+   * arbitrary match when multiple providers share the same model name.
+   * Only used by LimitModel where the usage table doesn't store provider.
+   */
+  static async findByModelIdOnly(modelId: string): Promise<Model | null> {
+    const [result] = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(eq(schema.modelsTable.modelId, modelId))
+      .limit(1);
+
+    return result || null;
   }
 
   /**

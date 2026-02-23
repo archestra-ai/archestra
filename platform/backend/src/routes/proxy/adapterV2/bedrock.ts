@@ -1170,6 +1170,7 @@ export async function convertToolResultsToToon(
       toonCostSavings = await ModelModel.calculateCostSavings(
         model,
         tokensSaved,
+        "bedrock",
       );
     }
   }

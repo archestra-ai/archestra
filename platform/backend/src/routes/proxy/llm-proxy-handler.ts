@@ -670,6 +670,7 @@ async function handleStreaming<
             actualModel,
             state.usage.inputTokens,
             state.usage.outputTokens,
+            providerName,
           );
           if (cost !== undefined) {
             llmSpan.setAttribute("archestra.cost", cost);
@@ -817,11 +818,13 @@ async function handleStreaming<
         baselineModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
       const actualCost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
 
       withSessionContext(sessionId, () =>
@@ -953,6 +956,7 @@ async function handleNonStreaming<
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
       if (cost !== undefined) {
         llmSpan.setAttribute("archestra.cost", cost);
@@ -1030,11 +1034,13 @@ async function handleNonStreaming<
         baselineModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
       const actualCost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
 
       withSessionContext(sessionId, () =>
@@ -1094,11 +1100,13 @@ async function handleNonStreaming<
     baselineModel,
     usage.inputTokens,
     usage.outputTokens,
+    providerName,
   );
   const actualCost = await utils.costOptimization.calculateCost(
     actualModel,
     usage.inputTokens,
     usage.outputTokens,
+    providerName,
   );
 
   withSessionContext(sessionId, () =>

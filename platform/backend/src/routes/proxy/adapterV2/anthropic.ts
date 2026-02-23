@@ -1052,7 +1052,11 @@ export async function convertToolResultsToToon(
   let toonCostSavings = 0;
   const tokensSaved = totalTokensBefore - totalTokensAfter;
   if (tokensSaved > 0) {
-    toonCostSavings = await ModelModel.calculateCostSavings(model, tokensSaved);
+    toonCostSavings = await ModelModel.calculateCostSavings(
+      model,
+      tokensSaved,
+      "anthropic",
+    );
   }
 
   return {

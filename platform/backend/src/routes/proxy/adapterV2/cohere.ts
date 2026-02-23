@@ -787,7 +787,11 @@ export async function convertToolResultsToToon(
   let costSavings = 0;
   if (totalTokensBefore > 0) {
     const savedTokens = totalTokensBefore - totalTokensAfter;
-    costSavings = await ModelModel.calculateCostSavings(model, savedTokens);
+    costSavings = await ModelModel.calculateCostSavings(
+      model,
+      savedTokens,
+      "cohere",
+    );
   }
 
   return {

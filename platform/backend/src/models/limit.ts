@@ -110,7 +110,8 @@ class LimitModel {
     // Calculate cost for each model
     const breakdown = await Promise.all(
       modelUsages.map(async (usage) => {
-        const modelEntry = await ModelModel.findByModelId(usage.model);
+        // Look up model by modelId only — limit usage records don't store provider
+        const modelEntry = await ModelModel.findByModelIdOnly(usage.model);
         const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
 
         const inputCost =
@@ -714,7 +715,10 @@ export class LimitValidationService {
                 totalTokensIn += usage.currentUsageTokensIn;
                 totalTokensOut += usage.currentUsageTokensOut;
 
-                const modelEntry = await ModelModel.findByModelId(usage.model);
+                // Look up model by modelId only — limit usage records don't store provider
+                const modelEntry = await ModelModel.findByModelIdOnly(
+                  usage.model,
+                );
                 const pricing = ModelModel.getEffectivePricing(
                   modelEntry,
                   usage.model,

@@ -539,6 +539,10 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    xai: {
+      baseUrl:
+        process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+    },
     cohere: {
       enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
       baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",

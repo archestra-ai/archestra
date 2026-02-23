@@ -1,0 +1,85 @@
+import fastifyHttpProxy from "@fastify/http-proxy";
+import { RouteId } from "@shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import config from "@/config";
+import logger from "@/logging";
+import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import { openrouterAdapterFactory } from "../adapterV2";
+import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { handleLLMProxy } from "../llm-proxy-handler";
+import { createProxyPreHandler } from "./proxy-prehandler";
+
+const openrouterProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
+  const API_PREFIX = `${PROXY_API_PREFIX}/openrouter`;
+  const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
+
+  logger.info("[UnifiedProxy] Registering unified OpenRouter routes");
+
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://openrouter.ai/api/v1",
+    prefix: API_PREFIX,
+    rewritePrefix: "",
+    preHandler: createProxyPreHandler({
+      apiPrefix: API_PREFIX,
+      endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
+      upstream: "https://openrouter.ai/api/v1",
+      providerName: "OpenRouter",
+    }),
+  });
+
+  fastify.post(
+    `${API_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenRouterChatCompletionsWithDefaultAgent,
+        description:
+          "Create a chat completion with OpenRouter (uses default agent)",
+        tags: ["llm-proxy"],
+        body: OpenAi.API.ChatCompletionRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling OpenRouter request (default agent)",
+      );
+      return handleLLMProxy(request.body, request, reply, openrouterAdapterFactory);
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenRouterChatCompletionsWithAgent,
+        description:
+          "Create a chat completion with OpenRouter for a specific agent",
+        tags: ["llm-proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.ChatCompletionRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling OpenRouter request (with agent)",
+      );
+      return handleLLMProxy(request.body, request, reply, openrouterAdapterFactory);
+    },
+  );
+};
+
+export default openrouterProxyRoutesV2;

@@ -157,6 +157,11 @@ export const RouteId = {
     "openAiChatCompletionsWithDefaultAgent",
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
 
+  // Proxy Routes - OpenRouter
+  OpenRouterChatCompletionsWithDefaultAgent:
+    "openRouterChatCompletionsWithDefaultAgent",
+  OpenRouterChatCompletionsWithAgent: "openRouterChatCompletionsWithAgent",
+
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",

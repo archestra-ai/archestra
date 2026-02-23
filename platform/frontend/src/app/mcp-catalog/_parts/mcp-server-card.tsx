@@ -792,7 +792,7 @@ export function McpServerCard({
       className="flex flex-col relative pt-4 gap-2 h-full"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
-      <CardHeader>
+      <CardHeader className="gap-0">
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div

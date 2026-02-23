@@ -35,6 +35,25 @@ class ToolInvocationPolicyModel {
   static async create(
     policy: ToolInvocation.InsertToolInvocationPolicy,
   ): Promise<ToolInvocation.ToolInvocationPolicy> {
+    // If this is a default policy (empty conditions), upsert to prevent duplicates
+    if (policy.conditions.length === 0) {
+      const [existingDefault] = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, policy.toolId))
+        .then((rows) => rows.filter((r) => r.conditions.length === 0));
+
+      if (existingDefault) {
+        const [updatedPolicy] = await db
+          .update(schema.toolInvocationPoliciesTable)
+          .set({ action: policy.action, reason: policy.reason ?? null })
+          .where(eq(schema.toolInvocationPoliciesTable.id, existingDefault.id))
+          .returning();
+
+        return updatedPolicy;
+      }
+    }
+
     const [createdPolicy] = await db
       .insert(schema.toolInvocationPoliciesTable)
       .values(policy)
@@ -208,6 +227,11 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     context: PolicyEvaluationContext,
   ): Promise<boolean> {
+    // Archestra tools always bypass policies (consistent with evaluateBatch)
+    if (isArchestraMcpServerTool(toolName)) {
+      return false;
+    }
+
     // Find tool by name
     const [tool] = await db
       .select({ id: schema.toolsTable.id })

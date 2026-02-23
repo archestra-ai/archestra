@@ -782,6 +782,34 @@ export default function ChatPage() {
       return;
     }
 
+    // Auto-deny any pending tool approvals before sending new message
+    // to avoid "No tool output found for function call" error
+    if (setMessages) {
+      const hasPendingApprovals = messages.some((msg) =>
+        msg.parts.some(
+          (part) => "state" in part && part.state === "approval-requested",
+        ),
+      );
+
+      if (hasPendingApprovals) {
+        setMessages(
+          messages.map((msg) => ({
+            ...msg,
+            parts: msg.parts.map((part) =>
+              "state" in part && part.state === "approval-requested"
+                ? {
+                    ...part,
+                    state: "output-denied" as const,
+                    output:
+                      "Tool approval was skipped because the user sent a new message",
+                  }
+                : part,
+            ),
+          })) as UIMessage[],
+        );
+      }
+    }
+
     // Build message parts: text first, then file attachments
     const parts: Array<
       | { type: "text"; text: string }

@@ -10,6 +10,7 @@ export const SupportedProvidersSchema = z.enum([
   "bedrock",
   "cohere",
   "cerebras",
+  "deepseek",
   "mistral",
   "perplexity",
   "vllm",
@@ -24,6 +25,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "bedrock:converse",
   "cohere:chat",
   "cerebras:chatCompletions",
+  "deepseek:chatCompletions",
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
   "vllm:chatCompletions",
@@ -44,6 +46,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   gemini: "Gemini",
   cohere: "Cohere",
   cerebras: "Cerebras",
+  deepseek: "DeepSeek",
   mistral: "Mistral AI",
   perplexity: "Perplexity AI",
   vllm: "vLLM",
@@ -75,6 +78,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   bedrock: "",
   cohere: "https://api.cohere.ai",
   cerebras: "https://api.cerebras.ai/v1",
+  deepseek: "https://api.deepseek.com",
   mistral: "https://api.mistral.ai/v1",
   perplexity: "https://api.perplexity.ai",
   vllm: "",
@@ -115,6 +119,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   cerebras: {
     fastest: ["llama-3.3-70b"],
     best: ["llama-3.3-70b"],
+  },
+  deepseek: {
+    fastest: ["deepseek-chat"],
+    best: ["deepseek-reasoner"],
   },
   cohere: {
     fastest: ["command-light"],

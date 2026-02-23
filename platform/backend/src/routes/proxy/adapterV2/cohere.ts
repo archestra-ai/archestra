@@ -786,14 +786,8 @@ export async function convertToolResultsToToon(
   // Calculate cost savings
   let costSavings = 0;
   if (totalTokensBefore > 0) {
-    const modelEntry = await ModelModel.findByModelId(model);
-    const pricing = ModelModel.getEffectivePricing(modelEntry, model);
     const savedTokens = totalTokensBefore - totalTokensAfter;
-    const inputPricePerToken =
-      parseFloat(pricing.pricePerMillionInput) / 1_000_000;
-    costSavings =
-      savedTokens *
-      (Number.isFinite(inputPricePerToken) ? inputPricePerToken : 0);
+    costSavings = await ModelModel.calculateCostSavings(model, savedTokens);
   }
 
   return {

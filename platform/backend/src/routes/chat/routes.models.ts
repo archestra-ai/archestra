@@ -1081,16 +1081,35 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const modelsWithApiKeys =
         await ApiKeyModelModel.getAllModelsWithApiKeys();
 
+      // Also include unlinked models (e.g. created by ensureModelExists during proxy
+      // requests) but ONLY for providers that have at least one configured API key.
+      // This prevents showing models from unconfigured providers.
+      const allModels = await ModelModel.findAll();
+      const linkedModelIds = new Set(modelsWithApiKeys.map((m) => m.model.id));
+      const configuredProviders = new Set(
+        modelsWithApiKeys.map((m) => m.model.provider),
+      );
+      const unlinkedModels = allModels.filter(
+        (m) => !linkedModelIds.has(m.id) && configuredProviders.has(m.provider),
+      );
+
       // Transform to response format with capabilities and markers
-      const response = modelsWithApiKeys.map(
-        ({ model, isFastest, isBest, apiKeys }) => ({
+      const response = [
+        ...modelsWithApiKeys.map(({ model, isFastest, isBest, apiKeys }) => ({
           ...model,
           isFastest,
           isBest,
           apiKeys,
           capabilities: ModelModel.toCapabilities(model),
-        }),
-      );
+        })),
+        ...unlinkedModels.map((model) => ({
+          ...model,
+          isFastest: false,
+          isBest: false,
+          apiKeys: [],
+          capabilities: ModelModel.toCapabilities(model),
+        })),
+      ];
 
       logger.debug(
         { modelCount: response.length },

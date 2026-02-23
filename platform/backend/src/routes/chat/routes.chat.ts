@@ -81,6 +81,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   perplexity: "sonar-pro",
   zhipuai: "glm-4-plus",
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
+  deepseek: "deepseek-chat",
 };
 
 /**

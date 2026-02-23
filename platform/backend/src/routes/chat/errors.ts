@@ -1128,6 +1128,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
 };
 
 /**
@@ -1147,6 +1148,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
 };
 
 // =============================================================================

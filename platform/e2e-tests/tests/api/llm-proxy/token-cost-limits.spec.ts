@@ -169,6 +169,12 @@ const zhipuaiConfig = makeOpenAiCompatibleCostConfig({
   provider: "zhipuai",
 });
 
+const deepseekConfig = makeOpenAiCompatibleCostConfig({
+  providerName: "DeepSeek",
+  modelName: "test-deepseek-cost-limit",
+  provider: "deepseek",
+});
+
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
 
@@ -239,6 +245,7 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  deepseek: deepseekConfig,
   bedrock: bedrockConfig,
 } satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
 

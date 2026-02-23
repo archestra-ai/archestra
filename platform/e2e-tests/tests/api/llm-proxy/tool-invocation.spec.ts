@@ -445,6 +445,12 @@ const zhipuaiConfig = makeOpenAiCompatibleToolConfig({
   model: "glm-4.5-flash",
 });
 
+const deepseekConfig = makeOpenAiCompatibleToolConfig({
+  providerName: "DeepSeek",
+  endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+  model: "deepseek-chat",
+});
+
 const bedrockConfig: ToolInvocationTestConfig = {
   providerName: "Bedrock",
 
@@ -541,6 +547,7 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  deepseek: deepseekConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;

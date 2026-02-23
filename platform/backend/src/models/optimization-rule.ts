@@ -285,6 +285,7 @@ class OptimizationRuleModel {
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
+        deepseek: [], // DeepSeek optimization rules are deployment-specific, no defaults
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

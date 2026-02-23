@@ -64,6 +64,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
   },
+  deepseek: {
+    label: providerDisplayNames.deepseek,
+    originalUrl: "https://api.deepseek.com/v1/",
+  },
   bedrock: {
     label: providerDisplayNames.bedrock,
     originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",

@@ -214,10 +214,11 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cerebras: "cerebras",
   mistral: "mistral",
   llama: "openai",
-  deepseek: "openai",
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
+  // DeepSeek now has native provider support
+  deepseek: "deepseek",
   perplexity: null,
   xai: null,
   nvidia: null,

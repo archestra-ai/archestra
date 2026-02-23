@@ -44284,6 +44284,7 @@
                           "bedrock",
                           "cerebras",
                           "cohere",
+                          "deepseek",
                           "gemini",
                           "mistral",
                           "openai",
@@ -44622,6 +44623,7 @@
                       "bedrock",
                       "cerebras",
                       "cohere",
+                      "deepseek",
                       "gemini",
                       "mistral",
                       "openai",
@@ -44699,6 +44701,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -44998,6 +45001,7 @@
                 "bedrock",
                 "cerebras",
                 "cohere",
+                "deepseek",
                 "gemini",
                 "mistral",
                 "openai",
@@ -45050,6 +45054,7 @@
                           "bedrock",
                           "cerebras",
                           "cohere",
+                          "deepseek",
                           "gemini",
                           "mistral",
                           "openai",
@@ -45411,6 +45416,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -45818,6 +45824,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -46367,6 +46374,7 @@
                 "bedrock",
                 "cerebras",
                 "cohere",
+                "deepseek",
                 "gemini",
                 "mistral",
                 "openai",
@@ -46404,6 +46412,7 @@
                           "bedrock",
                           "cerebras",
                           "cohere",
+                          "deepseek",
                           "gemini",
                           "mistral",
                           "openai",
@@ -46990,7 +46999,8 @@
                           "perplexity",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "deepseek"
                         ]
                       },
                       "modelId": {
@@ -47488,7 +47498,8 @@
                         "perplexity",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "deepseek"
                       ]
                     },
                     "modelId": {
@@ -48368,6 +48379,7 @@
                           "bedrock",
                           "cerebras",
                           "cohere",
+                          "deepseek",
                           "gemini",
                           "mistral",
                           "openai",
@@ -48737,6 +48749,7 @@
                       "bedrock",
                       "cerebras",
                       "cohere",
+                      "deepseek",
                       "gemini",
                       "mistral",
                       "openai",
@@ -48806,6 +48819,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -49208,6 +49222,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -49571,6 +49586,7 @@
                       "bedrock",
                       "cerebras",
                       "cohere",
+                      "deepseek",
                       "gemini",
                       "mistral",
                       "openai",
@@ -49657,6 +49673,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -50589,6 +50606,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -51019,6 +51037,7 @@
                         "bedrock",
                         "cerebras",
                         "cohere",
+                        "deepseek",
                         "gemini",
                         "mistral",
                         "openai",
@@ -55274,7 +55293,8 @@
                         "perplexity",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "deepseek"
                       ]
                     }
                   },
@@ -86775,7 +86795,8 @@
                           "perplexity",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "deepseek"
                         ]
                       },
                       "targetModel": {
@@ -87094,7 +87115,8 @@
                       "perplexity",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "deepseek"
                     ]
                   },
                   "targetModel": {
@@ -87188,7 +87210,8 @@
                         "perplexity",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "deepseek"
                       ]
                     },
                     "targetModel": {
@@ -87508,7 +87531,8 @@
                       "perplexity",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "deepseek"
                     ]
                   },
                   "targetModel": {
@@ -87606,7 +87630,8 @@
                         "perplexity",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "deepseek"
                       ]
                     },
                     "targetModel": {

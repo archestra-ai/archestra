@@ -1549,6 +1549,16 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result).toBe(false);
     });
 
+    test("returns false for archestra tools regardless of policies", async () => {
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "archestra__todo_write",
+        { todos: [] },
+        mockContext,
+      );
+
+      expect(result).toBe(false);
+    });
+
     test("returns false when tool does not exist", async () => {
       const result = await ToolInvocationPolicyModel.checkApprovalRequired(
         "nonexistent-tool",

@@ -43,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   type ChatApiKeyScope,
@@ -241,9 +242,9 @@ export function ProviderSettingsApiKeys() {
           >
             <span className="font-medium break-all">{row.original.name}</span>
             {row.original.isPrimary && (
-              <Badge className="bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border-amber-500/20">
+              <InlineTag className="text-amber-500 bg-amber-500/15 border border-amber-500/20">
                 Primary
-              </Badge>
+              </InlineTag>
             )}
           </div>
         ),

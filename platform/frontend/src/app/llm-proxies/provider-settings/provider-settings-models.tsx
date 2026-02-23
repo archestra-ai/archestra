@@ -25,6 +25,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineTag } from "@/components/ui/inline-tag";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -534,43 +535,45 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
 
 function UnknownCapabilitiesBadge() {
   return (
-    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+    <InlineTag className="text-muted-foreground bg-muted">
       capabilities unknown
-    </span>
+    </InlineTag>
   );
 }
 
 function FastestModelBadge() {
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-      <Zap className="h-3 w-3" />
+    <InlineTag
+      icon={<Zap />}
+      className="text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950"
+    >
       fastest
-    </span>
+    </InlineTag>
   );
 }
 
 function BestModelBadge() {
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-      <Star className="h-3 w-3" />
+    <InlineTag
+      icon={<Star />}
+      className="text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950"
+    >
       best
-    </span>
+    </InlineTag>
   );
 }
 
 function PriceSourceBadge({ source }: { source: string }) {
   if (source === "custom") {
     return (
-      <span className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+      <InlineTag className="text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950">
         custom
-      </span>
+      </InlineTag>
     );
   }
   if (source === "default") {
     return (
-      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-        default
-      </span>
+      <InlineTag className="text-muted-foreground bg-muted">default</InlineTag>
     );
   }
   return null;

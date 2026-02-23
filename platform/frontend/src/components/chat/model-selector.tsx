@@ -35,6 +35,7 @@ import {
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { DialogClose } from "@/components/ui/dialog";
+import { InlineTag } from "@/components/ui/inline-tag";
 import { Toggle } from "@/components/ui/toggle";
 import {
   Tooltip,
@@ -183,9 +184,9 @@ function ModelCapabilityBadges({
   // Show "unknown" badge if no capabilities data at all
   if (!capabilities || !hasAnyCapability) {
     return (
-      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+      <InlineTag className="text-muted-foreground bg-muted">
         capabilities unknown
-      </span>
+      </InlineTag>
     );
   }
 

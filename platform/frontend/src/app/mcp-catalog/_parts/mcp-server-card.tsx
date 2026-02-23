@@ -503,7 +503,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {usersAuthenticated}
           </div>
@@ -529,7 +529,7 @@ export function McpServerCard({
           </PermissionButton>
         )}
       {/* Spacer + action buttons + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2 flex flex-col gap-2">
+      <div className="mt-auto flex flex-col gap-2">
         {userIsMcpServerAdmin && actionButtons}
         {!isInstalling && (
           <TooltipProvider>
@@ -567,7 +567,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {localServersInstalled}
           </div>
@@ -591,7 +591,7 @@ export function McpServerCard({
         </PermissionButton>
       )}
       {/* Spacer + action buttons + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2 flex flex-col gap-2">
+      <div className="mt-auto flex flex-col gap-2">
         {userIsMcpServerAdmin && actionButtons}
         {/* Show Connect button when user can create new installation */}
         {!isInstalling && (
@@ -648,7 +648,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {localServersInstalled}
           </div>
@@ -672,7 +672,7 @@ export function McpServerCard({
         </PermissionButton>
       )}
       {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
-      <div className="mt-auto pt-2 flex flex-col gap-2">
+      <div className="mt-auto flex flex-col gap-2">
         {userIsMcpServerAdmin && actionButtons}
         {!isInstalling && isCurrentUserAuthenticated && installedServer && (
           <Button
@@ -740,7 +740,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
@@ -789,7 +789,7 @@ export function McpServerCard({
 
   return (
     <Card
-      className="flex flex-col relative pt-4 h-full"
+      className="flex flex-col relative pt-4 gap-2 h-full"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
       <CardHeader>

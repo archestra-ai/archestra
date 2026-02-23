@@ -60,7 +60,12 @@ export function ProviderSettingsModels() {
     if (providerFilter !== "all") {
       result = result.filter((m) => m.provider === providerFilter);
     }
-    return result;
+    // Stable sort so rows don't jump when data refetches after pricing edits
+    return [...result].sort(
+      (a, b) =>
+        a.provider.localeCompare(b.provider) ||
+        a.modelId.localeCompare(b.modelId),
+    );
   }, [models, search, providerFilter]);
 
   const availableProviders = useMemo(() => {
@@ -198,11 +203,6 @@ export function ProviderSettingsModels() {
         ),
       },
       {
-        id: "pricingActions",
-        header: "",
-        cell: ({ row }) => <PricingResetCell model={row.original} />,
-      },
-      {
         accessorKey: "capabilities.contextLength",
         header: "Context",
         cell: ({ row }) => {
@@ -291,7 +291,9 @@ export function ProviderSettingsModels() {
             <div>
               <h2 className="text-lg font-semibold">Available Models</h2>
               <p className="text-sm text-muted-foreground">
-                Models available from your configured API keys
+                Models available from your configured API keys. Click any price
+                cell to set a custom token price. Use Refresh to re-fetch models
+                and capabilities from providers.
               </p>
             </div>
             <Button
@@ -402,7 +404,7 @@ function PricingValueCell({
   model: ModelWithApiKeys;
   field: "input" | "output";
 }) {
-  const { onSaveField } = useContext(PricingEditContext);
+  const { onSaveField, onReset } = useContext(PricingEditContext);
   const currentPrice =
     field === "input"
       ? model.capabilities?.pricePerMillionInput
@@ -410,6 +412,7 @@ function PricingValueCell({
   const source = (model.capabilities as Record<string, unknown>)?.priceSource as
     | string
     | undefined;
+  const isCustom = source === "custom";
 
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentPrice ?? "");
@@ -449,41 +452,34 @@ function PricingValueCell({
   }
 
   return (
-    <button
-      type="button"
-      className="flex items-center gap-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
-      onClick={() => {
-        setValue(currentPrice ?? "");
-        setEditing(true);
-      }}
-    >
-      {currentPrice ? (
-        <span className="text-sm font-mono">${currentPrice}</span>
-      ) : (
-        <span className="text-sm text-muted-foreground">-</span>
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        className="flex items-center gap-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
+        onClick={() => {
+          setValue(currentPrice ?? "");
+          setEditing(true);
+        }}
+      >
+        {currentPrice ? (
+          <span className="text-sm font-mono">${currentPrice}</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">-</span>
+        )}
+        {field === "output" && source && <PriceSourceBadge source={source} />}
+      </button>
+      {field === "output" && isCustom && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 text-muted-foreground"
+          onClick={() => onReset(model.id)}
+          title="Reset to default pricing"
+        >
+          <RotateCcw className="h-3 w-3" />
+        </Button>
       )}
-      {field === "output" && source && <PriceSourceBadge source={source} />}
-    </button>
-  );
-}
-
-function PricingResetCell({ model }: { model: ModelWithApiKeys }) {
-  const { onReset } = useContext(PricingEditContext);
-  const isCustom =
-    (model.capabilities as Record<string, unknown>)?.priceSource === "custom";
-
-  if (hasUnknownCapabilities(model) || !isCustom) return null;
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-7 w-7 p-0 text-muted-foreground"
-      onClick={() => onReset(model.id)}
-      title="Reset to default pricing"
-    >
-      <RotateCcw className="h-3.5 w-3.5" />
-    </Button>
+    </div>
   );
 }
 

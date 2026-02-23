@@ -75,7 +75,10 @@ function DateTimePicker({
             disabled={disabledDate}
           />
           <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x">
-            <div className="max-h-[300px] overflow-y-auto p-2">
+            <div
+              className="max-h-[300px] overflow-y-auto p-2"
+              onWheel={handleContainerScroll}
+            >
               <div className="flex sm:flex-col">
                 {HOURS.map((hour) => (
                   <Button
@@ -92,7 +95,10 @@ function DateTimePicker({
                 ))}
               </div>
             </div>
-            <div className="max-h-[300px] overflow-y-auto p-2">
+            <div
+              className="max-h-[300px] overflow-y-auto p-2"
+              onWheel={handleContainerScroll}
+            >
               <div className="flex sm:flex-col">
                 {MINUTES.map((minute) => (
                   <Button
@@ -118,6 +124,15 @@ function DateTimePicker({
       </PopoverContent>
     </Popover>
   );
+}
+
+/**
+ * Manually scroll the container on wheel events.
+ * Radix Dialog's scroll lock blocks native wheel scrolling on portaled
+ * Popover content, so we handle it ourselves.
+ */
+function handleContainerScroll(e: React.WheelEvent<HTMLDivElement>) {
+  e.currentTarget.scrollTop += e.deltaY;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);

@@ -9,8 +9,6 @@ import {
   RotateCcw,
   Search,
   Server,
-  Star,
-  Zap,
 } from "lucide-react";
 import Image from "next/image";
 import {
@@ -22,6 +20,12 @@ import {
 } from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
+import {
+  BestModelBadge,
+  FastestModelBadge,
+  PriceSourceBadge,
+  UnknownCapabilitiesBadge,
+} from "@/components/model-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -34,20 +38,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
   useUpdateModelPricing,
 } from "@/lib/chat-models.query";
-import {
-  type ChatApiKeyScope,
-  useSyncChatModels,
-} from "@/lib/chat-settings.query";
-
-const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
-  personal: null,
-  team: null,
-  org_wide: null,
-};
+import { useSyncChatModels } from "@/lib/chat-settings.query";
 
 export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
@@ -65,7 +65,12 @@ export function ProviderSettingsModels() {
     if (providerFilter !== "all") {
       result = result.filter((m) => m.provider === providerFilter);
     }
-    return result;
+    // Stable sort so rows don't jump when data refetches after pricing edits
+    return [...result].sort(
+      (a, b) =>
+        a.provider.localeCompare(b.provider) ||
+        a.modelId.localeCompare(b.modelId),
+    );
   }, [models, search, providerFilter]);
 
   const availableProviders = useMemo(() => {
@@ -180,13 +185,7 @@ export function ProviderSettingsModels() {
                   variant={apiKey.isSystem ? "secondary" : "outline"}
                   className="text-xs gap-1 max-w-full"
                 >
-                  {apiKey.isSystem ? (
-                    <Server className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <span className="shrink-0">
-                      {SCOPE_ICONS[apiKey.scope as ChatApiKeyScope]}
-                    </span>
-                  )}
+                  {apiKey.isSystem && <Server className="h-3 w-3 shrink-0" />}
                   <span className="truncate">{apiKey.name}</span>
                 </Badge>
               ))}
@@ -207,11 +206,6 @@ export function ProviderSettingsModels() {
         cell: ({ row }) => (
           <PricingValueCell model={row.original} field="output" />
         ),
-      },
-      {
-        id: "pricingActions",
-        header: "",
-        cell: ({ row }) => <PricingResetCell model={row.original} />,
       },
       {
         accessorKey: "capabilities.contextLength",
@@ -302,7 +296,9 @@ export function ProviderSettingsModels() {
             <div>
               <h2 className="text-lg font-semibold">Available Models</h2>
               <p className="text-sm text-muted-foreground">
-                Models available from your configured API keys
+                Models available from your configured API keys. Click any price
+                cell to set a custom token price. Use Refresh to re-fetch models
+                and capabilities from providers.
               </p>
             </div>
             <Button
@@ -413,14 +409,13 @@ function PricingValueCell({
   model: ModelWithApiKeys;
   field: "input" | "output";
 }) {
-  const { onSaveField } = useContext(PricingEditContext);
+  const { onSaveField, onReset } = useContext(PricingEditContext);
   const currentPrice =
     field === "input"
       ? model.capabilities?.pricePerMillionInput
       : model.capabilities?.pricePerMillionOutput;
-  const source = (model.capabilities as Record<string, unknown>)?.priceSource as
-    | string
-    | undefined;
+  const source = model.capabilities?.priceSource;
+  const isCustom = source === "custom";
 
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentPrice ?? "");
@@ -460,41 +455,38 @@ function PricingValueCell({
   }
 
   return (
-    <button
-      type="button"
-      className="flex items-center gap-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
-      onClick={() => {
-        setValue(currentPrice ?? "");
-        setEditing(true);
-      }}
-    >
-      {currentPrice ? (
-        <span className="text-sm font-mono">${currentPrice}</span>
-      ) : (
-        <span className="text-sm text-muted-foreground">-</span>
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        className="flex items-center gap-1 h-auto px-1 -mx-1 py-0.5"
+        onClick={() => {
+          setValue(currentPrice ?? "");
+          setEditing(true);
+        }}
+      >
+        {currentPrice ? (
+          <span className="text-sm font-mono">${currentPrice}</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">-</span>
+        )}
+        {field === "output" && source && <PriceSourceBadge source={source} />}
+      </Button>
+      {field === "output" && isCustom && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-muted-foreground"
+              onClick={() => onReset(model.id)}
+            >
+              <RotateCcw className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Reset token prices to defaults</TooltipContent>
+        </Tooltip>
       )}
-      {field === "output" && source && <PriceSourceBadge source={source} />}
-    </button>
-  );
-}
-
-function PricingResetCell({ model }: { model: ModelWithApiKeys }) {
-  const { onReset } = useContext(PricingEditContext);
-  const isCustom =
-    (model.capabilities as Record<string, unknown>)?.priceSource === "custom";
-
-  if (hasUnknownCapabilities(model) || !isCustom) return null;
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-7 w-7 p-0 text-muted-foreground"
-      onClick={() => onReset(model.id)}
-      title="Reset to default pricing"
-    >
-      <RotateCcw className="h-3.5 w-3.5" />
-    </Button>
+    </div>
   );
 }
 
@@ -530,48 +522,4 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
     !hasContextLength &&
     !hasPricing
   );
-}
-
-function UnknownCapabilitiesBadge() {
-  return (
-    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-      capabilities unknown
-    </span>
-  );
-}
-
-function FastestModelBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-      <Zap className="h-3 w-3" />
-      fastest
-    </span>
-  );
-}
-
-function BestModelBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-      <Star className="h-3 w-3" />
-      best
-    </span>
-  );
-}
-
-function PriceSourceBadge({ source }: { source: string }) {
-  if (source === "custom") {
-    return (
-      <span className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.5 rounded whitespace-nowrap">
-        custom
-      </span>
-    );
-  }
-  if (source === "default") {
-    return (
-      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-        default
-      </span>
-    );
-  }
-  return null;
 }

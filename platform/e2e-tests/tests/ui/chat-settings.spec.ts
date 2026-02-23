@@ -253,6 +253,88 @@ test.describe("Provider Settings - Virtual API Keys", () => {
   });
 });
 
+test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let keylessParentName: string;
+
+  test("Can create a virtual key for a keyless (no API key) provider", async ({
+    page,
+    makeRandomString,
+  }) => {
+    keylessParentName = makeRandomString(8, "Keyless Parent");
+    const virtualKeyName = makeRandomString(8, "Keyless VK");
+
+    // Create an Ollama key without providing an API key (optional for Ollama)
+    await goToApiKeysPage(page);
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByRole("combobox", { name: "Provider" }).click();
+    await page.getByRole("option", { name: "Ollama Ollama" }).click();
+    await page.getByLabel(/Name/i).fill(keylessParentName);
+    // Leave API Key blank — it's optional for Ollama
+    await clickButton({ page, options: { name: "Test & Create" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keylessParentName}`),
+    ).toBeVisible();
+
+    // Navigate to Virtual API Keys tab
+    await goToVirtualKeysPage(page);
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Keys" }),
+    ).toBeVisible();
+
+    // Create Virtual Key — the keyless parent should appear in the dropdown
+    await clickButton({ page, options: { name: "Create Virtual Key" } });
+    await expect(
+      page.getByRole("heading", { name: /Create Virtual API Key/i }),
+    ).toBeVisible();
+
+    // Select the keyless parent key
+    await page.getByRole("combobox").first().click();
+    await page
+      .getByRole("option", { name: new RegExp(keylessParentName) })
+      .click();
+
+    // Fill name and create
+    await page.getByLabel(/Name/i).fill(virtualKeyName);
+    await clickButton({ page, options: { name: "Create" } });
+
+    // Should show the created key value
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Key Created" }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.locator("code").filter({ hasText: "archestra_" }).last(),
+    ).toBeVisible();
+
+    await clickButton({ page, options: { name: "Close" }, first: true });
+    await expect(page.getByText(virtualKeyName)).toBeVisible();
+  });
+
+  test("Cleanup keyless parent key", async ({ page }) => {
+    await goToVirtualKeysPage(page);
+
+    // Delete the virtual key
+    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
+    if (await deleteButton.isVisible()) {
+      await deleteButton.click();
+      await clickButton({ page, options: { name: "Delete" } });
+      await page.waitForLoadState("domcontentloaded");
+    }
+
+    // Delete the keyless parent API key
+    if (keylessParentName) {
+      await goToApiKeysPage(page);
+      await page
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keylessParentName}`)
+        .click();
+      await clickButton({ page, options: { name: "Delete" } });
+    }
+  });
+});
+
 test.describe("Provider Settings - Tab Navigation", () => {
   test("All three tabs are accessible", async ({ page }) => {
     // API Keys tab (default)

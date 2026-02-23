@@ -3,7 +3,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { Key, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ChatApiKeyResponse,
   PROVIDER_CONFIG,
@@ -11,6 +11,7 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Dialog,
   DialogContent,
@@ -53,20 +54,21 @@ export function CreateVirtualKeyDialog({
     null,
   );
 
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (nextOpen) {
-        // Reset form state when opening
-        setCreatedKeyValue(null);
-        setCreatedKeyExpiresAt(null);
-        setNewKeyName("");
-        setSelectedParentKeyId(parentableKeys[0]?.id ?? "");
-        setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
-      }
-      onOpenChange(nextOpen);
-    },
-    [onOpenChange, parentableKeys, defaultExpirationSeconds],
-  );
+  const defaultParentKeyId = parentableKeys[0]?.id ?? "";
+  const prevOpenRef = useRef(open);
+
+  // Reset form state only on open transition (false → true)
+  useEffect(() => {
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (open && !wasOpen) {
+      setCreatedKeyValue(null);
+      setCreatedKeyExpiresAt(null);
+      setNewKeyName("");
+      setSelectedParentKeyId(defaultParentKeyId);
+      setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
+    }
+  }, [open, defaultParentKeyId, defaultExpirationSeconds]);
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim() || !selectedParentKeyId) return;
@@ -89,7 +91,7 @@ export function CreateVirtualKeyDialog({
   }, [newKeyName, selectedParentKeyId, expiresAt, createMutation]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
@@ -176,15 +178,15 @@ export function CreateVirtualKeyDialog({
                   </span>
                 </Label>
                 <div className="flex items-center gap-2">
-                  <Input
-                    type="datetime-local"
-                    value={expiresAt ? toDatetimeLocalValue(expiresAt) : ""}
-                    min={toDatetimeLocalValue(new Date())}
-                    onChange={(e) =>
-                      setExpiresAt(
-                        e.target.value ? new Date(e.target.value) : null,
-                      )
-                    }
+                  <DateTimePicker
+                    value={expiresAt ?? undefined}
+                    onChange={(date) => setExpiresAt(date ?? null)}
+                    disabledDate={(date) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return date < today;
+                    }}
+                    placeholder="No expiration"
                     className="flex-1"
                   />
                   {expiresAt && (
@@ -249,12 +251,4 @@ function formatExpiration(date: Date | string | null): string {
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
   if (!defaultSeconds) return null;
   return new Date(Date.now() + defaultSeconds * 1000);
-}
-
-/**
- * Format a Date to a datetime-local input value (YYYY-MM-DDTHH:mm).
- */
-function toDatetimeLocalValue(date: Date): string {
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

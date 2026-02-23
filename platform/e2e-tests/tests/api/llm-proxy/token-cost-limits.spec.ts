@@ -307,8 +307,7 @@ for (const config of testConfigs) {
 
         // Reset any existing custom pricing first, then set our test values
         await updateModelPricing(request, modelUuid, {
-          customPricePerMillionInput:
-            config.customPricing.pricePerMillionInput,
+          customPricePerMillionInput: config.customPricing.pricePerMillionInput,
           customPricePerMillionOutput:
             config.customPricing.pricePerMillionOutput,
         });

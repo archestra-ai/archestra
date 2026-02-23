@@ -195,6 +195,28 @@ describe("validateVirtualApiKey", () => {
 
     spy.mockRestore();
   });
+
+  test("returns undefined apiKey for system key (no secret) without throwing", async ({
+    makeOrganization,
+  }) => {
+    const { ChatApiKeyModel } = await import("@/models");
+    const org = await makeOrganization();
+
+    const systemKey = await ChatApiKeyModel.createSystemKey({
+      organizationId: org.id,
+      name: "Vertex AI",
+      provider: "gemini",
+    });
+
+    const { value } = await VirtualApiKeyModel.create({
+      chatApiKeyId: systemKey.id,
+      name: "virtual-for-system-key",
+    });
+
+    const result = await validateVirtualApiKey(value, "gemini");
+    expect(result.apiKey).toBeUndefined();
+    expect(result.baseUrl).toBeUndefined();
+  });
 });
 
 // =========================================================================

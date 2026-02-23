@@ -952,6 +952,7 @@ function MessageTool({
         part={part}
         toolResultPart={toolResultPart}
         errorText={errorText}
+        onToolApprovalResponse={onToolApprovalResponse}
       />
     );
   }

@@ -40,21 +40,13 @@ function DateTimePicker({
     onChange(newDate);
   };
 
-  const handleTimeChange = (type: "hour" | "minute" | "ampm", val: string) => {
+  const handleTimeChange = (type: "hour" | "minute", val: string) => {
     const current = value ?? new Date();
     const newDate = new Date(current);
     if (type === "hour") {
-      const hour = Number.parseInt(val, 10);
-      newDate.setHours((hour % 12) + (newDate.getHours() >= 12 ? 12 : 0));
+      newDate.setHours(Number.parseInt(val, 10));
     } else if (type === "minute") {
       newDate.setMinutes(Number.parseInt(val, 10));
-    } else if (type === "ampm") {
-      const hours = newDate.getHours();
-      if (val === "AM" && hours >= 12) {
-        newDate.setHours(hours - 12);
-      } else if (val === "PM" && hours < 12) {
-        newDate.setHours(hours + 12);
-      }
     }
     onChange(newDate);
   };
@@ -71,7 +63,7 @@ function DateTimePicker({
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {value ? format(value, "MM/dd/yyyy hh:mm aa") : placeholder}
+          {value ? format(value, "MM/dd/yyyy HH:mm") : placeholder}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
@@ -91,14 +83,12 @@ function DateTimePicker({
                     key={hour}
                     size="icon"
                     variant={
-                      value && value.getHours() % 12 === hour % 12
-                        ? "default"
-                        : "ghost"
+                      value && value.getHours() === hour ? "default" : "ghost"
                     }
                     className="sm:w-full shrink-0 aspect-square"
                     onClick={() => handleTimeChange("hour", hour.toString())}
                   >
-                    {hour}
+                    {hour.toString().padStart(2, "0")}
                   </Button>
                 ))}
               </div>
@@ -126,27 +116,6 @@ function DateTimePicker({
               </div>
               <ScrollBar orientation="horizontal" className="sm:hidden" />
             </ScrollArea>
-            <ScrollArea>
-              <div className="flex sm:flex-col p-2">
-                {AMPM.map((ampm) => (
-                  <Button
-                    key={ampm}
-                    size="icon"
-                    variant={
-                      value &&
-                      ((ampm === "AM" && value.getHours() < 12) ||
-                        (ampm === "PM" && value.getHours() >= 12))
-                        ? "default"
-                        : "ghost"
-                    }
-                    className="sm:w-full shrink-0 aspect-square"
-                    onClick={() => handleTimeChange("ampm", ampm)}
-                  >
-                    {ampm}
-                  </Button>
-                ))}
-              </div>
-            </ScrollArea>
           </div>
         </div>
       </PopoverContent>
@@ -154,9 +123,8 @@ function DateTimePicker({
   );
 }
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
-const AMPM = ["AM", "PM"] as const;
 
 export { DateTimePicker };
 export type { DateTimePickerProps };

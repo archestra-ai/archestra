@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 interface DateTimePickerProps {
@@ -75,36 +76,44 @@ function DateTimePicker({
             disabled={disabledDate}
           />
           <div className="flex flex-col sm:flex-row sm:h-[300px] divide-y sm:divide-y-0 sm:divide-x">
-            <div className="flex overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto sm:flex-col p-2">
-              {HOURS.map((hour) => (
-                <Button
-                  key={hour}
-                  size="icon"
-                  variant={
-                    value && value.getHours() === hour ? "default" : "ghost"
-                  }
-                  className="sm:w-full shrink-0 aspect-square"
-                  onClick={() => handleTimeChange("hour", hour.toString())}
-                >
-                  {hour.toString().padStart(2, "0")}
-                </Button>
-              ))}
-            </div>
-            <div className="flex overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto sm:flex-col p-2">
-              {MINUTES.map((minute) => (
-                <Button
-                  key={minute}
-                  size="icon"
-                  variant={
-                    value && value.getMinutes() === minute ? "default" : "ghost"
-                  }
-                  className="sm:w-full shrink-0 aspect-square"
-                  onClick={() => handleTimeChange("minute", minute.toString())}
-                >
-                  {minute.toString().padStart(2, "0")}
-                </Button>
-              ))}
-            </div>
+            <ScrollArea className="h-[200px] sm:h-auto overflow-hidden">
+              <div className="flex sm:flex-col p-2">
+                {HOURS.map((hour) => (
+                  <Button
+                    key={hour}
+                    size="icon"
+                    variant={
+                      value && value.getHours() === hour ? "default" : "ghost"
+                    }
+                    className="sm:w-full shrink-0 aspect-square"
+                    onClick={() => handleTimeChange("hour", hour.toString())}
+                  >
+                    {hour.toString().padStart(2, "0")}
+                  </Button>
+                ))}
+              </div>
+            </ScrollArea>
+            <ScrollArea className="h-[200px] sm:h-auto overflow-hidden">
+              <div className="flex sm:flex-col p-2">
+                {MINUTES.map((minute) => (
+                  <Button
+                    key={minute}
+                    size="icon"
+                    variant={
+                      value && value.getMinutes() === minute
+                        ? "default"
+                        : "ghost"
+                    }
+                    className="sm:w-full shrink-0 aspect-square"
+                    onClick={() =>
+                      handleTimeChange("minute", minute.toString())
+                    }
+                  >
+                    {minute.toString().padStart(2, "0")}
+                  </Button>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
         </div>
       </PopoverContent>

@@ -266,11 +266,11 @@ export function McpServerCard({
 
   // JSX parts - Action buttons for Edit and Logs
   const actionButtons = (
-    <div className="flex gap-1 mb-2">
+    <div className="flex gap-1">
       <Button
         variant="outline"
         size="sm"
-        className="flex-1 h-8 text-xs"
+        className="flex-1 h-8"
         onClick={onEdit}
       >
         <Pencil className="h-3 w-3 mr-1" />
@@ -280,7 +280,7 @@ export function McpServerCard({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 h-8 text-xs"
+          className="flex-1 h-8"
           onClick={() => setIsLogsDialogOpen(true)}
         >
           <FileText className="h-3 w-3 mr-1" />
@@ -528,8 +528,9 @@ export function McpServerCard({
             Reconnect Required
           </PermissionButton>
         )}
-      {/* Spacer + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      <div className="mt-auto pt-2 flex flex-col gap-2">
+        {userIsMcpServerAdmin && actionButtons}
         {!isInstalling && (
           <TooltipProvider>
             <Tooltip>
@@ -589,8 +590,9 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      <div className="mt-auto pt-2 flex flex-col gap-2">
+        {userIsMcpServerAdmin && actionButtons}
         {/* Show Connect button when user can create new installation */}
         {!isInstalling && (
           <TooltipProvider>
@@ -669,8 +671,9 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + Connect/Uninstall button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
+      <div className="mt-auto pt-2 flex flex-col gap-2">
+        {userIsMcpServerAdmin && actionButtons}
         {!isInstalling && isCurrentUserAuthenticated && installedServer && (
           <Button
             variant="outline"
@@ -835,7 +838,6 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 flex-grow">
-        {userIsMcpServerAdmin && !isBuiltinVariant && actionButtons}
         {isBuiltinVariant
           ? builtinCardContent
           : isPlaywrightVariant

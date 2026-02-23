@@ -40,7 +40,13 @@ function DateTimePicker({
   };
 
   const handleTimeChange = (type: "hour" | "minute", val: string) => {
-    const current = value ?? new Date();
+    const current =
+      value ??
+      (() => {
+        const d = new Date();
+        d.setMinutes(0, 0, 0);
+        return d;
+      })();
     const newDate = new Date(current);
     if (type === "hour") {
       newDate.setHours(Number.parseInt(val, 10));
@@ -139,4 +145,3 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 
 export { DateTimePicker };
-export type { DateTimePickerProps };

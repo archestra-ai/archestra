@@ -414,9 +414,7 @@ function PricingValueCell({
     field === "input"
       ? model.capabilities?.pricePerMillionInput
       : model.capabilities?.pricePerMillionOutput;
-  const source = (model.capabilities as Record<string, unknown>)?.priceSource as
-    | string
-    | undefined;
+  const source = model.capabilities?.priceSource;
   const isCustom = source === "custom";
 
   const [editing, setEditing] = useState(false);
@@ -458,9 +456,9 @@ function PricingValueCell({
 
   return (
     <div className="flex items-center gap-1">
-      <button
-        type="button"
-        className="flex items-center gap-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
+      <Button
+        variant="ghost"
+        className="flex items-center gap-1 h-auto px-1 -mx-1 py-0.5"
         onClick={() => {
           setValue(currentPrice ?? "");
           setEditing(true);
@@ -472,7 +470,7 @@ function PricingValueCell({
           <span className="text-sm text-muted-foreground">-</span>
         )}
         {field === "output" && source && <PriceSourceBadge source={source} />}
-      </button>
+      </Button>
       {field === "output" && isCustom && (
         <Tooltip>
           <TooltipTrigger asChild>

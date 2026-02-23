@@ -292,6 +292,45 @@ test.describe("Virtual API Keys - CRUD API", () => {
     }
   });
 
+  test("create virtual key for keyless parent (no secret)", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // Create an ollama key without an apiKey — this produces a chat API key
+    // with secretId: null, same as system keys created for Vertex AI.
+    const uniqueName = `e2e-vk-keyless-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createResp = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: uniqueName,
+        provider: "ollama",
+        scope: "org_wide",
+      },
+    });
+    const chatApiKey = (await createResp.json()) as {
+      id: string;
+      name: string;
+      provider: string;
+    };
+
+    try {
+      const vk = await createVirtualKey(
+        makeApiRequest,
+        request,
+        chatApiKey.id,
+        { name: "vk-for-keyless" },
+      );
+
+      expect(vk.value).toMatch(/^archestra_/);
+      expect(vk.id).toBeTruthy();
+      expect(vk.name).toBe("vk-for-keyless");
+    } finally {
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
+    }
+  });
+
   test("reject creation with past expiration date", async ({
     request,
     makeApiRequest,

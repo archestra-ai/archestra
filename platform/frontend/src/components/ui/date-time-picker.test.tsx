@@ -88,7 +88,7 @@ describe("DateTimePicker", () => {
       expect(newDate.getHours()).toBe(10);
     });
 
-    it("uses current time as base when no value and an hour is clicked", async () => {
+    it("uses current date with zeroed minutes as base when no value and an hour is clicked", async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
 
@@ -106,6 +106,8 @@ describe("DateTimePicker", () => {
       expect(onChange).toHaveBeenCalledTimes(1);
       const newDate = onChange.mock.calls[0][0] as Date;
       expect(newDate.getHours()).toBe(8);
+      // Minutes should default to 0 when no existing value
+      expect(newDate.getMinutes()).toBe(0);
     });
   });
 

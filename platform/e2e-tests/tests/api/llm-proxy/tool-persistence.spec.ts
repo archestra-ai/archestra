@@ -328,12 +328,20 @@ for (const config of testConfigs) {
           {
             name: toolOneName,
             description: "Test tool for persistence",
-            parameters: { type: "object", properties: { input: { type: "string", description: "Input" } }, required: ["input"] },
+            parameters: {
+              type: "object",
+              properties: { input: { type: "string", description: "Input" } },
+              required: ["input"],
+            },
           },
           {
             name: toolTwoName,
             description: "Test tool for persistence",
-            parameters: { type: "object", properties: { value: { type: "number", description: "Value" } }, required: ["value"] },
+            parameters: {
+              type: "object",
+              properties: { value: { type: "number", description: "Value" } },
+              required: ["value"],
+            },
           },
         ]),
       });
@@ -363,7 +371,11 @@ for (const config of testConfigs) {
       const tool: ToolDefinition = {
         name: toolName,
         description: "Test tool for dedup verification",
-        parameters: { type: "object", properties: { input: { type: "string", description: "Input" } }, required: ["input"] },
+        parameters: {
+          type: "object",
+          properties: { input: { type: "string", description: "Input" } },
+          required: ["input"],
+        },
       };
 
       // 1. Create test LLM proxy (tool persistence only applies to llm_proxy agents)

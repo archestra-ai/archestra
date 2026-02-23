@@ -149,8 +149,8 @@ export function ProviderSettingsVirtualKeys() {
     [],
   );
 
-  // Non-system API keys that can have virtual keys
-  const parentableKeys = apiKeys.filter((k) => !k.isSystem);
+  // API keys that can have virtual keys (including system keys for keyless providers like Vertex AI)
+  const parentableKeys = apiKeys;
 
   return (
     <LoadingWrapper

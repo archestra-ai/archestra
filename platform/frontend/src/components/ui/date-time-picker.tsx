@@ -10,7 +10,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 interface DateTimePickerProps {
@@ -75,9 +74,9 @@ function DateTimePicker({
             onSelect={handleDateSelect}
             disabled={disabledDate}
           />
-          <div className="flex flex-col sm:flex-row sm:h-[300px] divide-y sm:divide-y-0 sm:divide-x">
-            <ScrollArea className="w-64 sm:w-auto">
-              <div className="flex sm:flex-col p-2">
+          <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x">
+            <div className="max-h-[300px] overflow-y-auto p-2">
+              <div className="flex sm:flex-col">
                 {HOURS.map((hour) => (
                   <Button
                     key={hour}
@@ -92,10 +91,9 @@ function DateTimePicker({
                   </Button>
                 ))}
               </div>
-              <ScrollBar orientation="horizontal" className="sm:hidden" />
-            </ScrollArea>
-            <ScrollArea className="w-64 sm:w-auto">
-              <div className="flex sm:flex-col p-2">
+            </div>
+            <div className="max-h-[300px] overflow-y-auto p-2">
+              <div className="flex sm:flex-col">
                 {MINUTES.map((minute) => (
                   <Button
                     key={minute}
@@ -114,8 +112,7 @@ function DateTimePicker({
                   </Button>
                 ))}
               </div>
-              <ScrollBar orientation="horizontal" className="sm:hidden" />
-            </ScrollArea>
+            </div>
           </div>
         </div>
       </PopoverContent>

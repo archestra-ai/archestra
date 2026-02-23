@@ -144,7 +144,7 @@ let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
  * idle timeouts.
  *
  * Pool configuration:
- * - max: 20 connections (reasonable default for Node.js)
+ * - max: 15 connections (sized to stay within max_connections during rolling deployments)
  * - idleTimeoutMillis: 30s (close idle connections after 30s)
  * - connectionTimeoutMillis: 10s (fail if can't get connection in 10s)
  *
@@ -160,7 +160,7 @@ function createPool(connectionString: string): pg.Pool {
   const newPool = new pg.Pool({
     connectionString,
     // Pool configuration
-    max: 20,
+    max: 15,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     // Keepalive configuration to prevent "Connection terminated unexpectedly"

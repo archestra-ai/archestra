@@ -36,17 +36,17 @@ WHERE tool_id IN (
 );
 --> statement-breakpoint
 
--- Step 3: Deduplicate proxy tools (keep oldest per name) and remove those with catalog equivalents.
+-- Step 3: Deduplicate proxy tools (keep newest per name) and remove those with catalog equivalents.
 DELETE FROM tools
 WHERE agent_id IS NOT NULL
   AND catalog_id IS NULL
   AND delegate_to_agent_id IS NULL
   AND (
-    -- Not the oldest tool for this name (duplicate)
+    -- Not the newest tool for this name (duplicate)
     id NOT IN (
       SELECT DISTINCT ON (name) id FROM tools
       WHERE agent_id IS NOT NULL AND catalog_id IS NULL AND delegate_to_agent_id IS NULL
-      ORDER BY name, created_at ASC
+      ORDER BY name, created_at DESC
     )
     -- Or has a catalog equivalent (catalog tool takes precedence)
     OR name IN (SELECT name FROM tools WHERE catalog_id IS NOT NULL)

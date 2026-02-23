@@ -85,14 +85,31 @@ export function ProviderSettingsModels() {
       value: string | null,
     ) => {
       const model = models.find((m) => m.id === modelId);
-      const currentInput = model?.capabilities?.pricePerMillionInput ?? null;
-      const currentOutput = model?.capabilities?.pricePerMillionOutput ?? null;
+      // When clearing a field, reset both to null (validation requires both or neither)
+      if (!value) {
+        await updatePricing.mutateAsync({
+          id: modelId,
+          customPricePerMillionInput: null,
+          customPricePerMillionOutput: null,
+        });
+        return;
+      }
+      // Use existing custom price for the unchanged field,
+      // falling back to effective price from capabilities
+      const currentInput =
+        model?.customPricePerMillionInput ??
+        model?.capabilities?.pricePerMillionInput ??
+        null;
+      const currentOutput =
+        model?.customPricePerMillionOutput ??
+        model?.capabilities?.pricePerMillionOutput ??
+        null;
       await updatePricing.mutateAsync({
         id: modelId,
         customPricePerMillionInput:
-          field === "input" ? value || null : currentInput || null,
+          field === "input" ? value : currentInput || null,
         customPricePerMillionOutput:
-          field === "output" ? value || null : currentOutput || null,
+          field === "output" ? value : currentOutput || null,
       });
     },
     [updatePricing, models],

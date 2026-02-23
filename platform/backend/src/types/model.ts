@@ -91,6 +91,16 @@ export const UpdateModelPricingSchema = z
   })
   .refine(
     (data) => {
+      const inputSet = data.customPricePerMillionInput !== null;
+      const outputSet = data.customPricePerMillionOutput !== null;
+      return inputSet === outputSet;
+    },
+    {
+      message: "Both custom prices must be set together or both must be null",
+    },
+  )
+  .refine(
+    (data) => {
       if (data.customPricePerMillionInput !== null) {
         const price = parseFloat(data.customPricePerMillionInput);
         if (Number.isNaN(price) || price < 0) return false;

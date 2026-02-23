@@ -276,16 +276,17 @@ export function McpServerCard({
         <Pencil className="h-3 w-3 mr-1" />
         Edit
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1 h-8 text-xs"
-        onClick={() => setIsLogsDialogOpen(true)}
-        disabled={!isLogsAvailable}
-      >
-        <FileText className="h-3 w-3 mr-1" />
-        Logs
-      </Button>
+      {isLogsAvailable && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 h-8 text-xs"
+          onClick={() => setIsLogsDialogOpen(true)}
+        >
+          <FileText className="h-3 w-3 mr-1" />
+          Logs
+        </Button>
+      )}
     </div>
   );
 

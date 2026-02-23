@@ -452,7 +452,7 @@ function PricingValueCell({
             setEditing(false);
           }
         }}
-        className="h-7 w-20 text-sm font-mono"
+        className="h-7 w-24 text-sm font-mono"
         placeholder={field === "input" ? "Input" : "Output"}
         autoFocus
       />

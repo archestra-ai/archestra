@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.49](https://github.com/archestra-ai/archestra/compare/platform-v1.0.48...platform-v1.0.49) (2026-02-24)
+
+
+### Features
+
+* MCP deployment status indicators, metrics, imagePullSecrets, and logs dialog improvements ([#2978](https://github.com/archestra-ai/archestra/issues/2978)) ([c8015bc](https://github.com/archestra-ai/archestra/commit/c8015bc07cf6c98cee272f7d9f20674991bdaa09))
+* pinned chats, chat title bar, warnings accordion, sidebar polishing ([#2974](https://github.com/archestra-ai/archestra/issues/2974)) ([38f60c0](https://github.com/archestra-ai/archestra/commit/38f60c0de54c79aa2444983a028f4167d0d029a5))
+
+
+### Bug Fixes
+
+* ensure anthopic title autogeneration uses haiku 4 ([#2952](https://github.com/archestra-ai/archestra/issues/2952)) ([dbffab8](https://github.com/archestra-ai/archestra/commit/dbffab898ad02a4c991df4799f584352ea890cb8))
+* fix handling server name during reinstall ([#2977](https://github.com/archestra-ai/archestra/issues/2977)) ([be001d1](https://github.com/archestra-ai/archestra/commit/be001d1132ad3a1e54949a418ea4b3c0f67f03a0))
+* hide Logs button when logs are unavailable ([#2971](https://github.com/archestra-ai/archestra/issues/2971)) ([e89214a](https://github.com/archestra-ai/archestra/commit/e89214a4734d2df58969b38de0bbd93f501fe1f4))
+* preserve chat and converstations after agent deletion ([#2431](https://github.com/archestra-ai/archestra/issues/2431)) ([f876089](https://github.com/archestra-ai/archestra/commit/f876089426bfa797c2ef687f9a02c922efa7f36f))
+
+
+### Miscellaneous Chores
+
+* Delete platform/CLAUDE.md ([#2972](https://github.com/archestra-ai/archestra/issues/2972)) ([1350a59](https://github.com/archestra-ai/archestra/commit/1350a598e9812d16fb2d9a86f2f8517a614f23cd))
+
 ## [1.0.48](https://github.com/archestra-ai/archestra/compare/platform-v1.0.46...platform-v1.0.48) (2026-02-23)
 
 

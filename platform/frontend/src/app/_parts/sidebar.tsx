@@ -27,7 +27,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
-import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
+import { SidebarWarnings } from "@/components/sidebar-warnings";
 import {
   Sidebar,
   SidebarContent,
@@ -307,7 +307,7 @@ const MainSideBarSection = ({
 
 const FooterSideBarSection = () => (
   <SidebarFooter>
-    <SidebarWarningsAccordion />
+    <SidebarWarnings />
     <SignedIn>
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>

@@ -2352,6 +2352,225 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
   });
 });
 
+describe("K8sDeployment.generateDeploymentSpec - YAML + platform nodeSelector/tolerations", () => {
+  const minimalYaml = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["server.js"]
+`;
+
+  function createK8sDeploymentWithYaml(
+    yamlString: string,
+    yamlNodeSelector?: Record<string, string>,
+    yamlTolerations?: Array<{
+      key: string;
+      operator: string;
+      value?: string;
+      effect: string;
+    }>,
+  ): K8sDeployment {
+    // Build YAML with optional nodeSelector/tolerations baked in
+    let yaml = yamlString;
+    if (yamlNodeSelector || yamlTolerations) {
+      const lines = yaml.split("\n");
+      const specInsertIndex = lines.findIndex((l) =>
+        l.includes("containers:"),
+      );
+      const insertions: string[] = [];
+      if (yamlNodeSelector) {
+        insertions.push("      nodeSelector:");
+        for (const [k, v] of Object.entries(yamlNodeSelector)) {
+          insertions.push(`        ${k}: "${v}"`);
+        }
+      }
+      if (yamlTolerations) {
+        insertions.push("      tolerations:");
+        for (const tol of yamlTolerations) {
+          insertions.push(`        - key: "${tol.key}"`);
+          insertions.push(`          operator: "${tol.operator}"`);
+          if (tol.value) {
+            insertions.push(`          value: "${tol.value}"`);
+          }
+          insertions.push(`          effect: "${tol.effect}"`);
+        }
+      }
+      lines.splice(specInsertIndex, 0, ...insertions);
+      yaml = lines.join("\n");
+    }
+
+    const catalogItem = {
+      deploymentSpecYaml: yaml,
+      localConfig: { command: "node", arguments: ["server.js"] },
+    } as unknown as import("@/types").InternalMcpCatalog;
+
+    const mcpServer = {
+      id: "yaml-test-id",
+      name: "yaml-test-server",
+      catalogId: "catalog-yaml",
+    } as McpServer;
+
+    return new K8sDeployment(
+      mcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      catalogItem,
+    );
+  }
+
+  test("applies platform nodeSelector when YAML has none", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
+
+    const platformNodeSelector = {
+      "karpenter.sh/nodepool": "general-purpose",
+    };
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      platformNodeSelector,
+      null,
+    );
+
+    expect(spec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "general-purpose",
+    });
+  });
+
+  test("merges platform nodeSelector with YAML nodeSelector (platform wins on conflict)", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml, {
+      "user-key": "user-value",
+      "karpenter.sh/nodepool": "user-pool",
+    });
+
+    const platformNodeSelector = {
+      "karpenter.sh/nodepool": "platform-pool",
+      "kubernetes.io/os": "linux",
+    };
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      platformNodeSelector,
+      null,
+    );
+
+    expect(spec.spec?.template.spec?.nodeSelector).toEqual({
+      "user-key": "user-value",
+      "karpenter.sh/nodepool": "platform-pool",
+      "kubernetes.io/os": "linux",
+    });
+  });
+
+  test("applies platform tolerations when YAML has none", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
+
+    const platformTolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      null,
+      platformTolerations,
+    );
+
+    expect(spec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+
+  test("YAML tolerations override platform tolerations entirely", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml, undefined, [
+      { key: "custom", operator: "Exists", effect: "NoExecute" },
+    ]);
+
+    const platformTolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      null,
+      platformTolerations,
+    );
+
+    // YAML tolerations win — platform tolerations are NOT merged
+    expect(spec.spec?.template.spec?.tolerations).toEqual([
+      { key: "custom", operator: "Exists", effect: "NoExecute" },
+    ]);
+  });
+
+  test("applies both platform nodeSelector and tolerations when YAML defines neither", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
+
+    const platformNodeSelector = { "karpenter.sh/nodepool": "platform-pool" };
+    const platformTolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      platformNodeSelector,
+      platformTolerations,
+    );
+
+    expect(spec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "platform-pool",
+    });
+    expect(spec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+});
+
 describe("K8sDeployment.createK8sSecret", () => {
   // Helper function to create a K8sDeployment instance with mocked K8s API
   function createK8sDeploymentWithMockedApi(

@@ -481,9 +481,7 @@ export function McpCatalogForm({
                         const value = input.value.trim();
                         if (
                           value &&
-                          !imagePullSecretFields.some(
-                            (f) => f.name === value,
-                          )
+                          !imagePullSecretFields.some((f) => f.name === value)
                         ) {
                           appendImagePullSecret({ name: value });
                           input.value = "";
@@ -500,9 +498,7 @@ export function McpCatalogForm({
                       const value = input?.value.trim();
                       if (
                         value &&
-                        !imagePullSecretFields.some(
-                          (f) => f.name === value,
-                        )
+                        !imagePullSecretFields.some((f) => f.name === value)
                       ) {
                         appendImagePullSecret({ name: value });
                         if (input) input.value = "";

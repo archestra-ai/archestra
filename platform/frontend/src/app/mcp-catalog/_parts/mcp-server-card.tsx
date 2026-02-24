@@ -1,6 +1,10 @@
 "use client";
 
-import { type McpDeploymentStatusEntry, type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  type McpDeploymentStatusEntry,
+} from "@shared";
 import {
   AlertTriangle,
   Code,
@@ -40,10 +44,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
-import {
-  useMcpServers,
-  useMcpServerTools,
-} from "@/lib/mcp-server.query";
+import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 import { DeploymentStatusIndicator } from "./deployment-status";
 import { InstallationProgress } from "./installation-progress";

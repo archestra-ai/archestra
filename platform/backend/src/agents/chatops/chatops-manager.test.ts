@@ -176,6 +176,7 @@ describe("ChatOpsManager security validation", () => {
       getThreadHistory: async () => [],
       getUserEmail: overrides.getUserEmail ?? (async () => null),
       getWorkspaceId: () => null,
+      getWorkspaceName: () => null,
       discoverChannels: async () => null,
     };
   }
@@ -228,7 +229,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -287,7 +287,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -344,7 +343,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -401,7 +399,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -460,7 +457,6 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
       name: "Sales Agent",
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -516,7 +512,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -566,7 +561,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const accessibleAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Accessible Agent",
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(accessibleAgent.id, [team.id]);
 
@@ -576,7 +570,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const inaccessibleAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Inaccessible Agent",
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(inaccessibleAgent.id, [
       otherTeam.id,
@@ -584,7 +577,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
 
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
-      provider: "ms-teams",
       senderEmail: "teamuser@example.com",
     });
 
@@ -606,14 +598,11 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       name: "Some Agent",
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const manager = new ChatOpsManager();
-    const agents = await manager.getAccessibleChatopsAgents({
-      provider: "ms-teams",
-    });
+    const agents = await manager.getAccessibleChatopsAgents({});
 
     expect(agents.length).toBeGreaterThanOrEqual(1);
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
@@ -632,13 +621,11 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       name: "Some Agent",
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
-      provider: "ms-teams",
       senderEmail: "nonexistent@example.com",
     });
 
@@ -663,7 +650,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       name: "Unassigned Agent",
-      allowedChatops: ["ms-teams"],
     });
     // Agent has a team but admin is NOT a member of it
     const otherUser = await makeUser({ email: "otheruser@example.com" });
@@ -672,7 +658,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
 
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
-      provider: "ms-teams",
       senderEmail: "fulladmin@example.com",
     });
 

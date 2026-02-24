@@ -1,12 +1,10 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
-import { SlackAgentSetupDialog } from "@/components/slack-agent-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,12 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useProfiles } from "@/lib/agent.query";
-import { useChatOpsBindings, useChatOpsStatus } from "@/lib/chatops.query";
+import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { AgentTilesSection } from "../_components/agent-tiles-section";
+import { ChannelTilesSection } from "../_components/channel-tiles-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { SetupStep } from "../_components/setup-step";
@@ -50,49 +47,23 @@ const slackProviderConfig: ProviderConfig = {
 
 export default function SlackPage() {
   const publicBaseUrl = usePublicBaseUrl();
-  const queryClient = useQueryClient();
   const [slackSetupOpen, setSlackSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
-  const [slackAgentDialogOpen, setSlackAgentDialogOpen] = useState(false);
 
   const { data: features, isLoading: featuresLoading } = useFeatures();
   const { data: chatOpsProviders, isLoading: statusLoading } =
     useChatOpsStatus();
-  const { data: bindings, isLoading: bindingsLoading } = useChatOpsBindings();
-  const { data: agents, isLoading: agentsLoading } = useProfiles({
-    filters: { agentType: "agent" },
-  });
 
   const ngrokDomain = features?.ngrokDomain;
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
   const slackCreds = slack?.credentials as Record<string, string> | undefined;
 
-  const slackAgentIds = new Set(
-    agents
-      ?.filter((a) =>
-        Array.isArray(a.allowedChatops)
-          ? a.allowedChatops.includes("slack")
-          : false,
-      )
-      .map((a) => a.id) ?? [],
-  );
-  const hasBindings =
-    !!bindings &&
-    bindings.some(
-      (b) =>
-        b.provider === "slack" &&
-        !b.isDm &&
-        b.agentId &&
-        slackAgentIds.has(b.agentId),
-    );
-
-  const setupDataLoading =
-    featuresLoading || statusLoading || bindingsLoading || agentsLoading;
+  const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
   const allStepsCompleted = isLocalDev
-    ? !!ngrokDomain && !!slack?.configured && hasBindings
-    : !!slack?.configured && hasBindings;
+    ? !!ngrokDomain && !!slack?.configured
+    : !!slack?.configured;
 
   return (
     <div className="flex flex-col gap-6">
@@ -165,25 +136,11 @@ export default function SlackPage() {
             <CredentialField label="App ID" value={slackCreds?.appId} />
           </div>
         </SetupStep>
-        <SetupStep
-          title="Enable Slack for your Agents and assign channels to them"
-          description="Agents with enabled Slack will appear below. Then you can assign channels to them."
-          done={hasBindings}
-          ctaLabel="Configure"
-          onAction={() => setSlackAgentDialogOpen(true)}
-        />
       </CollapsibleSetupSection>
 
       <Divider />
 
-      <AgentTilesSection
-        providerConfig={slackProviderConfig}
-        onRefreshSuccess={() =>
-          queryClient.invalidateQueries({
-            queryKey: ["chatops", "bindings"],
-          })
-        }
-      />
+      <ChannelTilesSection providerConfig={slackProviderConfig} />
 
       <SlackSetupDialog
         open={slackSetupOpen}
@@ -192,10 +149,6 @@ export default function SlackPage() {
       <NgrokSetupDialog
         open={ngrokDialogOpen}
         onOpenChange={setNgrokDialogOpen}
-      />
-      <SlackAgentSetupDialog
-        open={slackAgentDialogOpen}
-        onOpenChange={setSlackAgentDialogOpen}
       />
     </div>
   );

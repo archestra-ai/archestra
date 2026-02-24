@@ -220,6 +220,12 @@ export interface ChatOpsProvider {
   getWorkspaceId(): string | null;
 
   /**
+   * Get the workspace/team display name for this provider, if known.
+   * Used to populate workspaceName on channel bindings (including DMs).
+   */
+  getWorkspaceName(): string | null;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)

@@ -30,10 +30,8 @@ import type {
   SortingQuery,
   UpdateAgent,
 } from "@/types";
-import type { ChatOpsProviderType } from "@/types/chatops";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
-import ChatOpsChannelBindingModel from "./chatops-channel-binding";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -330,25 +328,17 @@ class AgentModel {
   }
 
   /**
-   * Find all internal agents that allow a specific chatops provider.
+   * Find all internal agents.
    * Used to populate the agent selection dropdown in Teams/Slack/etc.
-   * Returns only internal agents where the provider is in the allowedChatops array.
    */
-  static async findByAllowedChatopsProvider(
-    provider: ChatOpsProviderType,
-  ): Promise<Pick<Agent, "id" | "name">[]> {
+  static async findAllInternalAgents(): Promise<Pick<Agent, "id" | "name">[]> {
     const agents = await db
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
       })
       .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.agentType, "agent"),
-          sql`${schema.agentsTable.allowedChatops} @> ${JSON.stringify([provider])}::jsonb`,
-        ),
-      )
+      .where(eq(schema.agentsTable.agentType, "agent"))
       .orderBy(asc(schema.agentsTable.name));
 
     return agents;
@@ -826,21 +816,6 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
-    // If allowedChatops changed, unbind the agent from removed providers
-    if (agent.allowedChatops !== undefined) {
-      const oldProviders = existingAgent.allowedChatops ?? [];
-      const newProviders = agent.allowedChatops ?? [];
-      const removedProviders = oldProviders.filter(
-        (p) => !newProviders.includes(p),
-      );
-      if (removedProviders.length > 0) {
-        await ChatOpsChannelBindingModel.unbindAgentFromProviders(
-          id,
-          removedProviders,
-        );
-      }
-    }
-
     const toolRows = await db
       .select({ tool: schema.toolsTable })
       .from(schema.agentToolsTable)
@@ -892,7 +867,6 @@ class AgentModel {
         name: input.name ?? agent.name,
         systemPrompt: input.systemPrompt ?? agent.systemPrompt,
         userPrompt: input.userPrompt ?? agent.userPrompt,
-        allowedChatops: input.allowedChatops ?? agent.allowedChatops,
         promptVersion: (agent.promptVersion || 1) + 1,
         promptHistory: sql`${schema.agentsTable.promptHistory} || ${JSON.stringify([historyEntry])}::jsonb`,
       })

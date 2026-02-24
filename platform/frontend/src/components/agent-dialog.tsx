@@ -87,7 +87,6 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
-import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { cn } from "@/lib/utils";
@@ -347,7 +346,6 @@ export function AgentDialog({
   const { data: currentDelegations = [] } = useAgentDelegations(
     agentType !== "llm_proxy" ? agent?.id : undefined,
   );
-  const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
   const { data: identityProviders = [] } = useIdentityProviders();
   const agentLlmApiKeyId = agent?.llmApiKeyId;
@@ -379,7 +377,6 @@ export function AgentDialog({
   const [systemPrompt, setSystemPrompt] = useState("");
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
-  const [allowedChatops, setAllowedChatops] = useState<string[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
@@ -427,13 +424,6 @@ export function AgentDialog({
         setLlmModel(agentData.llmModel ?? null);
         // Reset delegation targets - will be populated by the next useEffect when data loads
         setSelectedDelegationTargetIds([]);
-        // Parse allowedChatops from agent
-        const chatopsValue = agentData.allowedChatops;
-        if (Array.isArray(chatopsValue)) {
-          setAllowedChatops(chatopsValue as string[]);
-        } else {
-          setAllowedChatops([]);
-        }
         // Teams and labels
         const agentTeams = agentData.teams as unknown as
           | Array<{ id: string; name: string }>
@@ -462,7 +452,6 @@ export function AgentDialog({
         setLlmApiKeyId(null);
         setLlmModel(null);
         setSelectedDelegationTargetIds([]);
-        setAllowedChatops([]);
         setAssignedTeamIds([]);
         setLabels([]);
         setConsiderContextUntrusted(false);
@@ -662,7 +651,6 @@ export function AgentDialog({
               description: description.trim() || null,
               userPrompt: trimmedUserPrompt || undefined,
               systemPrompt: trimmedSystemPrompt || undefined,
-              allowedChatops,
               llmApiKeyId: llmApiKeyId || null,
               llmModel: llmModel || null,
             }),
@@ -688,7 +676,6 @@ export function AgentDialog({
             description: description.trim() || null,
             userPrompt: trimmedUserPrompt || undefined,
             systemPrompt: trimmedSystemPrompt || undefined,
-            allowedChatops,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
           }),
@@ -741,7 +728,6 @@ export function AgentDialog({
     description,
     userPrompt,
     systemPrompt,
-    allowedChatops,
     assignedTeamIds,
     labels,
     considerContextUntrusted,
@@ -1022,66 +1008,6 @@ export function AgentDialog({
             {/* Agent Trigger Rules (Agent only) */}
             {isInternalAgent && (
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold">Agent Trigger Rules</h3>
-
-                {/* ChatOps */}
-                <div className="space-y-3">
-                  {chatopsProviders.map((provider) => (
-                    <div key={provider.id} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <label
-                            htmlFor={`chatops-${provider.id}`}
-                            className="text-sm cursor-pointer"
-                          >
-                            {provider.displayName}
-                          </label>
-                          <p className="text-xs text-muted-foreground">
-                            Users can interact with this agent in{" "}
-                            {provider.displayName}, configure channels in{" "}
-                            <Link
-                              href={`/agent-triggers/${provider.id}`}
-                              className="underline hover:text-foreground"
-                            >
-                              Agent Triggers
-                            </Link>
-                          </p>
-                        </div>
-                        <Switch
-                          id={`chatops-${provider.id}`}
-                          disabled={!provider.configured}
-                          checked={allowedChatops.includes(provider.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setAllowedChatops([
-                                ...allowedChatops,
-                                provider.id,
-                              ]);
-                            } else {
-                              setAllowedChatops(
-                                allowedChatops.filter(
-                                  (id) => id !== provider.id,
-                                ),
-                              );
-                            }
-                          }}
-                        />
-                      </div>
-                      {!provider.configured && (
-                        <p className="text-xs text-muted-foreground">
-                          Not configured.{" "}
-                          <Link
-                            href="/agent-triggers"
-                            className="underline hover:text-foreground"
-                          >
-                            Set up in Agent Triggers
-                          </Link>
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
                 {/* Email */}
                 {features?.incomingEmail?.enabled ? (
                   <div className="space-y-3">

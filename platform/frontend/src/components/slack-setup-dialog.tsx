@@ -75,14 +75,7 @@ export function SlackSetupDialog({
         onBotTokenChange={setSharedBotToken}
       />,
       // Step 3: Customize App Appearance and connect Archestra
-      <StepAppearanceAndConnect
-        key="appearance-and-connect"
-        stepNumber={3}
-        appId={sharedAppId}
-        botToken={sharedBotToken}
-        signingSecret={sharedSigningSecret}
-        creds={creds}
-      />,
+      <StepAppearanceAndConnect key="appearance-and-connect" stepNumber={3} />,
     ];
 
     return slides;
@@ -90,7 +83,6 @@ export function SlackSetupDialog({
     sharedBotToken,
     sharedSigningSecret,
     sharedAppId,
-    creds,
     webhookUrl,
     interactiveUrl,
     slashCommandUrl,
@@ -150,23 +142,7 @@ export function SlackSetupDialog({
   );
 }
 
-function StepAppearanceAndConnect({
-  stepNumber,
-  appId,
-  botToken,
-  signingSecret,
-  creds,
-}: {
-  stepNumber: number;
-  appId: string;
-  botToken: string;
-  signingSecret: string;
-  creds?: Record<string, string>;
-}) {
-  const displayAppId = appId || creds?.appId || "";
-  const hasBotToken = Boolean(botToken || creds?.botToken);
-  const hasSigningSecret = Boolean(signingSecret || creds?.signingSecret);
-
+function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
   return (
     <div
       className="grid flex-1 gap-6"
@@ -216,44 +192,6 @@ function StepAppearanceAndConnect({
             </span>
             <span className="pt-0.5 flex-1">
               Click <strong>Connect</strong> in the bottom right corner
-              <div className="mt-2 space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono">
-                <div className="flex gap-1.5">
-                  <span className="text-muted-foreground shrink-0">
-                    App ID:
-                  </span>
-                  {displayAppId ? (
-                    <span className="break-all">{displayAppId}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">
-                      Not set
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-1.5">
-                  <span className="text-muted-foreground shrink-0">
-                    Bot Token:
-                  </span>
-                  {hasBotToken ? (
-                    <span>{"••••••••"}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">
-                      Not set
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-1.5">
-                  <span className="text-muted-foreground shrink-0">
-                    Signing Secret:
-                  </span>
-                  {hasSigningSecret ? (
-                    <span>{"••••••••"}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">
-                      Not set
-                    </span>
-                  )}
-                </div>
-              </div>
             </span>
           </li>
         </ol>
@@ -316,7 +254,7 @@ function StepInstall({
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
                 xoxb-
               </code>
-              ) and paste it here
+              )
               <Input
                 type="password"
                 value={botToken}
@@ -503,7 +441,7 @@ function StepManifest({
             </span>
             <span className="pt-0.5 flex-1">
               From <strong>Basic Information &rarr; App Credentials</strong>,
-              copy the <strong>App ID</strong> and paste it here
+              copy the <strong>App ID</strong>
               <Input
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
@@ -518,7 +456,7 @@ function StepManifest({
             </span>
             <span className="pt-0.5 flex-1">
               From <strong>Basic Information &rarr; App Credentials</strong>,
-              copy the <strong>Signing Secret</strong> and paste it here
+              copy the <strong>Signing Secret</strong>
               <Input
                 type="password"
                 value={signingSecret}

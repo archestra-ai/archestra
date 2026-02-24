@@ -31,8 +31,11 @@ runs:
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
         node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
         install_only: false
-        # Increase from default 60s — CI runners under load can take longer to start
-        wait: 300s
+        # When Calico is being installed, skip the Ready wait — with disableDefaultCNI the
+        # node stays NotReady until Calico is running, so this wait always times out (wasting 5m).
+        # The Calico install step below handles waiting for node readiness instead.
+        # For non-Calico clusters, wait 300s for control-plane Ready (CI runners can be slow).
+        wait: ${{ inputs.install-calico == 'true' && '10s' || '300s' }}
 
     - name: Install Calico CNI for NetworkPolicy enforcement
       if: ${{ inputs.install-calico == 'true' }}

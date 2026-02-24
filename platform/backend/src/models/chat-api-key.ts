@@ -649,6 +649,18 @@ class ChatApiKeyModel {
       .from(schema.chatApiKeysTable)
       .where(eq(schema.chatApiKeysTable.isSystem, true));
   }
+
+  /**
+   * Get the set of distinct providers that have at least one API key configured.
+   * Used to determine which providers are "configured" for model filtering,
+   * independent of whether model sync has linked models to those keys.
+   */
+  static async getConfiguredProviders(): Promise<Set<string>> {
+    const rows = await db
+      .selectDistinct({ provider: schema.chatApiKeysTable.provider })
+      .from(schema.chatApiKeysTable);
+    return new Set(rows.map((r) => r.provider));
+  }
 }
 
 /**

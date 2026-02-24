@@ -51,7 +51,7 @@ export function CollapsibleSetupSection({
               {allStepsCompleted && (
                 <Badge
                   variant="secondary"
-                  className="bg-green-500/10 text-green-600 border-green-500/20"
+                  className="bg-green-500/10 text-green-600 border-green-500/70"
                 >
                   <CheckCircle2 className="size-3" />
                   Completed

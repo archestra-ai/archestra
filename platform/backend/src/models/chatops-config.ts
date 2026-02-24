@@ -41,9 +41,11 @@ class ChatOpsConfigModel {
   async getSlackConfig(): Promise<SlackConfig | null> {
     const raw = await this.getConfig<SlackConfig>(SLACK_SECRET_NAME);
     if (!raw) return null;
-    // Backward compatibility: configs saved before socket mode was added won't
-    // have connectionMode set. Infer "webhook" when signingSecret is present,
-    // so existing webhook deployments aren't broken by the new default.
+    // Backward compatibility — precedence:
+    // 1. Explicit connectionMode from DB (already set by user)
+    // 2. Infer "webhook" if signingSecret is present but connectionMode is missing
+    //    (configs saved before socket mode was added)
+    // 3. Default to SLACK_DEFAULT_CONNECTION_MODE ("socket") for new installs
     const inferredMode =
       !raw.connectionMode && raw.signingSecret
         ? "webhook"

@@ -8,6 +8,7 @@ import {
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
+import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -52,31 +53,10 @@ const captureSlackRawBody = async (
 };
 
 /**
- * Short-lived in-memory dedup cache for Slack events.
- * Slack fires both `message` and `app_mention` for @mention messages
- * with the same event ts, causing duplicate processing.
- * Entries auto-expire after 30 seconds.
- *
- * This is a fast first-pass filter that saves a DB round-trip for the common
- * duplicate case. The authoritative dedup is database-level via
- * ChatOpsProcessedMessageModel.tryMarkAsProcessed() in the manager.
+ * Fast-path dedup for webhook Slack events. Socket mode has its own instance
+ * inside SlackProvider. See EventDedupMap for details.
  */
-const SLACK_DEDUP_MAX_SIZE = 10_000;
-const recentlyProcessedSlackEvents = new Map<string, true>();
-
-function markSlackEventProcessed(eventTs: string): void {
-  // Safety bound: evict oldest 10% when the map grows too large
-  if (recentlyProcessedSlackEvents.size >= SLACK_DEDUP_MAX_SIZE) {
-    const toDelete = Math.ceil(SLACK_DEDUP_MAX_SIZE * 0.1);
-    const iter = recentlyProcessedSlackEvents.keys();
-    for (let i = 0; i < toDelete; i++) {
-      const key = iter.next().value;
-      if (key) recentlyProcessedSlackEvents.delete(key);
-    }
-  }
-  recentlyProcessedSlackEvents.set(eventTs, true);
-  setTimeout(() => recentlyProcessedSlackEvents.delete(eventTs), 30_000);
-}
+const slackWebhookDedup = new EventDedupMap();
 
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -610,11 +590,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (slackBody.type === "event_callback") {
           // Quick in-memory dedup for Slack's duplicate message+app_mention events
           const eventTs = slackBody.event?.ts;
-          if (eventTs) {
-            if (recentlyProcessedSlackEvents.has(eventTs)) {
-              return reply.send({ ok: true });
-            }
-            markSlackEventProcessed(eventTs);
+          if (eventTs && slackWebhookDedup.mark(eventTs)) {
+            return reply.send({ ok: true });
           }
 
           // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)

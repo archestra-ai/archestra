@@ -25,7 +25,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
 } from "./constants";
-import { errorMessage } from "./utils";
+import { EventDedupMap, errorMessage } from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -45,7 +45,7 @@ class SlackProvider implements ChatOpsProvider {
   private config: SlackConfig;
   private socketModeClient: SocketModeClient | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
-  private recentSocketEvents = new Map<string, true>();
+  private socketDedup = new EventDedupMap();
 
   constructor(slackConfig: SlackConfig) {
     this.config = slackConfig;
@@ -125,7 +125,7 @@ class SlackProvider implements ChatOpsProvider {
       this.socketModeClient = null;
     }
     this.eventHandler = null;
-    this.recentSocketEvents.clear();
+    this.socketDedup.clear();
     this.client = null;
     this.botUserId = null;
     this.teamId = null;
@@ -715,30 +715,10 @@ class SlackProvider implements ChatOpsProvider {
         switch (type) {
           case "events_api": {
             await ack();
-            // Fast-path dedup: Slack fires both `message` and `app_mention` for
-            // @mention messages with the same event ts. This in-memory map prevents
-            // duplicate processing within the same pod. The authoritative dedup is
-            // DB-level via ChatOpsProcessedMessageModel.tryMarkAsProcessed() — it
-            // covers cross-pod duplicates and reconnection redeliveries.
-            const eventBody = body as {
-              event?: { ts?: string };
-            };
+            const eventBody = body as { event?: { ts?: string } };
             const eventTs = eventBody?.event?.ts;
-            if (eventTs) {
-              if (this.recentSocketEvents.has(eventTs)) {
-                break;
-              }
-              this.recentSocketEvents.set(eventTs, true);
-              setTimeout(() => this.recentSocketEvents.delete(eventTs), 30_000);
-              // Safety bound: evict oldest 10% when the map grows too large
-              if (this.recentSocketEvents.size >= 10_000) {
-                const toDelete = Math.ceil(10_000 * 0.1);
-                const iter = this.recentSocketEvents.keys();
-                for (let i = 0; i < toDelete; i++) {
-                  const key = iter.next().value;
-                  if (key) this.recentSocketEvents.delete(key);
-                }
-              }
+            if (eventTs && this.socketDedup.mark(eventTs)) {
+              break;
             }
             this.eventHandler
               ?.handleIncomingMessage(this, body)

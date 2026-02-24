@@ -197,7 +197,11 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
-    // Only process message and app_mention events
+    // Only process message and app_mention events.
+    // assistant_thread_started and assistant_thread_context_changed events are
+    // subscribed in the manifest (required for "Agents & AI Apps" designation)
+    // but intentionally dropped here — handling them (e.g., welcome messages,
+    // suggested prompts) is deferred to a future phase.
     if (event.type !== "message" && event.type !== "app_mention") {
       return null;
     }

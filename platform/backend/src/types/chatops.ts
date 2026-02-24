@@ -184,8 +184,15 @@ export interface ChatOpsProvider {
   /**
    * Set a typing/loading status indicator (optional, provider-specific).
    * For Slack: shows "App is thinking..." in the assistant thread.
-   * For Teams: sends a typing activity indicator.
+   * For Teams: sends a typing activity indicator in DMs/group chats,
+   *   or a placeholder "Thinking..." message in channels (which sendReply
+   *   later updates with the real response).
    * Non-fatal if unsupported or not configured.
+   *
+   * Implementations may mutate `metadata` to pass state to a subsequent
+   * `sendReply` call (e.g., storing a placeholder message ID). The caller
+   * passes `message.metadata` by reference, so mutations are visible when
+   * `sendReply` reads `options.originalMessage.metadata`.
    */
   setTypingStatus?(
     channelId: string,

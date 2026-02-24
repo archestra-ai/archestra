@@ -95,6 +95,8 @@ export function computeDeploymentStatusSummary(
     const entry = statuses[id];
     if (entry && entry.state !== "not_created") {
       total++;
+      // "succeeded" is treated as running — K8s Jobs report "succeeded" on completion,
+      // but the MCP server is still available and serving requests.
       if (entry.state === "running" || entry.state === "succeeded") running++;
       else if (entry.state === "pending") pending++;
       else if (entry.state === "failed") failed++;

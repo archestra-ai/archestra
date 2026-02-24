@@ -142,6 +142,7 @@ export function McpCatalogForm({
     control: form.control,
     name: "localConfig.imagePullSecrets",
   });
+  const imagePullSecretInputRef = useRef<HTMLInputElement>(null);
 
   // Update form values when BYOS paths/keys change
   useEffect(() => {
@@ -470,15 +471,20 @@ export function McpCatalogForm({
                 )}
                 <div className="flex gap-2">
                   <Input
+                    ref={imagePullSecretInputRef}
                     placeholder="secret-name"
                     className="font-mono"
-                    id="new-image-pull-secret"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
                         const input = e.currentTarget;
                         const value = input.value.trim();
-                        if (value) {
+                        if (
+                          value &&
+                          !imagePullSecretFields.some(
+                            (f) => f.name === value,
+                          )
+                        ) {
                           appendImagePullSecret({ name: value });
                           input.value = "";
                         }
@@ -490,13 +496,16 @@ export function McpCatalogForm({
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const input = document.getElementById(
-                        "new-image-pull-secret",
-                      ) as HTMLInputElement;
+                      const input = imagePullSecretInputRef.current;
                       const value = input?.value.trim();
-                      if (value) {
+                      if (
+                        value &&
+                        !imagePullSecretFields.some(
+                          (f) => f.name === value,
+                        )
+                      ) {
                         appendImagePullSecret({ name: value });
-                        input.value = "";
+                        if (input) input.value = "";
                       }
                     }}
                   >

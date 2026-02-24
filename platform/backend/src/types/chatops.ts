@@ -266,24 +266,3 @@ export interface MSTeamsConfig {
     clientSecret: string;
   };
 }
-
-/**
- * Slack specific configuration from environment variables
- */
-export interface SlackConfig {
-  enabled: boolean;
-  /** Slack Bot User OAuth Token (xoxb-...) */
-  botToken: string;
-  /** Slack Signing Secret for webhook verification */
-  signingSecret: string;
-  /** Slack App ID (used to filter bot's own messages) */
-  appId: string;
-}
-
-/**
- * Overall chatops configuration
- */
-export interface ChatOpsConfig {
-  msTeams: MSTeamsConfig;
-  slack: SlackConfig;
-}

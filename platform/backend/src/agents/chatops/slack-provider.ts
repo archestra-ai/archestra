@@ -653,20 +653,31 @@ class SlackProvider implements ChatOpsProvider {
     body: unknown,
     ack: (response?: Record<string, unknown>) => Promise<void>,
   ): Promise<void> {
-    const cmd = body as {
-      command?: string;
-      text?: string;
-      user_id?: string;
-      user_name?: string;
-      channel_id?: string;
-      channel_name?: string;
-      team_id?: string;
-      response_url?: string;
-      trigger_id?: string;
-    };
-    const response = await this.handleSlashCommand(cmd);
-    // Acknowledge with the response body — SocketModeClient sends it back via the socket
-    await ack(response ? (response as Record<string, unknown>) : undefined);
+    try {
+      const cmd = body as {
+        command?: string;
+        text?: string;
+        user_id?: string;
+        user_name?: string;
+        channel_id?: string;
+        channel_name?: string;
+        team_id?: string;
+        response_url?: string;
+        trigger_id?: string;
+      };
+      const response = await this.handleSlashCommand(cmd);
+      // Acknowledge with the response body — SocketModeClient sends it back via the socket
+      await ack(response ? (response as Record<string, unknown>) : undefined);
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[SlackProvider] Slash command failed",
+      );
+      await ack({
+        response_type: "ephemeral",
+        text: "Something went wrong. Please try again.",
+      });
+    }
   }
 
   private async startSocketMode(): Promise<void> {
@@ -705,8 +716,11 @@ class SlackProvider implements ChatOpsProvider {
         switch (type) {
           case "events_api": {
             await ack();
-            // Slack fires both `message` and `app_mention` for @mention messages
-            // with the same event ts. Dedup so we only process each event once.
+            // Fast-path dedup: Slack fires both `message` and `app_mention` for
+            // @mention messages with the same event ts. This in-memory map prevents
+            // duplicate processing within the same pod. The authoritative dedup is
+            // DB-level via ChatOpsProcessedMessageModel.tryMarkAsProcessed() — it
+            // covers cross-pod duplicates and reconnection redeliveries.
             const eventBody = body as {
               event?: { ts?: string };
             };

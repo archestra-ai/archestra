@@ -3,14 +3,11 @@
 import { DEFAULT_ADMIN_EMAIL } from "@shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatures } from "@/lib/config.query";
@@ -24,7 +21,6 @@ export function SidebarWarningsAccordion() {
 
   const isPermissive = features?.globalToolPolicy === "permissive";
 
-  // Determine which warnings should be shown (only for authenticated users)
   const showSecurityEngineWarning =
     !!session && !isLoadingFeatures && features !== undefined && isPermissive;
   const showDefaultCredsWarning =
@@ -33,53 +29,38 @@ export function SidebarWarningsAccordion() {
     defaultCredentialsEnabled &&
     userEmail === DEFAULT_ADMIN_EMAIL;
 
-  // Count active warnings
-  const warningCount =
-    (showSecurityEngineWarning ? 1 : 0) + (showDefaultCredsWarning ? 1 : 0);
-
-  // Don't render anything if no warnings
-  if (warningCount === 0) {
+  if (!showSecurityEngineWarning && !showDefaultCredsWarning) {
     return null;
   }
 
   return (
-    <div className="px-2 pb-1">
-      <Accordion type="single" collapsible defaultValue="warnings">
-        <AccordionItem value="warnings" className="border-b-0">
-          <AccordionTrigger className="py-2 text-xs font-medium text-destructive hover:no-underline">
-            <span className="flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {warningCount} security{" "}
-              {warningCount === 1 ? "warning" : "warnings"}
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="pb-0 pt-0 space-y-2">
-            {showSecurityEngineWarning && (
-              <Alert variant="destructive" className="text-xs">
-                <AlertTitle className="text-xs font-semibold">
-                  Security Engine Disabled
-                </AlertTitle>
-                <AlertDescription className="text-xs mt-1">
-                  <p>
-                    Agents can perform dangerous actions without supervision.
-                  </p>
-                  <p className="mt-1">
-                    <Link
-                      href="/tool-policies"
-                      className="inline-flex items-center underline"
-                    >
-                      Go to Tools Settings
-                    </Link>
-                  </p>
-                </AlertDescription>
-              </Alert>
-            )}
-            {showDefaultCredsWarning && (
-              <DefaultCredentialsWarning alwaysShow showCopyButtons={false} />
-            )}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    </div>
+    <SidebarMenu>
+      {showDefaultCredsWarning && (
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            className="text-destructive hover:text-destructive"
+          >
+            <Link href="/settings">
+              <AlertTriangle className="shrink-0" />
+              <span>Change default credentials</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      )}
+      {showSecurityEngineWarning && (
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            className="text-destructive hover:text-destructive"
+          >
+            <Link href="/tool-policies">
+              <AlertTriangle className="shrink-0" />
+              <span>Enable security engine</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      )}
+    </SidebarMenu>
   );
 }

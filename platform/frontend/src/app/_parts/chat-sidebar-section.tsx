@@ -30,12 +30,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import {
   Tooltip,
@@ -59,7 +57,7 @@ import { cn } from "@/lib/utils";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 const SIDEBAR_CHAT_SLOTS = 3;
-const MAX_TITLE_LENGTH = 30;
+const MAX_TITLE_LENGTH = 100;
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
@@ -215,7 +213,7 @@ export function ChatSidebarSection() {
     const isPinned = !!conv.pinnedAt;
 
     return (
-      <SidebarMenuItem key={conv.id}>
+      <SidebarMenuSubItem key={conv.id}>
         <div className="flex items-center justify-between w-full gap-1">
           {editingId === conv.id ? (
             <div className="flex items-center gap-1 flex-1">
@@ -267,7 +265,7 @@ export function ChatSidebarSection() {
             <SidebarMenuButton
               onClick={() => handleSelectConversation(conv.id)}
               isActive={isCurrentConversation}
-              className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent justify-between"
+              className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
                 {showPinIcon && (
@@ -377,7 +375,7 @@ export function ChatSidebarSection() {
             </SidebarMenuButton>
           )}
         </div>
-      </SidebarMenuItem>
+      </SidebarMenuSubItem>
     );
   };
 
@@ -386,40 +384,36 @@ export function ChatSidebarSection() {
   }
 
   return (
-    <SidebarGroup className="px-4 -mt-3 py-0 group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
-
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {isLoading ? (
-            <SidebarMenuItem>
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-                <span className="text-xs text-muted-foreground">
-                  Loading chats...
-                </span>
-              </div>
-            </SidebarMenuItem>
-          ) : (
-            <>
-              {pinnedChats.map((conv) => renderConversationItem(conv, true))}
-              {recentUnpinnedChats.map((conv) => renderConversationItem(conv))}
-              {conversations.length >
-                pinnedChats.length + recentUnpinnedChats.length && (
-                <li className="px-2 py-0">
-                  <button
-                    type="button"
-                    onClick={openConversationSearch}
-                    className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                  >
-                    View more
-                  </button>
-                </li>
-              )}
-            </>
-          )}
-        </SidebarMenu>
-      </SidebarGroupContent>
+    <>
+      <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
+        {isLoading ? (
+          <SidebarMenuSubItem>
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
+              <span className="text-xs text-muted-foreground">
+                Loading chats...
+              </span>
+            </div>
+          </SidebarMenuSubItem>
+        ) : (
+          <>
+            {pinnedChats.map((conv) => renderConversationItem(conv, true))}
+            {recentUnpinnedChats.map((conv) => renderConversationItem(conv))}
+            {conversations.length >
+              pinnedChats.length + recentUnpinnedChats.length && (
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  className="text-sidebar-foreground/70"
+                  onClick={openConversationSearch}
+                >
+                  <MoreHorizontal />
+                  <span>More</span>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            )}
+          </>
+        )}
+      </SidebarMenuSub>
 
       <AlertDialog
         open={deleteConfirmId !== null}
@@ -452,6 +446,6 @@ export function ChatSidebarSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </SidebarGroup>
+    </>
   );
 }

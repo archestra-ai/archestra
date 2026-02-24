@@ -31,7 +31,6 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
-  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -448,7 +447,7 @@ export async function validateTeamToken(
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
     // Team token: profile must be assigned to this team, or be teamless (org-wide)
-    const hasAccess = await teamHasAccessToAgent(profileId, token.teamId);
+    const hasAccess = await AgentTeamModel.teamHasAgentAccess(profileId, token.teamId);
     if (!hasAccess) {
       logger.warn(
         { profileId, tokenTeamId: token.teamId },
@@ -512,7 +511,7 @@ export async function validateUserToken(
   }
 
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-  if (!(await userHasAccessToAgent(profileId, token.userId))) {
+  if (!(await AgentTeamModel.userHasAgentAccess(token.userId, profileId, false))) {
     logger.warn(
       { profileId, userId: token.userId },
       "Profile not accessible via user token (no shared teams)",
@@ -606,7 +605,7 @@ export async function validateOAuthToken(
     }
 
     // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await userHasAccessToAgent(profileId, userId))) {
+    if (!(await AgentTeamModel.userHasAgentAccess(userId, profileId, false))) {
       logger.warn(
         { profileId, userId },
         "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
@@ -812,7 +811,7 @@ export async function validateExternalIdpToken(
     }
 
     // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await userHasAccessToAgent(profileId, user.id))) {
+    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
       logger.warn(
         { profileId, userId: user.id },
         "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
@@ -840,42 +839,6 @@ export async function validateExternalIdpToken(
     );
     return null;
   }
-}
-
-// =============================================================================
-// Shared team-access helpers
-// =============================================================================
-
-/**
- * Check whether a user can access an agent based on team membership.
- * Returns true if the agent is teamless (org-wide) or the user shares at
- * least one team with the agent.
- */
-async function userHasAccessToAgent(
-  agentId: string,
-  userId: string,
-): Promise<boolean> {
-  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-  if (agentTeamIds.length === 0) {
-    return true; // Teamless agent — accessible to all org members
-  }
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  return userTeamIds.some((teamId) => agentTeamIds.includes(teamId));
-}
-
-/**
- * Check whether a team token can access an agent.
- * Returns true if the agent is teamless (org-wide) or assigned to the given team.
- */
-async function teamHasAccessToAgent(
-  agentId: string,
-  teamId: string | null,
-): Promise<boolean> {
-  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-  if (agentTeamIds.length === 0) {
-    return true; // Teamless agent — accessible via any token in the same org
-  }
-  return !!teamId && agentTeamIds.includes(teamId);
 }
 
 // =============================================================================

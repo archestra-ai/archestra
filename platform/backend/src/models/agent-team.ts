@@ -4,7 +4,7 @@ import logger from "@/logging";
 
 class AgentTeamModel {
   /**
-   * Get all agent IDs that a user has access to (through team membership)
+   * Get all agent IDs that a user has access to.
    */
   static async getUserAccessibleAgentIds(
     userId: string,
@@ -298,6 +298,62 @@ class AgentTeamModel {
       "AgentTeamModel.removeTeamFromAgent: completed",
     );
     return removed;
+  }
+
+  /**
+   * Check if a team token can access an agent.
+   * Returns true if the agent is teamless (org-wide) or assigned to the given team.
+   */
+  static async teamHasAgentAccess(
+    agentId: string,
+    teamId: string | null,
+  ): Promise<boolean> {
+    logger.debug(
+      { agentId, teamId },
+      "AgentTeamModel.teamHasAgentAccess: checking access",
+    );
+
+    // Check if the agent has ANY team assignments — teamless agents are visible to all
+    const agentTeamAssignments = await db
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1);
+
+    if (agentTeamAssignments.length === 0) {
+      logger.debug(
+        { agentId, teamId },
+        "AgentTeamModel.teamHasAgentAccess: agent has no teams (org-wide), granting access",
+      );
+      return true;
+    }
+
+    if (!teamId) {
+      logger.debug(
+        { agentId },
+        "AgentTeamModel.teamHasAgentAccess: no teamId provided, denying access",
+      );
+      return false;
+    }
+
+    // Check if the agent is assigned to this specific team
+    const match = await db
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
+      .where(
+        and(
+          eq(schema.agentTeamsTable.agentId, agentId),
+          eq(schema.agentTeamsTable.teamId, teamId),
+        ),
+      )
+      .limit(1);
+
+    const hasAccess = match.length > 0;
+    logger.debug(
+      { agentId, teamId, hasAccess },
+      "AgentTeamModel.teamHasAgentAccess: completed",
+    );
+    return hasAccess;
   }
 
   /**

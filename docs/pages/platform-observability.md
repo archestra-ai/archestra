@@ -37,6 +37,7 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 - `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
 - `mcp_tool_call_duration_seconds` - MCP tool call execution duration by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status
+- `mcp_server_deployment_status` - Current deployment state of self-hosted MCP servers by server_name and state (not_created/pending/running/failed/succeeded). Value is 1 for the active state. Use `count(mcp_server_deployment_status{state="running"} == 1)` to count running deployments.
 
 ### Archestra Application Metrics
 

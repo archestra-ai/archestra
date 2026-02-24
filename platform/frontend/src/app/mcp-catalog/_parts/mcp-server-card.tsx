@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  type McpDeploymentStatusEntry,
+} from "@shared";
 import {
   AlertTriangle,
   Code,
@@ -42,6 +46,7 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
+import { DeploymentStatusIndicator } from "./deployment-status";
 import { InstallationProgress } from "./installation-progress";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
@@ -71,6 +76,7 @@ export type McpServerCardProps = {
     | "idle"
     | "discovering-tools"
     | null;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
@@ -98,6 +104,7 @@ export function McpServerCard({
   installedServer,
   installingItemId,
   installationStatus,
+  deploymentStatuses,
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
@@ -264,31 +271,30 @@ export function McpServerCard({
   const hasLocalInstallations = localInstalls.length > 0;
   const isLogsAvailable = variant === "local" && hasLocalInstallations;
 
-  // JSX parts - Action buttons for Edit and Logs
-  const actionButtons = (
-    <div className="flex gap-1">
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1 h-8"
-        onClick={onEdit}
-      >
-        <Pencil className="h-3 w-3 mr-1" />
-        Edit
-      </Button>
-      {isLogsAvailable && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 h-8"
-          onClick={() => setIsLogsDialogOpen(true)}
-        >
-          <FileText className="h-3 w-3 mr-1" />
-          Logs
-        </Button>
-      )}
-    </div>
+  // Collect server IDs for deployment status indicator
+  const deploymentServerIds = (allMcpServers ?? [])
+    .filter((s) => s.catalogId === item.id && s.serverType === "local")
+    .map((s) => s.id);
+
+  // JSX parts - Edit button (admin only) and Logs button (visible to all for local servers)
+  const editButton = (
+    <Button variant="outline" size="sm" className="flex-1 h-8" onClick={onEdit}>
+      <Pencil className="h-3 w-3 mr-1" />
+      Edit
+    </Button>
   );
+
+  const logsButton = isLogsAvailable ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="flex-1 h-8"
+      onClick={() => setIsLogsDialogOpen(true)}
+    >
+      <FileText className="h-3 w-3 mr-1" />
+      Logs
+    </Button>
+  ) : null;
 
   const manageCatalogItemDropdownMenu = (
     <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
@@ -306,7 +312,7 @@ export function McpServerCard({
           {variant === "local" && (
             <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
               <Code className="mr-2 h-4 w-4" />
-              Edit K8S Deployment Yaml
+              Edit K8s Deployment YAML
             </DropdownMenuItem>
           )}
           {!isPlaywrightVariant && (
@@ -530,7 +536,10 @@ export function McpServerCard({
         )}
       {/* Spacer + action buttons + Connect button pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
-        {userIsMcpServerAdmin && actionButtons}
+        <div className="flex gap-1">
+          {userIsMcpServerAdmin && editButton}
+          {logsButton}
+        </div>
         {!isInstalling && (
           <TooltipProvider>
             <Tooltip>
@@ -592,7 +601,10 @@ export function McpServerCard({
       )}
       {/* Spacer + action buttons + Connect button pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
-        {userIsMcpServerAdmin && actionButtons}
+        <div className="flex gap-1">
+          {userIsMcpServerAdmin && editButton}
+          {logsButton}
+        </div>
         {/* Show Connect button when user can create new installation */}
         {!isInstalling && (
           <TooltipProvider>
@@ -673,7 +685,10 @@ export function McpServerCard({
       )}
       {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
-        {userIsMcpServerAdmin && actionButtons}
+        <div className="flex gap-1">
+          {userIsMcpServerAdmin && editButton}
+          {logsButton}
+        </div>
         {!isInstalling && isCurrentUserAuthenticated && installedServer && (
           <Button
             variant="outline"
@@ -764,6 +779,7 @@ export function McpServerCard({
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
         installs={localInstalls}
+        deploymentStatuses={deploymentStatuses}
       />
 
       <ManageUsersDialog
@@ -796,12 +812,18 @@ export function McpServerCard({
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div
-              className="text-lg font-semibold mb-1 overflow-hidden whitespace-nowrap text-ellipsis w-full"
+              className="flex items-center gap-2 mb-1 overflow-hidden w-full"
               title={item.name}
             >
-              {item.name}
+              <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
+                {item.name}
+              </span>
+              <DeploymentStatusIndicator
+                serverIds={deploymentServerIds}
+                deploymentStatuses={deploymentStatuses}
+              />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {(isBuiltinVariant || isPlaywrightVariant) && (
                 <Badge
                   variant="secondary"

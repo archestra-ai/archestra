@@ -1643,6 +1643,125 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     );
   });
 
+  test("generates deploymentSpec with imagePullSecrets when provided", () => {
+    const mcpServer: McpServer = {
+      id: "ips-test-id",
+      name: "ips-test-server",
+      catalogId: "catalog-ips",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "private-registry.example.com/mcp-server:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      imagePullSecrets: [{ name: "my-registry-secret" }],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.imagePullSecrets).toEqual([
+      { name: "my-registry-secret" },
+    ]);
+  });
+
+  test("generates deploymentSpec with multiple imagePullSecrets", () => {
+    const mcpServer: McpServer = {
+      id: "multi-ips-test-id",
+      name: "multi-ips-test-server",
+      catalogId: "catalog-multi-ips",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "private-registry.example.com/mcp-server:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      imagePullSecrets: [
+        { name: "registry-secret-1" },
+        { name: "registry-secret-2" },
+      ],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.imagePullSecrets).toEqual([
+      { name: "registry-secret-1" },
+      { name: "registry-secret-2" },
+    ]);
+  });
+
+  test("generates deploymentSpec without imagePullSecrets when not provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-ips-test-id",
+      name: "no-ips-test-server",
+      catalogId: "catalog-no-ips",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(
+      deploymentSpec.spec?.template.spec?.imagePullSecrets,
+    ).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without imagePullSecrets when empty array is provided", () => {
+    const mcpServer: McpServer = {
+      id: "empty-ips-test-id",
+      name: "empty-ips-test-server",
+      catalogId: "catalog-empty-ips",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      imagePullSecrets: [],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(
+      deploymentSpec.spec?.template.spec?.imagePullSecrets,
+    ).toBeUndefined();
+  });
+
   test("generates deploymentSpec with volume and volumeMount for mounted secrets", () => {
     const mockCatalogItem = {
       id: "catalog-mounted",
@@ -2940,6 +3059,7 @@ describe("K8sDeployment.statusSummary", () => {
     expect(summary.state).toBe("not_created");
     expect(summary.message).toBe("Deployment not created");
     expect(summary.error).toBeNull();
+    expect(summary.serverName).toBe("test-server");
     expect(summary.deploymentName).toBe("mcp-test-server");
     expect(summary.namespace).toBe("test-namespace");
   });

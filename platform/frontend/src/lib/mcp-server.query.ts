@@ -1,10 +1,17 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type McpDeploymentStatusEntry,
+  type McpDeploymentStatusesMessage,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { authClient } from "./clients/auth/auth-client";
+import { useFeatureFlag } from "./features.hook";
 import { handleApiError } from "./utils";
+import websocketService from "./websocket";
 
 const {
   deleteMcpServer,
@@ -274,4 +281,46 @@ export function useReinstallMcpServer() {
       // Success toast is shown when polling detects status changed to "success"
     },
   });
+}
+
+/**
+ * Subscribe to real-time MCP deployment statuses via WebSocket.
+ * Returns a record mapping server IDs to their deployment status entries.
+ * Only subscribes when the K8s runtime feature flag is enabled.
+ */
+export function useMcpDeploymentStatuses(): Record<
+  string,
+  McpDeploymentStatusEntry
+> {
+  const [statuses, setStatuses] = useState<
+    Record<string, McpDeploymentStatusEntry>
+  >({});
+  const isK8sEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+
+  useEffect(() => {
+    if (!isK8sEnabled) return;
+
+    websocketService.connect();
+    websocketService.send({
+      type: "subscribe_mcp_deployment_statuses",
+      payload: {},
+    });
+
+    const unsubscribe = websocketService.subscribe(
+      "mcp_deployment_statuses",
+      (message: McpDeploymentStatusesMessage) => {
+        setStatuses(message.payload.statuses);
+      },
+    );
+
+    return () => {
+      websocketService.send({
+        type: "unsubscribe_mcp_deployment_statuses",
+        payload: {},
+      });
+      unsubscribe();
+    };
+  }, [isK8sEnabled]);
+
+  return statuses;
 }

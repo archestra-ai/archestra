@@ -1,10 +1,12 @@
 import type { IncomingMessage } from "node:http";
 import type { PassThrough } from "node:stream";
-import type { ClientWebSocketMessage } from "@shared";
+import type { ClientWebSocketMessage, McpDeploymentStatusEntry } from "@shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
 import type * as originalConfigModule from "@/config";
+import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
@@ -42,6 +44,11 @@ interface McpLogsSubscription {
   abortController: AbortController;
 }
 
+interface McpDeploymentStatusSubscription {
+  interval: NodeJS.Timeout;
+  lastStatuses: Record<string, McpDeploymentStatusEntry>;
+}
+
 const service = websocketService as unknown as {
   authenticateConnection: (
     request: IncomingMessage,
@@ -54,6 +61,7 @@ const service = websocketService as unknown as {
     get: (ws: WS) => { intervalId: NodeJS.Timeout } | undefined;
   };
   mcpLogsSubscriptions: Map<WS, McpLogsSubscription>;
+  mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
   initBrowserStreamContextForTesting: () => void;
 };
 
@@ -66,6 +74,7 @@ describe("websocket authentication", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
   });
 
   test("authenticateConnection rejects unauthenticated requests", async () => {
@@ -93,6 +102,7 @@ describe("websocket browser-stream authorization", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
   });
 
   test("rejects browser stream subscription for conversations the user does not own", async ({
@@ -159,6 +169,7 @@ describe("websocket browser-stream screenshot handling", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
     // Mock Playwright tools as assigned so browser stream tests can proceed
     vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
   });
@@ -229,6 +240,7 @@ describe("websocket MCP logs", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
   });
 
   afterEach(() => {
@@ -548,5 +560,373 @@ describe("websocket MCP logs", () => {
     const secondSubscription = service.mcpLogsSubscriptions.get(ws);
     expect(secondSubscription).toBeDefined();
     expect(secondSubscription?.serverId).toBe(mcpServer2.id);
+  });
+});
+
+describe("websocket MCP deployment statuses", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    service.clientContexts.clear();
+    service.browserSubscriptions.clear();
+    service.mcpLogsSubscriptions.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
+  });
+
+  afterEach(() => {
+    for (const subscription of service.mcpDeploymentStatusSubscriptions.values()) {
+      clearInterval(subscription.interval);
+    }
+    service.mcpDeploymentStatusSubscriptions.clear();
+  });
+
+  test("sends initial deployment statuses for accessible local servers", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const mcpServer1 = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+    const mcpServer2 = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    // Mock statusSummary: server1 is running, server2 is not in the summary
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {
+        [mcpServer1.id]: {
+          state: "running",
+          message: "Deployment is running",
+          error: null,
+          serverName: "test-server-1",
+          deploymentName: `mcp-${mcpServer1.id}`,
+          namespace: "default",
+        },
+      },
+    });
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "mcp_deployment_statuses",
+        payload: {
+          statuses: {
+            [mcpServer1.id]: {
+              state: "running",
+              message: "Deployment is running",
+              error: null,
+            },
+            [mcpServer2.id]: {
+              state: "not_created",
+              message: "Deployment not created",
+              error: null,
+            },
+          },
+        },
+      }),
+    );
+    expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
+  });
+
+  test("filters out remote servers from deployment statuses", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+
+    // Create a local server using the fixture (defaults to serverType: "local")
+    const localServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    // Create a remote server by first creating via fixture then updating serverType
+    const remoteServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, remoteServer.id));
+
+    // Mock statusSummary with both servers
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {
+        [localServer.id]: {
+          state: "running",
+          message: "Deployment is running",
+          error: null,
+          serverName: "local-server",
+          deploymentName: `mcp-${localServer.id}`,
+          namespace: "default",
+        },
+        [remoteServer.id]: {
+          state: "running",
+          message: "Deployment is running",
+          error: null,
+          serverName: "remote-server",
+          deploymentName: `mcp-${remoteServer.id}`,
+          namespace: "default",
+        },
+      },
+    });
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    const sentMessage = JSON.parse(
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string,
+    );
+    expect(sentMessage.type).toBe("mcp_deployment_statuses");
+    // Only local server should be in statuses
+    expect(sentMessage.payload.statuses).toHaveProperty(localServer.id);
+    expect(sentMessage.payload.statuses).not.toHaveProperty(remoteServer.id);
+  });
+
+  test("returns not_created for servers not in runtime summary", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    // Mock statusSummary with an empty mcpServers map
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "mcp_deployment_statuses",
+        payload: {
+          statuses: {
+            [mcpServer.id]: {
+              state: "not_created",
+              message: "Deployment not created",
+              error: null,
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  test("unsubscribes and clears interval on unsubscribe message", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    // Subscribe first
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
+    const subscription = service.mcpDeploymentStatusSubscriptions.get(ws);
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+
+    // Now unsubscribe
+    await service.handleMessage(
+      {
+        type: "unsubscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
+    expect(clearIntervalSpy).toHaveBeenCalledWith(subscription?.interval);
+  });
+
+  test("cleans up previous subscription when subscribing again", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    // Subscribe first time
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    const firstSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
+    expect(firstSubscription).toBeDefined();
+    const firstInterval = firstSubscription?.interval;
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+
+    // Subscribe again - should clean up the first subscription
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_deployment_statuses",
+        payload: {},
+      },
+      ws,
+    );
+
+    // First interval should have been cleared
+    expect(clearIntervalSpy).toHaveBeenCalledWith(firstInterval);
+
+    // A new subscription should exist
+    const secondSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
+    expect(secondSubscription).toBeDefined();
+    expect(secondSubscription?.interval).not.toBe(firstInterval);
   });
 });

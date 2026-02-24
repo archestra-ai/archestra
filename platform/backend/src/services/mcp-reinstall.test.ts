@@ -9,17 +9,17 @@ vi.mock("@/mcp-server-runtime", () => ({
 }));
 
 vi.mock("@/models", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/models")>();
+  const original = await importOriginal<typeof import("@/models")>();
   return {
     McpServerModel: {
-      constructServerName:
-        original.McpServerModel.constructServerName,
+      constructServerName: original.McpServerModel.constructServerName,
       getToolsFromServer: vi.fn(),
       update: vi.fn(),
     },
     ToolModel: {
-      slugifyName: vi.fn((prefix: string, name: string) => `${prefix}__${name}`),
+      slugifyName: vi.fn(
+        (prefix: string, name: string) => `${prefix}__${name}`,
+      ),
       syncToolsForCatalog: vi.fn(),
     },
   };

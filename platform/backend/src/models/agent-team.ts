@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -28,16 +28,15 @@ class AgentTeamModel {
     }
 
     // Get teamless agents (agents with no team assignments) — visible to all org members
-    const allAgentIds = await db
+    const teamlessAgents = await db
       .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable);
-    const agentsWithTeams = await db
-      .select({ agentId: schema.agentTeamsTable.agentId })
-      .from(schema.agentTeamsTable);
-    const agentIdsWithTeams = new Set(agentsWithTeams.map((at) => at.agentId));
-    const teamlessAgentIds = allAgentIds
-      .map((a) => a.id)
-      .filter((id) => !agentIdsWithTeams.has(id));
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
+      )
+      .where(isNull(schema.agentTeamsTable.agentId));
+    const teamlessAgentIds = teamlessAgents.map((a) => a.id);
 
     // Get all team IDs the user is a member of
     const userTeams = await db

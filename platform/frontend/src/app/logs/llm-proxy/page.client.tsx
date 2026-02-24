@@ -241,7 +241,9 @@ function SessionRow({
           <Badge variant="secondary" className="text-xs max-w-[200px]">
             <Layers className="h-3 w-3 mr-1 shrink-0" />
             <span className="truncate">
-              {agent?.name ?? session.profileName ?? "Unknown"}
+              {agent?.name ??
+                session.profileName ??
+                (session.profileId === null ? "Deleted LLM Proxy" : "Unknown")}
             </span>
           </Badge>
           {session.userNames.map((userName) => (

@@ -38,7 +38,7 @@ const SessionSummarySchema = z.object({
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),
   models: z.array(z.string()),
-  profileId: z.string(),
+  profileId: z.string().nullable(), // null when profile was deleted
   profileName: z.string().nullable(),
   externalAgentIds: z.array(z.string()),
   externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names

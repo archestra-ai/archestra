@@ -16,9 +16,11 @@ const conversationsTable = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   organizationId: text("organization_id").notNull(),
-  agentId: uuid("agent_id")
-    .notNull()
-    .references(() => agentsTable.id, { onDelete: "cascade" }),
+  // Nullable to preserve conversations when agent is deleted
+  // null indicates the agent was deleted
+  agentId: uuid("agent_id").references(() => agentsTable.id, {
+    onDelete: "set null",
+  }),
   chatApiKeyId: uuid("chat_api_key_id").references(() => chatApiKeysTable.id, {
     onDelete: "set null",
   }),

@@ -251,8 +251,18 @@ export type McpLogsErrorMessage = {
 };
 
 // MCP Deployment Status server -> client messages
+export const MCP_DEPLOYMENT_STATES = [
+  "not_created",
+  "pending",
+  "running",
+  "failed",
+  "succeeded",
+] as const;
+
+export type McpDeploymentState = (typeof MCP_DEPLOYMENT_STATES)[number];
+
 export type McpDeploymentStatusEntry = {
-  state: "not_created" | "pending" | "running" | "failed" | "succeeded";
+  state: McpDeploymentState;
   message: string;
   error: string | null;
 };

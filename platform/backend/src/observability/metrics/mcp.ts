@@ -7,6 +7,7 @@
  * rate(mcp_tool_calls_total{agent_name="my-agent"}[5m])
  */
 
+import { MCP_DEPLOYMENT_STATES } from "@shared";
 import client from "prom-client";
 import logger from "@/logging";
 import type { AgentType } from "@/types";
@@ -21,11 +22,7 @@ let mcpResponseSizeBytes: client.Histogram<string>;
 // Each server has exactly one active state at a time (value=1), with all other
 // states at 0. This enables queries like:
 //   count(mcp_server_deployment_status{state="running"} == 1)
-const mcpServerDeploymentStatus = new client.Gauge({
-  name: "mcp_server_deployment_status",
-  help: "Current deployment state of self-hosted MCP servers (1 = active state)",
-  labelNames: ["server_name", "state"],
-});
+let mcpServerDeploymentStatus: client.Gauge<string> | undefined;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -202,14 +199,6 @@ export function reportMcpToolCall(params: {
   }
 }
 
-const DEPLOYMENT_STATES = [
-  "not_created",
-  "pending",
-  "running",
-  "failed",
-  "succeeded",
-] as const;
-
 /**
  * Update the mcp_server_deployment_status gauge from a map of server statuses.
  * Each server gets value=1 for its current state and value=0 for all other states.
@@ -218,11 +207,19 @@ const DEPLOYMENT_STATES = [
 export function reportMcpDeploymentStatuses(
   statuses: Record<string, { serverName: string; state: string }>,
 ): void {
+  if (!mcpServerDeploymentStatus) {
+    mcpServerDeploymentStatus = new client.Gauge({
+      name: "mcp_server_deployment_status",
+      help: "Current deployment state of self-hosted MCP servers (1 = active state)",
+      labelNames: ["server_name", "state"],
+    });
+  }
+
   // Reset gauge to remove stale series from servers that no longer exist
   mcpServerDeploymentStatus.reset();
 
   for (const { serverName, state } of Object.values(statuses)) {
-    for (const s of DEPLOYMENT_STATES) {
+    for (const s of MCP_DEPLOYMENT_STATES) {
       mcpServerDeploymentStatus.set(
         { server_name: serverName, state: s },
         s === state ? 1 : 0,

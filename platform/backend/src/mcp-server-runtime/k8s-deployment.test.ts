@@ -3059,6 +3059,7 @@ describe("K8sDeployment.statusSummary", () => {
     expect(summary.state).toBe("not_created");
     expect(summary.message).toBe("Deployment not created");
     expect(summary.error).toBeNull();
+    expect(summary.serverName).toBe("test-server");
     expect(summary.deploymentName).toBe("mcp-test-server");
     expect(summary.namespace).toBe("test-namespace");
   });

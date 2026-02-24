@@ -55,6 +55,7 @@ class WebSocketService {
   > = new Map();
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
+  private deploymentMetricsInterval: NodeJS.Timeout | null = null;
 
   /**
    * Proxy object for browser subscriptions - exposes Map-like interface for testing.
@@ -124,6 +125,8 @@ class WebSocketService {
     }
 
     logger.info(`WebSocket server started on path ${path}`);
+
+    this.startDeploymentMetricsPolling();
 
     this.wss.on(
       "connection",
@@ -362,6 +365,40 @@ class WebSocketService {
     }
   }
 
+  /**
+   * Start a standalone interval that periodically reports deployment status
+   * metrics to Prometheus, independent of any WebSocket client subscriptions.
+   */
+  private startDeploymentMetricsPolling(): void {
+    const reportMetrics = () => {
+      try {
+        const summary = McpServerRuntimeManager.statusSummary;
+        const metricStatuses: Record<
+          string,
+          { serverName: string; state: string }
+        > = {};
+        for (const [serverId, deployment] of Object.entries(
+          summary.mcpServers,
+        )) {
+          metricStatuses[serverId] = {
+            serverName: deployment.serverName,
+            state: deployment.state,
+          };
+        }
+        reportMcpDeploymentStatuses(metricStatuses);
+      } catch (error) {
+        logger.error(
+          { error },
+          "Failed to report MCP deployment status metrics",
+        );
+      }
+    };
+
+    // Report immediately, then every 30 seconds
+    reportMetrics();
+    this.deploymentMetricsInterval = setInterval(reportMetrics, 30_000);
+  }
+
   private async handleSubscribeMcpDeploymentStatuses(
     ws: WebSocket,
     clientContext: WebSocketClientContext,
@@ -378,19 +415,12 @@ class WebSocketService {
     // Filter to local servers only (remote servers don't have K8s deployments)
     const localServers = allServers.filter((s) => s.serverType === "local");
     const localServerIds = localServers.map((s) => s.id);
-    const serverNameById = Object.fromEntries(
-      localServers.map((s) => [s.id, s.name]),
-    );
 
-    // Build statuses from the runtime manager and update Prometheus metric
-    const buildAndReportStatuses = (
+    // Build statuses from the runtime manager for this client
+    const buildStatuses = (
       summary: typeof McpServerRuntimeManager.statusSummary,
     ): Record<string, McpDeploymentStatusEntry> => {
       const result: Record<string, McpDeploymentStatusEntry> = {};
-      const metricStatuses: Record<
-        string,
-        { serverName: string; state: string }
-      > = {};
 
       for (const serverId of localServerIds) {
         const deploymentStatus = summary.mcpServers[serverId];
@@ -407,19 +437,14 @@ class WebSocketService {
             error: null,
           };
         }
-        metricStatuses[serverId] = {
-          serverName: serverNameById[serverId] ?? serverId,
-          state: result[serverId].state,
-        };
       }
 
-      reportMcpDeploymentStatuses(metricStatuses);
       return result;
     };
 
     // Build initial statuses from the runtime manager
     const runtimeSummary = McpServerRuntimeManager.statusSummary;
-    const statuses = buildAndReportStatuses(runtimeSummary);
+    const statuses = buildStatuses(runtimeSummary);
 
     // Send initial statuses
     this.sendToClient(ws, {
@@ -439,7 +464,7 @@ class WebSocketService {
 
       try {
         const currentSummary = McpServerRuntimeManager.statusSummary;
-        const currentStatuses = buildAndReportStatuses(currentSummary);
+        const currentStatuses = buildStatuses(currentSummary);
 
         // Only send if statuses changed
         const sub = this.mcpDeploymentStatusSubscriptions.get(ws);
@@ -538,6 +563,10 @@ class WebSocketService {
   }
 
   stop() {
+    if (this.deploymentMetricsInterval) {
+      clearInterval(this.deploymentMetricsInterval);
+      this.deploymentMetricsInterval = null;
+    }
     for (const [ws] of this.mcpLogsSubscriptions) {
       this.unsubscribeMcpLogs(ws);
     }

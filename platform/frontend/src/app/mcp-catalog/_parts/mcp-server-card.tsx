@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import { type McpDeploymentStatusEntry, type archestraApiTypes, E2eTestId } from "@shared";
 import {
   AlertTriangle,
   Code,
@@ -41,7 +41,6 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import {
-  useMcpDeploymentStatuses,
   useMcpServers,
   useMcpServerTools,
 } from "@/lib/mcp-server.query";
@@ -76,6 +75,7 @@ export type McpServerCardProps = {
     | "idle"
     | "discovering-tools"
     | null;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
@@ -103,6 +103,7 @@ export function McpServerCard({
   installedServer,
   installingItemId,
   installationStatus,
+  deploymentStatuses,
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
@@ -137,7 +138,6 @@ export function McpServerCard({
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();
   const { data: teams } = useTeams();
-  const deploymentStatuses = useMcpDeploymentStatuses();
 
   // Compute if user can create new installation (personal or team)
   // This is used to determine if the Connect button should be shown
@@ -778,6 +778,7 @@ export function McpServerCard({
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
         installs={localInstalls}
+        deploymentStatuses={deploymentStatuses}
       />
 
       <ManageUsersDialog

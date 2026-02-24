@@ -4,6 +4,7 @@ import type { Attach } from "@kubernetes/client-node";
 import {
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
+  type McpDeploymentState,
   TimeInMs,
 } from "@shared";
 import type z from "zod";
@@ -15,7 +16,7 @@ import {
   customYamlToDeployment,
   resolvePlaceholders,
 } from "./k8s-yaml-generator";
-import type { K8sDeploymentState, K8sDeploymentStatusSummary } from "./schemas";
+import type { K8sDeploymentStatusSummary } from "./schemas";
 
 const {
   orchestrator: { mcpServerBaseImage },
@@ -180,7 +181,7 @@ export default class K8sDeployment {
   private k8sLog: k8s.Log;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
-  private state: K8sDeploymentState = "not_created";
+  private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
@@ -2138,6 +2139,7 @@ export default class K8sDeployment {
               ? "Deployment failed"
               : "Deployment not created",
       error: this.errorMessage,
+      serverName: this.mcpServer.name,
       deploymentName: this.deploymentName,
       namespace: this.namespace,
     };

@@ -3,6 +3,7 @@
 import {
   E2eTestId,
   MCP_DEFAULT_LOG_LINES,
+  type McpDeploymentStatusEntry,
   type McpLogsErrorMessage,
   type McpLogsMessage,
 } from "@shared";
@@ -25,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMcpDeploymentStatuses } from "@/lib/mcp-server.query";
 import websocketService from "@/lib/websocket";
 import {
   type DeploymentState,
@@ -41,6 +41,7 @@ interface McpLogsDialogProps {
     id: string;
     name: string;
   }[];
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
   hideInstallationSelector?: boolean;
 }
@@ -76,6 +77,7 @@ export function McpLogsDialog({
   onOpenChange,
   serverName,
   installs,
+  deploymentStatuses,
   hideInstallationSelector = false,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
@@ -312,7 +314,6 @@ export function McpLogsDialog({
     }
   }, []);
 
-  const deploymentStatuses = useMcpDeploymentStatuses();
   const currentDeploymentStatus = serverId
     ? deploymentStatuses[serverId]
     : null;

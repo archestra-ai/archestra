@@ -39,6 +39,13 @@ let cachedPlatformNodeSelector: k8s.V1PodSpec["nodeSelector"] | null = null;
 let nodeSelectorFetched = false;
 
 /**
+ * Cached tolerations from the archestra-platform pod.
+ * This is fetched once on first use and reused for all MCP server deployments.
+ */
+let cachedPlatformTolerations: k8s.V1Toleration[] | null = null;
+let tolerationsFetched = false;
+
+/**
  * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
  * K8s client errors can have either `statusCode` or `code` property set to 404.
  */
@@ -166,6 +173,123 @@ export function getCachedPlatformNodeSelector():
   | k8s.V1PodSpec["nodeSelector"]
   | null {
   return cachedPlatformNodeSelector;
+}
+
+/**
+ * Fetches the tolerations from the archestra-platform pod (the pod running the backend).
+ * This allows MCP server deployments to inherit the same tolerations as the platform,
+ * which is necessary for scheduling on tainted nodes (e.g., dedicated Karpenter nodepools).
+ *
+ * The result is cached after the first call to avoid repeated API calls.
+ *
+ * @param k8sApi - The Kubernetes CoreV1Api client
+ * @param namespace - The namespace to search for the platform pod
+ * @returns The tolerations from the platform pod, or null if not found/not configured
+ */
+export async function fetchPlatformPodTolerations(
+  k8sApi: k8s.CoreV1Api,
+  namespace: string,
+): Promise<k8s.V1Toleration[] | null> {
+  // Return cached value if already fetched
+  if (tolerationsFetched) {
+    return cachedPlatformTolerations;
+  }
+
+  try {
+    // Try to find the current pod by reading the POD_NAME environment variable
+    // which is typically set via the Kubernetes downward API.
+    // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
+    // will be the Docker container ID which won't exist as a K8s pod.
+    const podName = config.orchestrator.kubernetes
+      .loadKubeconfigFromCurrentCluster
+      ? process.env.POD_NAME || process.env.HOSTNAME
+      : process.env.POD_NAME;
+
+    if (podName) {
+      // Read the current pod's spec directly
+      const pod = await k8sApi.readNamespacedPod({
+        name: podName,
+        namespace,
+      });
+
+      cachedPlatformTolerations = pod.spec?.tolerations?.length
+        ? pod.spec.tolerations
+        : null;
+      tolerationsFetched = true;
+
+      if (cachedPlatformTolerations) {
+        logger.info(
+          { tolerations: cachedPlatformTolerations },
+          "Fetched tolerations from archestra-platform pod",
+        );
+      } else {
+        logger.debug("Archestra-platform pod has no tolerations configured");
+      }
+
+      return cachedPlatformTolerations;
+    }
+
+    // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
+    const pods = await k8sApi.listNamespacedPod({
+      namespace,
+      labelSelector: "app.kubernetes.io/name=archestra-platform",
+    });
+
+    // Get the first running pod's tolerations
+    const runningPod = pods.items.find(
+      (pod) => pod.status?.phase === "Running",
+    );
+
+    if (runningPod?.spec?.tolerations?.length) {
+      cachedPlatformTolerations = runningPod.spec.tolerations;
+      tolerationsFetched = true;
+
+      logger.info(
+        { tolerations: cachedPlatformTolerations },
+        "Fetched tolerations from archestra-platform pod (via label selector)",
+      );
+
+      return cachedPlatformTolerations;
+    }
+
+    // No tolerations found
+    tolerationsFetched = true;
+    cachedPlatformTolerations = null;
+
+    logger.debug(
+      "No archestra-platform pod found or no tolerations configured",
+    );
+
+    return null;
+  } catch (error) {
+    // Log the error but don't fail - toleration inheritance is optional
+    logger.warn(
+      { err: error },
+      "Failed to fetch archestra-platform pod tolerations, MCP servers will use default scheduling",
+    );
+
+    tolerationsFetched = true;
+    cachedPlatformTolerations = null;
+
+    return null;
+  }
+}
+
+/**
+ * Resets the cached platform tolerations.
+ * This is primarily useful for testing.
+ */
+export function resetPlatformTolerationsCache(): void {
+  cachedPlatformTolerations = null;
+  tolerationsFetched = false;
+}
+
+/**
+ * Returns the cached platform tolerations without fetching.
+ * This is useful for synchronous access after the initial fetch.
+ */
+export function getCachedPlatformTolerations(): k8s.V1Toleration[] | null {
+  return cachedPlatformTolerations;
 }
 
 /**
@@ -520,6 +644,7 @@ export default class K8sDeployment {
    * @param needsHttp - Whether the deployment's pod needs HTTP port exposure
    * @param httpPort - The HTTP port to expose (if needsHttp is true)
    * @param nodeSelector - Optional nodeSelector to apply to the pod spec (e.g., inherited from platform pod)
+   * @param tolerations - Optional tolerations to apply to the pod spec (e.g., inherited from platform pod)
    * @returns The Kubernetes deployment specification
    */
   generateDeploymentSpec(
@@ -528,6 +653,7 @@ export default class K8sDeployment {
     needsHttp: boolean,
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
+    tolerations?: k8s.V1Toleration[] | null,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -538,6 +664,7 @@ export default class K8sDeployment {
         needsHttp,
         httpPort,
         nodeSelector,
+        tolerations,
       );
       if (yamlDeployment) {
         logger.info(
@@ -596,6 +723,8 @@ export default class K8sDeployment {
       ...(nodeSelector && Object.keys(nodeSelector).length > 0
         ? { nodeSelector }
         : {}),
+      // Apply tolerations if provided (e.g., inherited from archestra-platform pod)
+      ...(tolerations?.length ? { tolerations } : {}),
       // Apply imagePullSecrets for pulling from private registries
       ...(localConfig.imagePullSecrets?.length
         ? { imagePullSecrets: localConfig.imagePullSecrets }
@@ -698,6 +827,7 @@ export default class K8sDeployment {
    * @param needsHttp - Whether HTTP port is needed
    * @param httpPort - The HTTP port
    * @param nodeSelector - Optional nodeSelector
+   * @param tolerations - Optional tolerations
    * @returns The K8s deployment or null if parsing failed
    */
   private generateDeploymentFromYaml(
@@ -707,6 +837,7 @@ export default class K8sDeployment {
     needsHttp: boolean,
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
+    tolerations?: k8s.V1Toleration[] | null,
   ): k8s.V1Deployment | null {
     const k8sSecretName = K8sDeployment.constructK8sSecretName(
       this.mcpServer.id,
@@ -797,7 +928,16 @@ export default class K8sDeployment {
       };
     }
 
-    // 2. Apply imagePullSecrets if provided
+    // 2. Apply inherited tolerations if the YAML doesn't define its own
+    if (
+      tolerations?.length &&
+      deployment.spec?.template?.spec &&
+      !deployment.spec.template.spec.tolerations?.length
+    ) {
+      deployment.spec.template.spec.tolerations = tolerations;
+    }
+
+    // 3. Apply imagePullSecrets if provided
     if (
       localConfig.imagePullSecrets?.length &&
       deployment.spec?.template?.spec
@@ -814,10 +954,10 @@ export default class K8sDeployment {
       ];
     }
 
-    // 3. Get environment variables and mounted secrets for system-managed env vars
+    // 4. Get environment variables and mounted secrets for system-managed env vars
     const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
 
-    // 4. Apply volume mounts for mounted secrets
+    // 5. Apply volume mounts for mounted secrets
     if (mountedSecrets.length > 0 && deployment.spec?.template?.spec) {
       const newVolume: k8s.V1Volume = {
         name: "mounted-secrets",
@@ -856,7 +996,7 @@ export default class K8sDeployment {
       }
     }
 
-    // 5. Merge environment variables (YAML env vars + system env vars)
+    // 6. Merge environment variables (YAML env vars + system env vars)
     // Also filter out YAML secretKeyRef entries for keys that don't have values
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
@@ -895,7 +1035,7 @@ export default class K8sDeployment {
       }
     }
 
-    // 6. Ensure command and args from localConfig are applied
+    // 7. Ensure command and args from localConfig are applied
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
 
@@ -927,7 +1067,7 @@ export default class K8sDeployment {
       }
     }
 
-    // 7. Set transport-specific container settings (stdin/tty for stdio, ports for HTTP)
+    // 8. Set transport-specific container settings (stdin/tty for stdio, ports for HTTP)
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
 
@@ -1332,9 +1472,10 @@ export default class K8sDeployment {
         })),
       };
 
-      // Get the cached nodeSelector from the platform pod (if available)
+      // Get the cached nodeSelector and tolerations from the platform pod (if available)
       // This allows MCP servers to inherit the same scheduling constraints
       const platformNodeSelector = getCachedPlatformNodeSelector();
+      const platformTolerations = getCachedPlatformTolerations();
 
       await this.k8sAppsApi.createNamespacedDeployment({
         namespace: this.namespace,
@@ -1344,6 +1485,7 @@ export default class K8sDeployment {
           needsHttp,
           httpPort,
           platformNodeSelector,
+          platformTolerations,
         ),
       });
 

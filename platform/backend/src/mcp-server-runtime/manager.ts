@@ -10,7 +10,10 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
-import K8sDeployment, { fetchPlatformPodNodeSelector } from "./k8s-deployment";
+import K8sDeployment, {
+  fetchPlatformPodNodeSelector,
+  fetchPlatformPodTolerations,
+} from "./k8s-deployment";
 import type {
   AvailableTool,
   K8sRuntimeStatus,
@@ -161,9 +164,10 @@ export class McpServerRuntimeManager {
       // Verify K8s connectivity
       await this.verifyK8sConnection();
 
-      // Fetch the platform pod's nodeSelector to inherit for MCP server deployments
+      // Fetch the platform pod's nodeSelector and tolerations to inherit for MCP server deployments
       // This allows MCP servers to be scheduled on the same node pool as the platform
       await fetchPlatformPodNodeSelector(this.k8sApi, this.namespace);
+      await fetchPlatformPodTolerations(this.k8sApi, this.namespace);
 
       this.status = "running";
 

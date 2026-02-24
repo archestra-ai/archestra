@@ -8,8 +8,11 @@ import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
+  fetchPlatformPodTolerations,
   getCachedPlatformNodeSelector,
+  getCachedPlatformTolerations,
   resetPlatformNodeSelectorCache,
+  resetPlatformTolerationsCache,
 } from "./k8s-deployment";
 
 // Helper function to create a K8sDeployment instance with mocked dependencies
@@ -1641,6 +1644,227 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
     );
+  });
+
+  test("generates deploymentSpec with tolerations when provided", () => {
+    const mcpServer: McpServer = {
+      id: "toleration-test-id",
+      name: "toleration-server",
+      catalogId: "catalog-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const tolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      tolerations,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+
+  test("generates deploymentSpec with multiple tolerations", () => {
+    const mcpServer: McpServer = {
+      id: "multi-tol-test-id",
+      name: "multi-toleration-server",
+      catalogId: "catalog-multi-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const tolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+      {
+        key: "gpu",
+        operator: "Exists",
+        effect: "NoExecute",
+        tolerationSeconds: 3600,
+      },
+    ];
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      tolerations,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toHaveLength(2);
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toEqual(
+      tolerations,
+    );
+  });
+
+  test("generates deploymentSpec without tolerations when null is provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-tol-id",
+      name: "no-toleration-server",
+      catalogId: "catalog-no-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      null,
+      null,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without tolerations when undefined is provided", () => {
+    const mcpServer: McpServer = {
+      id: "undef-tol-id",
+      name: "undef-toleration-server",
+      catalogId: "catalog-undef-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      undefined,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without tolerations when empty array is provided", () => {
+    const mcpServer: McpServer = {
+      id: "empty-tol-id",
+      name: "empty-toleration-server",
+      catalogId: "catalog-empty-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      [],
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toBeUndefined();
+  });
+
+  test("combines tolerations with nodeSelector when both are configured", () => {
+    const mcpServer: McpServer = {
+      id: "combined-tol-ns-id",
+      name: "combined-tol-ns-server",
+      catalogId: "catalog-combined-tol-ns",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const nodeSelector = {
+      "karpenter.sh/nodepool": "mcp-pool",
+    };
+    const tolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      nodeSelector,
+      tolerations,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "mcp-pool",
+    });
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ]);
   });
 
   test("generates deploymentSpec with imagePullSecrets when provided", () => {
@@ -3467,6 +3691,422 @@ describe("resetPlatformNodeSelectorCache", () => {
     resetPlatformNodeSelectorCache();
 
     expect(getCachedPlatformNodeSelector()).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+describe("fetchPlatformPodTolerations", () => {
+  // Reset cache before each test
+  test.beforeEach(() => {
+    resetPlatformTolerationsCache();
+  });
+
+  test("returns tolerations from pod when POD_NAME env var is set", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-abc123";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        tolerations: [
+          {
+            key: "dedicated",
+            operator: "Equal",
+            value: "platform",
+            effect: "NoSchedule",
+          },
+          {
+            key: "gpu",
+            operator: "Exists",
+            effect: "NoExecute",
+          },
+        ],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+
+    expect(result).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+      {
+        key: "gpu",
+        operator: "Exists",
+        effect: "NoExecute",
+      },
+    ]);
+
+    expect(mockReadPod).toHaveBeenCalledWith({
+      name: "archestra-platform-abc123",
+      namespace: "default",
+    });
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("ignores HOSTNAME when not running in-cluster (only uses POD_NAME)", async () => {
+    const originalConfig =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+
+    try {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
+      delete process.env.POD_NAME;
+      process.env.HOSTNAME = "b960428dea4c";
+
+      const mockListPods = vi.fn().mockResolvedValue({
+        items: [],
+      });
+
+      const mockK8sApi = {
+        listNamespacedPod: mockListPods,
+      } as unknown as k8s.CoreV1Api;
+
+      const result = await fetchPlatformPodTolerations(mockK8sApi, "test-ns");
+
+      expect(result).toBeNull();
+      expect(mockListPods).toHaveBeenCalledWith({
+        namespace: "test-ns",
+        labelSelector: "app.kubernetes.io/name=archestra-platform",
+      });
+    } finally {
+      process.env.POD_NAME = originalPodName;
+      process.env.HOSTNAME = originalHostname;
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalConfig;
+    }
+  });
+
+  test("uses HOSTNAME as fallback when running in-cluster", async () => {
+    const originalConfig =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+
+    try {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+      delete process.env.POD_NAME;
+      process.env.HOSTNAME = "archestra-platform-xyz789";
+
+      const mockReadPod = vi.fn().mockResolvedValue({
+        spec: {
+          tolerations: [
+            {
+              key: "dedicated",
+              operator: "Equal",
+              value: "platform",
+              effect: "NoSchedule",
+            },
+          ],
+        },
+      });
+
+      const mockK8sApi = {
+        readNamespacedPod: mockReadPod,
+      } as unknown as k8s.CoreV1Api;
+
+      const result = await fetchPlatformPodTolerations(mockK8sApi, "test-ns");
+
+      expect(result).toEqual([
+        {
+          key: "dedicated",
+          operator: "Equal",
+          value: "platform",
+          effect: "NoSchedule",
+        },
+      ]);
+      expect(mockReadPod).toHaveBeenCalledWith({
+        name: "archestra-platform-xyz789",
+        namespace: "test-ns",
+      });
+    } finally {
+      process.env.POD_NAME = originalPodName;
+      process.env.HOSTNAME = originalHostname;
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalConfig;
+    }
+  });
+
+  test("returns null when pod has no tolerations", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-no-tolerations";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        containers: [{ name: "archestra" }],
+        // No tolerations
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("returns null when pod has empty tolerations array", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-empty-tol";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        tolerations: [],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("falls back to label selector when POD_NAME/HOSTNAME not set", async () => {
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.POD_NAME;
+    delete process.env.HOSTNAME;
+
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "archestra-platform-abc" },
+          status: { phase: "Running" },
+          spec: {
+            tolerations: [
+              {
+                key: "dedicated",
+                operator: "Equal",
+                value: "platform",
+                effect: "NoSchedule",
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "archestra");
+
+    expect(result).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+
+    expect(mockListPods).toHaveBeenCalledWith({
+      namespace: "archestra",
+      labelSelector: "app.kubernetes.io/name=archestra-platform",
+    });
+
+    process.env.POD_NAME = originalPodName;
+    process.env.HOSTNAME = originalHostname;
+  });
+
+  test("returns null when no platform pods found via label selector", async () => {
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.POD_NAME;
+    delete process.env.HOSTNAME;
+
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [],
+    });
+
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+    process.env.HOSTNAME = originalHostname;
+  });
+
+  test("caches result after first call", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-cached";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        tolerations: [
+          {
+            key: "cached",
+            operator: "Equal",
+            value: "toleration",
+            effect: "NoSchedule",
+          },
+        ],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    // First call
+    const result1 = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(result1).toEqual([
+      {
+        key: "cached",
+        operator: "Equal",
+        value: "toleration",
+        effect: "NoSchedule",
+      },
+    ]);
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
+
+    // Second call should return cached value without API call
+    const result2 = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(result2).toEqual([
+      {
+        key: "cached",
+        operator: "Equal",
+        value: "toleration",
+        effect: "NoSchedule",
+      },
+    ]);
+    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only called once
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("returns null and caches on API error", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-error";
+
+    const mockReadPod = vi
+      .fn()
+      .mockRejectedValue(new Error("API connection failed"));
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    // Subsequent calls should return cached null without API call
+    const result2 = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(result2).toBeNull();
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+describe("getCachedPlatformTolerations", () => {
+  test.beforeEach(() => {
+    resetPlatformTolerationsCache();
+  });
+
+  test("returns null before any fetch", () => {
+    expect(getCachedPlatformTolerations()).toBeNull();
+  });
+
+  test("returns cached value after fetch", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        tolerations: [
+          {
+            key: "test-key",
+            operator: "Equal",
+            value: "test-value",
+            effect: "NoSchedule",
+          },
+        ],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await fetchPlatformPodTolerations(mockK8sApi, "default");
+
+    expect(getCachedPlatformTolerations()).toEqual([
+      {
+        key: "test-key",
+        operator: "Equal",
+        value: "test-value",
+        effect: "NoSchedule",
+      },
+    ]);
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+describe("resetPlatformTolerationsCache", () => {
+  test.beforeEach(() => {
+    resetPlatformTolerationsCache();
+  });
+
+  test("clears the cached tolerations", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        tolerations: [
+          {
+            key: "before-reset",
+            operator: "Equal",
+            value: "value",
+            effect: "NoSchedule",
+          },
+        ],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(getCachedPlatformTolerations()).toEqual([
+      {
+        key: "before-reset",
+        operator: "Equal",
+        value: "value",
+        effect: "NoSchedule",
+      },
+    ]);
+
+    resetPlatformTolerationsCache();
+
+    expect(getCachedPlatformTolerations()).toBeNull();
 
     process.env.POD_NAME = originalPodName;
   });

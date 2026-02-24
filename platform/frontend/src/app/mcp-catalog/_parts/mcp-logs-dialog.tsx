@@ -3,6 +3,7 @@
 import {
   E2eTestId,
   MCP_DEFAULT_LOG_LINES,
+  type McpDeploymentStatusEntry,
   type McpLogsErrorMessage,
   type McpLogsMessage,
 } from "@shared";
@@ -26,6 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import websocketService from "@/lib/websocket";
+import {
+  type DeploymentState,
+  DeploymentStatusBanner,
+  DeploymentStatusDot,
+} from "./deployment-status";
 
 interface McpLogsDialogProps {
   open: boolean;
@@ -35,6 +41,7 @@ interface McpLogsDialogProps {
     id: string;
     name: string;
   }[];
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
   hideInstallationSelector?: boolean;
 }
@@ -70,6 +77,7 @@ export function McpLogsDialog({
   onOpenChange,
   serverName,
   installs,
+  deploymentStatuses,
   hideInstallationSelector = false,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
@@ -306,6 +314,10 @@ export function McpLogsDialog({
     }
   }, []);
 
+  const currentDeploymentStatus = serverId
+    ? deploymentStatuses[serverId]
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -313,15 +325,21 @@ export function McpLogsDialog({
         data-testid={E2eTestId.McpLogsDialog}
       >
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 overflow-hidden">
-            <Terminal className="h-5 w-5 flex-shrink-0" />
-            <span className="truncate">Logs: {serverName}</span>
-          </DialogTitle>
-          <DialogDescription className="flex flex-col gap-2">
-            <span>View the recent logs from the MCP server deployment</span>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <DialogTitle className="flex items-center gap-2 overflow-hidden">
+                <Terminal className="h-5 w-5 flex-shrink-0" />
+                <span className="truncate">Logs: {serverName}</span>
+              </DialogTitle>
+              <DialogDescription>
+                View the recent logs from the MCP server deployment
+              </DialogDescription>
+            </div>
             {!hideInstallationSelector && installs.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Installation:</span>
+              <div className="flex flex-col gap-1 flex-shrink-0">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Installation
+                </span>
                 <Select
                   value={serverId ?? undefined}
                   onValueChange={setServerId}
@@ -330,17 +348,33 @@ export function McpLogsDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {installs.map((install) => (
-                      <SelectItem key={install.id} value={install.id}>
-                        {install.name}
-                      </SelectItem>
-                    ))}
+                    {installs.map((install) => {
+                      const status = deploymentStatuses[install.id];
+                      const dotState =
+                        status &&
+                        status.state !== "not_created" &&
+                        status.state !== "succeeded"
+                          ? (status.state as DeploymentState)
+                          : null;
+                      return (
+                        <SelectItem key={install.id} value={install.id}>
+                          <span className="flex items-center gap-2">
+                            {dotState && (
+                              <DeploymentStatusDot state={dotState} />
+                            )}
+                            {install.name}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
             )}
-          </DialogDescription>
+          </div>
         </DialogHeader>
+
+        <DeploymentStatusBanner status={currentDeploymentStatus} />
 
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-2 flex-1 min-h-0">

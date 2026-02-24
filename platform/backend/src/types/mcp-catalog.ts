@@ -62,6 +62,7 @@ const LocalConfigSelectSchema = z.object({
   httpPort: z.number().optional(),
   httpPath: z.string().optional(),
   nodePort: z.number().optional(),
+  imagePullSecrets: z.array(z.object({ name: z.string() })).optional(),
 });
 
 const CatalogLabelSchema = z.object({

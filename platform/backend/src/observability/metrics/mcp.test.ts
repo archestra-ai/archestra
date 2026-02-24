@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test } from "@/test";
 
 const histogramObserve = vi.fn();
 const counterInc = vi.fn();
+const gaugeSet = vi.fn();
+const gaugeReset = vi.fn();
 const registerRemoveSingleMetric = vi.fn();
 
 vi.mock("prom-client", () => {
@@ -18,6 +20,14 @@ vi.mock("prom-client", () => {
           return counterInc(...args);
         }
       },
+      Gauge: class {
+        set(...args: unknown[]) {
+          return gaugeSet(...args);
+        }
+        reset() {
+          return gaugeReset();
+        }
+      },
       register: {
         removeSingleMetric: (...args: unknown[]) =>
           registerRemoveSingleMetric(...args),
@@ -26,7 +36,11 @@ vi.mock("prom-client", () => {
   };
 });
 
-import { initializeMcpMetrics, reportMcpToolCall } from "./mcp";
+import {
+  initializeMcpMetrics,
+  reportMcpDeploymentStatuses,
+  reportMcpToolCall,
+} from "./mcp";
 
 describe("initializeMcpMetrics", () => {
   beforeEach(() => {
@@ -293,5 +307,71 @@ describe("reportMcpToolCall", () => {
 
     // Only duration histogram should be observed
     expect(histogramObserve).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("reportMcpDeploymentStatuses", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("resets gauge and sets state=1 for active state, 0 for others", () => {
+    reportMcpDeploymentStatuses({
+      "server-1": { serverName: "github-server", state: "running" },
+    });
+
+    expect(gaugeReset).toHaveBeenCalledTimes(1);
+
+    // Should set value=1 for running, 0 for all other states
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "running" },
+      1,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "pending" },
+      0,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "failed" },
+      0,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "not_created" },
+      0,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "succeeded" },
+      0,
+    );
+  });
+
+  test("reports multiple servers with different states", () => {
+    reportMcpDeploymentStatuses({
+      "server-1": { serverName: "github-server", state: "running" },
+      "server-2": { serverName: "slack-server", state: "failed" },
+    });
+
+    // 5 states per server * 2 servers = 10 calls
+    expect(gaugeSet).toHaveBeenCalledTimes(10);
+
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "running" },
+      1,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "slack-server", state: "failed" },
+      1,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "slack-server", state: "running" },
+      0,
+    );
+  });
+
+  test("handles empty statuses map", () => {
+    reportMcpDeploymentStatuses({});
+
+    expect(gaugeReset).toHaveBeenCalledTimes(1);
+    expect(gaugeSet).not.toHaveBeenCalled();
   });
 });

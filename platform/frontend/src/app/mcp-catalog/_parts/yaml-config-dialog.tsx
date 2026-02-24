@@ -88,7 +88,7 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
     <Dialog open={!!item} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit K8S Deployment Yaml</DialogTitle>
+          <DialogTitle>Edit K8s Deployment YAML</DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
@@ -181,7 +181,7 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
         {item &&
           isLocalServer &&
           (isLoadingYaml ? (
-            <div className="flex items-center justify-center h-64 text-muted-foreground">
+            <div className="flex items-center justify-center h-[60vh] w-full text-muted-foreground">
               Loading YAML...
             </div>
           ) : (

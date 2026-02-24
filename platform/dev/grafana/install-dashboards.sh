@@ -24,13 +24,13 @@ Environment variables:
 
 Examples:
   # Service Account token
-  GRAFANA_URL=https://grafana.example.com GRAFANA_TOKEN=glsa_xxx ./install-dashboards.sh
+  GRAFANA_URL=https://example.grafana.net GRAFANA_TOKEN=glsa_xxx ./install-dashboards.sh
 
   # Basic auth (local development)
   GRAFANA_URL=http://localhost:3000 GRAFANA_USER=admin GRAFANA_PASS=admin ./install-dashboards.sh
 
   # Remote install (no local clone needed)
-  GRAFANA_URL=https://grafana.example.com GRAFANA_TOKEN=glsa_xxx \
+  GRAFANA_URL=https://example.grafana.net GRAFANA_TOKEN=glsa_xxx \
     bash <(curl -sL https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/dev/grafana/install-dashboards.sh)
 
 Dashboards installed:

@@ -4,6 +4,7 @@ import type { Attach } from "@kubernetes/client-node";
 import {
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
+  type McpDeploymentState,
   TimeInMs,
 } from "@shared";
 import type z from "zod";
@@ -15,7 +16,7 @@ import {
   customYamlToDeployment,
   resolvePlaceholders,
 } from "./k8s-yaml-generator";
-import type { K8sDeploymentState, K8sDeploymentStatusSummary } from "./schemas";
+import type { K8sDeploymentStatusSummary } from "./schemas";
 
 const {
   orchestrator: { mcpServerBaseImage },
@@ -180,7 +181,7 @@ export default class K8sDeployment {
   private k8sLog: k8s.Log;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
-  private state: K8sDeploymentState = "not_created";
+  private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
@@ -595,6 +596,10 @@ export default class K8sDeployment {
       ...(nodeSelector && Object.keys(nodeSelector).length > 0
         ? { nodeSelector }
         : {}),
+      // Apply imagePullSecrets for pulling from private registries
+      ...(localConfig.imagePullSecrets?.length
+        ? { imagePullSecrets: localConfig.imagePullSecrets }
+        : {}),
       // Add volumes for secrets mounted as files
       ...(volumes.length > 0 ? { volumes } : {}),
       containers: [
@@ -790,6 +795,23 @@ export default class K8sDeployment {
         ...(deployment.spec.template.spec.nodeSelector || {}),
         ...nodeSelector,
       };
+    }
+
+    // 2. Apply imagePullSecrets if provided
+    if (
+      localConfig.imagePullSecrets?.length &&
+      deployment.spec?.template?.spec
+    ) {
+      const existingSecrets =
+        deployment.spec.template.spec.imagePullSecrets || [];
+      const existingNames = new Set(existingSecrets.map((s) => s.name));
+      const newSecrets = localConfig.imagePullSecrets.filter(
+        (s) => !existingNames.has(s.name),
+      );
+      deployment.spec.template.spec.imagePullSecrets = [
+        ...existingSecrets,
+        ...newSecrets,
+      ];
     }
 
     // 3. Get environment variables and mounted secrets for system-managed env vars
@@ -2117,6 +2139,7 @@ export default class K8sDeployment {
               ? "Deployment failed"
               : "Deployment not created",
       error: this.errorMessage,
+      serverName: this.mcpServer.name,
       deploymentName: this.deploymentName,
       namespace: this.namespace,
     };

@@ -970,6 +970,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
 
+      logger.debug(
+        {
+          conversationId: id,
+          selectedProvider: conversation.selectedProvider,
+          selectedModel: conversation.selectedModel,
+          resolvedProvider: provider,
+        },
+        "Title generation: resolved provider",
+      );
+
       // Resolve API key using the centralized function (handles all providers)
       const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
         organizationId,
@@ -977,6 +987,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         conversationId: id,
       });
+
+      logger.debug(
+        {
+          conversationId: id,
+          provider,
+          hasApiKey: !!apiKey,
+          chatApiKeyId,
+          baseUrl,
+        },
+        "Title generation: resolved API key",
+      );
 
       if (isApiKeyRequired(provider, apiKey)) {
         throw new ApiError(
@@ -996,6 +1017,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       if (!generatedTitle) {
+        logger.warn(
+          { conversationId: id, provider },
+          "Title generation: returned null (generation failed)",
+        );
         // Return the conversation without title update on error
         return reply.send(conversation);
       }
@@ -1315,6 +1340,11 @@ export async function generateConversationTitle(
 
   const modelName = await resolveFastModelName(provider, chatApiKeyId);
 
+  logger.debug(
+    { provider, modelName, chatApiKeyId, hasApiKey: !!apiKey, baseUrl },
+    "Title generation: creating direct LLM model",
+  );
+
   // Create model for title generation (direct call, not through LLM Proxy)
   const model = createDirectLLMModel({
     provider,
@@ -1326,14 +1356,25 @@ export async function generateConversationTitle(
   const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
 
   try {
+    logger.debug(
+      { provider, modelName },
+      "Title generation: calling generateText",
+    );
     const result = await generateText({
       model,
       prompt: titlePrompt,
     });
 
+    logger.debug(
+      { provider, modelName, generatedTitle: result.text.trim() },
+      "Title generation: generateText succeeded",
+    );
     return result.text.trim();
   } catch (error) {
-    logger.error({ error, provider }, "Failed to generate conversation title");
+    logger.error(
+      { error, provider, modelName, baseUrl },
+      "Failed to generate conversation title",
+    );
     return null;
   }
 }
@@ -1540,14 +1581,27 @@ async function resolveFastModelName(
   chatApiKeyId: string | undefined,
 ): Promise<string> {
   if (!chatApiKeyId) {
-    return FAST_MODELS[provider];
+    const fallback = FAST_MODELS[provider];
+    logger.debug(
+      { provider, modelName: fallback },
+      "Title generation: no chatApiKeyId, using hardcoded fast model",
+    );
+    return fallback;
   }
 
   try {
     const fastestModel = await ApiKeyModelModel.getFastestModel(chatApiKeyId);
     if (fastestModel) {
+      logger.debug(
+        { provider, chatApiKeyId, modelId: fastestModel.modelId },
+        "Title generation: resolved fastest model from DB",
+      );
       return fastestModel.modelId;
     }
+    logger.debug(
+      { provider, chatApiKeyId },
+      "Title generation: no fastest model in DB, using hardcoded fallback",
+    );
   } catch (error) {
     logger.warn(
       { error, chatApiKeyId },

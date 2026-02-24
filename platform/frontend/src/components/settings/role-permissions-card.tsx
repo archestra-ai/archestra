@@ -15,8 +15,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAllPermissions } from "@/lib/auth.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useActiveMemberRole,
   useActiveOrganization,
@@ -62,6 +64,7 @@ const actionLabels: Record<Action, string> = {
 };
 
 export function RolePermissionsCard() {
+  const { data: session } = authClient.useSession();
   const { data: activeOrg } = useActiveOrganization();
   const { data: role, isLoading: isRoleLoading } = useActiveMemberRole(
     activeOrg?.id,
@@ -74,9 +77,6 @@ export function RolePermissionsCard() {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Your Role & Permissions</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
@@ -87,22 +87,25 @@ export function RolePermissionsCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Your Role & Permissions</CardTitle>
-        {role && (
-          <Badge
-            variant="secondary"
-            className="capitalize text-base px-4 py-1.5"
-          >
-            {role}
-          </Badge>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3">
+          <span className="text-muted-foreground">Username:</span>
+          <span>{session?.user?.name || "—"}</span>
+          <span className="text-muted-foreground">Email:</span>
+          <span>{session?.user?.email || "—"}</span>
+          <span className="text-muted-foreground">Role:</span>
+          <span className="capitalize">{role || "—"}</span>
+        </div>
+        {permissions && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Permissions</h4>
+              <PermissionsGrid permissions={permissions} />
+            </div>
+          </>
         )}
-      </CardHeader>
-      {permissions && (
-        <CardContent>
-          <PermissionsGrid permissions={permissions} />
-        </CardContent>
-      )}
+      </CardContent>
     </Card>
   );
 }

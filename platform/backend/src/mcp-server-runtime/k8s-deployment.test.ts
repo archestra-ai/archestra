@@ -10,7 +10,6 @@ import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
   getCachedPlatformNodeSelector,
-  getCachedPlatformTolerations,
   resetPlatformNodeSelectorCache,
   resetPlatformTolerationsCache,
 } from "./k8s-deployment";
@@ -3370,14 +3369,13 @@ describe("K8sDeployment.k8sDeploymentName", () => {
   });
 });
 
-describe("fetchPlatformPodNodeSelector", () => {
-  // Reset cache before each test
+// Shared pod-lookup + caching tests (uses nodeSelector fetcher as representative)
+describe("createPlatformPodSpecFetcher (shared pod-lookup logic)", () => {
   test.beforeEach(() => {
     resetPlatformNodeSelectorCache();
   });
 
-  test("returns nodeSelector from pod when POD_NAME env var is set", async () => {
-    // Save and set POD_NAME env var
+  test("looks up pod by POD_NAME env var", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "archestra-platform-abc123";
 
@@ -3406,13 +3404,10 @@ describe("fetchPlatformPodNodeSelector", () => {
       namespace: "default",
     });
 
-    // Restore env var
     process.env.POD_NAME = originalPodName;
   });
 
   test("ignores HOSTNAME when not running in-cluster (only uses POD_NAME)", async () => {
-    // When running outside K8s (Docker mode, local dev), HOSTNAME is the container ID
-    // which doesn't correspond to a K8s pod. Only POD_NAME should be used.
     const originalConfig =
       config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
     const originalPodName = process.env.POD_NAME;
@@ -3448,7 +3443,6 @@ describe("fetchPlatformPodNodeSelector", () => {
   });
 
   test("uses HOSTNAME as fallback when running in-cluster", async () => {
-    // When running inside K8s cluster, HOSTNAME is the pod name
     const originalConfig =
       config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
     const originalPodName = process.env.POD_NAME;
@@ -3488,14 +3482,13 @@ describe("fetchPlatformPodNodeSelector", () => {
     }
   });
 
-  test("returns null when pod has no nodeSelector", async () => {
+  test("returns null when pod has no matching spec field", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "archestra-platform-no-selector";
 
     const mockReadPod = vi.fn().mockResolvedValue({
       spec: {
         containers: [{ name: "archestra" }],
-        // No nodeSelector
       },
     });
 
@@ -3571,7 +3564,7 @@ describe("fetchPlatformPodNodeSelector", () => {
     process.env.HOSTNAME = originalHostname;
   });
 
-  test("caches result after first call", async () => {
+  test("caches result after first call (only one API call)", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "archestra-platform-cached";
 
@@ -3587,15 +3580,13 @@ describe("fetchPlatformPodNodeSelector", () => {
       readNamespacedPod: mockReadPod,
     } as unknown as k8s.CoreV1Api;
 
-    // First call
     const result1 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
     expect(result1).toEqual({ cached: "value" });
     expect(mockReadPod).toHaveBeenCalledTimes(1);
 
-    // Second call should return cached value without API call
     const result2 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
     expect(result2).toEqual({ cached: "value" });
-    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only called once
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
 
     process.env.POD_NAME = originalPodName;
   });
@@ -3613,29 +3604,20 @@ describe("fetchPlatformPodNodeSelector", () => {
     } as unknown as k8s.CoreV1Api;
 
     const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
-
     expect(result).toBeNull();
 
-    // Subsequent calls should return cached null without API call
     const result2 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
     expect(result2).toBeNull();
     expect(mockReadPod).toHaveBeenCalledTimes(1);
 
     process.env.POD_NAME = originalPodName;
   });
-});
 
-describe("getCachedPlatformNodeSelector", () => {
-  // Reset cache before each test to ensure isolation
-  test.beforeEach(() => {
-    resetPlatformNodeSelectorCache();
-  });
-
-  test("returns null before any fetch", () => {
+  test("getCached returns null before any fetch", () => {
     expect(getCachedPlatformNodeSelector()).toBeNull();
   });
 
-  test("returns cached value after fetch", async () => {
+  test("getCached returns value after fetch", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "test-pod";
 
@@ -3659,15 +3641,8 @@ describe("getCachedPlatformNodeSelector", () => {
 
     process.env.POD_NAME = originalPodName;
   });
-});
 
-describe("resetPlatformNodeSelectorCache", () => {
-  // Reset cache before each test to ensure isolation
-  test.beforeEach(() => {
-    resetPlatformNodeSelectorCache();
-  });
-
-  test("clears the cached nodeSelector", async () => {
+  test("resetCache clears cached value", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "test-pod";
 
@@ -3696,109 +3671,46 @@ describe("resetPlatformNodeSelectorCache", () => {
   });
 });
 
-describe("fetchPlatformPodTolerations", () => {
-  // Reset cache before each test
+// Extractor-specific tests for nodeSelector
+describe("fetchPlatformPodNodeSelector (extractor)", () => {
+  test.beforeEach(() => {
+    resetPlatformNodeSelectorCache();
+  });
+
+  test("extracts spec.nodeSelector", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockK8sApi = {
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: {
+          nodeSelector: { "karpenter.sh/nodepool": "general-purpose" },
+          tolerations: [{ key: "other", operator: "Exists" }],
+        },
+      }),
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(result).toEqual({ "karpenter.sh/nodepool": "general-purpose" });
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+// Extractor-specific tests for tolerations
+describe("fetchPlatformPodTolerations (extractor)", () => {
   test.beforeEach(() => {
     resetPlatformTolerationsCache();
   });
 
-  test("returns tolerations from pod when POD_NAME env var is set", async () => {
+  test("extracts spec.tolerations", async () => {
     const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "archestra-platform-abc123";
-
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        tolerations: [
-          {
-            key: "dedicated",
-            operator: "Equal",
-            value: "platform",
-            effect: "NoSchedule",
-          },
-          {
-            key: "gpu",
-            operator: "Exists",
-            effect: "NoExecute",
-          },
-        ],
-      },
-    });
+    process.env.POD_NAME = "test-pod";
 
     const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
-    } as unknown as k8s.CoreV1Api;
-
-    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
-
-    expect(result).toEqual([
-      {
-        key: "dedicated",
-        operator: "Equal",
-        value: "platform",
-        effect: "NoSchedule",
-      },
-      {
-        key: "gpu",
-        operator: "Exists",
-        effect: "NoExecute",
-      },
-    ]);
-
-    expect(mockReadPod).toHaveBeenCalledWith({
-      name: "archestra-platform-abc123",
-      namespace: "default",
-    });
-
-    process.env.POD_NAME = originalPodName;
-  });
-
-  test("ignores HOSTNAME when not running in-cluster (only uses POD_NAME)", async () => {
-    const originalConfig =
-      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
-    const originalPodName = process.env.POD_NAME;
-    const originalHostname = process.env.HOSTNAME;
-
-    try {
-      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
-      delete process.env.POD_NAME;
-      process.env.HOSTNAME = "b960428dea4c";
-
-      const mockListPods = vi.fn().mockResolvedValue({
-        items: [],
-      });
-
-      const mockK8sApi = {
-        listNamespacedPod: mockListPods,
-      } as unknown as k8s.CoreV1Api;
-
-      const result = await fetchPlatformPodTolerations(mockK8sApi, "test-ns");
-
-      expect(result).toBeNull();
-      expect(mockListPods).toHaveBeenCalledWith({
-        namespace: "test-ns",
-        labelSelector: "app.kubernetes.io/name=archestra-platform",
-      });
-    } finally {
-      process.env.POD_NAME = originalPodName;
-      process.env.HOSTNAME = originalHostname;
-      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
-        originalConfig;
-    }
-  });
-
-  test("uses HOSTNAME as fallback when running in-cluster", async () => {
-    const originalConfig =
-      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
-    const originalPodName = process.env.POD_NAME;
-    const originalHostname = process.env.HOSTNAME;
-
-    try {
-      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
-      delete process.env.POD_NAME;
-      process.env.HOSTNAME = "archestra-platform-xyz789";
-
-      const mockReadPod = vi.fn().mockResolvedValue({
+      readNamespacedPod: vi.fn().mockResolvedValue({
         spec: {
+          nodeSelector: { "karpenter.sh/nodepool": "general-purpose" },
           tolerations: [
             {
               key: "dedicated",
@@ -3808,108 +3720,10 @@ describe("fetchPlatformPodTolerations", () => {
             },
           ],
         },
-      });
-
-      const mockK8sApi = {
-        readNamespacedPod: mockReadPod,
-      } as unknown as k8s.CoreV1Api;
-
-      const result = await fetchPlatformPodTolerations(mockK8sApi, "test-ns");
-
-      expect(result).toEqual([
-        {
-          key: "dedicated",
-          operator: "Equal",
-          value: "platform",
-          effect: "NoSchedule",
-        },
-      ]);
-      expect(mockReadPod).toHaveBeenCalledWith({
-        name: "archestra-platform-xyz789",
-        namespace: "test-ns",
-      });
-    } finally {
-      process.env.POD_NAME = originalPodName;
-      process.env.HOSTNAME = originalHostname;
-      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
-        originalConfig;
-    }
-  });
-
-  test("returns null when pod has no tolerations", async () => {
-    const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "archestra-platform-no-tolerations";
-
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        containers: [{ name: "archestra" }],
-        // No tolerations
-      },
-    });
-
-    const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
+      }),
     } as unknown as k8s.CoreV1Api;
 
     const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
-
-    expect(result).toBeNull();
-
-    process.env.POD_NAME = originalPodName;
-  });
-
-  test("returns null when pod has empty tolerations array", async () => {
-    const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "archestra-platform-empty-tol";
-
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        tolerations: [],
-      },
-    });
-
-    const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
-    } as unknown as k8s.CoreV1Api;
-
-    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
-
-    expect(result).toBeNull();
-
-    process.env.POD_NAME = originalPodName;
-  });
-
-  test("falls back to label selector when POD_NAME/HOSTNAME not set", async () => {
-    const originalPodName = process.env.POD_NAME;
-    const originalHostname = process.env.HOSTNAME;
-    delete process.env.POD_NAME;
-    delete process.env.HOSTNAME;
-
-    const mockListPods = vi.fn().mockResolvedValue({
-      items: [
-        {
-          metadata: { name: "archestra-platform-abc" },
-          status: { phase: "Running" },
-          spec: {
-            tolerations: [
-              {
-                key: "dedicated",
-                operator: "Equal",
-                value: "platform",
-                effect: "NoSchedule",
-              },
-            ],
-          },
-        },
-      ],
-    });
-
-    const mockK8sApi = {
-      listNamespacedPod: mockListPods,
-    } as unknown as k8s.CoreV1Api;
-
-    const result = await fetchPlatformPodTolerations(mockK8sApi, "archestra");
-
     expect(result).toEqual([
       {
         key: "dedicated",
@@ -3919,194 +3733,37 @@ describe("fetchPlatformPodTolerations", () => {
       },
     ]);
 
-    expect(mockListPods).toHaveBeenCalledWith({
-      namespace: "archestra",
-      labelSelector: "app.kubernetes.io/name=archestra-platform",
-    });
-
     process.env.POD_NAME = originalPodName;
-    process.env.HOSTNAME = originalHostname;
   });
 
-  test("returns null when no platform pods found via label selector", async () => {
+  test("returns null when pod has empty tolerations array", async () => {
     const originalPodName = process.env.POD_NAME;
-    const originalHostname = process.env.HOSTNAME;
-    delete process.env.POD_NAME;
-    delete process.env.HOSTNAME;
-
-    const mockListPods = vi.fn().mockResolvedValue({
-      items: [],
-    });
+    process.env.POD_NAME = "archestra-platform-empty-tol";
 
     const mockK8sApi = {
-      listNamespacedPod: mockListPods,
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: { tolerations: [] },
+      }),
     } as unknown as k8s.CoreV1Api;
 
     const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
-
     expect(result).toBeNull();
 
     process.env.POD_NAME = originalPodName;
-    process.env.HOSTNAME = originalHostname;
   });
 
-  test("caches result after first call", async () => {
+  test("returns null when pod has no tolerations", async () => {
     const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "archestra-platform-cached";
-
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        tolerations: [
-          {
-            key: "cached",
-            operator: "Equal",
-            value: "toleration",
-            effect: "NoSchedule",
-          },
-        ],
-      },
-    });
+    process.env.POD_NAME = "archestra-platform-no-tol";
 
     const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
-    } as unknown as k8s.CoreV1Api;
-
-    // First call
-    const result1 = await fetchPlatformPodTolerations(mockK8sApi, "default");
-    expect(result1).toEqual([
-      {
-        key: "cached",
-        operator: "Equal",
-        value: "toleration",
-        effect: "NoSchedule",
-      },
-    ]);
-    expect(mockReadPod).toHaveBeenCalledTimes(1);
-
-    // Second call should return cached value without API call
-    const result2 = await fetchPlatformPodTolerations(mockK8sApi, "default");
-    expect(result2).toEqual([
-      {
-        key: "cached",
-        operator: "Equal",
-        value: "toleration",
-        effect: "NoSchedule",
-      },
-    ]);
-    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only called once
-
-    process.env.POD_NAME = originalPodName;
-  });
-
-  test("returns null and caches on API error", async () => {
-    const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "archestra-platform-error";
-
-    const mockReadPod = vi
-      .fn()
-      .mockRejectedValue(new Error("API connection failed"));
-
-    const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: { containers: [{ name: "archestra" }] },
+      }),
     } as unknown as k8s.CoreV1Api;
 
     const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
-
     expect(result).toBeNull();
-
-    // Subsequent calls should return cached null without API call
-    const result2 = await fetchPlatformPodTolerations(mockK8sApi, "default");
-    expect(result2).toBeNull();
-    expect(mockReadPod).toHaveBeenCalledTimes(1);
-
-    process.env.POD_NAME = originalPodName;
-  });
-});
-
-describe("getCachedPlatformTolerations", () => {
-  test.beforeEach(() => {
-    resetPlatformTolerationsCache();
-  });
-
-  test("returns null before any fetch", () => {
-    expect(getCachedPlatformTolerations()).toBeNull();
-  });
-
-  test("returns cached value after fetch", async () => {
-    const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "test-pod";
-
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        tolerations: [
-          {
-            key: "test-key",
-            operator: "Equal",
-            value: "test-value",
-            effect: "NoSchedule",
-          },
-        ],
-      },
-    });
-
-    const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
-    } as unknown as k8s.CoreV1Api;
-
-    await fetchPlatformPodTolerations(mockK8sApi, "default");
-
-    expect(getCachedPlatformTolerations()).toEqual([
-      {
-        key: "test-key",
-        operator: "Equal",
-        value: "test-value",
-        effect: "NoSchedule",
-      },
-    ]);
-
-    process.env.POD_NAME = originalPodName;
-  });
-});
-
-describe("resetPlatformTolerationsCache", () => {
-  test.beforeEach(() => {
-    resetPlatformTolerationsCache();
-  });
-
-  test("clears the cached tolerations", async () => {
-    const originalPodName = process.env.POD_NAME;
-    process.env.POD_NAME = "test-pod";
-
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        tolerations: [
-          {
-            key: "before-reset",
-            operator: "Equal",
-            value: "value",
-            effect: "NoSchedule",
-          },
-        ],
-      },
-    });
-
-    const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
-    } as unknown as k8s.CoreV1Api;
-
-    await fetchPlatformPodTolerations(mockK8sApi, "default");
-    expect(getCachedPlatformTolerations()).toEqual([
-      {
-        key: "before-reset",
-        operator: "Equal",
-        value: "value",
-        effect: "NoSchedule",
-      },
-    ]);
-
-    resetPlatformTolerationsCache();
-
-    expect(getCachedPlatformTolerations()).toBeNull();
 
     process.env.POD_NAME = originalPodName;
   });

@@ -32,20 +32,6 @@ interface ContainerEnvResult {
 }
 
 /**
- * Cached nodeSelector from the archestra-platform pod.
- * This is fetched once on first use and reused for all MCP server deployments.
- */
-let cachedPlatformNodeSelector: k8s.V1PodSpec["nodeSelector"] | null = null;
-let nodeSelectorFetched = false;
-
-/**
- * Cached tolerations from the archestra-platform pod.
- * This is fetched once on first use and reused for all MCP server deployments.
- */
-let cachedPlatformTolerations: k8s.V1Toleration[] | null = null;
-let tolerationsFetched = false;
-
-/**
  * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
  * K8s client errors can have either `statusCode` or `code` property set to 404.
  */
@@ -58,239 +44,140 @@ function isK8s404Error(error: unknown): boolean {
   );
 }
 
+interface PlatformPodSpecFetcher<T> {
+  fetch: (k8sApi: k8s.CoreV1Api, namespace: string) => Promise<T | null>;
+  getCached: () => T | null;
+  resetCache: () => void;
+}
+
 /**
- * Fetches the nodeSelector from the archestra-platform pod (the pod running the backend).
- * This allows MCP server deployments to inherit the same nodeSelector as the platform,
- * which is useful when targeting specific node pools (e.g., Karpenter nodepools).
- *
- * The result is cached after the first call to avoid repeated API calls.
- *
- * @param k8sApi - The Kubernetes CoreV1Api client
- * @param namespace - The namespace to search for the platform pod
- * @returns The nodeSelector from the platform pod, or null if not found/not configured
+ * Factory that creates a cached fetcher for a specific field from the archestra-platform pod spec.
+ * Encapsulates the pod lookup logic (POD_NAME → HOSTNAME fallback → label selector),
+ * caching, and error handling.
  */
-export async function fetchPlatformPodNodeSelector(
-  k8sApi: k8s.CoreV1Api,
-  namespace: string,
-): Promise<k8s.V1PodSpec["nodeSelector"] | null> {
-  // Return cached value if already fetched
-  if (nodeSelectorFetched) {
-    return cachedPlatformNodeSelector;
-  }
+function createPlatformPodSpecFetcher<T>(options: {
+  extract: (spec: k8s.V1PodSpec) => T | undefined | null;
+  label: string;
+}): PlatformPodSpecFetcher<T> {
+  let cachedValue: T | null = null;
+  let fetched = false;
 
-  try {
-    // Try to find the current pod by reading the POD_NAME environment variable
-    // which is typically set via the Kubernetes downward API.
-    // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
-    // will be the Docker container ID which won't exist as a K8s pod.
-    const podName = config.orchestrator.kubernetes
-      .loadKubeconfigFromCurrentCluster
-      ? process.env.POD_NAME || process.env.HOSTNAME
-      : process.env.POD_NAME;
-
-    if (podName) {
-      // Read the current pod's spec directly
-      const pod = await k8sApi.readNamespacedPod({
-        name: podName,
-        namespace,
-      });
-
-      cachedPlatformNodeSelector = pod.spec?.nodeSelector || null;
-      nodeSelectorFetched = true;
-
-      if (cachedPlatformNodeSelector) {
-        logger.info(
-          { nodeSelector: cachedPlatformNodeSelector },
-          "Fetched nodeSelector from archestra-platform pod",
-        );
-      } else {
-        logger.debug("Archestra-platform pod has no nodeSelector configured");
+  return {
+    async fetch(k8sApi, namespace) {
+      if (fetched) {
+        return cachedValue;
       }
 
-      return cachedPlatformNodeSelector;
-    }
+      try {
+        // Try to find the current pod by reading the POD_NAME environment variable
+        // which is typically set via the Kubernetes downward API.
+        // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
+        // will be the Docker container ID which won't exist as a K8s pod.
+        const podName = config.orchestrator.kubernetes
+          .loadKubeconfigFromCurrentCluster
+          ? process.env.POD_NAME || process.env.HOSTNAME
+          : process.env.POD_NAME;
 
-    // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
-    const pods = await k8sApi.listNamespacedPod({
-      namespace,
-      labelSelector: "app.kubernetes.io/name=archestra-platform",
-    });
+        if (podName) {
+          const pod = await k8sApi.readNamespacedPod({
+            name: podName,
+            namespace,
+          });
 
-    // Get the first running pod's nodeSelector
-    const runningPod = pods.items.find(
-      (pod) => pod.status?.phase === "Running",
-    );
+          cachedValue = pod.spec ? (options.extract(pod.spec) ?? null) : null;
+          fetched = true;
 
-    if (runningPod?.spec?.nodeSelector) {
-      cachedPlatformNodeSelector = runningPod.spec.nodeSelector;
-      nodeSelectorFetched = true;
+          if (cachedValue) {
+            logger.info(
+              { [options.label]: cachedValue },
+              `Fetched ${options.label} from archestra-platform pod`,
+            );
+          } else {
+            logger.debug(
+              `Archestra-platform pod has no ${options.label} configured`,
+            );
+          }
 
-      logger.info(
-        { nodeSelector: cachedPlatformNodeSelector },
-        "Fetched nodeSelector from archestra-platform pod (via label selector)",
-      );
+          return cachedValue;
+        }
 
-      return cachedPlatformNodeSelector;
-    }
+        // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
+        const pods = await k8sApi.listNamespacedPod({
+          namespace,
+          labelSelector: "app.kubernetes.io/name=archestra-platform",
+        });
 
-    // No nodeSelector found
-    nodeSelectorFetched = true;
-    cachedPlatformNodeSelector = null;
-
-    logger.debug(
-      "No archestra-platform pod found or no nodeSelector configured",
-    );
-
-    return null;
-  } catch (error) {
-    // Log the error but don't fail - nodeSelector inheritance is optional
-    logger.warn(
-      { err: error },
-      "Failed to fetch archestra-platform pod nodeSelector, MCP servers will use default scheduling",
-    );
-
-    nodeSelectorFetched = true;
-    cachedPlatformNodeSelector = null;
-
-    return null;
-  }
-}
-
-/**
- * Resets the cached platform nodeSelector.
- * This is primarily useful for testing.
- */
-export function resetPlatformNodeSelectorCache(): void {
-  cachedPlatformNodeSelector = null;
-  nodeSelectorFetched = false;
-}
-
-/**
- * Returns the cached platform nodeSelector without fetching.
- * This is useful for synchronous access after the initial fetch.
- */
-export function getCachedPlatformNodeSelector():
-  | k8s.V1PodSpec["nodeSelector"]
-  | null {
-  return cachedPlatformNodeSelector;
-}
-
-/**
- * Fetches the tolerations from the archestra-platform pod (the pod running the backend).
- * This allows MCP server deployments to inherit the same tolerations as the platform,
- * which is necessary for scheduling on tainted nodes (e.g., dedicated Karpenter nodepools).
- *
- * The result is cached after the first call to avoid repeated API calls.
- *
- * @param k8sApi - The Kubernetes CoreV1Api client
- * @param namespace - The namespace to search for the platform pod
- * @returns The tolerations from the platform pod, or null if not found/not configured
- */
-export async function fetchPlatformPodTolerations(
-  k8sApi: k8s.CoreV1Api,
-  namespace: string,
-): Promise<k8s.V1Toleration[] | null> {
-  // Return cached value if already fetched
-  if (tolerationsFetched) {
-    return cachedPlatformTolerations;
-  }
-
-  try {
-    // Try to find the current pod by reading the POD_NAME environment variable
-    // which is typically set via the Kubernetes downward API.
-    // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
-    // will be the Docker container ID which won't exist as a K8s pod.
-    const podName = config.orchestrator.kubernetes
-      .loadKubeconfigFromCurrentCluster
-      ? process.env.POD_NAME || process.env.HOSTNAME
-      : process.env.POD_NAME;
-
-    if (podName) {
-      // Read the current pod's spec directly
-      const pod = await k8sApi.readNamespacedPod({
-        name: podName,
-        namespace,
-      });
-
-      cachedPlatformTolerations = pod.spec?.tolerations?.length
-        ? pod.spec.tolerations
-        : null;
-      tolerationsFetched = true;
-
-      if (cachedPlatformTolerations) {
-        logger.info(
-          { tolerations: cachedPlatformTolerations },
-          "Fetched tolerations from archestra-platform pod",
+        const runningPod = pods.items.find(
+          (pod) => pod.status?.phase === "Running",
         );
-      } else {
-        logger.debug("Archestra-platform pod has no tolerations configured");
+
+        const extracted = runningPod?.spec
+          ? (options.extract(runningPod.spec) ?? null)
+          : null;
+
+        if (extracted) {
+          cachedValue = extracted;
+          fetched = true;
+
+          logger.info(
+            { [options.label]: cachedValue },
+            `Fetched ${options.label} from archestra-platform pod (via label selector)`,
+          );
+
+          return cachedValue;
+        }
+
+        fetched = true;
+        cachedValue = null;
+
+        logger.debug(
+          `No archestra-platform pod found or no ${options.label} configured`,
+        );
+
+        return null;
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          `Failed to fetch archestra-platform pod ${options.label}, MCP servers will use default scheduling`,
+        );
+
+        fetched = true;
+        cachedValue = null;
+
+        return null;
       }
+    },
 
-      return cachedPlatformTolerations;
-    }
+    getCached() {
+      return cachedValue;
+    },
 
-    // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
-    const pods = await k8sApi.listNamespacedPod({
-      namespace,
-      labelSelector: "app.kubernetes.io/name=archestra-platform",
-    });
-
-    // Get the first running pod's tolerations
-    const runningPod = pods.items.find(
-      (pod) => pod.status?.phase === "Running",
-    );
-
-    if (runningPod?.spec?.tolerations?.length) {
-      cachedPlatformTolerations = runningPod.spec.tolerations;
-      tolerationsFetched = true;
-
-      logger.info(
-        { tolerations: cachedPlatformTolerations },
-        "Fetched tolerations from archestra-platform pod (via label selector)",
-      );
-
-      return cachedPlatformTolerations;
-    }
-
-    // No tolerations found
-    tolerationsFetched = true;
-    cachedPlatformTolerations = null;
-
-    logger.debug(
-      "No archestra-platform pod found or no tolerations configured",
-    );
-
-    return null;
-  } catch (error) {
-    // Log the error but don't fail - toleration inheritance is optional
-    logger.warn(
-      { err: error },
-      "Failed to fetch archestra-platform pod tolerations, MCP servers will use default scheduling",
-    );
-
-    tolerationsFetched = true;
-    cachedPlatformTolerations = null;
-
-    return null;
-  }
+    resetCache() {
+      cachedValue = null;
+      fetched = false;
+    },
+  };
 }
 
-/**
- * Resets the cached platform tolerations.
- * This is primarily useful for testing.
- */
-export function resetPlatformTolerationsCache(): void {
-  cachedPlatformTolerations = null;
-  tolerationsFetched = false;
-}
+const nodeSelectorFetcher = createPlatformPodSpecFetcher<
+  k8s.V1PodSpec["nodeSelector"]
+>({
+  extract: (spec) => spec.nodeSelector,
+  label: "nodeSelector",
+});
 
-/**
- * Returns the cached platform tolerations without fetching.
- * This is useful for synchronous access after the initial fetch.
- */
-export function getCachedPlatformTolerations(): k8s.V1Toleration[] | null {
-  return cachedPlatformTolerations;
-}
+const tolerationsFetcher = createPlatformPodSpecFetcher<k8s.V1Toleration[]>({
+  extract: (spec) => (spec.tolerations?.length ? spec.tolerations : null),
+  label: "tolerations",
+});
+
+export const fetchPlatformPodNodeSelector = nodeSelectorFetcher.fetch;
+export const getCachedPlatformNodeSelector = nodeSelectorFetcher.getCached;
+export const resetPlatformNodeSelectorCache = nodeSelectorFetcher.resetCache;
+
+export const fetchPlatformPodTolerations = tolerationsFetcher.fetch;
+export const getCachedPlatformTolerations = tolerationsFetcher.getCached;
+export const resetPlatformTolerationsCache = tolerationsFetcher.resetCache;
 
 /**
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.

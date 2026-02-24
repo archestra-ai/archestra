@@ -45,7 +45,12 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
-    };
+      // imagePullSecrets is added to the schema but API types haven't been regenerated yet
+      imagePullSecrets:
+        values.localConfig.imagePullSecrets?.filter(
+          (s) => s.name.trim().length > 0,
+        ) || undefined,
+    } as typeof data.localConfig;
 
     // BYOS: Include local config vault path and key if set
     if (values.localConfigVaultPath && values.localConfigVaultKey) {
@@ -208,6 +213,7 @@ export function transformCatalogItemToFormValues(
         httpPort?: string;
         httpPath?: string;
         serviceAccount?: string;
+        imagePullSecrets?: Array<{ name: string }>;
       }
     | undefined;
   if (item.localConfig) {
@@ -241,6 +247,12 @@ export function transformCatalogItemToFormValues(
         return envVar;
       }) || [];
 
+    // Cast to access imagePullSecrets (schema updated, API types not yet regenerated)
+    const localConfigWithSecrets =
+      item.localConfig as typeof item.localConfig & {
+        imagePullSecrets?: Array<{ name: string }>;
+      };
+
     localConfig = {
       command: item.localConfig.command || "",
       arguments: argumentsString,
@@ -250,6 +262,7 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
+      imagePullSecrets: localConfigWithSecrets.imagePullSecrets || [],
     };
   }
 

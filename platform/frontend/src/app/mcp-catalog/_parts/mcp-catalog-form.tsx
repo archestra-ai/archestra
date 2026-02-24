@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { AlertCircle, ChevronRight } from "lucide-react";
+import { AlertCircle, ChevronRight, Plus, X } from "lucide-react";
 import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/agent-labels";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -99,6 +100,7 @@ export function McpCatalogForm({
             httpPort: "",
             httpPath: "/mcp",
             serviceAccount: "",
+            imagePullSecrets: [],
           },
         },
   });
@@ -129,6 +131,16 @@ export function McpCatalogForm({
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
+  });
+
+  // Use field array for imagePullSecrets
+  const {
+    fields: imagePullSecretFields,
+    append: appendImagePullSecret,
+    remove: removeImagePullSecret,
+  } = useFieldArray({
+    control: form.control,
+    name: "localConfig.imagePullSecrets",
   });
 
   // Update form values when BYOS paths/keys change
@@ -422,6 +434,77 @@ export function McpCatalogForm({
                   />
                 </>
               )}
+
+              <div className="space-y-2">
+                <Label>Image Pull Secrets</Label>
+                <p className="text-sm text-muted-foreground">
+                  Kubernetes secrets for pulling container images from private
+                  registries.{" "}
+                  <a
+                    href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                  >
+                    Learn more
+                  </a>
+                </p>
+                {imagePullSecretFields.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {imagePullSecretFields.map((field, index) => (
+                      <div
+                        key={field.id}
+                        className="flex items-center gap-1 bg-muted rounded-md px-2 py-1 text-sm"
+                      >
+                        <span className="font-mono">{field.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeImagePullSecret(index)}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="secret-name"
+                    className="font-mono"
+                    id="new-image-pull-secret"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const input = e.currentTarget;
+                        const value = input.value.trim();
+                        if (value) {
+                          appendImagePullSecret({ name: value });
+                          input.value = "";
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const input = document.getElementById(
+                        "new-image-pull-secret",
+                      ) as HTMLInputElement;
+                      const value = input?.value.trim();
+                      if (value) {
+                        appendImagePullSecret({ name: value });
+                        input.value = "";
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+              </div>
             </>
           )}
         </div>

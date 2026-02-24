@@ -5,6 +5,7 @@ import {
   ClientWebSocketMessageSchema,
   type ClientWebSocketMessageType,
   MCP_DEFAULT_LOG_LINES,
+  type McpDeploymentStatusEntry,
   type ServerWebSocketMessage,
 } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
@@ -26,6 +27,11 @@ interface McpLogsSubscription {
   abortController: AbortController;
 }
 
+interface McpDeploymentStatusSubscription {
+  interval: NodeJS.Timeout;
+  lastStatuses: Record<string, McpDeploymentStatusEntry>;
+}
+
 interface WebSocketClientContext {
   userId: string;
   organizationId: string;
@@ -42,6 +48,10 @@ type MessageHandler = (
 class WebSocketService {
   private wss: WebSocketServer | null = null;
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
+  private mcpDeploymentStatusSubscriptions: Map<
+    WebSocket,
+    McpDeploymentStatusSubscription
+  > = new Map();
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
 
@@ -86,6 +96,12 @@ class WebSocketService {
     },
     unsubscribe_mcp_logs: (ws) => {
       this.unsubscribeMcpLogs(ws);
+    },
+    subscribe_mcp_deployment_statuses: (ws, _message, clientContext) => {
+      return this.handleSubscribeMcpDeploymentStatuses(ws, clientContext);
+    },
+    unsubscribe_mcp_deployment_statuses: (ws) => {
+      this.unsubscribeMcpDeploymentStatuses(ws);
     },
   };
 
@@ -156,6 +172,7 @@ class WebSocketService {
 
         ws.on("close", () => {
           this.unsubscribeMcpLogs(ws);
+          this.unsubscribeMcpDeploymentStatuses(ws);
           logger.info(
             `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
           );
@@ -165,6 +182,7 @@ class WebSocketService {
         ws.on("error", (error) => {
           logger.error({ error }, "WebSocket error");
           this.unsubscribeMcpLogs(ws);
+          this.unsubscribeMcpDeploymentStatuses(ws);
           this.clientContexts.delete(ws);
         });
       },
@@ -343,6 +361,118 @@ class WebSocketService {
     }
   }
 
+  private async handleSubscribeMcpDeploymentStatuses(
+    ws: WebSocket,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    // Unsubscribe from any existing subscription first
+    this.unsubscribeMcpDeploymentStatuses(ws);
+
+    // Get accessible servers for this user
+    const allServers = await McpServerModel.findAll(
+      clientContext.userId,
+      clientContext.userIsMcpServerAdmin,
+    );
+
+    // Filter to local servers only (remote servers don't have K8s deployments)
+    const localServerIds = allServers
+      .filter((s) => s.serverType === "local")
+      .map((s) => s.id);
+
+    // Build initial statuses from the runtime manager
+    const statuses: Record<string, McpDeploymentStatusEntry> = {};
+    const runtimeSummary = McpServerRuntimeManager.statusSummary;
+
+    for (const serverId of localServerIds) {
+      const deploymentStatus = runtimeSummary.mcpServers[serverId];
+      if (deploymentStatus) {
+        statuses[serverId] = {
+          state: deploymentStatus.state,
+          message: deploymentStatus.message,
+          error: deploymentStatus.error,
+        };
+      } else {
+        statuses[serverId] = {
+          state: "not_created",
+          message: "Deployment not created",
+          error: null,
+        };
+      }
+    }
+
+    // Send initial statuses
+    this.sendToClient(ws, {
+      type: "mcp_deployment_statuses",
+      payload: { statuses },
+    });
+
+    // Store subscription with initial statuses for change detection
+    const lastStatuses = { ...statuses };
+
+    // Start polling interval (10s)
+    const interval = setInterval(async () => {
+      if (ws.readyState !== WS.OPEN) {
+        this.unsubscribeMcpDeploymentStatuses(ws);
+        return;
+      }
+
+      try {
+        const currentSummary = McpServerRuntimeManager.statusSummary;
+        const currentStatuses: Record<string, McpDeploymentStatusEntry> = {};
+
+        for (const serverId of localServerIds) {
+          const deploymentStatus = currentSummary.mcpServers[serverId];
+          if (deploymentStatus) {
+            currentStatuses[serverId] = {
+              state: deploymentStatus.state,
+              message: deploymentStatus.message,
+              error: deploymentStatus.error,
+            };
+          } else {
+            currentStatuses[serverId] = {
+              state: "not_created",
+              message: "Deployment not created",
+              error: null,
+            };
+          }
+        }
+
+        // Only send if statuses changed
+        const sub = this.mcpDeploymentStatusSubscriptions.get(ws);
+        if (!sub) return;
+
+        const changed =
+          JSON.stringify(currentStatuses) !== JSON.stringify(sub.lastStatuses);
+
+        if (changed) {
+          sub.lastStatuses = { ...currentStatuses };
+          this.sendToClient(ws, {
+            type: "mcp_deployment_statuses",
+            payload: { statuses: currentStatuses },
+          });
+        }
+      } catch (error) {
+        logger.error({ error }, "Failed to poll MCP deployment statuses");
+      }
+    }, 10_000);
+
+    this.mcpDeploymentStatusSubscriptions.set(ws, {
+      interval,
+      lastStatuses,
+    });
+
+    logger.info("MCP deployment status client subscribed");
+  }
+
+  private unsubscribeMcpDeploymentStatuses(ws: WebSocket): void {
+    const subscription = this.mcpDeploymentStatusSubscriptions.get(ws);
+    if (subscription) {
+      clearInterval(subscription.interval);
+      this.mcpDeploymentStatusSubscriptions.delete(ws);
+      logger.info("MCP deployment status client unsubscribed");
+    }
+  }
+
   private sendToClient(ws: WebSocket, message: ServerWebSocketMessage): void {
     if (ws.readyState === WS.OPEN) {
       ws.send(JSON.stringify(message));
@@ -406,6 +536,9 @@ class WebSocketService {
   stop() {
     for (const [ws] of this.mcpLogsSubscriptions) {
       this.unsubscribeMcpLogs(ws);
+    }
+    for (const [ws] of this.mcpDeploymentStatusSubscriptions) {
+      this.unsubscribeMcpDeploymentStatuses(ws);
     }
     this.clientContexts.clear();
 

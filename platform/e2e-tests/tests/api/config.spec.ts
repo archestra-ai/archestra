@@ -38,5 +38,4 @@ test.describe("Config endpoint", () => {
       expect(urls).toHaveProperty(provider);
     }
   });
-
 });

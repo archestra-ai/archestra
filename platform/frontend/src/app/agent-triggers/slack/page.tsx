@@ -120,7 +120,8 @@ export default function SlackPage() {
               <span className="text-sm">
                 WebSocket{" "}
                 <span className="text-muted-foreground">
-                  — Archestra exchanges WebSocket messages with Slack, no public URL needed
+                  — Archestra exchanges WebSocket messages with Slack, no public
+                  URL needed
                 </span>
               </span>
             </label>
@@ -130,7 +131,8 @@ export default function SlackPage() {
               <span className="text-sm">
                 Webhook{" "}
                 <span className="text-muted-foreground">
-                  — Slack makes HTTP requests to Archestra, requires a public URL
+                  — Slack makes HTTP requests to Archestra, requires a public
+                  URL
                 </span>
               </span>
             </label>

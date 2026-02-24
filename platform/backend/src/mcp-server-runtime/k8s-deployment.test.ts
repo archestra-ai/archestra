@@ -2380,9 +2380,7 @@ spec:
     let yaml = yamlString;
     if (yamlNodeSelector || yamlTolerations) {
       const lines = yaml.split("\n");
-      const specInsertIndex = lines.findIndex((l) =>
-        l.includes("containers:"),
-      );
+      const specInsertIndex = lines.findIndex((l) => l.includes("containers:"));
       const insertions: string[] = [];
       if (yamlNodeSelector) {
         insertions.push("      nodeSelector:");
@@ -3885,6 +3883,52 @@ describe("createPlatformPodSpecFetcher (shared pod-lookup logic)", () => {
     resetPlatformNodeSelectorCache();
 
     expect(getCachedPlatformNodeSelector()).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("both fetchers share a single pod API call", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-shared";
+
+    // Reset both caches to ensure clean state
+    resetPlatformNodeSelectorCache();
+    resetPlatformTolerationsCache();
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: { "karpenter.sh/nodepool": "shared-pool" },
+        tolerations: [
+          {
+            key: "dedicated",
+            operator: "Equal",
+            value: "platform",
+            effect: "NoSchedule",
+          },
+        ],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    // Fetch nodeSelector first — triggers the shared pod lookup
+    const ns = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(ns).toEqual({ "karpenter.sh/nodepool": "shared-pool" });
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
+
+    // Fetch tolerations — should reuse the cached pod spec, no additional API call
+    const tol = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(tol).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only one call
 
     process.env.POD_NAME = originalPodName;
   });

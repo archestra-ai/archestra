@@ -44,6 +44,79 @@ function isK8s404Error(error: unknown): boolean {
   );
 }
 
+/**
+ * Shared cache for the archestra-platform pod spec.
+ * Both nodeSelector and tolerations fetchers read from this cache,
+ * so only one API call is made regardless of how many fields are extracted.
+ */
+let platformPodSpecCache: {
+  fetched: boolean;
+  spec: k8s.V1PodSpec | null;
+} = { fetched: false, spec: null };
+
+/**
+ * Fetches and caches the archestra-platform pod spec.
+ * Uses POD_NAME → HOSTNAME fallback → label selector lookup strategy.
+ * Only makes one API call; subsequent calls return the cached spec.
+ */
+async function fetchPlatformPodSpec(
+  k8sApi: k8s.CoreV1Api,
+  namespace: string,
+): Promise<k8s.V1PodSpec | null> {
+  if (platformPodSpecCache.fetched) {
+    return platformPodSpecCache.spec;
+  }
+
+  try {
+    // Try to find the current pod by reading the POD_NAME environment variable
+    // which is typically set via the Kubernetes downward API.
+    // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
+    // will be the Docker container ID which won't exist as a K8s pod.
+    const podName = config.orchestrator.kubernetes
+      .loadKubeconfigFromCurrentCluster
+      ? process.env.POD_NAME || process.env.HOSTNAME
+      : process.env.POD_NAME;
+
+    if (podName) {
+      const pod = await k8sApi.readNamespacedPod({
+        name: podName,
+        namespace,
+      });
+
+      platformPodSpecCache = { fetched: true, spec: pod.spec ?? null };
+      return platformPodSpecCache.spec;
+    }
+
+    // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
+    const pods = await k8sApi.listNamespacedPod({
+      namespace,
+      labelSelector: "app.kubernetes.io/name=archestra-platform",
+    });
+
+    const runningPod = pods.items.find(
+      (pod) => pod.status?.phase === "Running",
+    );
+
+    platformPodSpecCache = {
+      fetched: true,
+      spec: runningPod?.spec ?? null,
+    };
+    return platformPodSpecCache.spec;
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "Failed to fetch archestra-platform pod spec, MCP servers will use default scheduling",
+    );
+
+    platformPodSpecCache = { fetched: true, spec: null };
+    return null;
+  }
+}
+
+export function resetPlatformPodSpecCache(): void {
+  platformPodSpecCache = { fetched: false, spec: null };
+}
+
 interface PlatformPodSpecFetcher<T> {
   fetch: (k8sApi: k8s.CoreV1Api, namespace: string) => Promise<T | null>;
   getCached: () => T | null;
@@ -52,100 +125,38 @@ interface PlatformPodSpecFetcher<T> {
 
 /**
  * Factory that creates a cached fetcher for a specific field from the archestra-platform pod spec.
- * Encapsulates the pod lookup logic (POD_NAME → HOSTNAME fallback → label selector),
- * caching, and error handling.
+ * All fetchers share the same underlying pod spec cache, so only one API call is made.
  */
 function createPlatformPodSpecFetcher<T>(options: {
   extract: (spec: k8s.V1PodSpec) => T | undefined | null;
   label: string;
 }): PlatformPodSpecFetcher<T> {
   let cachedValue: T | null = null;
-  let fetched = false;
+  let extracted = false;
 
   return {
     async fetch(k8sApi, namespace) {
-      if (fetched) {
+      if (extracted) {
         return cachedValue;
       }
 
-      try {
-        // Try to find the current pod by reading the POD_NAME environment variable
-        // which is typically set via the Kubernetes downward API.
-        // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
-        // will be the Docker container ID which won't exist as a K8s pod.
-        const podName = config.orchestrator.kubernetes
-          .loadKubeconfigFromCurrentCluster
-          ? process.env.POD_NAME || process.env.HOSTNAME
-          : process.env.POD_NAME;
+      const spec = await fetchPlatformPodSpec(k8sApi, namespace);
 
-        if (podName) {
-          const pod = await k8sApi.readNamespacedPod({
-            name: podName,
-            namespace,
-          });
+      cachedValue = spec ? (options.extract(spec) ?? null) : null;
+      extracted = true;
 
-          cachedValue = pod.spec ? (options.extract(pod.spec) ?? null) : null;
-          fetched = true;
-
-          if (cachedValue) {
-            logger.info(
-              { [options.label]: cachedValue },
-              `Fetched ${options.label} from archestra-platform pod`,
-            );
-          } else {
-            logger.debug(
-              `Archestra-platform pod has no ${options.label} configured`,
-            );
-          }
-
-          return cachedValue;
-        }
-
-        // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
-        const pods = await k8sApi.listNamespacedPod({
-          namespace,
-          labelSelector: "app.kubernetes.io/name=archestra-platform",
-        });
-
-        const runningPod = pods.items.find(
-          (pod) => pod.status?.phase === "Running",
+      if (cachedValue) {
+        logger.info(
+          { [options.label]: cachedValue },
+          `Inherited ${options.label} from archestra-platform pod`,
         );
-
-        const extracted = runningPod?.spec
-          ? (options.extract(runningPod.spec) ?? null)
-          : null;
-
-        if (extracted) {
-          cachedValue = extracted;
-          fetched = true;
-
-          logger.info(
-            { [options.label]: cachedValue },
-            `Fetched ${options.label} from archestra-platform pod (via label selector)`,
-          );
-
-          return cachedValue;
-        }
-
-        fetched = true;
-        cachedValue = null;
-
+      } else {
         logger.debug(
-          `No archestra-platform pod found or no ${options.label} configured`,
+          `Archestra-platform pod has no ${options.label} configured`,
         );
-
-        return null;
-      } catch (error) {
-        logger.warn(
-          { err: error },
-          `Failed to fetch archestra-platform pod ${options.label}, MCP servers will use default scheduling`,
-        );
-
-        fetched = true;
-        cachedValue = null;
-
-        return null;
       }
+
+      return cachedValue;
     },
 
     getCached() {
@@ -154,7 +165,8 @@ function createPlatformPodSpecFetcher<T>(options: {
 
     resetCache() {
       cachedValue = null;
-      fetched = false;
+      extracted = false;
+      resetPlatformPodSpecCache();
     },
   };
 }

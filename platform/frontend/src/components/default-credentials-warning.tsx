@@ -1,6 +1,7 @@
 "use client";
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
@@ -8,10 +9,10 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 
 export function DefaultCredentialsWarning({
   alwaysShow = false,
-  showCopyButtons = true,
+  slim = false,
 }: {
   alwaysShow?: boolean;
-  showCopyButtons?: boolean;
+  slim?: boolean;
 }) {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
@@ -33,6 +34,28 @@ export function DefaultCredentialsWarning({
     return null;
   }
 
+  if (slim) {
+    return (
+      <div className="rounded-lg border bg-card px-3 py-1.5 text-xs text-destructive">
+        <p className="flex items-center gap-1.5 whitespace-nowrap">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            Default credentials
+            {" - "}
+            <a
+              href="https://archestra.ai/docs/platform-deployment#authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              Fix
+            </a>
+          </span>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <Alert variant="destructive" className="text-xs">
       <AlertTitle className="text-xs font-semibold">
@@ -40,35 +63,24 @@ export function DefaultCredentialsWarning({
       </AlertTitle>
       <AlertDescription className="text-xs mt-1">
         <div className="space-y-1">
-          {showCopyButtons ? (
-            <>
-              <div className="flex items-center gap-1">
-                <code className="break-all">- {DEFAULT_ADMIN_EMAIL}</code>
-                <CopyButton
-                  text={DEFAULT_ADMIN_EMAIL}
-                  className="h-4 w-4 hover:bg-transparent"
-                  size={10}
-                  behavior="text"
-                />
-              </div>
-              <div className="flex items-center gap-1">
-                <code className="break-all">- {DEFAULT_ADMIN_PASSWORD}</code>
-                <CopyButton
-                  text={DEFAULT_ADMIN_PASSWORD}
-                  className="h-4 w-4 hover:bg-transparent"
-                  size={10}
-                  behavior="text"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <code className="break-all block">- {DEFAULT_ADMIN_EMAIL}</code>
-              <code className="break-all block">
-                - {DEFAULT_ADMIN_PASSWORD}
-              </code>
-            </>
-          )}
+          <div className="flex items-center gap-1">
+            <code className="break-all">- {DEFAULT_ADMIN_EMAIL}</code>
+            <CopyButton
+              text={DEFAULT_ADMIN_EMAIL}
+              className="h-4 w-4 hover:bg-transparent"
+              size={10}
+              behavior="text"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <code className="break-all">- {DEFAULT_ADMIN_PASSWORD}</code>
+            <CopyButton
+              text={DEFAULT_ADMIN_PASSWORD}
+              className="h-4 w-4 hover:bg-transparent"
+              size={10}
+              behavior="text"
+            />
+          </div>
         </div>
         <p className="mt-1">
           <a

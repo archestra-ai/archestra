@@ -636,10 +636,7 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
-  async setTypingStatus(
-    channelId: string,
-    threadTs: string,
-  ): Promise<void> {
+  async setTypingStatus(channelId: string, threadTs: string): Promise<void> {
     if (!this.client) return;
     try {
       await this.client.assistant.threads.setStatus({

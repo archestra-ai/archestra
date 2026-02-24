@@ -118,7 +118,9 @@ export default function SlackPage() {
             <label className="flex items-start gap-2 cursor-pointer">
               <RadioGroupItem value="socket" className="mt-1" />
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">WebSocket</span>
+                <span className="text-sm font-medium text-foreground">
+                  WebSocket
+                </span>
                 <span className="text-xs text-muted-foreground">
                   Archestra exchanges WebSocket messages with Slack, no public
                   URL needed
@@ -129,7 +131,9 @@ export default function SlackPage() {
             <label className="flex items-start gap-2 cursor-pointer">
               <RadioGroupItem value="webhook" className="mt-1" />
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">Webhook</span>
+                <span className="text-sm font-medium text-foreground">
+                  Webhook
+                </span>
                 <span className="text-xs text-muted-foreground">
                   Slack makes HTTP requests to Archestra, requires a public URL
                 </span>

@@ -266,26 +266,27 @@ export function McpServerCard({
 
   // JSX parts - Action buttons for Edit and Logs
   const actionButtons = (
-    <div className="flex gap-1 mb-2">
+    <div className="flex gap-1">
       <Button
         variant="outline"
         size="sm"
-        className="flex-1 h-8 text-xs"
+        className="flex-1 h-8"
         onClick={onEdit}
       >
         <Pencil className="h-3 w-3 mr-1" />
         Edit
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1 h-8 text-xs"
-        onClick={() => setIsLogsDialogOpen(true)}
-        disabled={!isLogsAvailable}
-      >
-        <FileText className="h-3 w-3 mr-1" />
-        Logs
-      </Button>
+      {isLogsAvailable && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 h-8"
+          onClick={() => setIsLogsDialogOpen(true)}
+        >
+          <FileText className="h-3 w-3 mr-1" />
+          Logs
+        </Button>
+      )}
     </div>
   );
 
@@ -502,7 +503,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {usersAuthenticated}
           </div>
@@ -527,8 +528,9 @@ export function McpServerCard({
             Reconnect Required
           </PermissionButton>
         )}
-      {/* Spacer + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      <div className="mt-auto flex flex-col gap-2">
+        {userIsMcpServerAdmin && actionButtons}
         {!isInstalling && (
           <TooltipProvider>
             <Tooltip>
@@ -565,7 +567,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {localServersInstalled}
           </div>
@@ -588,8 +590,9 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      <div className="mt-auto flex flex-col gap-2">
+        {userIsMcpServerAdmin && actionButtons}
         {/* Show Connect button when user can create new installation */}
         {!isInstalling && (
           <TooltipProvider>
@@ -645,7 +648,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {localServersInstalled}
           </div>
@@ -668,8 +671,9 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + Connect/Uninstall button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
+      <div className="mt-auto flex flex-col gap-2">
+        {userIsMcpServerAdmin && actionButtons}
         {!isInstalling && isCurrentUserAuthenticated && installedServer && (
           <Button
             variant="outline"
@@ -736,7 +740,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
@@ -785,10 +789,10 @@ export function McpServerCard({
 
   return (
     <Card
-      className="flex flex-col relative pt-4 h-full"
+      className="flex flex-col relative pt-4 gap-4 h-full"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
-      <CardHeader>
+      <CardHeader className="gap-0">
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div
@@ -833,8 +837,7 @@ export function McpServerCard({
           {userIsMcpServerAdmin && manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 flex-grow">
-        {userIsMcpServerAdmin && !isBuiltinVariant && actionButtons}
+      <CardContent className="flex flex-col gap-4 flex-grow">
         {isBuiltinVariant
           ? builtinCardContent
           : isPlaywrightVariant

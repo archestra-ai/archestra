@@ -31,6 +31,10 @@ class ConversationModel {
 
     // Disable Archestra tools by default for new conversations (except todo_write and artifact_write)
     // Get all tools assigned to the agent (profile tools)
+    // Note: agentId is required for creating conversations but nullable in schema for deleted agents
+    if (!data.agentId) {
+      throw new Error("agentId is required when creating a conversation");
+    }
     const agentTools = await ToolModel.getToolsByAgent(data.agentId);
 
     // Get agent delegation tools
@@ -165,7 +169,7 @@ class ConversationModel {
           },
         })
         .from(schema.conversationsTable)
-        .innerJoin(
+        .leftJoin(
           schema.agentsTable,
           eq(schema.conversationsTable.agentId, schema.agentsTable.id),
         )
@@ -249,7 +253,7 @@ class ConversationModel {
           },
         })
         .from(schema.conversationsTable)
-        .innerJoin(
+        .leftJoin(
           schema.agentsTable,
           eq(schema.conversationsTable.agentId, schema.agentsTable.id),
         )
@@ -287,7 +291,7 @@ class ConversationModel {
         },
       })
       .from(schema.conversationsTable)
-      .innerJoin(
+      .leftJoin(
         schema.agentsTable,
         eq(schema.conversationsTable.agentId, schema.agentsTable.id),
       )

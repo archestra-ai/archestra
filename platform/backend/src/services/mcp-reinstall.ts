@@ -103,6 +103,28 @@ export async function autoReinstallServer(
     "Starting auto-reinstall of MCP server",
   );
 
+  // Reconstruct the correct server name from the current catalog name.
+  const reconstructedName = McpServerModel.constructServerName({
+    baseName: catalogItem.name,
+    serverType: server.serverType,
+    ownerId: server.ownerId,
+    teamId: server.teamId,
+  });
+
+  // Update server name in DB BEFORE restart so the new K8s deployment
+  // gets the correct name. restartServer reads from DB to create the new deployment.
+  if (reconstructedName !== server.name) {
+    logger.info(
+      {
+        serverId: server.id,
+        oldName: server.name,
+        newName: reconstructedName,
+      },
+      "Updating server name to match catalog name",
+    );
+    await McpServerModel.update(server.id, { name: reconstructedName });
+  }
+
   // For local servers: restart K8s deployment
   if (catalogItem.serverType === "local") {
     await McpServerRuntimeManager.restartServer(server.id);
@@ -136,7 +158,7 @@ export async function autoReinstallServer(
   logger.info(
     {
       serverId: server.id,
-      serverName: server.name,
+      serverName: reconstructedName,
       created: syncResult.created.length,
       updated: syncResult.updated.length,
       unchanged: syncResult.unchanged.length,
@@ -145,9 +167,8 @@ export async function autoReinstallServer(
     "Auto-reinstall completed - tools synced",
   );
 
-  // Update server name to match catalog name and clear reinstall flag
+  // Clear reinstall flag
   await McpServerModel.update(server.id, {
-    name: catalogItem.name,
     reinstallRequired: false,
   });
 }

@@ -111,7 +111,7 @@ export class DynamicInteraction implements InteractionUtils {
   private interaction: Interaction;
 
   id: string;
-  profileId: string;
+  profileId: string | null;
   externalAgentId: string | null;
   executionId: string | null;
   type: Interaction["type"];

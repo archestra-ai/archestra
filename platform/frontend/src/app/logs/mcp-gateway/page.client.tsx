@@ -237,13 +237,24 @@ function McpToolCallsTable({
       id: "agent",
       accessorFn: (row) => {
         const agent = agents?.find((a) => a.id === row.agentId);
-        return agent?.name ?? "Unknown";
+        return (
+          agent?.name ??
+          (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
+        );
       },
       header: "MCP Gateway",
       cell: ({ row }) => {
         const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
-          <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
+          <TruncatedText
+            message={
+              agent?.name ??
+              (row.original.agentId === null
+                ? "Deleted MCP Gateway"
+                : "Unknown")
+            }
+            maxLength={30}
+          />
         );
       },
     },

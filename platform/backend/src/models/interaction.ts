@@ -450,6 +450,10 @@ class InteractionModel {
 
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
+      // If profileId is null (agent was deleted), only admins can see the interaction
+      if (!interaction.profileId) {
+        return null;
+      }
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         interaction.profileId,
@@ -652,6 +656,13 @@ class InteractionModel {
       }
 
       // Get agent's teams to update team and organization limits
+      // If profileId is null (agent was deleted), we can't update usage - skip silently
+      if (!interaction.profileId) {
+        logger.info(
+          `Interaction ${interaction.id} has null profileId (agent deleted) - skipping limit update`,
+        );
+        return;
+      }
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
         interaction.profileId,
       );
@@ -785,7 +796,7 @@ class InteractionModel {
       firstRequestTime: Date;
       lastRequestTime: Date;
       models: string[];
-      profileId: string;
+      profileId: string | null; // null when profile was deleted
       profileName: string | null;
       externalAgentIds: string[];
       externalAgentIdLabels: (string | null)[]; // Resolved agent names for external agent IDs

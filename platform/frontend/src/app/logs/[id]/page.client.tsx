@@ -115,7 +115,12 @@ function LogDetail({
                 <div className="text-sm text-muted-foreground mb-2">
                   Profile Name
                 </div>
-                <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+                <div className="font-medium">
+                  {agent?.name ??
+                    (interaction.profileId === null
+                      ? "Deleted LLM Proxy"
+                      : "Unknown")}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">

@@ -3,7 +3,15 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Edit, FileText, Globe, Loader2, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  Edit,
+  FileText,
+  Globe,
+  Loader2,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -486,7 +494,7 @@ export default function ChatPage() {
     : (initialAgentId ?? undefined);
 
   const playwrightSetupAgentId = conversationId
-    ? conversation?.agentId
+    ? (conversation?.agentId ?? undefined)
     : (initialAgentId ?? undefined);
   const {
     isLoading: isPlaywrightCheckLoading,
@@ -1080,6 +1088,9 @@ export default function ChatPage() {
   // Determine which agent ID to use for prompt input
   const activeAgentId = conversation?.agent?.id ?? initialAgentId;
 
+  // Check if the conversation's agent was deleted
+  const isAgentDeleted = conversationId && conversation && !conversation.agent;
+
   // Show loading spinner while essential data is loading
   if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
     return (
@@ -1094,8 +1105,8 @@ export default function ChatPage() {
     return <NoApiKeySetup />;
   }
 
-  // If no agents exist, show empty state
-  if (internalAgents.length === 0) {
+  // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
+  if (internalAgents.length === 0 && !isAgentDeleted) {
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -1171,7 +1182,7 @@ export default function ChatPage() {
               <div className="flex items-start gap-2 min-w-0 flex-1">
                 {/* Agent/Profile selector - fixed width */}
                 <div className="flex-shrink-0 flex items-center gap-2">
-                  {conversationId ? (
+                  {isAgentDeleted ? null : conversationId ? (
                     <AgentSelector
                       currentPromptId={
                         conversation?.agent?.agentType === "agent"
@@ -1188,20 +1199,21 @@ export default function ChatPage() {
                     />
                   )}
                   {/* Edit agent button */}
-                  {(conversationId
-                    ? conversation?.agentId
-                    : initialAgentId) && (
-                    <PermissionButton
-                      permissions={{ agent: ["update"] }}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openDialog("edit-agent")}
-                      title="Edit agent, tools, sub-agents"
-                      className="h-8 px-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </PermissionButton>
-                  )}
+                  {!isAgentDeleted &&
+                    (conversationId
+                      ? conversation?.agentId
+                      : initialAgentId) && (
+                      <PermissionButton
+                        permissions={{ agent: ["update"] }}
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDialog("edit-agent")}
+                        title="Edit agent, tools, sub-agents"
+                        className="h-8 px-2"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </PermissionButton>
+                    )}
                 </div>
               </div>
               {/* Right side - show/hide controls */}
@@ -1323,93 +1335,114 @@ export default function ChatPage() {
             />
           </div>
 
-          {activeAgentId && (
+          {isAgentDeleted ? (
             <div className="sticky bottom-0 bg-background border-t p-4">
-              <div className="max-w-4xl mx-auto space-y-3">
-                <ArchestraPromptInput
-                  onSubmit={
-                    conversationId && conversation?.agent.id
-                      ? handleSubmit
-                      : handleInitialSubmit
-                  }
-                  status={
-                    conversationId && conversation?.agent.id
-                      ? status
-                      : createConversationMutation.isPending
-                        ? "submitted"
-                        : "ready"
-                  }
-                  selectedModel={
-                    conversationId && conversation?.agent.id
-                      ? (conversation?.selectedModel ?? "")
-                      : initialModel
-                  }
-                  onModelChange={
-                    conversationId && conversation?.agent.id
-                      ? handleModelChange
-                      : handleInitialModelChange
-                  }
-                  messageCount={
-                    conversationId && conversation?.agent.id
-                      ? messages.length
-                      : undefined
-                  }
-                  agentId={
-                    conversationId && conversation?.agent.id
-                      ? conversation.agent.id
-                      : activeAgentId
-                  }
-                  conversationId={conversationId}
-                  currentConversationChatApiKeyId={
-                    conversationId && conversation?.agent.id
-                      ? conversation?.chatApiKeyId
-                      : undefined
-                  }
-                  currentProvider={
-                    conversationId && conversation?.agent.id
-                      ? currentProvider
-                      : initialProvider
-                  }
-                  textareaRef={textareaRef}
-                  initialApiKeyId={
-                    conversationId && conversation?.agent.id
-                      ? undefined
-                      : initialApiKeyId
-                  }
-                  onApiKeyChange={
-                    conversationId && conversation?.agent.id
-                      ? undefined
-                      : setInitialApiKeyId
-                  }
-                  onProviderChange={
-                    conversationId && conversation?.agent.id
-                      ? handleProviderChange
-                      : handleInitialProviderChange
-                  }
-                  allowFileUploads={organization?.allowChatFileUploads ?? false}
-                  isModelsLoading={isModelsLoading}
-                  onEditAgent={() => openDialog("edit-agent")}
-                  tokensUsed={tokensUsed}
-                  maxContextLength={selectedModelContextLength}
-                  inputModalities={selectedModelInputModalities}
-                  agentLlmApiKeyId={
-                    conversationId && conversation?.agent.id
-                      ? ((conversation.agent as Record<string, unknown>)
-                          .llmApiKeyId as string | null)
-                      : ((
-                          internalAgents.find((a) => a.id === initialAgentId) as
-                            | Record<string, unknown>
-                            | undefined
-                        )?.llmApiKeyId as string | null)
-                  }
-                  submitDisabled={isPlaywrightSetupVisible}
-                  isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                />
-                <div className="text-center">
-                  <Version inline />
+              <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
+                  <div className="flex items-center gap-3 text-muted-foreground">
+                    <AlertTriangle className="h-5 w-5 text-amber-500" />
+                    <span>
+                      The agent associated with this conversation has been
+                      deleted.
+                    </span>
+                  </div>
+                  <Button onClick={() => router.push("/chat")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Conversation
+                  </Button>
                 </div>
               </div>
             </div>
+          ) : (
+            activeAgentId && (
+              <div className="sticky bottom-0 bg-background border-t p-4">
+                <div className="max-w-4xl mx-auto space-y-3">
+                  <ArchestraPromptInput
+                    onSubmit={
+                      conversationId && conversation?.agent?.id
+                        ? handleSubmit
+                        : handleInitialSubmit
+                    }
+                    status={
+                      conversationId && conversation?.agent?.id
+                        ? status
+                        : createConversationMutation.isPending
+                          ? "submitted"
+                          : "ready"
+                    }
+                    selectedModel={
+                      conversationId && conversation?.agent?.id
+                        ? (conversation?.selectedModel ?? "")
+                        : initialModel
+                    }
+                    onModelChange={
+                      conversationId && conversation?.agent?.id
+                        ? handleModelChange
+                        : handleInitialModelChange
+                    }
+                    messageCount={
+                      conversationId && conversation?.agent?.id
+                        ? messages.length
+                        : undefined
+                    }
+                    agentId={
+                      conversationId && conversation?.agent?.id
+                        ? conversation.agent?.id
+                        : activeAgentId
+                    }
+                    conversationId={conversationId}
+                    currentConversationChatApiKeyId={
+                      conversationId && conversation?.agent?.id
+                        ? conversation?.chatApiKeyId
+                        : undefined
+                    }
+                    currentProvider={
+                      conversationId && conversation?.agent?.id
+                        ? currentProvider
+                        : initialProvider
+                    }
+                    textareaRef={textareaRef}
+                    initialApiKeyId={
+                      conversationId && conversation?.agent?.id
+                        ? undefined
+                        : initialApiKeyId
+                    }
+                    onApiKeyChange={
+                      conversationId && conversation?.agent?.id
+                        ? undefined
+                        : setInitialApiKeyId
+                    }
+                    onProviderChange={
+                      conversationId && conversation?.agent?.id
+                        ? handleProviderChange
+                        : handleInitialProviderChange
+                    }
+                    allowFileUploads={
+                      organization?.allowChatFileUploads ?? false
+                    }
+                    isModelsLoading={isModelsLoading}
+                    onEditAgent={() => openDialog("edit-agent")}
+                    tokensUsed={tokensUsed}
+                    maxContextLength={selectedModelContextLength}
+                    inputModalities={selectedModelInputModalities}
+                    agentLlmApiKeyId={
+                      conversationId && conversation?.agent?.id
+                        ? (conversation.agent?.llmApiKeyId ?? null)
+                        : ((
+                            internalAgents.find(
+                              (a) => a.id === initialAgentId,
+                            ) as Record<string, unknown> | undefined
+                          )?.llmApiKeyId as string | null)
+                    }
+                    submitDisabled={isPlaywrightSetupVisible}
+                    isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+                  />
+                  <div className="text-center">
+                    <Version inline />
+                  </div>
+                </div>
+              </div>
+            )
           )}
         </div>
       </div>

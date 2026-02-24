@@ -56,6 +56,9 @@ vi.mock("@/lib/chat.query", () => ({
   useDeleteConversation: () => ({
     mutate: mockDeleteMutate,
   }),
+  usePinConversation: () => ({
+    mutate: vi.fn(),
+  }),
 }));
 
 // Store the onValueChange callback so tests can control selectedValue

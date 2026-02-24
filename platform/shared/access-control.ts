@@ -658,6 +658,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     organization: ["update"],
   },
+  // Config endpoint - any authenticated user can access
+  [RouteId.GetConfig]: {},
 };
 
 /**

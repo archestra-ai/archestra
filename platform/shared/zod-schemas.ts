@@ -53,6 +53,8 @@ export const LocalConfigSchema = z
     // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:
     // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-operator")
     serviceAccount: z.string().optional(),
+    // Kubernetes imagePullSecrets for pulling container images from private registries
+    imagePullSecrets: z.array(z.object({ name: z.string().min(1) })).optional(),
   })
   .refine(
     (data) => {
@@ -76,6 +78,7 @@ export const LocalConfigFormSchema = z.object({
   httpPort: z.string().optional(), // UI uses string, gets parsed to number
   httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
   serviceAccount: z.string().optional(), // K8s service account for the MCP server pod
+  imagePullSecrets: z.array(z.object({ name: z.string().min(1) })).optional(), // K8s imagePullSecrets for private registries
 });
 
 /**

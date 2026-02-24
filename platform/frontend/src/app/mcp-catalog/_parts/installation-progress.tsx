@@ -148,6 +148,7 @@ export function InstallationProgress({
           onOpenChange={setIsLogsDialogOpen}
           serverName={serverName || "MCP Server"}
           installs={installs}
+          deploymentStatuses={{}}
           hideInstallationSelector
         />
       )}

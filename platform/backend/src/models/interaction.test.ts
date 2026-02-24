@@ -2488,4 +2488,230 @@ describe("InteractionModel", () => {
       expect(userIds[0].name).toBe("Other User");
     });
   });
+
+  describe("preserves interactions when profile is deleted", () => {
+    test("interaction is preserved with null profileId when profile is deleted", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [],
+      });
+
+      // Create an interaction for the agent
+      const interaction = await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Hi there",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Delete the agent
+      await AgentModel.delete(agent.id);
+
+      // Admin should still be able to see the interaction with null profileId
+      const found = await InteractionModel.findById(
+        interaction.id,
+        admin.id,
+        true,
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(interaction.id);
+      expect(found?.profileId).toBeNull();
+    });
+
+    test("non-admin cannot see interaction with deleted profile (null profileId)", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Give user access to the team
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const agent = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [team.id],
+      });
+
+      // Create an interaction for the agent
+      const interaction = await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // User can see interaction before agent deletion
+      const beforeDelete = await InteractionModel.findById(
+        interaction.id,
+        user.id,
+        false,
+      );
+      expect(beforeDelete).not.toBeNull();
+
+      // Delete the agent
+      await AgentModel.delete(agent.id);
+
+      // Non-admin should NOT see the interaction with null profileId
+      const afterDelete = await InteractionModel.findById(
+        interaction.id,
+        user.id,
+        false,
+      );
+      expect(afterDelete).toBeNull();
+
+      // But admin should still see it
+      const adminView = await InteractionModel.findById(
+        interaction.id,
+        admin.id,
+        true,
+      );
+      expect(adminView).not.toBeNull();
+      expect(adminView?.profileId).toBeNull();
+    });
+
+    test("getSessions includes sessions with deleted profiles for admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [],
+      });
+
+      // Create an interaction with session
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-to-preserve",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Session message" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Delete the agent
+      await AgentModel.delete(agent.id);
+
+      // Admin should see the session with null profileId
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-to-preserve" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].sessionId).toBe("session-to-preserve");
+      expect(sessions.data[0].profileId).toBeNull();
+    });
+
+    test("findAllPaginated includes interactions with deleted profiles for admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agentToDelete = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [],
+      });
+      const agentToKeep = await AgentModel.create({
+        name: "Agent To Keep",
+        teams: [],
+      });
+
+      // Create interactions for both agents
+      await InteractionModel.create({
+        profileId: agentToDelete.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agentToKeep.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Delete one agent
+      await AgentModel.delete(agentToDelete.id);
+
+      // Admin should see both interactions
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+      );
+
+      expect(interactions.data).toHaveLength(2);
+
+      const deletedProfileInteraction = interactions.data.find(
+        (i) => i.profileId === null,
+      );
+      const existingProfileInteraction = interactions.data.find(
+        (i) => i.profileId === agentToKeep.id,
+      );
+
+      expect(deletedProfileInteraction).toBeDefined();
+      expect(existingProfileInteraction).toBeDefined();
+    });
+  });
 });

@@ -45,6 +45,10 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
+      imagePullSecrets:
+        values.localConfig.imagePullSecrets?.filter(
+          (s) => s.name.trim().length > 0,
+        ) || undefined,
     };
 
     // BYOS: Include local config vault path and key if set
@@ -208,6 +212,7 @@ export function transformCatalogItemToFormValues(
         httpPort?: string;
         httpPath?: string;
         serviceAccount?: string;
+        imagePullSecrets?: Array<{ name: string }>;
       }
     | undefined;
   if (item.localConfig) {
@@ -250,6 +255,7 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
+      imagePullSecrets: item.localConfig.imagePullSecrets || [],
     };
   }
 

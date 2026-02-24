@@ -100,7 +100,7 @@ export const MODEL_MARKER_PATTERNS: Record<
   }
 > = {
   anthropic: {
-    fastest: ["haiku"],
+    fastest: ["haiku-4", "haiku"],
     best: ["opus", "sonnet"],
   },
   openai: {

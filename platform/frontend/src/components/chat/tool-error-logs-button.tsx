@@ -5,7 +5,10 @@ import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { McpLogsDialog } from "@/app/mcp-catalog/_parts/mcp-logs-dialog";
 import { Button } from "@/components/ui/button";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import {
+  useMcpDeploymentStatuses,
+  useMcpServers,
+} from "@/lib/mcp-server.query";
 
 interface ToolErrorLogsButtonProps {
   toolName: string;
@@ -18,6 +21,7 @@ interface ToolErrorLogsButtonProps {
 export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const { data: allMcpServers } = useMcpServers();
+  const deploymentStatuses = useMcpDeploymentStatuses();
 
   const mcpServerName = parseFullToolName(toolName).serverName;
 
@@ -61,6 +65,7 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
         onOpenChange={setIsLogsDialogOpen}
         serverName={mcpServerName}
         installs={serverInstalls}
+        deploymentStatuses={deploymentStatuses}
         hideInstallationSelector
       />
     </>

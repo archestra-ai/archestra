@@ -28,6 +28,46 @@ describe("k8s-yaml-generator", () => {
       expect(yaml).toContain("value: ${env.API_KEY}");
     });
 
+    test("generates YAML with imagePullSecrets", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "test-id",
+        serverName: "test-server",
+        namespace: "default",
+        dockerImage: "private-registry.example.com/test-image:latest",
+        imagePullSecrets: [{ name: "my-registry-secret" }],
+      });
+
+      expect(yaml).toContain("imagePullSecrets");
+      expect(yaml).toContain("name: my-registry-secret");
+    });
+
+    test("generates YAML with multiple imagePullSecrets", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "test-id",
+        serverName: "test-server",
+        namespace: "default",
+        dockerImage: "private-registry.example.com/test-image:latest",
+        imagePullSecrets: [
+          { name: "registry-secret-1" },
+          { name: "registry-secret-2" },
+        ],
+      });
+
+      expect(yaml).toContain("name: registry-secret-1");
+      expect(yaml).toContain("name: registry-secret-2");
+    });
+
+    test("generates YAML without imagePullSecrets when not provided", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "test-id",
+        serverName: "test-server",
+        namespace: "default",
+        dockerImage: "test-image:latest",
+      });
+
+      expect(yaml).not.toContain("imagePullSecrets");
+    });
+
     test("generates YAML with secret env vars", () => {
       const yaml = generateDeploymentYamlTemplate({
         serverId: "test-id",

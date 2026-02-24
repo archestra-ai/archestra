@@ -8,16 +8,22 @@ vi.mock("@/mcp-server-runtime", () => ({
   },
 }));
 
-vi.mock("@/models", () => ({
-  McpServerModel: {
-    getToolsFromServer: vi.fn(),
-    update: vi.fn(),
-  },
-  ToolModel: {
-    slugifyName: vi.fn((prefix, name) => `${prefix}__${name}`),
-    syncToolsForCatalog: vi.fn(),
-  },
-}));
+vi.mock("@/models", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/models")>();
+  return {
+    McpServerModel: {
+      constructServerName: original.McpServerModel.constructServerName,
+      getToolsFromServer: vi.fn(),
+      update: vi.fn(),
+    },
+    ToolModel: {
+      slugifyName: vi.fn(
+        (prefix: string, name: string) => `${prefix}__${name}`,
+      ),
+      syncToolsForCatalog: vi.fn(),
+    },
+  };
+});
 
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { McpServerModel, ToolModel } from "@/models";
@@ -581,7 +587,11 @@ describe("mcp-reinstall", () => {
     });
 
     test("throws error when restartServer fails for local server", async () => {
-      const server = createServer({ serverType: "local" });
+      // Use name that already matches expected format so no name update happens before restart
+      const server = createServer({
+        serverType: "local",
+        name: "Test Catalog-user-123",
+      });
       const catalog = createCatalog({ serverType: "local" });
 
       vi.mocked(McpServerRuntimeManager.restartServer).mockRejectedValue(
@@ -597,12 +607,18 @@ describe("mcp-reinstall", () => {
         server.id,
       );
 
-      // Verify update was NOT called since we threw before getting there
-      expect(McpServerModel.update).not.toHaveBeenCalled();
+      // Verify reinstall flag update was NOT called since we threw before getting there
+      expect(McpServerModel.update).not.toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
     });
 
     test("throws error when getToolsFromServer fails", async () => {
-      const server = createServer({ serverType: "remote" });
+      // Use matching name so no name update happens
+      const server = createServer({
+        serverType: "remote",
+        name: "Test Catalog",
+      });
       const catalog = createCatalog({ serverType: "remote" });
 
       vi.mocked(McpServerModel.getToolsFromServer).mockRejectedValue(
@@ -613,12 +629,16 @@ describe("mcp-reinstall", () => {
         "Failed to fetch tools from MCP server",
       );
 
-      // Verify update was NOT called since we threw before completing
+      // Verify reinstall flag update was NOT called since we threw before completing
       expect(McpServerModel.update).not.toHaveBeenCalled();
     });
 
     test("throws error when syncToolsForCatalog fails", async () => {
-      const server = createServer({ serverType: "remote" });
+      // Use matching name so no name update happens
+      const server = createServer({
+        serverType: "remote",
+        name: "Test Catalog",
+      });
       const catalog = createCatalog({ serverType: "remote" });
 
       vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
@@ -632,12 +652,16 @@ describe("mcp-reinstall", () => {
         "Database constraint violation",
       );
 
-      // Verify update was NOT called since we threw before completing
+      // Verify reinstall flag update was NOT called since we threw before completing
       expect(McpServerModel.update).not.toHaveBeenCalled();
     });
 
     test("throws error when deployment waitForDeploymentReady times out", async () => {
-      const server = createServer({ serverType: "local" });
+      // Use name that already matches expected format so no name update happens before restart
+      const server = createServer({
+        serverType: "local",
+        name: "Test Catalog-user-123",
+      });
       const catalog = createCatalog({ serverType: "local" });
 
       vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
@@ -653,13 +677,21 @@ describe("mcp-reinstall", () => {
         "Deployment timeout",
       );
 
-      // Verify update was NOT called since we threw before completing
-      expect(McpServerModel.update).not.toHaveBeenCalled();
+      // Verify reinstall flag update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
     });
 
-    test("succeeds for remote server and clears reinstall flag", async () => {
-      const server = createServer({ serverType: "remote" });
-      const catalog = createCatalog({ serverType: "remote" });
+    test("succeeds for remote server - updates name and clears reinstall flag", async () => {
+      const server = createServer({
+        serverType: "remote",
+        name: "Old Catalog Name",
+      });
+      const catalog = createCatalog({
+        serverType: "remote",
+        name: "New Catalog Name",
+      });
 
       vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
         { name: "test-tool", description: "A test tool", inputSchema: {} },
@@ -674,15 +706,167 @@ describe("mcp-reinstall", () => {
 
       await autoReinstallServer(server, catalog);
 
-      // Verify server name and reinstall flag were updated
+      // Remote servers get the catalog name directly (no suffix)
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
-        name: catalog.name,
+        name: "New Catalog Name",
+      });
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
         reinstallRequired: false,
       });
     });
 
+    test("reconstructs name with userId suffix when name already correct", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "microsoft__playwright-mcp-user-123",
+        ownerId: "user-123",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "microsoft__playwright-mcp",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "tool1", description: "A tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Name already matches, so no name update call — only reinstall flag cleared
+      expect(McpServerModel.update).toHaveBeenCalledTimes(1);
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("updates name with userId suffix when catalog is renamed", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "old-catalog-name-user-123",
+        ownerId: "user-123",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "new-catalog-name",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "tool1", description: "A tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Name updated with new catalog name + userId suffix BEFORE restart
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "new-catalog-name-user-123",
+      });
+      // Then reinstall flag cleared after restart
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("updates name with teamId suffix for team servers on catalog rename", async () => {
+      const server = createServer({
+        serverType: "local",
+        name: "old-name-team-456",
+        ownerId: "user-123",
+        teamId: "team-456",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "new-name",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // teamId takes precedence over ownerId for the suffix
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "new-name-team-456",
+      });
+    });
+
+    test("fixes legacy server missing userId suffix", async () => {
+      // Legacy server created before suffix logic was deployed
+      const server = createServer({
+        serverType: "local",
+        name: "microsoft__playwright-mcp",
+        ownerId: "user-123",
+      });
+      const catalog = createCatalog({
+        serverType: "local",
+        name: "microsoft__playwright-mcp",
+      });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Name updated to add the missing userId suffix
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: "microsoft__playwright-mcp-user-123",
+      });
+    });
+
     test("succeeds for local server with full flow", async () => {
-      const server = createServer({ serverType: "local" });
+      const server = createServer({
+        serverType: "local",
+        name: "Test Catalog-user-123",
+      });
       const catalog = createCatalog({ serverType: "local" });
 
       vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
@@ -724,9 +908,9 @@ describe("mcp-reinstall", () => {
         }),
       ]);
 
-      // Verify server name and reinstall flag were updated
+      // Verify reinstall flag was cleared (name already correct, no name update)
+      expect(McpServerModel.update).toHaveBeenCalledTimes(1);
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
-        name: catalog.name,
         reinstallRequired: false,
       });
     });

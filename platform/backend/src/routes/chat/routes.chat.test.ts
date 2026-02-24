@@ -295,7 +295,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).not.toHaveBeenCalled();
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "claude-3-5-haiku-20241022" }),
+      expect.objectContaining({ modelName: "claude-haiku-4-5-20251001" }),
     );
   });
 

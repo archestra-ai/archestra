@@ -23,6 +23,7 @@ import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useInstallMcpServer,
+  useMcpDeploymentStatuses,
   useMcpServers,
   useReinstallMcpServer,
 } from "@/lib/mcp-server.query";
@@ -80,6 +81,7 @@ export function InternalMCPCatalog({
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
+  const deploymentStatuses = useMcpDeploymentStatuses();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
@@ -779,6 +781,7 @@ export function InternalMCPCatalog({
                     serverInfo.installedServer?.localInstallationStatus ||
                     undefined
                   }
+                  deploymentStatuses={deploymentStatuses}
                   onInstallRemoteServer={() =>
                     handleInstallRemoteServer(item, false)
                   }

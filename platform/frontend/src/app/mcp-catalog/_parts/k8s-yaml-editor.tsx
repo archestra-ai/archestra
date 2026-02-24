@@ -153,7 +153,7 @@ export function K8sYamlEditor({
           value={value || ""}
           onChange={handleEditorChange}
           loading={
-            <div className="flex items-center justify-center h-[400px] bg-muted/50">
+            <div className="flex items-center justify-center h-[400px] w-full bg-muted/50">
               <p className="text-sm text-muted-foreground">Loading editor...</p>
             </div>
           }

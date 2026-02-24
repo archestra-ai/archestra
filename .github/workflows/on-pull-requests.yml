@@ -169,9 +169,17 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
 
+  # Automatic checks for special PR types:
+  # - Release-please PRs: auto-commit codegen changes (e.g. docs/openapi.json version bump)
+  # - Fork PRs: run automatically since maintainer already explicitly approves workflows to run
+  # Regular PRs from team members use workflow_dispatch on platform-linting-and-tests.yml for on-demand checks.
   platform-linting-and-tests-pr:
-    name: Platform Linting and Tests (Optional)
-    if: github.event_name == 'pull_request'
+    name: Platform Linting and Tests (PR)
+    if: |
+      github.event_name == 'pull_request' && (
+        startsWith(github.head_ref, 'release-please--') ||
+        github.event.pull_request.head.repo.fork == true
+      )
     permissions:
       contents: write
       packages: write # Required for pushing platform image to GHCR (non-fork PRs only)

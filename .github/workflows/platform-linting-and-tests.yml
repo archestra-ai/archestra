@@ -1,6 +1,7 @@
 name: Platform Linting and Tests
 
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       should-skip-running-and-always-succeed:
@@ -159,7 +160,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+    if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
     permissions:
       contents: read
       packages: write
@@ -280,7 +281,7 @@ jobs:
     name: Platform E2E Tests (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -434,7 +435,7 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
     runs-on: e2e-runner-16cpu
     permissions:
       contents: read
@@ -626,7 +627,7 @@ jobs:
   platform-vault-k8s-e2e-tests:
     name: Platform E2E Tests (Vault K8s)
     needs: [platform-e2e-build]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
     runs-on: e2e-runner-16cpu
     permissions:
       contents: read
@@ -746,7 +747,7 @@ jobs:
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests, platform-quickstart-e2e-tests, platform-vault-k8s-e2e-tests]
-    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
+    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -805,7 +806,7 @@ jobs:
     name: Docker Image Scanning (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

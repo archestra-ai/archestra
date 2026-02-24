@@ -1,5 +1,5 @@
 {
-  "id": "44d69ee1-3eb0-4793-bfac-aa0d392c7618",
+  "id": "50662dc6-cb78-4cf4-9ffb-5db89047913e",
   "prevId": "6a795df9-13c2-4bc2-bcb7-c085053ae6bf",
   "version": "7",
   "dialect": "postgresql",
@@ -1616,7 +1616,7 @@
           "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "chat_api_key_id": {
           "name": "chat_api_key_id",
@@ -1689,7 +1689,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "conversations_chat_api_key_id_chat_api_keys_id_fk": {
@@ -2039,7 +2039,7 @@
           "name": "profile_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "external_agent_id": {
           "name": "external_agent_id",
@@ -2308,7 +2308,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "interactions_user_id_user_id_fk": {
@@ -3449,7 +3449,7 @@
           "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "mcp_server_name": {
           "name": "mcp_server_name",
@@ -3538,7 +3538,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "mcp_tool_calls_user_id_user_id_fk": {

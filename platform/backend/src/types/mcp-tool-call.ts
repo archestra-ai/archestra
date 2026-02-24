@@ -37,6 +37,8 @@ export const SelectMcpToolCallSchema = createSelectSchema(
 
 /**
  * Insert schema for MCP tool calls
+ * Note: agentId is required when creating new tool calls
+ * (it's nullable in the DB schema to preserve calls when agents are deleted)
  */
 export const InsertMcpToolCallSchema = createInsertSchema(
   schema.mcpToolCallsTable,
@@ -46,7 +48,10 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
   },
-);
+).extend({
+  // Override agentId to be required for creating tool calls
+  agentId: z.string().uuid(),
+});
 
 export type McpToolCall = z.infer<typeof SelectMcpToolCallSchema>;
 export type InsertMcpToolCall = z.infer<typeof InsertMcpToolCallSchema>;

@@ -398,9 +398,12 @@ describe("InteractionModel", () => {
       expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
-    test("member with no access sees no interactions", async ({ makeUser }) => {
+    test("member with no access sees only org-wide agent interactions", async ({
+      makeUser,
+    }) => {
       const user = await makeUser();
 
+      // Teamless agent is org-wide, visible to all members
       const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
 
       await InteractionModel.create({
@@ -422,7 +425,9 @@ describe("InteractionModel", () => {
         user.id,
         false,
       );
-      expect(interactions.data).toHaveLength(0);
+      // Org-wide agents are visible to all members
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
     test("findById returns interaction for admin", async ({ makeAdmin }) => {
@@ -493,11 +498,12 @@ describe("InteractionModel", () => {
       expect(found?.id).toBe(interaction.id);
     });
 
-    test("findById returns null for user without profile access", async ({
+    test("findById returns interaction for org-wide agent", async ({
       makeUser,
     }) => {
       const user = await makeUser();
 
+      // Teamless agent is org-wide
       const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
@@ -518,7 +524,9 @@ describe("InteractionModel", () => {
         user.id,
         false,
       );
-      expect(found).toBeNull();
+      // Org-wide agents are accessible to all members
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(interaction.id);
     });
   });
 
@@ -708,12 +716,13 @@ describe("InteractionModel", () => {
         name: "Accessible Agent",
         teams: [team.id],
       });
-      const inaccessibleAgent = await AgentModel.create({
-        name: "Inaccessible Agent",
+      // Org-wide agent (no teams) is also accessible
+      const orgWideAgent = await AgentModel.create({
+        name: "Org-Wide Agent",
         teams: [],
       });
 
-      // Interaction for accessible agent
+      // Interaction for team-scoped agent
       await InteractionModel.create({
         profileId: accessibleAgent.id,
         externalAgentId: "my-app",
@@ -728,9 +737,9 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Interaction for inaccessible agent with same external ID
+      // Interaction for org-wide agent with same external ID
       await InteractionModel.create({
-        profileId: inaccessibleAgent.id,
+        profileId: orgWideAgent.id,
         externalAgentId: "my-app",
         request: { model: "gpt-4", messages: [] },
         response: {
@@ -743,7 +752,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // User should only see the accessible agent's interaction
+      // User sees both: team-scoped + org-wide agent interactions
       const interactions = await InteractionModel.findAllPaginated(
         { limit: 100, offset: 0 },
         undefined,
@@ -752,8 +761,7 @@ describe("InteractionModel", () => {
         { externalAgentId: "my-app" },
       );
 
-      expect(interactions.data).toHaveLength(1);
-      expect(interactions.data[0].profileId).toBe(accessibleAgent.id);
+      expect(interactions.data).toHaveLength(2);
     });
 
     test("filters by userId", async ({ makeAdmin, makeUser }) => {
@@ -2446,12 +2454,12 @@ describe("InteractionModel", () => {
         name: "Accessible Agent",
         teams: [team.id],
       });
-      const inaccessibleAgent = await AgentModel.create({
-        name: "Inaccessible Agent",
+      const orgWideAgent = await AgentModel.create({
+        name: "Org-Wide Agent",
         teams: [],
       });
 
-      // Interaction for accessible agent with otherUser
+      // Interaction for team-scoped agent with otherUser
       await InteractionModel.create({
         profileId: accessibleAgent.id,
         userId: otherUser.id,
@@ -2466,9 +2474,9 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Interaction for inaccessible agent with admin
+      // Interaction for org-wide agent with admin
       await InteractionModel.create({
-        profileId: inaccessibleAgent.id,
+        profileId: orgWideAgent.id,
         userId: admin.id,
         request: { model: "gpt-4", messages: [] },
         response: {
@@ -2481,11 +2489,10 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // User should only see userIds from accessible agent's interactions
+      // User sees userIds from both team-scoped and org-wide agent interactions
       const userIds = await InteractionModel.getUniqueUserIds(user.id, false);
 
-      expect(userIds).toHaveLength(1);
-      expect(userIds[0].name).toBe("Other User");
+      expect(userIds).toHaveLength(2);
     });
   });
 

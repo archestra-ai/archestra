@@ -735,14 +735,14 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data[0].agent.id).toBe(agent1.id);
     });
 
-    test("member with no team access sees empty results", async ({
+    test("member with no team access sees org-wide agent tools", async ({
       makeUser,
       makeAgent,
       makeTool,
       makeAgentTool,
     }) => {
       const user = await makeUser();
-      const agent = await makeAgent();
+      const agent = await makeAgent(); // agent with no teams is org-wide
       const tool = await makeTool();
 
       await makeAgentTool(agent.id, tool.id);
@@ -753,8 +753,9 @@ describe("AgentToolModel.findAll", () => {
         isAgentAdmin: false,
       });
 
-      expect(result.data).toHaveLength(0);
-      expect(result.pagination.total).toBe(0);
+      // Teamless agents are org-wide, so their tools are visible to all members
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination.total).toBe(1);
     });
   });
 

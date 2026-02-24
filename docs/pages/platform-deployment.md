@@ -955,14 +955,14 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 - **`ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE`** - Connection mode for Slack integration.
 
-  - Default: `webhook`
-  - Options: `webhook`, `socket`
-  - `webhook`: Slack sends events to your public webhook URLs (requires a publicly accessible Archestra instance)
+  - Default: `socket`
+  - Options: `socket`, `webhook`
   - `socket`: Archestra connects to Slack via an outbound WebSocket (no public URL required)
+  - `webhook`: Slack sends events to your public webhook URLs (requires a publicly accessible Archestra instance)
 
 - **`ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN`** - Slack App-Level Token for socket mode.
 
-  - Required when: `ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE=socket`
+  - Required for the default socket mode
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 

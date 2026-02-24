@@ -19,7 +19,11 @@ import type {
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
-import { CHATOPS_THREAD_HISTORY, SLACK_SLASH_COMMANDS } from "./constants";
+import {
+  CHATOPS_THREAD_HISTORY,
+  SLACK_DEFAULT_CONNECTION_MODE,
+  SLACK_SLASH_COMMANDS,
+} from "./constants";
 import { errorMessage } from "./utils";
 
 /**
@@ -58,6 +62,7 @@ class SlackProvider implements ChatOpsProvider {
   private config: SlackConfig;
   private socketModeClient: SocketModeClient | null = null;
   private eventHandler: SlackEventHandler | null = null;
+  private recentSocketEvents = new Map<string, true>();
 
   constructor(slackConfig: SlackConfig) {
     this.config = slackConfig;
@@ -76,7 +81,9 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   getConnectionMode(): "webhook" | "socket" {
-    return this.config.connectionMode === "socket" ? "socket" : "webhook";
+    return this.config.connectionMode === "webhook"
+      ? "webhook"
+      : SLACK_DEFAULT_CONNECTION_MODE;
   }
 
   setEventHandler(handler: SlackEventHandler): void {
@@ -135,6 +142,7 @@ class SlackProvider implements ChatOpsProvider {
       this.socketModeClient = null;
     }
     this.eventHandler = null;
+    this.recentSocketEvents.clear();
     this.client = null;
     this.botUserId = null;
     this.teamId = null;
@@ -638,10 +646,13 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
 
   /**
-   * Process a slash command received via socket mode.
-   * Handles the slash command and posts the response to response_url.
+   * Handle a slash command received via socket mode.
+   * Uses ack() to send the response directly (supported by the SocketModeClient).
    */
-  private async processSlashCommandEvent(body: unknown): Promise<void> {
+  private async handleSlashCommandSocket(
+    body: unknown,
+    ack: (response?: Record<string, unknown>) => Promise<void>,
+  ): Promise<void> {
     const cmd = body as {
       command?: string;
       text?: string;
@@ -654,21 +665,8 @@ class SlackProvider implements ChatOpsProvider {
       trigger_id?: string;
     };
     const response = await this.handleSlashCommand(cmd);
-    // In socket mode, slash commands are already ack'd. Send response via response_url.
-    if (response && cmd.response_url) {
-      try {
-        await fetch(cmd.response_url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(response),
-        });
-      } catch (error) {
-        logger.error(
-          { error: errorMessage(error) },
-          "[SlackProvider] Failed to send slash command response via response_url",
-        );
-      }
-    }
+    // Acknowledge with the response body — SocketModeClient sends it back via the socket
+    await ack(response ? (response as Record<string, unknown>) : undefined);
   }
 
   private async startSocketMode(): Promise<void> {
@@ -685,37 +683,86 @@ class SlackProvider implements ChatOpsProvider {
       autoReconnectEnabled: true,
     });
 
-    this.socketModeClient.on("events_api", async ({ ack, body }) => {
-      await ack();
-      this.eventHandler?.handleIncomingMessage(this, body).catch((error) => {
-        logger.error(
-          { error: errorMessage(error) },
-          "[SlackProvider] Error processing socket event",
-        );
-      });
-    });
-
-    this.socketModeClient.on("interactive", async ({ ack, body }) => {
-      await ack();
-      this.eventHandler
-        ?.handleInteractiveSelection(this, body)
-        .catch((error) => {
-          logger.error(
-            { error: errorMessage(error) },
-            "[SlackProvider] Error processing socket interactive event",
-          );
-        });
-    });
-
-    this.socketModeClient.on("slash_commands", async ({ ack, body }) => {
-      await ack();
-      this.processSlashCommandEvent(body).catch((error) => {
-        logger.error(
-          { error: errorMessage(error) },
-          "[SlackProvider] Error processing socket slash command",
-        );
-      });
-    });
+    // The SocketModeClient dispatches events as follows (see source):
+    //   events_api  → emits inner event type ("message", "app_mention"), body = full envelope
+    //   interactive → emits "interactive", body = interaction payload
+    //   slash_commands → emits "slash_commands", body = command payload
+    //   ALL types   → also emits "slack_event" with { type, body }
+    //
+    // We use "slack_event" as a single catch-all to route all event types.
+    this.socketModeClient.on(
+      "slack_event",
+      async ({
+        ack,
+        type,
+        body,
+      }: {
+        ack: (response?: Record<string, unknown>) => Promise<void>;
+        type: string;
+        body: unknown;
+        retry_num?: number;
+      }) => {
+        switch (type) {
+          case "events_api": {
+            await ack();
+            // Slack fires both `message` and `app_mention` for @mention messages
+            // with the same event ts. Dedup so we only process each event once.
+            const eventBody = body as {
+              event?: { ts?: string };
+            };
+            const eventTs = eventBody?.event?.ts;
+            if (eventTs) {
+              if (this.recentSocketEvents.has(eventTs)) {
+                break;
+              }
+              this.recentSocketEvents.set(eventTs, true);
+              setTimeout(() => this.recentSocketEvents.delete(eventTs), 30_000);
+              // Safety bound: evict oldest 10% when the map grows too large
+              if (this.recentSocketEvents.size >= 10_000) {
+                const toDelete = Math.ceil(10_000 * 0.1);
+                const iter = this.recentSocketEvents.keys();
+                for (let i = 0; i < toDelete; i++) {
+                  const key = iter.next().value;
+                  if (key) this.recentSocketEvents.delete(key);
+                }
+              }
+            }
+            this.eventHandler
+              ?.handleIncomingMessage(this, body)
+              .catch((error) => {
+                logger.error(
+                  { error: errorMessage(error) },
+                  "[SlackProvider] Error processing socket event",
+                );
+              });
+            break;
+          }
+          case "interactive":
+            await ack();
+            this.eventHandler
+              ?.handleInteractiveSelection(this, body)
+              .catch((error) => {
+                logger.error(
+                  { error: errorMessage(error) },
+                  "[SlackProvider] Error processing socket interactive event",
+                );
+              });
+            break;
+          case "slash_commands":
+            // ack() for slash commands can include a response body
+            this.handleSlashCommandSocket(body, ack).catch((error) => {
+              logger.error(
+                { error: errorMessage(error) },
+                "[SlackProvider] Error processing socket slash command",
+              );
+            });
+            break;
+          default:
+            await ack();
+            break;
+        }
+      },
+    );
 
     try {
       await this.socketModeClient.start();

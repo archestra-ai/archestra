@@ -54103,17 +54103,14 @@
                   },
                   "botToken": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 512
                   },
                   "signingSecret": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 256
                   },
                   "appId": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 256
                   },
                   "connectionMode": {

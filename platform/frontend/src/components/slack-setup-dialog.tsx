@@ -8,7 +8,6 @@ import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
@@ -18,11 +17,13 @@ type ConnectionMode = "webhook" | "socket";
 interface SlackSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  connectionMode: ConnectionMode;
 }
 
 export function SlackSetupDialog({
   open,
   onOpenChange,
+  connectionMode,
 }: SlackSetupDialogProps) {
   const publicBaseUrl = usePublicBaseUrl();
 
@@ -32,9 +33,6 @@ export function SlackSetupDialog({
   const creds = slack?.credentials as Record<string, string> | undefined;
 
   const [saving, setSaving] = useState(false);
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>(
-    (creds?.connectionMode as ConnectionMode) || "webhook",
-  );
 
   // Shared credential state across steps
   const [sharedBotToken, setSharedBotToken] = useState("");
@@ -181,37 +179,6 @@ export function SlackSetupDialog({
           </a>
           .
         </>
-      }
-      beforeSteps={
-        <div className="space-y-2 px-1">
-          <Label className="text-sm font-medium">Connection Mode</Label>
-          <RadioGroup
-            value={connectionMode}
-            onValueChange={(v) => setConnectionMode(v as ConnectionMode)}
-            className="flex gap-4"
-          >
-            {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <RadioGroupItem value="webhook" />
-              <div>
-                <span className="text-sm font-medium">Webhook</span>
-                <p className="text-xs text-muted-foreground">
-                  Requires a publicly accessible URL
-                </p>
-              </div>
-            </label>
-            {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <RadioGroupItem value="socket" />
-              <div>
-                <span className="text-sm font-medium">Socket Mode</span>
-                <p className="text-xs text-muted-foreground">
-                  No public URL needed — connects outbound via WebSocket
-                </p>
-              </div>
-            </label>
-          </RadioGroup>
-        </div>
       }
       steps={steps}
       lastStepAction={lastStepAction}

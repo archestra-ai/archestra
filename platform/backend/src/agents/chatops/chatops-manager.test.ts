@@ -1009,7 +1009,7 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     await manager.cleanup();
   });
 
-  test("defaults to webhook mode when connectionMode is not set", async () => {
+  test("defaults to socket mode when connectionMode is not set", async () => {
     await ChatOpsConfigModel.saveSlackConfig({
       enabled: true,
       botToken: "xoxb-test",
@@ -1022,8 +1022,8 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
 
     const provider = manager.getSlackProvider();
     expect(provider).not.toBeNull();
-    expect(provider?.isSocketMode()).toBe(false);
-    expect(provider?.getConnectionMode()).toBe("webhook");
+    expect(provider?.isSocketMode()).toBe(true);
+    expect(provider?.getConnectionMode()).toBe("socket");
 
     await manager.cleanup();
   });

@@ -6,6 +6,7 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
+  SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -1040,9 +1041,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         body: z.object({
           enabled: z.boolean().optional(),
-          botToken: z.string().min(1).max(512).optional(),
-          signingSecret: z.string().min(1).max(256).optional(),
-          appId: z.string().min(1).max(256).optional(),
+          botToken: z.string().max(512).optional(),
+          signingSecret: z.string().max(256).optional(),
+          appId: z.string().max(256).optional(),
           connectionMode: z.enum(["webhook", "socket"]).optional(),
           appLevelToken: z.string().max(512).optional(),
         }),
@@ -1066,7 +1067,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         botToken: botToken ?? existing?.botToken ?? "",
         signingSecret: signingSecret ?? existing?.signingSecret ?? "",
         appId: appId ?? existing?.appId ?? "",
-        connectionMode: connectionMode ?? existing?.connectionMode ?? "webhook",
+        connectionMode:
+          connectionMode ??
+          existing?.connectionMode ??
+          SLACK_DEFAULT_CONNECTION_MODE,
         appLevelToken: appLevelToken ?? existing?.appLevelToken ?? "",
       };
 
@@ -1176,7 +1180,8 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
       const credentials: Record<string, string> = {
         botToken: maskValue(dbConfig?.botToken ?? ""),
         appId: maskValue(dbConfig?.appId ?? ""),
-        connectionMode: dbConfig?.connectionMode ?? "webhook",
+        connectionMode:
+          dbConfig?.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
       };
       if (isSocket) {
         credentials.appLevelToken = maskValue(dbConfig?.appLevelToken ?? "");

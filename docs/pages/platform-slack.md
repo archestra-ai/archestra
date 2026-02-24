@@ -37,9 +37,95 @@ Choose the mode in the setup wizard (**Agent Triggers** → **Slack** → **Setu
 5. Go to **Install App** → **Install to Workspace** and authorize
 6. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
 
-#### App Manifest (Webhook Mode)
+#### App Manifest
 
-The manifest pre-configures all required scopes, event subscriptions, and interactivity settings. Replace the URLs with your Archestra domain.
+The manifest pre-configures all required scopes, event subscriptions, slash commands, and interactivity settings. The two modes differ only in the `settings` section — the rest is identical.
+
+Pick the manifest for your chosen connection mode:
+
+<details>
+<summary><strong>WebSocket mode</strong></summary>
+
+```json
+{
+  "display_information": {
+    "name": "Archestra",
+    "description": "Archestra AI Agent"
+  },
+  "features": {
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "bot_user": {
+      "display_name": "Archestra",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/archestra-select-agent",
+        "description": "Change which agent handles this channel"
+      },
+      {
+        "command": "/archestra-status",
+        "description": "Show current agent for this channel"
+      },
+      {
+        "command": "/archestra-help",
+        "description": "Show available commands"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "commands",
+        "app_mentions:read",
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "im:read",
+        "im:write",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "app_mention",
+        "message.channels",
+        "message.groups",
+        "message.im"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
+```
+
+After creating the app, generate an **App-Level Token**:
+
+1. Go to **Basic Information** → **App-Level Tokens**
+2. Click **Generate Token and Scopes**
+3. Name it (e.g., "archestra-socket") and add the `connections:write` scope
+4. Copy the token (starts with `xapp-`)
+
+</details>
+
+<details>
+<summary><strong>Webhook mode</strong></summary>
+
+Replace the URLs with your Archestra domain.
 
 ```json
 {
@@ -113,115 +199,36 @@ The manifest pre-configures all required scopes, event subscriptions, and intera
 }
 ```
 
-#### App Manifest (Socket Mode)
+</details>
 
-Socket mode does not require webhook URLs. The manifest enables `socket_mode_enabled` and omits `request_url` fields.
+> The setup wizard in Archestra generates this manifest automatically. Go to **Agent Triggers** → **Slack** → **Setup Slack** to use it.
 
-```json
-{
-  "display_information": {
-    "name": "Archestra",
-    "description": "Archestra AI Agent"
-  },
-  "features": {
-    "app_home": {
-      "messages_tab_enabled": true,
-      "messages_tab_read_only_enabled": false
-    },
-    "bot_user": {
-      "display_name": "Archestra",
-      "always_online": true
-    },
-    "slash_commands": [
-      {
-        "command": "/archestra-select-agent",
-        "description": "Change which agent handles this channel"
-      },
-      {
-        "command": "/archestra-status",
-        "description": "Show current agent for this channel"
-      },
-      {
-        "command": "/archestra-help",
-        "description": "Show available commands"
-      }
-    ]
-  },
-  "oauth_config": {
-    "scopes": {
-      "bot": [
-        "commands",
-        "app_mentions:read",
-        "channels:history",
-        "channels:read",
-        "chat:write",
-        "groups:history",
-        "groups:read",
-        "im:history",
-        "im:read",
-        "im:write",
-        "users:read",
-        "users:read.email"
-      ]
-    }
-  },
-  "settings": {
-    "event_subscriptions": {
-      "bot_events": [
-        "app_mention",
-        "message.channels",
-        "message.groups",
-        "message.im"
-      ]
-    },
-    "interactivity": {
-      "is_enabled": true
-    },
-    "org_deploy_enabled": false,
-    "socket_mode_enabled": true,
-    "token_rotation_enabled": false
-  }
-}
-```
-
-After creating the app with socket mode, generate an **App-Level Token**:
-
-1. Go to **Basic Information** → **App-Level Tokens**
-2. Click **Generate Token and Scopes**
-3. Name it (e.g., "archestra-socket") and add the `connections:write` scope
-4. Copy the token (starts with `xapp-`)
-
-> The setup wizard in Archestra generates this manifest with your webhook URLs pre-filled (webhook mode) or with socket mode enabled. Go to **Agent Triggers** → **Slack** → **Setup Slack** to use it.
-
-> If updating from a previous manifest (before slash commands), update the manifest in your Slack app settings and **reinstall the app** to your workspace for the new slash commands to take effect.
+> If updating from a previous manifest, update it in your Slack app settings and **reinstall the app** to your workspace for changes to take effect.
 
 ### Configure Archestra
 
-#### Webhook Mode (default)
+Set the following environment variables. The common variables apply to both modes — then add the mode-specific ones.
 
 ```bash
+# Common (both modes)
 ARCHESTRA_CHATOPS_SLACK_ENABLED=true
 ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN=xoxb-your-bot-token
-ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET=your-signing-secret
 ARCHESTRA_CHATOPS_SLACK_APP_ID=A12345678
-```
 
-#### Socket Mode
-
-```bash
-ARCHESTRA_CHATOPS_SLACK_ENABLED=true
-ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE=socket
-ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN=xoxb-your-bot-token
+# WebSocket mode (default — add these)
 ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN=xapp-your-app-level-token
-ARCHESTRA_CHATOPS_SLACK_APP_ID=A12345678
+
+# Webhook mode (add these instead)
+ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE=webhook
+ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET=your-signing-secret
 ```
 
 Finding these values:
 
 - **Bot Token**: OAuth & Permissions page → Bot User OAuth Token
-- **Signing Secret** (webhook mode): Basic Information page → App Credentials → Signing Secret
-- **App-Level Token** (socket mode): Basic Information page → App-Level Tokens
 - **App ID**: Basic Information page → App ID
+- **Signing Secret** (webhook only): Basic Information page → App Credentials → Signing Secret
+- **App-Level Token** (WebSocket only): Basic Information page → App-Level Tokens
 
 ## Usage
 

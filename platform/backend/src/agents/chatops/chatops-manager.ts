@@ -24,6 +24,7 @@ import type {
 import {
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
+  SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider, { type SlackEventHandler } from "./slack-provider";
@@ -879,7 +880,7 @@ export class ChatOpsManager implements SlackEventHandler {
         (process.env.ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE as
           | "webhook"
           | "socket"
-          | undefined) || "webhook";
+          | undefined) || SLACK_DEFAULT_CONNECTION_MODE;
       const appLevelToken =
         process.env.ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN || "";
 

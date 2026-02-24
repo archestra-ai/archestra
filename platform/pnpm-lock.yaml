@@ -198,6 +198,9 @@ importers:
       '@shared':
         specifier: workspace:*
         version: link:../shared
+      '@slack/socket-mode':
+        specifier: ^2.0.5
+        version: 2.0.5
       '@slack/web-api':
         specifier: ^7.14.1
         version: 7.14.1
@@ -3977,6 +3980,10 @@ packages:
 
   '@slack/logger@4.0.0':
     resolution: {integrity: sha512-Wz7QYfPAlG/DR+DfABddUZeNgoeY7d1J39OCR2jR+v7VBsB8ezulDK5szTnDDPDwLH5IWhLvXIHlCFZV7MSKgA==}
+    engines: {node: '>= 18', npm: '>= 8.6.0'}
+
+  '@slack/socket-mode@2.0.5':
+    resolution: {integrity: sha512-VaapvmrAifeFLAFaDPfGhEwwunTKsI6bQhYzxRXw7BSujZUae5sANO76WqlVsLXuhVtCVrBWPiS2snAQR2RHJQ==}
     engines: {node: '>= 18', npm: '>= 8.6.0'}
 
   '@slack/types@2.20.0':
@@ -12666,6 +12673,19 @@ snapshots:
   '@slack/logger@4.0.0':
     dependencies:
       '@types/node': 25.2.3
+
+  '@slack/socket-mode@2.0.5':
+    dependencies:
+      '@slack/logger': 4.0.0
+      '@slack/web-api': 7.14.1
+      '@types/node': 25.2.3
+      '@types/ws': 8.18.1
+      eventemitter3: 5.0.4
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - utf-8-validate
 
   '@slack/types@2.20.0': {}
 

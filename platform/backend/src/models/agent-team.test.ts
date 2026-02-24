@@ -81,6 +81,191 @@ describe("AgentTeamModel", () => {
     });
   });
 
+  describe("getUserAccessibleAgentIds", () => {
+    test("teamless agent is accessible to any user", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+
+      // Agent with no team assignments (teamless)
+      const teamlessAgent = await makeAgent({ organizationId: org.id });
+
+      // Agent assigned to a team the user is NOT in
+      const otherTeam = await makeTeam(org.id, user.id);
+      const teamedAgent = await makeAgent({ organizationId: org.id });
+      await AgentTeamModel.assignTeamsToAgent(teamedAgent.id, [otherTeam.id]);
+
+      const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        user.id,
+        false,
+      );
+
+      // Teamless agent should be accessible
+      expect(accessibleIds).toContain(teamlessAgent.id);
+      // Agent in a different team should NOT be accessible
+      expect(accessibleIds).not.toContain(teamedAgent.id);
+    });
+
+    test("teamless agents are returned even when user has no teams", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const teamlessAgent = await makeAgent({ organizationId: org.id });
+
+      const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        user.id,
+        false,
+      );
+
+      expect(accessibleIds).toContain(teamlessAgent.id);
+    });
+  });
+
+  describe("userHasAgentAccess", () => {
+    test("returns true for teamless agents", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const teamlessAgent = await makeAgent({ organizationId: org.id });
+
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
+        user.id,
+        teamlessAgent.id,
+        false,
+      );
+
+      expect(hasAccess).toBe(true);
+    });
+
+    test("returns false for team-scoped agent when user is not in that team", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      // User is NOT a member of the team
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
+        user.id,
+        agent.id,
+        false,
+      );
+
+      expect(hasAccess).toBe(false);
+    });
+  });
+
+  describe("teamHasAgentAccess", () => {
+    test("returns true for teamless agent with valid teamId", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+        agent.id,
+        team.id,
+      );
+
+      expect(hasAccess).toBe(true);
+    });
+
+    test("returns true for teamless agent with null teamId", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(agent.id, null);
+
+      expect(hasAccess).toBe(true);
+    });
+
+    test("returns true for team-scoped agent with matching teamId", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+        agent.id,
+        team.id,
+      );
+
+      expect(hasAccess).toBe(true);
+    });
+
+    test("returns false for team-scoped agent with null teamId", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(agent.id, null);
+
+      expect(hasAccess).toBe(false);
+    });
+
+    test("returns false for team-scoped agent with wrong teamId", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const assignedTeam = await makeTeam(org.id, user.id);
+      const otherTeam = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [assignedTeam.id]);
+
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+        agent.id,
+        otherTeam.id,
+      );
+
+      expect(hasAccess).toBe(false);
+    });
+  });
+
   describe("syncAgentTeams", () => {
     test("syncs team assignments for an agent", async ({
       makeAgent,

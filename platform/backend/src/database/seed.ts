@@ -1,7 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_TEAM_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
   type PredefinedRoleName,
@@ -9,13 +8,11 @@ import {
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
-import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
-  AgentTeamModel,
   ChatApiKeyModel,
   DualLlmConfigModel,
   InternalMcpCatalogModel,
@@ -164,7 +161,7 @@ async function seedChatAssistantAgent(): Promise<void> {
 
   const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
 
-  const [inserted] = await db
+  const [_inserted] = await db
     .insert(schema.agentsTable)
     .values({
       organizationId: org.id,
@@ -173,12 +170,6 @@ async function seedChatAssistantAgent(): Promise<void> {
       systemPrompt,
     })
     .returning({ id: schema.agentsTable.id });
-
-  // Assign to Default Team so all members have access
-  const defaultTeam = await TeamModel.findByName(DEFAULT_TEAM_NAME, org.id);
-  if (defaultTeam && inserted) {
-    await AgentTeamModel.assignTeamsToAgent(inserted.id, [defaultTeam.id]);
-  }
 
   logger.info("Seeded Chat Assistant internal agent");
 }
@@ -291,57 +282,6 @@ async function seedPlaywrightCatalog(): Promise<void> {
     .onConflictDoNothing();
 
   logger.info("Seeded Playwright browser preview catalog");
-}
-
-/**
- * Seeds default team and assigns it to the default profile and user
- */
-async function seedDefaultTeam(): Promise<void> {
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser(auth);
-  const defaultMcpGateway = await AgentModel.getMCPGatewayOrCreateDefault();
-  const defaultLlmProxy = await AgentModel.getLLMProxyOrCreateDefault();
-
-  if (!user) {
-    logger.error(
-      "Failed to get or create default admin user, skipping default team seeding",
-    );
-    return;
-  }
-
-  // Check if default team already exists
-  const existingTeams = await TeamModel.findByOrganization(org.id);
-  let defaultTeam = existingTeams.find((t) => t.name === DEFAULT_TEAM_NAME);
-
-  if (!defaultTeam) {
-    defaultTeam = await TeamModel.create({
-      name: DEFAULT_TEAM_NAME,
-      description: "Default team for all users",
-      organizationId: org.id,
-      createdBy: user.id,
-    });
-    logger.info("Seeded default team");
-  } else {
-    logger.info("Default team already exists, skipping creation");
-  }
-
-  // Add default user to team (if not already a member)
-  const isUserInTeam = await TeamModel.isUserInTeam(defaultTeam.id, user.id);
-  if (!isUserInTeam) {
-    await TeamModel.addMember(defaultTeam.id, user.id);
-    logger.info("Added default user to default team");
-  }
-
-  // Assign team to default agents (idempotent)
-  await AgentTeamModel.assignTeamsToAgent(defaultMcpGateway.id, [
-    defaultTeam.id,
-  ]);
-  await AgentTeamModel.assignTeamsToAgent(defaultLlmProxy.id, [defaultTeam.id]);
-
-  // Note: Chat Assistant team assignment is handled in seedChatAssistantAgent(),
-  // which always runs after seedDefaultTeam() in seedRequiredStartingData().
-
-  logger.info("Assigned default team to default agents");
 }
 
 /**
@@ -580,8 +520,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Create default agents before seeding internal agents
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
-  await seedDefaultTeam();
-  // seedChatAssistantAgent needs to run after seedDefaultTeam() so that default team is available for assignment
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();

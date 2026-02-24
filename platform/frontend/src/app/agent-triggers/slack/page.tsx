@@ -1,8 +1,8 @@
 "use client";
 
-import { ExternalLink, Info } from "lucide-react";
+import { AlertTriangle, ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useChatOpsStatus } from "@/lib/chatops.query";
+import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
@@ -58,12 +60,33 @@ export default function SlackPage() {
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
   const slackCreds = slack?.credentials as Record<string, string> | undefined;
 
+  const resetMutation = useUpdateSlackChatOpsConfig();
+
+  // Connection mode: use saved value if configured, otherwise default to "socket"
+  const savedMode = slackCreds?.connectionMode as
+    | "socket"
+    | "webhook"
+    | undefined;
+  const [selectedMode, setSelectedMode] = useState<"socket" | "webhook">(
+    savedMode ?? "socket",
+  );
+  // Sync local state when saved config loads or changes (e.g. after reset)
+  useEffect(() => {
+    if (savedMode) setSelectedMode(savedMode);
+  }, [savedMode]);
+  const isSocket = (savedMode ?? selectedMode) === "socket";
+  const hasModeChange = savedMode != null && selectedMode !== savedMode;
+
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
-  const allStepsCompleted = isLocalDev
-    ? !!ngrokDomain && !!slack?.configured
-    : !!slack?.configured;
+
+  // Socket mode doesn't require ngrok or a public URL
+  const allStepsCompleted = isSocket
+    ? !!slack?.configured
+    : isLocalDev
+      ? !!ngrokDomain && !!slack?.configured
+      : !!slack?.configured;
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,51 +96,110 @@ export default function SlackPage() {
         providerLabel="Slack"
         docsUrl="https://archestra.ai/docs/platform-slack"
       >
-        {isLocalDev ? (
-          <SetupStep
-            title="Make Archestra reachable from the Internet"
-            description="The Slack bot needs to connect to an Archestra webhook — your instance must be publicly accessible"
-            done={!!ngrokDomain}
-            ctaLabel="Configure ngrok"
-            onAction={() => setNgrokDialogOpen(true)}
+        <SetupStep
+          title="Choose connection mode"
+          description="How Slack delivers events to Archestra"
+          done={
+            !hasModeChange && (isSocket || (isLocalDev ? !!ngrokDomain : true))
+          }
+          ctaLabel={
+            !isSocket && isLocalDev && !ngrokDomain && !hasModeChange
+              ? "Configure ngrok"
+              : undefined
+          }
+          onAction={() => setNgrokDialogOpen(true)}
+        >
+          <RadioGroup
+            value={selectedMode}
+            onValueChange={(v) => setSelectedMode(v as "socket" | "webhook")}
+            className="flex gap-6"
           >
-            {ngrokDomain ? (
-              <>
-                Ngrok domain{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  {ngrokDomain}
-                </code>{" "}
-                is configured.
-              </>
-            ) : (
-              <>
-                Archestra's webhook{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
-                </code>{" "}
-                needs to be reachable from the Internet. Configure ngrok or
-                deploy to a public URL.
-              </>
-            )}
-          </SetupStep>
-        ) : (
-          <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
-            <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-sm">
-                Archestra's webhook must be reachable from the Internet
+            {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <RadioGroupItem value="socket" />
+              <span className="text-sm">
+                WebSocket{" "}
+                <span className="text-muted-foreground">
+                  — Archestra exchanges WebSocket messages with Slack, no public
+                  URL needed
+                </span>
               </span>
+            </label>
+            {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <RadioGroupItem value="webhook" />
+              <span className="text-sm">
+                Webhook{" "}
+                <span className="text-muted-foreground">
+                  — Slack makes HTTP requests to Archestra, requires a public
+                  URL
+                </span>
+              </span>
+            </label>
+          </RadioGroup>
+          {selectedMode === "webhook" && !hasModeChange && (
+            <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 mt-3">
+              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
               <span className="text-muted-foreground text-xs">
-                The webhook endpoint{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
-                </code>{" "}
-                must be publicly accessible so Slack can deliver events to
-                Archestra
+                {isLocalDev && ngrokDomain ? (
+                  <>
+                    Ngrok domain{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      {ngrokDomain}
+                    </code>{" "}
+                    is configured.
+                  </>
+                ) : (
+                  <>
+                    The webhook endpoint{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
+                    </code>{" "}
+                    must be publicly accessible so Slack can deliver events to
+                    Archestra.
+                    {isLocalDev &&
+                      " Configure ngrok or deploy to a public URL."}
+                  </>
+                )}
               </span>
             </div>
-          </div>
-        )}
+          )}
+          {hasModeChange && (
+            <div className="mt-3 space-y-3">
+              {slack?.configured && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground text-xs">
+                    Changing the connection mode will reset your Slack
+                    configuration. You will need to reconfigure Slack with a new
+                    app manifest.
+                  </span>
+                </div>
+              )}
+              <Button
+                size="sm"
+                variant={slack?.configured ? "destructive" : "default"}
+                disabled={resetMutation.isPending}
+                onClick={async () => {
+                  await resetMutation.mutateAsync({
+                    enabled: false,
+                    connectionMode: selectedMode,
+                    botToken: "",
+                    signingSecret: "",
+                    appLevelToken: "",
+                    appId: "",
+                  });
+                }}
+              >
+                {resetMutation.isPending
+                  ? "Saving..."
+                  : slack?.configured
+                    ? "Reset & switch mode"
+                    : "Save"}
+              </Button>
+            </div>
+          )}
+        </SetupStep>
         <SetupStep
           title="Setup Slack"
           description="Create a Slack App from manifest and connect it to Archestra"
@@ -128,11 +210,22 @@ export default function SlackPage() {
           onDoneAction={() => setSlackSetupOpen(true)}
         >
           <div className="flex items-center flex-wrap gap-4">
-            <CredentialField label="Bot Token" value={slackCreds?.botToken} />
             <CredentialField
-              label="Signing Secret"
-              value={slackCreds?.signingSecret}
+              label="Mode"
+              value={isSocket ? "Socket" : "Webhook"}
             />
+            <CredentialField label="Bot Token" value={slackCreds?.botToken} />
+            {isSocket ? (
+              <CredentialField
+                label="App-Level Token"
+                value={slackCreds?.appLevelToken}
+              />
+            ) : (
+              <CredentialField
+                label="Signing Secret"
+                value={slackCreds?.signingSecret}
+              />
+            )}
             <CredentialField label="App ID" value={slackCreds?.appId} />
           </div>
         </SetupStep>
@@ -145,6 +238,7 @@ export default function SlackPage() {
       <SlackSetupDialog
         open={slackSetupOpen}
         onOpenChange={setSlackSetupOpen}
+        connectionMode={savedMode ?? selectedMode}
       />
       <NgrokSetupDialog
         open={ngrokDialogOpen}

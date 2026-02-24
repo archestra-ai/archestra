@@ -16,7 +16,7 @@ export function SetupStep({
   title: string;
   description: string;
   done: boolean;
-  ctaLabel: string;
+  ctaLabel?: string;
   onAction?: () => void;
   doneActionLabel?: string;
   onDoneAction?: () => void;
@@ -56,7 +56,7 @@ export function SetupStep({
               >
                 {doneActionLabel}
               </Button>
-            ) : !done && onAction ? (
+            ) : !done && onAction && ctaLabel ? (
               <Button
                 variant="outline"
                 onClick={onAction}

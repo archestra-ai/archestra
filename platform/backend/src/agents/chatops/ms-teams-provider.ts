@@ -506,6 +506,11 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  async getChannelName(_channelId: string): Promise<string | null> {
+    // MS Teams channel names are resolved during discoverChannels via TurnContext
+    return null;
+  }
+
   getWorkspaceId(): string | null {
     // MS Teams requires a TurnContext to determine the team — no eager discovery
     return null;
@@ -600,6 +605,20 @@ class MSTeamsProvider implements ChatOpsProvider {
     } finally {
       console.error = origConsoleError;
     }
+  }
+
+  parseInteractivePayload(_payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null {
+    // MS Teams handles interactive selections inline via Adaptive Card submissions
+    // in the route handler (TurnContext.activity.value), not through this method.
+    return null;
   }
 
   async sendAgentSelectionCard(params: {

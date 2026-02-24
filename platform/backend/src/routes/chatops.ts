@@ -6,9 +6,9 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
-  SLACK_SLASH_COMMANDS,
+  SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
-import type { SlackInteractivePayload } from "@/agents/chatops/slack-provider";
+import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -53,31 +53,10 @@ const captureSlackRawBody = async (
 };
 
 /**
- * Short-lived in-memory dedup cache for Slack events.
- * Slack fires both `message` and `app_mention` for @mention messages
- * with the same event ts, causing duplicate processing.
- * Entries auto-expire after 30 seconds.
- *
- * This is a fast first-pass filter that saves a DB round-trip for the common
- * duplicate case. The authoritative dedup is database-level via
- * ChatOpsProcessedMessageModel.tryMarkAsProcessed() in the manager.
+ * Fast-path dedup for webhook Slack events. Socket mode has its own instance
+ * inside SlackProvider. See EventDedupMap for details.
  */
-const SLACK_DEDUP_MAX_SIZE = 10_000;
-const recentlyProcessedSlackEvents = new Map<string, true>();
-
-function markSlackEventProcessed(eventTs: string): void {
-  // Safety bound: evict oldest 10% when the map grows too large
-  if (recentlyProcessedSlackEvents.size >= SLACK_DEDUP_MAX_SIZE) {
-    const toDelete = Math.ceil(SLACK_DEDUP_MAX_SIZE * 0.1);
-    const iter = recentlyProcessedSlackEvents.keys();
-    for (let i = 0; i < toDelete; i++) {
-      const key = iter.next().value;
-      if (key) recentlyProcessedSlackEvents.delete(key);
-    }
-  }
-  recentlyProcessedSlackEvents.set(eventTs, true);
-  setTimeout(() => recentlyProcessedSlackEvents.delete(eventTs), 30_000);
-}
+const slackWebhookDedup = new EventDedupMap();
 
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -574,6 +553,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const body = request.body;
 
+      // Socket mode guard — webhooks are not used in socket mode
+      if (provider.isSocketMode()) {
+        throw new ApiError(
+          400,
+          "Slack is configured for Socket Mode. Webhooks are disabled.",
+        );
+      }
+
       // Validate request signature FIRST — even url_verification challenges are signed.
       const rawBody = (request as unknown as { slackRawBody?: string })
         .slackRawBody;
@@ -595,116 +582,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       try {
-        // Check if this is an interactive payload (block_actions for agent selection)
         const slackBody = body as {
           type?: string;
-          payload?: string;
-          event?: { type?: string };
+          event?: { type?: string; ts?: string };
         };
 
         if (slackBody.type === "event_callback") {
-          const message = await provider.parseWebhookNotification(
-            body,
-            headers,
-          );
-
-          if (!message) {
+          // Quick in-memory dedup for Slack's duplicate message+app_mention events
+          const eventTs = slackBody.event?.ts;
+          if (eventTs && slackWebhookDedup.mark(eventTs)) {
             return reply.send({ ok: true });
           }
 
-          // Deduplicate: Slack fires both `message` and `app_mention` events
-          // for the same @mention with identical ts. Skip if already processed.
-          if (recentlyProcessedSlackEvents.has(message.messageId)) {
-            return reply.send({ ok: true });
-          }
-          markSlackEventProcessed(message.messageId);
-
-          // Discover channels in background (fire-and-forget — no TurnContext to expire)
-          if (message.workspaceId) {
-            chatOpsManager
-              .discoverChannels({
-                provider,
-                context: null,
-                workspaceId: message.workspaceId,
-              })
-              .catch(() => {});
-          }
-
-          // Resolve sender email
-          const senderEmail = await provider.getUserEmail(message.senderId);
-          if (senderEmail) {
-            message.senderEmail = senderEmail;
-          }
-
-          // Verify sender is a registered user
-          if (!message.senderEmail) {
-            logger.warn("[ChatOps] Could not resolve Slack user email");
-            await provider.sendReply({
-              originalMessage: message,
-              text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
-            });
-            return reply.send({ ok: true });
-          }
-
-          const user = await UserModel.findByEmail(
-            message.senderEmail.toLowerCase(),
-          );
-          if (!user) {
-            await provider.sendReply({
-              originalMessage: message,
-              text: `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-            });
-            return reply.send({ ok: true });
-          }
-
-          // Check for existing binding
-          const binding = await ChatOpsChannelBindingModel.findByChannel({
-            provider: "slack",
-            channelId: message.channelId,
-            workspaceId: message.workspaceId,
-          });
-
-          if (!binding || !binding.agentId) {
-            // Create binding early (without agent) so the DM/channel appears in the UI
-            if (!binding) {
-              const isSlackDm = message.metadata?.channelType === "im";
-              const organizationId = await getDefaultOrganizationId();
-              await ChatOpsChannelBindingModel.upsertByChannel({
-                organizationId,
-                provider: "slack",
-                channelId: message.channelId,
-                workspaceId: message.workspaceId,
-                workspaceName: provider.getWorkspaceName() ?? undefined,
-                channelName: isSlackDm
-                  ? `Direct Message - ${message.senderEmail}`
-                  : undefined,
-                isDm: isSlackDm,
-                dmOwnerEmail: isSlackDm ? message.senderEmail : undefined,
-              });
-            }
-
-            // Show agent selection
-            await sendAgentSelectionCard({
-              provider,
-              message,
-              isWelcome: true,
-            });
-            return reply.send({ ok: true });
-          }
-
-          // Process message through bound agent asynchronously.
-          // Return 200 immediately — Slack has a 3-second timeout for event deliveries.
-          // Dedup (in-memory + DB) protects against retries from Slack.
+          // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)
           chatOpsManager
-            .processMessage({
-              message,
-              provider,
-              sendReply: true,
-            })
+            .handleIncomingMessage(provider, body)
             .catch((error) => {
               logger.error(
                 {
-                  messageId: message.messageId,
                   error: error instanceof Error ? error.message : String(error),
                 },
                 "[ChatOps] Error processing Slack message (async)",
@@ -774,6 +669,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(429, "Too many requests");
       }
 
+      // Socket mode guard
+      if (provider.isSocketMode()) {
+        throw new ApiError(
+          400,
+          "Slack is configured for Socket Mode. Webhooks are disabled.",
+        );
+      }
+
       // Validate request signature using the captured raw body
       const headers: Record<string, string | string[] | undefined> = {};
       for (const [key, value] of Object.entries(request.headers)) {
@@ -797,75 +700,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Missing payload");
       }
 
-      let payload: SlackInteractivePayload;
+      let payload: unknown;
       try {
-        payload = JSON.parse(payloadStr) as SlackInteractivePayload;
+        payload = JSON.parse(payloadStr);
       } catch {
         throw new ApiError(400, "Invalid payload JSON");
       }
 
-      const selection = provider.parseInteractivePayload(payload);
-      if (!selection) {
-        return reply.send({ ok: true });
-      }
-
-      // Verify the user clicking the button is a registered Archestra user
-      const senderEmail = await provider.getUserEmail(selection.userId);
-      if (!senderEmail) {
-        logger.warn("[ChatOps] Could not resolve Slack interactive user email");
-        return reply.send({ ok: true });
-      }
-      const user = await UserModel.findByEmail(senderEmail.toLowerCase());
-      if (!user) {
-        logger.warn(
-          { senderEmail },
-          "[ChatOps] Slack interactive user not registered in Archestra",
-        );
-        return reply.send({ ok: true });
-      }
-
-      // Verify agent exists
-      const agent = await AgentModel.findById(selection.agentId);
-      if (!agent) {
-        return reply.send({ ok: true });
-      }
-
-      const organizationId = await getDefaultOrganizationId();
-
-      // Create or update binding
-      // Slack DM channel IDs start with "D" — use a readable name for DM bindings
-      const isSlackDm = selection.channelId.startsWith("D");
-      await ChatOpsChannelBindingModel.upsertByChannel({
-        organizationId,
-        provider: "slack",
-        channelId: selection.channelId,
-        workspaceId: selection.workspaceId,
-        workspaceName: provider.getWorkspaceName() ?? undefined,
-        channelName: isSlackDm ? `Direct Message - ${senderEmail}` : undefined,
-        isDm: isSlackDm,
-        dmOwnerEmail: isSlackDm ? senderEmail : undefined,
-        agentId: selection.agentId,
-      });
-
-      // Confirm the selection in the thread
-      const message: IncomingChatMessage = {
-        messageId: `slack-selection-${Date.now()}`,
-        channelId: selection.channelId,
-        workspaceId: selection.workspaceId,
-        threadId: selection.threadTs,
-        senderId: selection.userId,
-        senderName: selection.userName,
-        text: "",
-        rawText: "",
-        timestamp: new Date(),
-        isThreadReply: false,
-      };
-
-      await provider.sendReply({
-        originalMessage: message,
-        text: `Agent *${agent.name}* is now bound to this ${isSlackDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
-      });
-
+      await chatOpsManager.handleInteractiveSelection(provider, payload);
       return reply.send({ ok: true });
     },
   );
@@ -922,6 +764,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(429, "Too many requests");
       }
 
+      // Socket mode guard
+      if (provider.isSocketMode()) {
+        throw new ApiError(
+          400,
+          "Slack is configured for Socket Mode. Webhooks are disabled.",
+        );
+      }
+
       // Validate request signature using the raw form-encoded body
       const headers: Record<string, string | string[] | undefined> = {};
       for (const [key, value] of Object.entries(request.headers)) {
@@ -938,7 +788,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Invalid request signature");
       }
 
-      // Slack sends slash commands as form-encoded with these fields
       const body = request.body as {
         command?: string;
         text?: string;
@@ -951,98 +800,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         trigger_id?: string;
       };
 
-      const command = body.command;
-      const channelId = body.channel_id || "";
-      const workspaceId = body.team_id || null;
-      const userId = body.user_id || "unknown";
+      const response = await provider.handleSlashCommand(body);
 
-      // Resolve sender email and verify user
-      const senderEmail = await provider.getUserEmail(userId);
-      if (!senderEmail) {
-        return reply.send({
-          response_type: "ephemeral",
-          text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
-        });
+      if (response) {
+        return reply.send(response);
       }
-
-      const user = await UserModel.findByEmail(senderEmail.toLowerCase());
-      if (!user) {
-        return reply.send({
-          response_type: "ephemeral",
-          text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-        });
-      }
-
-      // Build an IncomingChatMessage for reuse with existing helpers
-      const message: IncomingChatMessage = {
-        messageId: `slack-slash-${Date.now()}`,
-        channelId,
-        workspaceId,
-        threadId: undefined,
-        senderId: userId,
-        senderName: body.user_name || "Unknown User",
-        senderEmail,
-        text: body.text || "",
-        rawText: body.text || "",
-        timestamp: new Date(),
-        isThreadReply: false,
-      };
-
-      switch (command) {
-        case SLACK_SLASH_COMMANDS.HELP: {
-          return reply.send({
-            response_type: "ephemeral",
-            text:
-              "*Available commands:*\n" +
-              "`/archestra-select-agent` — Change the default agent\n" +
-              "`/archestra-status` — Show current agent binding\n" +
-              "`/archestra-help` — Show this help message\n\n" +
-              "Or just send a message to interact with the bound agent.",
-          });
-        }
-        case SLACK_SLASH_COMMANDS.STATUS: {
-          const binding = await ChatOpsChannelBindingModel.findByChannel({
-            provider: "slack",
-            channelId,
-            workspaceId,
-          });
-
-          if (binding?.agentId) {
-            const agent = await AgentModel.findById(binding.agentId);
-            return reply.send({
-              response_type: "ephemeral",
-              text:
-                `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
-                "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
-                "Use `/archestra-select-agent` to change the default agent.",
-            });
-          }
-
-          return reply.send({
-            response_type: "ephemeral",
-            text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
-          });
-        }
-        case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
-          // Send agent selection card (visible to all in channel)
-          await sendAgentSelectionCard({
-            provider,
-            message,
-            isWelcome: false,
-          });
-          // Acknowledge the slash command with an empty 200
-          return reply.send({
-            response_type: "in_channel",
-            text: "",
-          });
-        }
-        default: {
-          return reply.send({
-            response_type: "ephemeral",
-            text: "Unknown command. Use `/archestra-help` to see available commands.",
-          });
-        }
-      }
+      return reply.send({ response_type: "ephemeral", text: "" });
     },
   );
 
@@ -1255,15 +1018,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         body: z.object({
           enabled: z.boolean().optional(),
-          botToken: z.string().min(1).max(512).optional(),
-          signingSecret: z.string().min(1).max(256).optional(),
-          appId: z.string().min(1).max(256).optional(),
+          botToken: z.string().max(512).optional(),
+          signingSecret: z.string().max(256).optional(),
+          appId: z.string().max(256).optional(),
+          connectionMode: z.enum(["webhook", "socket"]).optional(),
+          appLevelToken: z.string().max(512).optional(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
-      const { enabled, botToken, signingSecret, appId } = request.body;
+      const {
+        enabled,
+        botToken,
+        signingSecret,
+        appId,
+        connectionMode,
+        appLevelToken,
+      } = request.body;
 
       // Merge new values with existing DB config (or defaults for first setup)
       const existing = await ChatOpsConfigModel.getSlackConfig();
@@ -1272,6 +1044,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         botToken: botToken ?? existing?.botToken ?? "",
         signingSecret: signingSecret ?? existing?.signingSecret ?? "",
         appId: appId ?? existing?.appId ?? "",
+        connectionMode:
+          connectionMode ??
+          existing?.connectionMode ??
+          SLACK_DEFAULT_CONNECTION_MODE,
+        appLevelToken: appLevelToken ?? existing?.appLevelToken ?? "",
       };
 
       await ChatOpsConfigModel.saveSlackConfig(merged);
@@ -1376,15 +1153,23 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
     case "slack": {
       const provider = chatOpsManager.getSlackProvider();
       const dbConfig = await ChatOpsConfigModel.getSlackConfig();
+      const isSocket = dbConfig?.connectionMode === "socket";
+      const credentials: Record<string, string> = {
+        botToken: maskValue(dbConfig?.botToken ?? ""),
+        appId: maskValue(dbConfig?.appId ?? ""),
+        connectionMode:
+          dbConfig?.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+      };
+      if (isSocket) {
+        credentials.appLevelToken = maskValue(dbConfig?.appLevelToken ?? "");
+      } else {
+        credentials.signingSecret = dbConfig?.signingSecret ? "••••••••" : "";
+      }
       return {
         id: "slack",
         displayName: "Slack",
         configured: provider?.isConfigured() ?? false,
-        credentials: {
-          botToken: maskValue(dbConfig?.botToken ?? ""),
-          signingSecret: dbConfig?.signingSecret ? "••••••••" : "",
-          appId: maskValue(dbConfig?.appId ?? ""),
-        },
+        credentials,
         dmInfo:
           provider?.getBotUserId() || provider?.getWorkspaceId()
             ? {

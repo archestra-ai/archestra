@@ -1,4 +1,4 @@
-import { DEFAULT_TEAM_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -9,7 +9,6 @@ import type {
 } from "@/types";
 import MemberModel from "./member";
 import SessionModel from "./session";
-import TeamModel from "./team";
 import UserTokenModel from "./user-token";
 
 class InvitationModel {
@@ -114,37 +113,6 @@ class InvitationModel {
           `❌ Failed to create personal token for user ${user.email}:`,
         );
         // Don't fail invitation acceptance if token creation fails
-      }
-
-      // Auto-assign new member to Default Team
-      try {
-        const defaultTeam = await TeamModel.findByName(
-          DEFAULT_TEAM_NAME,
-          organizationId,
-        );
-        if (defaultTeam) {
-          const alreadyMember = await TeamModel.isUserInTeam(
-            defaultTeam.id,
-            user.id,
-          );
-          if (!alreadyMember) {
-            await TeamModel.addMember(defaultTeam.id, user.id);
-            logger.info(
-              `👥 User ${user.email} auto-assigned to Default Team in organization ${organizationId}`,
-            );
-          }
-        } else {
-          logger.warn(
-            { organizationId },
-            "Default Team not found, skipping auto-assignment",
-          );
-        }
-      } catch (teamError) {
-        logger.error(
-          { err: teamError },
-          `❌ Failed to auto-assign user ${user.email} to Default Team:`,
-        );
-        // Don't fail invitation acceptance if team assignment fails
       }
 
       // Mark invitation as accepted

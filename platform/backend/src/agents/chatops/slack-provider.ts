@@ -1,10 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { TimeInMs } from "@shared";
+import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import type { SlackConfig } from "@/models";
+import {
+  AgentModel,
+  ChatOpsChannelBindingModel,
+  type SlackConfig,
+  UserModel,
+} from "@/models";
 import type {
+  ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -13,8 +20,12 @@ import type {
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
-import { CHATOPS_THREAD_HISTORY } from "./constants";
-import { errorMessage } from "./utils";
+import {
+  CHATOPS_THREAD_HISTORY,
+  SLACK_DEFAULT_CONNECTION_MODE,
+  SLACK_SLASH_COMMANDS,
+} from "./constants";
+import { EventDedupMap, errorMessage } from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -32,17 +43,34 @@ class SlackProvider implements ChatOpsProvider {
   private teamId: string | null = null;
   private teamName: string | null = null;
   private config: SlackConfig;
+  private socketModeClient: SocketModeClient | null = null;
+  private eventHandler: ChatOpsEventHandler | null = null;
+  private socketDedup = new EventDedupMap();
 
   constructor(slackConfig: SlackConfig) {
     this.config = slackConfig;
   }
 
   isConfigured(): boolean {
-    return (
-      this.config.enabled &&
-      Boolean(this.config.botToken) &&
-      Boolean(this.config.signingSecret)
-    );
+    if (!this.config.enabled || !this.config.botToken) return false;
+    if (this.isSocketMode()) {
+      return Boolean(this.config.appLevelToken);
+    }
+    return Boolean(this.config.signingSecret);
+  }
+
+  isSocketMode(): boolean {
+    return this.config.connectionMode === "socket";
+  }
+
+  getConnectionMode(): "webhook" | "socket" {
+    return this.config.connectionMode === "webhook"
+      ? "webhook"
+      : SLACK_DEFAULT_CONNECTION_MODE;
+  }
+
+  setEventHandler(handler: ChatOpsEventHandler): void {
+    this.eventHandler = handler;
   }
 
   async initialize(): Promise<void> {
@@ -70,6 +98,10 @@ class SlackProvider implements ChatOpsProvider {
       );
       throw error;
     }
+
+    if (this.isSocketMode()) {
+      await this.startSocketMode();
+    }
   }
 
   getWorkspaceId(): string | null {
@@ -81,6 +113,19 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async cleanup(): Promise<void> {
+    if (this.socketModeClient) {
+      try {
+        await this.socketModeClient.disconnect();
+      } catch (error) {
+        logger.warn(
+          { error: errorMessage(error) },
+          "[SlackProvider] Error disconnecting socket mode client",
+        );
+      }
+      this.socketModeClient = null;
+    }
+    this.eventHandler = null;
+    this.socketDedup.clear();
     this.client = null;
     this.botUserId = null;
     this.teamId = null;
@@ -392,6 +437,22 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async getChannelName(channelId: string): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const result = await this.client.conversations.info({
+        channel: channelId,
+      });
+      return (result.channel as { name?: string })?.name || null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId },
+        "[SlackProvider] Failed to get channel name",
+      );
+      return null;
+    }
+  }
+
   async discoverChannels(_context: unknown): Promise<DiscoveredChannel[]> {
     if (!this.client) {
       return [];
@@ -427,7 +488,7 @@ class SlackProvider implements ChatOpsProvider {
    * Parse a block_actions interactive payload (agent selection button click).
    * Returns the selected agent ID and context, or null if not a valid selection.
    */
-  parseInteractivePayload(payload: SlackInteractivePayload): {
+  parseInteractivePayload(payload: unknown): {
     agentId: string;
     channelId: string;
     workspaceId: string | null;
@@ -436,24 +497,143 @@ class SlackProvider implements ChatOpsProvider {
     userName: string;
     responseUrl: string;
   } | null {
-    if (payload.type !== "block_actions" || !payload.actions?.length) {
+    const p = payload as SlackInteractivePayload;
+    if (p.type !== "block_actions" || !p.actions?.length) {
       return null;
     }
 
-    const action = payload.actions[0];
+    const action = p.actions[0];
     if (!action.action_id?.startsWith("select_agent_") || !action.value) {
       return null;
     }
 
     return {
       agentId: action.value,
-      channelId: payload.channel?.id || "",
-      workspaceId: payload.team?.id || null,
-      threadTs: payload.message?.thread_ts || payload.message?.ts,
-      userId: payload.user?.id || "unknown",
-      userName: payload.user?.name || "Unknown",
-      responseUrl: payload.response_url || "",
+      channelId: p.channel?.id || "",
+      workspaceId: p.team?.id || null,
+      threadTs: p.message?.thread_ts || p.message?.ts,
+      userId: p.user?.id || "unknown",
+      userName: p.user?.name || "Unknown",
+      responseUrl: p.response_url || "",
     };
+  }
+
+  /**
+   * Handle a Slack slash command.
+   * Returns the response object. Caller is responsible for delivery
+   * (HTTP response for webhooks, response_url POST for socket mode).
+   */
+  async handleSlashCommand(body: {
+    command?: string;
+    text?: string;
+    user_id?: string;
+    user_name?: string;
+    channel_id?: string;
+    channel_name?: string;
+    team_id?: string;
+    response_url?: string;
+    trigger_id?: string;
+  }): Promise<{ response_type: string; text: string } | null> {
+    const command = body.command;
+    const channelId = body.channel_id || "";
+    const workspaceId = body.team_id || null;
+    const userId = body.user_id || "unknown";
+
+    // Resolve sender email and verify user
+    const senderEmail = await this.getUserEmail(userId);
+    if (!senderEmail) {
+      return {
+        response_type: "ephemeral",
+        text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
+      };
+    }
+
+    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+    if (!user) {
+      return {
+        response_type: "ephemeral",
+        text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+      };
+    }
+
+    switch (command) {
+      case SLACK_SLASH_COMMANDS.HELP:
+        return {
+          response_type: "ephemeral",
+          text:
+            "*Available commands:*\n" +
+            "`/archestra-select-agent` — Change the default agent\n" +
+            "`/archestra-status` — Show current agent binding\n" +
+            "`/archestra-help` — Show this help message\n\n" +
+            "Or just send a message to interact with the bound agent.",
+        };
+
+      case SLACK_SLASH_COMMANDS.STATUS: {
+        const binding = await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId,
+          workspaceId,
+        });
+
+        if (binding?.agentId) {
+          const agent = await AgentModel.findById(binding.agentId);
+          return {
+            response_type: "ephemeral",
+            text:
+              `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
+              "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
+              "Use `/archestra-select-agent` to change the default agent.",
+          };
+        }
+
+        return {
+          response_type: "ephemeral",
+          text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
+        };
+      }
+
+      case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
+        // Send agent selection card (visible to all in channel)
+        const message: IncomingChatMessage = {
+          messageId: `slack-slash-${Date.now()}`,
+          channelId,
+          workspaceId,
+          threadId: undefined,
+          senderId: userId,
+          senderName: body.user_name || "Unknown User",
+          senderEmail,
+          text: body.text || "",
+          rawText: body.text || "",
+          timestamp: new Date(),
+          isThreadReply: false,
+        };
+
+        const agents =
+          (await this.eventHandler?.getAccessibleChatopsAgents({
+            senderEmail,
+          })) ?? [];
+
+        if (agents.length === 0) {
+          await this.sendReply({
+            originalMessage: message,
+            text: "No agents are available for you in Slack.\nContact your administrator to get access to an agent with Slack enabled.",
+          });
+        } else {
+          await this.sendAgentSelectionCard({
+            message,
+            agents,
+            isWelcome: false,
+          });
+        }
+        return { response_type: "in_channel", text: "" };
+      }
+
+      default:
+        return {
+          response_type: "ephemeral",
+          text: "Unknown command. Use `/archestra-help` to see available commands.",
+        };
+    }
   }
 
   getBotUserId(): string | null {
@@ -463,6 +643,131 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  /**
+   * Handle a slash command received via socket mode.
+   * Uses ack() to send the response directly (supported by the SocketModeClient).
+   */
+  private async handleSlashCommandSocket(
+    body: unknown,
+    ack: (response?: Record<string, unknown>) => Promise<void>,
+  ): Promise<void> {
+    try {
+      const cmd = body as {
+        command?: string;
+        text?: string;
+        user_id?: string;
+        user_name?: string;
+        channel_id?: string;
+        channel_name?: string;
+        team_id?: string;
+        response_url?: string;
+        trigger_id?: string;
+      };
+      const response = await this.handleSlashCommand(cmd);
+      // Acknowledge with the response body — SocketModeClient sends it back via the socket
+      await ack(response ? (response as Record<string, unknown>) : undefined);
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[SlackProvider] Slash command failed",
+      );
+      await ack({
+        response_type: "ephemeral",
+        text: "Something went wrong. Please try again.",
+      });
+    }
+  }
+
+  private async startSocketMode(): Promise<void> {
+    const appToken = this.config.appLevelToken;
+    if (!appToken) {
+      logger.error(
+        "[SlackProvider] Cannot start socket mode: appLevelToken is missing",
+      );
+      return;
+    }
+
+    this.socketModeClient = new SocketModeClient({
+      appToken,
+      autoReconnectEnabled: true,
+    });
+
+    // The SocketModeClient dispatches events as follows (see source):
+    //   events_api  → emits inner event type ("message", "app_mention"), body = full envelope
+    //   interactive → emits "interactive", body = interaction payload
+    //   slash_commands → emits "slash_commands", body = command payload
+    //   ALL types   → also emits "slack_event" with { type, body }
+    //
+    // We use "slack_event" as a single catch-all to route all event types.
+    this.socketModeClient.on(
+      "slack_event",
+      async ({
+        ack,
+        type,
+        body,
+      }: {
+        ack: (response?: Record<string, unknown>) => Promise<void>;
+        type: string;
+        body: unknown;
+        retry_num?: number;
+      }) => {
+        switch (type) {
+          case "events_api": {
+            await ack();
+            const eventBody = body as { event?: { ts?: string } };
+            const eventTs = eventBody?.event?.ts;
+            if (eventTs && this.socketDedup.mark(eventTs)) {
+              break;
+            }
+            this.eventHandler
+              ?.handleIncomingMessage(this, body)
+              .catch((error) => {
+                logger.error(
+                  { error: errorMessage(error) },
+                  "[SlackProvider] Error processing socket event",
+                );
+              });
+            break;
+          }
+          case "interactive":
+            await ack();
+            this.eventHandler
+              ?.handleInteractiveSelection(this, body)
+              .catch((error) => {
+                logger.error(
+                  { error: errorMessage(error) },
+                  "[SlackProvider] Error processing socket interactive event",
+                );
+              });
+            break;
+          case "slash_commands":
+            // ack() for slash commands can include a response body
+            this.handleSlashCommandSocket(body, ack).catch((error) => {
+              logger.error(
+                { error: errorMessage(error) },
+                "[SlackProvider] Error processing socket slash command",
+              );
+            });
+            break;
+          default:
+            await ack();
+            break;
+        }
+      },
+    );
+
+    try {
+      await this.socketModeClient.start();
+      logger.info("[SlackProvider] Socket mode connected");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to start socket mode",
+      );
+      throw error;
+    }
+  }
 
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
@@ -540,5 +845,3 @@ interface SlackInteractivePayload {
   message?: { ts: string; thread_ts?: string };
   response_url?: string;
 }
-
-export type { SlackInteractivePayload };

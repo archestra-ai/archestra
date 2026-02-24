@@ -44,6 +44,8 @@ export function useUpdateSlackChatOpsConfig() {
       botToken?: string;
       signingSecret?: string;
       appId?: string;
+      connectionMode?: "webhook" | "socket";
+      appLevelToken?: string;
     }) => {
       const { data, error } = await archestraApiSdk.updateSlackChatOpsConfig({
         body,

@@ -45,6 +45,10 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
+      imagePullSecrets:
+        values.localConfig.imagePullSecrets?.filter(
+          (s) => s.name.trim().length > 0,
+        ) || undefined,
     };
 
     // BYOS: Include local config vault path and key if set
@@ -121,6 +125,13 @@ export function transformFormToApiData(
     // No authentication - clear both configs
     data.userConfig = {};
     data.oauthConfig = undefined;
+  }
+
+  // Handle labels
+  if (values.labels && values.labels.length > 0) {
+    data.labels = values.labels;
+  } else {
+    data.labels = [];
   }
 
   return data;
@@ -201,6 +212,7 @@ export function transformCatalogItemToFormValues(
         httpPort?: string;
         httpPath?: string;
         serviceAccount?: string;
+        imagePullSecrets?: Array<{ name: string }>;
       }
     | undefined;
   if (item.localConfig) {
@@ -243,6 +255,7 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
+      imagePullSecrets: item.localConfig.imagePullSecrets || [],
     };
   }
 
@@ -260,6 +273,8 @@ export function transformCatalogItemToFormValues(
     // BYOS: Include parsed vault path and key if OAuth secret is a vault reference
     oauthClientSecretVaultPath,
     oauthClientSecretVaultKey,
+    // Labels
+    labels: item.labels ?? [],
   } as McpCatalogFormValues;
 }
 

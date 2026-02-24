@@ -22,7 +22,7 @@
         {
           "type": "tool_use",
           "id": "toolu_test_123",
-          "name": "read_file",
+          "name": "e2e_read_file_anthropic",
           "input": {
             "file_path": "/etc/passwd"
           }

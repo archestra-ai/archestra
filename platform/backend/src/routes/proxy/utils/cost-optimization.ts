@@ -1,9 +1,10 @@
+import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  ModelModel,
   OptimizationRuleModel,
   TeamModel,
-  TokenPriceModel,
 } from "@/models";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -124,22 +125,25 @@ export async function getOptimizedModel<
 }
 
 /**
- * Calculate cost for token usage based on model pricing
- * Returns undefined if pricing is not available for the model
+ * Calculate cost for token usage based on model pricing.
+ * Uses provider to disambiguate models with the same name across providers.
+ * Returns undefined if token counts are not available.
  */
 export async function calculateCost(
   model: string,
   inputTokens: number | null | undefined,
   outputTokens: number | null | undefined,
+  provider: SupportedProvider,
 ): Promise<number | undefined> {
   if (!inputTokens || !outputTokens) {
     return undefined;
   }
 
-  const pricing = await TokenPriceModel.findByModel(model);
-  if (!pricing) {
-    return undefined;
-  }
+  const model_entry = await ModelModel.findByProviderAndModelId(
+    provider,
+    model,
+  );
+  const pricing = ModelModel.getEffectivePricing(model_entry, model);
 
   const inputCost =
     (inputTokens / 1_000_000) * Number.parseFloat(pricing.pricePerMillionInput);

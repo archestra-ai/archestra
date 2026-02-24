@@ -39,6 +39,8 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}-wiremock
+        app.kubernetes.io/name: wiremock
+        app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       containers:
         - name: wiremock

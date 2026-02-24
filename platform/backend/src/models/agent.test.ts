@@ -158,10 +158,10 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // user1 only has access to agent1 (via team1)
+      // user1 has access to agent1 (via team1) and agent3 (org-wide, no teams)
       const agents = await AgentModel.findAll(user1.id, false);
-      expect(agents).toHaveLength(1);
-      expect(agents[0].id).toBe(agent1.id);
+      expect(agents).toHaveLength(2);
+      expect(agents.map((a) => a.id)).toContain(agent1.id);
     });
 
     test("member with no team membership sees empty list", async ({
@@ -399,13 +399,13 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // Non-admin user should only see agent in their team
+      // Non-admin user sees agent in their team + org-wide agents (no teams)
       const agents = await AgentModel.findAll(user.id, false);
-      expect(agents).toHaveLength(1);
-      expect(agents[0].id).toBe(userTeamAgent.id);
+      expect(agents).toHaveLength(2);
+      expect(agents.map((a) => a.id)).toContain(userTeamAgent.id);
     });
 
-    test("non-admin user cannot see agents with no team", async ({
+    test("non-admin user can see org-wide agents (no team)", async ({
       makeUser,
       makeAdmin,
       makeOrganization,
@@ -418,16 +418,15 @@ describe("AgentModel", () => {
       const userTeam = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(userTeam.id, user.id);
 
-      // Create agent with no teams
-      await AgentModel.create({
+      // Create agent with no teams (org-wide)
+      const orgWideAgent = await AgentModel.create({
         name: "No Team Agent",
         teams: [],
       });
 
-      // Non-admin user should not see agent with no teams
+      // Non-admin user should see org-wide agents (teamless)
       const agents = await AgentModel.findAll(user.id, false);
-      // Only agents in user's team should be visible
-      expect(agents.every((a) => a.teams.length > 0)).toBe(true);
+      expect(agents.map((a) => a.id)).toContain(orgWideAgent.id);
     });
 
     test("user with no team membership sees empty list", async ({
@@ -452,9 +451,10 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // User with no team membership should see nothing
+      // User with no team membership should still see org-wide agents (no teams)
       const agents = await AgentModel.findAll(userWithNoTeam.id, false);
-      expect(agents).toHaveLength(0);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].name).toBe("Agent without Team");
     });
 
     test("getUserTeamIds returns correct teams for validation", async ({
@@ -627,10 +627,10 @@ describe("AgentModel", () => {
         false, // not admin
       );
 
-      // The bug: total count should match the actual number of accessible agents
-      expect(result.data).toHaveLength(1); // Only Agent 1 is accessible
-      expect(result.pagination.total).toBe(1); // Total should also be 1, not 5 (including default agent)
-      expect(result.data[0].name).toBe("Agent 1");
+      // User sees Agent 1 (via team) + 3 org-wide agents (no teams)
+      expect(result.data).toHaveLength(4);
+      expect(result.pagination.total).toBe(4);
+      expect(result.data.map((a) => a.name)).toContain("Agent 1");
     });
 
     test("pagination count includes all agents for admin", async ({

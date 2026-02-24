@@ -30,8 +30,8 @@ export const RouteId = {
   DeleteAgentDelegation: "deleteAgentDelegation",
   GetAllDelegationConnections: "getAllDelegationConnections",
 
-  // Features Routes
-  GetFeatures: "getFeatures",
+  // Config Routes
+  GetConfig: "getConfig",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
@@ -44,6 +44,8 @@ export const RouteId = {
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
+  GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
+  GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
   GetDeploymentYamlPreview: "getDeploymentYamlPreview",
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
@@ -227,6 +229,12 @@ export const RouteId = {
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
 
+  // Virtual API Key Routes
+  GetVirtualApiKeys: "getVirtualApiKeys",
+  GetAllVirtualApiKeys: "getAllVirtualApiKeys",
+  CreateVirtualApiKey: "createVirtualApiKey",
+  DeleteVirtualApiKey: "deleteVirtualApiKey",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
 
@@ -257,12 +265,8 @@ export const RouteId = {
   // User Routes
   GetUserPermissions: "getUserPermissions",
 
-  // Token Price Routes
-  GetTokenPrices: "getTokenPrices",
-  CreateTokenPrice: "createTokenPrice",
-  GetTokenPrice: "getTokenPrice",
-  UpdateTokenPrice: "updateTokenPrice",
-  DeleteTokenPrice: "deleteTokenPrice",
+  // Model Pricing Routes
+  UpdateModelPricing: "updateModelPricing",
 
   // Team Token Routes
   GetTokens: "getTokens",

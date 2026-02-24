@@ -171,18 +171,9 @@ for (const config of testConfigs) {
       goToPage,
       makeRandomString,
     }) => {
-      // Skip onboarding if dialog is present
-      const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-
       // Navigate to chat page
       await goToPage(page, "/chat");
       await page.waitForLoadState("domcontentloaded");
-
-      // Skip onboarding if it appears
-      if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await skipButton.click();
-        await page.waitForTimeout(500);
-      }
 
       // Wait for the chat page to load - look for the prompt input area
       const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
@@ -205,10 +196,12 @@ for (const config of testConfigs) {
         await page.waitForTimeout(500);
       }
 
-      // Click on the model option that contains our model ID
+      // Click on the model option that matches our exact model ID.
+      // Use parentheses to avoid matching Bedrock models whose IDs contain
+      // the same base model name (e.g. "us.anthropic.claude-3-5-sonnet-20241022-v2:0").
       const modelOption = page
         .getByRole("option")
-        .filter({ hasText: config.modelId });
+        .filter({ hasText: `(${config.modelId})` });
       await expect(modelOption.first()).toBeVisible({ timeout: 5_000 });
       await modelOption.first().click();
 
@@ -237,7 +230,8 @@ for (const config of testConfigs) {
       });
 
       // Verify the user's message also appears in the chat
-      await expect(page.getByText(testMessage)).toBeVisible();
+      // Use .first() because the message text may also appear in the sidebar title
+      await expect(page.getByText(testMessage).first()).toBeVisible();
     });
   });
 }

@@ -17,6 +17,7 @@ import {
   getTrustedOrigins,
   parseBodyLimit,
   parseContentMaxLength,
+  parseVirtualKeyDefaultExpiration,
 } from "./config";
 
 // Mock the logger
@@ -901,5 +902,60 @@ describe("getCorsOrigins", () => {
       expect(result).toContain("http://localhost:3000");
       expect(result).toContain("http://127.0.0.1:3000");
     });
+  });
+});
+
+describe("parseVirtualKeyDefaultExpiration", () => {
+  test("should return default 2592000 when undefined", () => {
+    expect(parseVirtualKeyDefaultExpiration(undefined)).toBe(2592000);
+  });
+
+  test("should return default when empty string", () => {
+    expect(parseVirtualKeyDefaultExpiration("")).toBe(2592000);
+  });
+
+  test("should return default when whitespace-only", () => {
+    expect(parseVirtualKeyDefaultExpiration("   ")).toBe(2592000);
+  });
+
+  test("should parse valid positive integer", () => {
+    expect(parseVirtualKeyDefaultExpiration("86400")).toBe(86400);
+  });
+
+  test("should return 0 for zero (never expires)", () => {
+    expect(parseVirtualKeyDefaultExpiration("0")).toBe(0);
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseVirtualKeyDefaultExpiration("-100")).toBe(2592000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "-100", using default 2592000',
+    );
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseVirtualKeyDefaultExpiration("abc")).toBe(2592000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "abc", using default 2592000',
+    );
+  });
+
+  test("should trim whitespace and parse", () => {
+    expect(parseVirtualKeyDefaultExpiration("  3600  ")).toBe(3600);
+  });
+
+  test("should cap values exceeding 1 year to 31536000", () => {
+    expect(parseVirtualKeyDefaultExpiration("100000000")).toBe(31_536_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "100000000" exceeds maximum (31536000s / 1 year), capping to 31536000',
+    );
+  });
+
+  test("should allow exactly 1 year (31536000)", () => {
+    expect(parseVirtualKeyDefaultExpiration("31536000")).toBe(31_536_000);
+  });
+
+  test("should cap value just over 1 year", () => {
+    expect(parseVirtualKeyDefaultExpiration("31536001")).toBe(31_536_000);
   });
 });

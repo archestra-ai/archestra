@@ -14,7 +14,7 @@ import {
  * Navigate to the LLM API Keys page and expand pagination to show all rows.
  */
 async function goToApiKeysPage(page: Page) {
-  await goToPage(page, "/settings/llm-api-keys");
+  await goToPage(page, "/llm-proxies/provider-settings");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 
@@ -38,10 +38,10 @@ test("Check if BYOS Vault is enabled", async ({
   await goToPage(adminPage, "/mcp-catalog/registry");
   await adminPage.waitForLoadState("domcontentloaded");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  const { data: features } = await archestraApiSdk.getFeatures({
+  const { data: config } = await archestraApiSdk.getConfig({
     headers: { Cookie: cookieHeaders },
   });
-  byosEnabled = !!features?.byosEnabled;
+  byosEnabled = !!config?.features?.byosEnabled;
 });
 
 test("Then we create folder in Vault for Default Team and exemplary secret", async () => {

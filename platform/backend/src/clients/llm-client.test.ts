@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { describe, expect, it } from "@/test";
+import { describe, expect, it, test } from "@/test";
 
 // Mock the gemini-client module before importing llm-client
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
@@ -7,7 +7,11 @@ vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
 
-import { createDirectLLMModel, detectProviderFromModel } from "./llm-client";
+import {
+  createDirectLLMModel,
+  detectProviderFromModel,
+  resolveProviderApiKey,
+} from "./llm-client";
 
 describe("detectProviderFromModel", () => {
   describe("anthropic models", () => {
@@ -211,5 +215,199 @@ describe("createDirectLLMModel", () => {
     ).toThrow(
       "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
     );
+  });
+});
+
+describe("resolveProviderApiKey", () => {
+  test("resolves personal key for user", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-personal-key" } });
+    await makeChatApiKey(org.id, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "openai",
+    });
+
+    expect(result.apiKey).toBe("sk-personal-key");
+    expect(result.source).toBe("personal");
+    expect(result.chatApiKeyId).toBeDefined();
+    expect(result.baseUrl).toBeNull();
+  });
+
+  test("resolves org_wide key when no user provided", async ({
+    makeOrganization,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-org-key" } });
+    await makeChatApiKey(org.id, secret.id, {
+      provider: "anthropic",
+      scope: "org_wide",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      provider: "anthropic",
+    });
+
+    expect(result.apiKey).toBe("sk-org-key");
+    expect(result.source).toBe("org_wide");
+    expect(result.chatApiKeyId).toBeDefined();
+  });
+
+  test("returns baseUrl when key has custom base URL", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-custom-base" } });
+
+    // makeChatApiKey doesn't support baseUrl, create directly
+    const { ChatApiKeyModel } = await import("@/models");
+    await ChatApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: "Custom Base URL Key",
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+      baseUrl: "https://my-proxy.example.com/v1",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "openai",
+    });
+
+    expect(result.apiKey).toBe("sk-custom-base");
+    expect(result.baseUrl).toBe("https://my-proxy.example.com/v1");
+  });
+
+  test("returns undefined apiKey when no key configured and no env var", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "cerebras", // unlikely to have env var set in tests
+    });
+
+    // Should fall back to environment, which may or may not have a key
+    expect(result.source).toBe("environment");
+    expect(result.baseUrl).toBeNull();
+  });
+
+  test("personal key takes priority over org_wide", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+
+    const orgSecret = await makeSecret({ secret: { apiKey: "sk-org-wide" } });
+    await makeChatApiKey(org.id, orgSecret.id, {
+      provider: "anthropic",
+      scope: "org_wide",
+    });
+
+    const personalSecret = await makeSecret({
+      secret: { apiKey: "sk-personal" },
+    });
+    await makeChatApiKey(org.id, personalSecret.id, {
+      provider: "anthropic",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "anthropic",
+    });
+
+    expect(result.apiKey).toBe("sk-personal");
+    expect(result.source).toBe("personal");
+  });
+
+  test("team key takes priority over org_wide when user is in team", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id, { name: "Test Team" });
+    // makeTeam only creates the team — user must be added as member separately
+    await makeTeamMember(team.id, user.id);
+
+    const orgSecret = await makeSecret({ secret: { apiKey: "sk-org-wide" } });
+    await makeChatApiKey(org.id, orgSecret.id, {
+      provider: "openai",
+      scope: "org_wide",
+    });
+
+    const teamSecret = await makeSecret({ secret: { apiKey: "sk-team" } });
+    await makeChatApiKey(org.id, teamSecret.id, {
+      provider: "openai",
+      scope: "team",
+      teamId: team.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "openai",
+    });
+
+    expect(result.apiKey).toBe("sk-team");
+    expect(result.source).toBe("team");
+  });
+
+  test("supports legacy secret formats (anthropicApiKey)", async ({
+    makeOrganization,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    // Old format used provider-specific key names
+    const secret = await makeSecret({
+      secret: { anthropicApiKey: "sk-legacy-key" },
+    });
+    await makeChatApiKey(org.id, secret.id, {
+      provider: "anthropic",
+      scope: "org_wide",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      provider: "anthropic",
+    });
+
+    expect(result.apiKey).toBe("sk-legacy-key");
   });
 });

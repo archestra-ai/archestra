@@ -32,6 +32,7 @@ interface AssignmentComboboxProps {
   emptyMessage?: string;
   createAction?: { label: string; href: string };
   className?: string;
+  label?: string;
 }
 
 export function AssignmentCombobox({
@@ -42,6 +43,7 @@ export function AssignmentCombobox({
   emptyMessage = "No items found.",
   createAction,
   className,
+  label = "Add",
 }: AssignmentComboboxProps) {
   const [search, setSearch] = React.useState("");
 
@@ -81,7 +83,7 @@ export function AssignmentCombobox({
           )}
         >
           <Plus className="h-3.5 w-3.5" />
-          <span>Add</span>
+          <span>{label}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

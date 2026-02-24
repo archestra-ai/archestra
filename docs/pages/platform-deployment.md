@@ -183,8 +183,8 @@ openssl rand -base64 32
 **Deployment Settings**:
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
-- `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types)
-- `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+- `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
+- `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
@@ -696,6 +696,8 @@ The following environment variables can be used to configure Archestra Platform.
 
 ### LLM Provider Configuration
 
+These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
+
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
   - Default: `https://api.openai.com/v1`
@@ -723,6 +725,18 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `http://localhost:11434/v1` (Ollama is enabled by default)
   - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
+- **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
+
+  - Default: `10`
+  - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients
+  - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
+
+- **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
+
+  - Default: `2592000` (30 days)
+  - Set to `0` to create virtual keys that never expire by default
+  - Users can override this per-key when creating virtual keys via the UI
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
@@ -913,6 +927,44 @@ These environment variables configure the ChatOps feature, which allows users to
 
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
+
+#### Slack
+
+See [Slack](/docs/platform-slack) for setup instructions.
+
+- **`ARCHESTRA_CHATOPS_SLACK_ENABLED`** - Enable Slack integration.
+
+  - Default: `false`
+  - Set to `true` to enable the Slack chatops provider
+
+- **`ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN`** - Slack Bot User OAuth Token.
+
+  - Required when: `ARCHESTRA_CHATOPS_SLACK_ENABLED=true`
+  - Starts with `xoxb-`
+  - Found in: OAuth & Permissions page → Bot User OAuth Token
+
+- **`ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET`** - Slack app signing secret for webhook signature verification.
+
+  - Required when: using webhook mode (default)
+  - Found in: Basic Information page → App Credentials → Signing Secret
+
+- **`ARCHESTRA_CHATOPS_SLACK_APP_ID`** - Slack App ID.
+
+  - Optional but recommended for DM deep links
+  - Found in: Basic Information page → App ID
+
+- **`ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE`** - Connection mode for Slack integration.
+
+  - Default: `socket`
+  - Options: `socket`, `webhook`
+  - `socket`: Archestra connects to Slack via an outbound WebSocket (no public URL required)
+  - `webhook`: Slack sends events to your public webhook URLs (requires a publicly accessible Archestra instance)
+
+- **`ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN`** - Slack App-Level Token for socket mode.
+
+  - Required for the default socket mode
+  - Starts with `xapp-`
+  - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
 ### Knowledge Graph Configuration
 

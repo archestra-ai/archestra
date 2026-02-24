@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // Helper to determine if a tab is active
 // Sort tabs by href length descending so we match the most specific first
 function isTabActive(
-  pathname: string,
+  currentUrl: string,
   tabHref: string,
   allTabs: { href: string }[],
 ) {
@@ -14,13 +14,13 @@ function isTabActive(
 
   // Find the first tab that matches
   for (const tab of sortedTabs) {
-    if (pathname === tab.href || pathname.startsWith(`${tab.href}/`)) {
+    if (currentUrl === tab.href || currentUrl.startsWith(`${tab.href}/`)) {
       return tab.href === tabHref;
     }
   }
 
   // Fallback to includes for backwards compatibility
-  return pathname.includes(tabHref);
+  return currentUrl.includes(tabHref);
 }
 
 export function PageLayout({
@@ -37,6 +37,10 @@ export function PageLayout({
   actionButton?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentUrl = searchParams.toString()
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
   const maxWidth = "max-w-[1680px]";
 
   return (
@@ -55,7 +59,7 @@ export function PageLayout({
           {tabs.length > 0 && (
             <div className="flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
               {tabs.map((tab) => {
-                const isActive = isTabActive(pathname, tab.href, tabs);
+                const isActive = isTabActive(currentUrl, tab.href, tabs);
                 return (
                   <Link
                     key={tab.href}

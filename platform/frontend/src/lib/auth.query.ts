@@ -118,7 +118,7 @@ export function useMissingPermissions(
  * Low-level query which fetches the dictionary of all user permissions.
  * Avoid using directly in components and use useHasPermissions instead.
  */
-function useAllPermissions() {
+export function useAllPermissions() {
   const isAuthenticated = useIsAuthenticated();
 
   return useQuery({

@@ -1,7 +1,7 @@
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { clickButton, loginViaApi } from "../../utils";
+import { clickButton, navigateAndVerifyAuth } from "../../utils";
 
 test.describe(
   "Invitation functionality",
@@ -21,22 +21,14 @@ test.describe(
       const inviteButton = page.getByRole("button", {
         name: /invite member/i,
       });
-      await expect(async () => {
-        await goToPage(page, "/settings/members");
-        await page.waitForLoadState("domcontentloaded");
-        // WebKit sometimes fails to load session from storageState.
-        // If we detect the sign-in page, re-authenticate via API.
-        const loginButton = page.getByRole("button", { name: /login/i });
-        if (
-          await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)
-        ) {
-          await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-          await goToPage(page, "/settings/members");
-          await page.waitForLoadState("domcontentloaded");
-        }
-        await expect(inviteButton).toBeVisible({ timeout: 10_000 });
-        await expect(inviteButton).toBeEnabled({ timeout: 5_000 });
-      }).toPass({ timeout: 90_000, intervals: [3000, 5000, 10000] });
+      await navigateAndVerifyAuth({
+        page,
+        path: "/settings/members",
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        verifyLocator: inviteButton,
+        goToPage,
+      });
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
@@ -72,22 +64,14 @@ test.describe(
       const inviteButton = page.getByRole("button", {
         name: /invite member/i,
       });
-      await expect(async () => {
-        await goToPage(page, "/settings/members");
-        await page.waitForLoadState("domcontentloaded");
-        // WebKit sometimes fails to load session from storageState.
-        // If we detect the sign-in page, re-authenticate via API.
-        const loginButton = page.getByRole("button", { name: /login/i });
-        if (
-          await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)
-        ) {
-          await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-          await goToPage(page, "/settings/members");
-          await page.waitForLoadState("domcontentloaded");
-        }
-        await expect(inviteButton).toBeVisible({ timeout: 10_000 });
-        await expect(inviteButton).toBeEnabled({ timeout: 5_000 });
-      }).toPass({ timeout: 90_000, intervals: [3000, 5000, 10000] });
+      await navigateAndVerifyAuth({
+        page,
+        path: "/settings/members",
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        verifyLocator: inviteButton,
+        goToPage,
+      });
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });

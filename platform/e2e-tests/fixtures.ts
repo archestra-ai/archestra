@@ -8,10 +8,15 @@ import {
   test as base,
   type Page,
 } from "@playwright/test";
-import { editorAuthFile, memberAuthFile, UI_BASE_URL } from "./consts";
+import {
+  E2eTestId,
+  editorAuthFile,
+  memberAuthFile,
+  UI_BASE_URL,
+} from "./consts";
 
 /** Type for user-specific navigation function */
-type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
+type GoToPageFn = (path?: string) => Promise<void>;
 
 /**
  * Playwright test extension with fixtures
@@ -38,12 +43,25 @@ interface TestFixtures {
 export const goToPage = async (page: Page, path = "") => {
   await page.goto(`${UI_BASE_URL}${path}`);
   await page.waitForTimeout(500);
+  await dismissOnboarding(page);
 };
 
 const makeRandomString = (length = 10, prefix = "") =>
   `${prefix}-${Math.random()
     .toString(36)
     .substring(2, 2 + length)}`;
+
+/**
+ * Dismiss the onboarding dialog if it is currently visible.
+ * Uses isVisible() which returns immediately (no wait) when the element isn't in the DOM.
+ */
+async function dismissOnboarding(page: Page): Promise<void> {
+  const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
+  if (await skipButton.isVisible().catch(() => false)) {
+    await skipButton.click();
+    await page.waitForTimeout(500);
+  }
+}
 
 /**
  * Create a page with specific auth state
@@ -114,18 +132,27 @@ export const test = base.extend<TestFixtures>({
    * Navigate admin page to a path
    */
   goToAdminPage: async ({ adminPage }, use) => {
-    await use((path = "") => adminPage.goto(`${UI_BASE_URL}${path}`));
+    await use(async (path = "") => {
+      await adminPage.goto(`${UI_BASE_URL}${path}`);
+      await dismissOnboarding(adminPage);
+    });
   },
   /**
    * Navigate editor page to a path
    */
   goToEditorPage: async ({ editorPage }, use) => {
-    await use((path = "") => editorPage.goto(`${UI_BASE_URL}${path}`));
+    await use(async (path = "") => {
+      await editorPage.goto(`${UI_BASE_URL}${path}`);
+      await dismissOnboarding(editorPage);
+    });
   },
   /**
    * Navigate member page to a path
    */
   goToMemberPage: async ({ memberPage }, use) => {
-    await use((path = "") => memberPage.goto(`${UI_BASE_URL}${path}`));
+    await use(async (path = "") => {
+      await memberPage.goto(`${UI_BASE_URL}${path}`);
+      await dismissOnboarding(memberPage);
+    });
   },
 });

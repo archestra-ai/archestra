@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -511,6 +512,17 @@ export function McpConnectionInstructions({
               OAuth 2.1
             </TabsTrigger>
           </TabsList>
+          <p className="text-xs text-muted-foreground">
+            For external identity providers, use{" "}
+            <a
+              href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              JWKS authentication
+            </a>
+          </p>
         </div>
 
         {/* Static Token Tab */}
@@ -673,8 +685,6 @@ export function McpConnectionInstructions({
 }
 
 function OAuthConfigBlock({ mcpUrl }: { mcpUrl: string }) {
-  const [copied, setCopied] = useState(false);
-
   const oauthConfig = useMemo(
     () =>
       JSON.stringify(
@@ -691,45 +701,18 @@ function OAuthConfigBlock({ mcpUrl }: { mcpUrl: string }) {
     [mcpUrl],
   );
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(oauthConfig);
-    setCopied(true);
-    toast.success("Configuration copied");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
         Configuration for MCP clients:
       </p>
-      <div className="bg-muted rounded-md p-3 relative">
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 bg-transparent"
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-green-500" />
-                <span>Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" />
-                <span>Copy</span>
-              </>
-            )}
-          </Button>
-        </div>
+      <CopyableCode value={oauthConfig} toastMessage="Configuration copied">
         <pre className="text-xs whitespace-pre-wrap break-all">
           <CodeText className="text-sm whitespace pre-wrap break-all">
             {oauthConfig}
           </CodeText>
         </pre>
-      </div>
+      </CopyableCode>
     </div>
   );
 }

@@ -11,7 +11,7 @@ interface TokenCostLimitTestConfig {
   headers: (wiremockStub: string) => Record<string, string>;
   buildRequest: (content: string) => object;
   modelName: string;
-  tokenPrice: {
+  customPricing: {
     provider: SupportedProvider;
     model: string;
     pricePerMillionInput: string;
@@ -20,35 +20,57 @@ interface TokenCostLimitTestConfig {
 }
 
 // =============================================================================
+// OpenAI-Compatible Config Factory
+// =============================================================================
+
+/**
+ * Factory for providers that use the OpenAI-compatible chat/completions format.
+ * Only providerName, modelName, and provider enum differ between them.
+ * All use Bearer auth, /chat/completions endpoint, and messages-format requests.
+ */
+function makeOpenAiCompatibleCostConfig(params: {
+  providerName: string;
+  modelName: string;
+  provider: SupportedProvider;
+}): TokenCostLimitTestConfig {
+  return {
+    providerName: params.providerName,
+
+    endpoint: (profileId) =>
+      `/v1/${params.provider}/${profileId}/chat/completions`,
+
+    headers: (wiremockStub) => ({
+      Authorization: `Bearer ${wiremockStub}`,
+      "Content-Type": "application/json",
+    }),
+
+    buildRequest: (content) => ({
+      model: params.modelName,
+      messages: [{ role: "user", content }],
+    }),
+
+    modelName: params.modelName,
+
+    // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+    // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+    customPricing: {
+      provider: params.provider,
+      model: params.modelName,
+      pricePerMillionInput: "20000.00",
+      pricePerMillionOutput: "30000.00",
+    },
+  };
+}
+
+// =============================================================================
 // Test Configurations
 // =============================================================================
 
-const openaiConfig: TokenCostLimitTestConfig = {
+const openaiConfig = makeOpenAiCompatibleCostConfig({
   providerName: "OpenAI",
-
-  endpoint: (profileId) => `/v1/openai/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-gpt-4-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-gpt-4-cost-limit",
-
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "openai",
-    model: "test-gpt-4-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
+  provider: "openai",
+});
 
 const anthropicConfig: TokenCostLimitTestConfig = {
   providerName: "Anthropic",
@@ -71,7 +93,7 @@ const anthropicConfig: TokenCostLimitTestConfig = {
 
   // WireMock returns: input_tokens: 100, output_tokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
+  customPricing: {
     provider: "anthropic",
     model: "test-claude-cost-limit",
     pricePerMillionInput: "20000.00",
@@ -103,7 +125,7 @@ const geminiConfig: TokenCostLimitTestConfig = {
 
   // WireMock returns: promptTokenCount: 100, candidatesTokenCount: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
+  customPricing: {
     provider: "gemini",
     model: "test-gemini-cost-limit",
     pricePerMillionInput: "20000.00",
@@ -111,167 +133,41 @@ const geminiConfig: TokenCostLimitTestConfig = {
   },
 };
 
-const cerebrasConfig: TokenCostLimitTestConfig = {
+const cerebrasConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Cerebras",
-
-  endpoint: (profileId) => `/v1/cerebras/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-cerebras-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-cerebras-cost-limit",
+  provider: "cerebras",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "cerebras",
-    model: "test-cerebras-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const mistralConfig: TokenCostLimitTestConfig = {
+const mistralConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Mistral",
-
-  endpoint: (profileId) => `/v1/mistral/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-mistral-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-mistral-cost-limit",
+  provider: "mistral",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "mistral",
-    model: "test-mistral-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const perplexityConfig: TokenCostLimitTestConfig = {
+const perplexityConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Perplexity",
-
-  endpoint: (profileId) => `/v1/perplexity/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-perplexity-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-perplexity-cost-limit",
+  provider: "perplexity",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "perplexity",
-    model: "test-perplexity-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const vllmConfig: TokenCostLimitTestConfig = {
+const vllmConfig = makeOpenAiCompatibleCostConfig({
   providerName: "vLLM",
-
-  endpoint: (profileId) => `/v1/vllm/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-vllm-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-vllm-cost-limit",
+  provider: "vllm",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "vllm",
-    model: "test-vllm-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const ollamaConfig: TokenCostLimitTestConfig = {
+const ollamaConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Ollama",
-
-  endpoint: (profileId) => `/v1/ollama/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-ollama-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-ollama-cost-limit",
+  provider: "ollama",
+});
 
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "ollama",
-    model: "test-ollama-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
-
-const zhipuaiConfig: TokenCostLimitTestConfig = {
+const zhipuaiConfig = makeOpenAiCompatibleCostConfig({
   providerName: "Zhipuai",
-
-  endpoint: (profileId) => `/v1/zhipuai/${profileId}/chat/completions`,
-
-  headers: (wiremockStub) => ({
-    Authorization: `Bearer ${wiremockStub}`,
-    "Content-Type": "application/json",
-  }),
-
-  buildRequest: (content) => ({
-    model: "test-zhipuai-cost-limit",
-    messages: [{ role: "user", content }],
-  }),
-
   modelName: "test-zhipuai-cost-limit",
-
-  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
-    provider: "zhipuai",
-    model: "test-zhipuai-cost-limit",
-    pricePerMillionInput: "20000.00",
-    pricePerMillionOutput: "30000.00",
-  },
-};
+  provider: "zhipuai",
+});
 
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
@@ -292,7 +188,7 @@ const cohereConfig: TokenCostLimitTestConfig = {
 
   // WireMock returns: input_tokens: 100, output_tokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
+  customPricing: {
     provider: "cohere",
     model: "test-cohere-cost-limit",
     pricePerMillionInput: "20000.00",
@@ -319,7 +215,7 @@ const bedrockConfig: TokenCostLimitTestConfig = {
 
   // WireMock returns: inputTokens: 100, outputTokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
-  tokenPrice: {
+  customPricing: {
     provider: "bedrock",
     model: "test-bedrock-cost-limit",
     pricePerMillionInput: "20000.00",
@@ -357,7 +253,7 @@ for (const config of testConfigs) {
       test.describe.configure({ retries: 2 });
       let profileId: string;
       let limitId: string;
-      let tokenPriceId: string;
+      let modelUuid: string;
 
       const wiremockStub = `${config.providerName.toLowerCase()}-token-cost-limit-test`;
 
@@ -365,33 +261,11 @@ for (const config of testConfigs) {
         request,
         createAgent,
         createLimit,
-        createTokenPrice,
+        syncModels,
+        getModels,
+        updateModelPricing,
         makeApiRequest,
-        deleteTokenPrice,
-        getTokenPrices,
       }) => {
-        // 0. Delete any existing token prices for this model and create fresh ones
-        const allPricesResponse = await getTokenPrices(request);
-        if (allPricesResponse.ok()) {
-          const allPrices = await allPricesResponse.json();
-          const existingPrice = allPrices.find(
-            (p: { provider: string; model: string; id: string }) =>
-              p.provider === config.tokenPrice.provider &&
-              p.model === config.tokenPrice.model,
-          );
-          if (existingPrice) {
-            await deleteTokenPrice(request, existingPrice.id).catch(() => {});
-          }
-        }
-
-        // Create fresh token price with exact values for our test
-        const tokenPriceResponse = await createTokenPrice(
-          request,
-          config.tokenPrice,
-        );
-        const tokenPrice = await tokenPriceResponse.json();
-        tokenPriceId = tokenPrice.id;
-
         // 1. Create a test profile
         const createResponse = await createAgent(
           request,
@@ -400,9 +274,53 @@ for (const config of testConfigs) {
         const profile = await createResponse.json();
         profileId = profile.id;
 
-        // 2. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after 1st request)
-        // The limit check blocks when currentUsage >= limitValue, so with $2.60 usage after first request,
-        // the second request will be blocked because $2.60 >= $2
+        // 2. Make a setup request to trigger model creation via ensureModelExists.
+        //    This also exercises the proxy path so the model entry is created in the DB.
+        //    Cost is tracked at default pricing (~$0.006), well below the $2 limit.
+        const setupResponse = await makeApiRequest({
+          request,
+          method: "post",
+          urlSuffix: config.endpoint(profileId),
+          headers: config.headers(wiremockStub),
+          data: config.buildRequest("Setup request to create model entry"),
+        });
+
+        if (!setupResponse.ok()) {
+          const errorText = await setupResponse.text();
+          throw new Error(
+            `Setup ${config.providerName} request failed: ${setupResponse.status()} ${errorText}`,
+          );
+        }
+
+        // 3. Sync models from providers to ensure WireMock-backed providers are linked.
+        //    On CI, the backend seed may run before WireMock is ready, causing some
+        //    providers (e.g. bedrock) to have zero linked models. This sync ensures
+        //    the provider appears in configuredProviders so GET /api/models returns
+        //    unlinked models created by ensureModelExists.
+        await syncModels(request);
+
+        // 4. Find the model by modelId via GET /api/models and set custom pricing
+        const modelsResponse = await getModels(request);
+        const allModels = await modelsResponse.json();
+        const targetModel = allModels.find(
+          (m: { modelId: string }) => m.modelId === config.modelName,
+        );
+
+        if (!targetModel) {
+          throw new Error(
+            `Model '${config.modelName}' not found after setup request`,
+          );
+        }
+        modelUuid = targetModel.id;
+
+        // Reset any existing custom pricing first, then set our test values
+        await updateModelPricing(request, modelUuid, {
+          customPricePerMillionInput: config.customPricing.pricePerMillionInput,
+          customPricePerMillionOutput:
+            config.customPricing.pricePerMillionOutput,
+        });
+
+        // 5. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after next request)
         const limitResponse = await createLimit(request, {
           entityType: "agent",
           entityId: profileId,
@@ -413,7 +331,7 @@ for (const config of testConfigs) {
         const limit = await limitResponse.json();
         limitId = limit.id;
 
-        // 3. Make first request to set up usage (with long content to bypass optimization rules)
+        // 6. Make first tracked request with custom pricing (with long content to bypass optimization rules)
         const longContent =
           "This is a very long message to bypass optimization rules that typically only apply to short content under 1000 tokens. ".repeat(
             100,
@@ -436,7 +354,7 @@ for (const config of testConfigs) {
 
         // Poll for async usage tracking to complete
         // Usage tracking happens asynchronously after the response is sent
-        // We need to wait until the usage is actually recorded before the second request
+        // We need to wait until the usage is actually recorded before the next request
         // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
         // Use generous timeouts - in CI, async tracking can be very slow due to resource contention
         // across parallel test suites and multiple providers running concurrently
@@ -487,7 +405,7 @@ for (const config of testConfigs) {
           );
         }
 
-        // 4. Second request should be blocked (limit exceeded)
+        // 7. Next request should be blocked (limit exceeded)
         const blockedResponse = await makeApiRequest({
           request,
           method: "post",
@@ -499,7 +417,7 @@ for (const config of testConfigs) {
           ignoreStatusCheck: true,
         });
 
-        // 5. Verify 429 response with token_cost_limit_exceeded code
+        // 8. Verify 429 response with token_cost_limit_exceeded code
         expect(blockedResponse.status()).toBe(429);
         const errorBody = await blockedResponse.json();
         expect(errorBody.error.code).toBe("token_cost_limit_exceeded");
@@ -510,19 +428,11 @@ for (const config of testConfigs) {
         request,
         createAgent,
         createLimit,
-        createTokenPrice,
+        syncModels,
+        getModels,
+        updateModelPricing,
         makeApiRequest,
       }) => {
-        // 0. Create token price for the model
-        const tokenPriceResponse = await createTokenPrice(
-          request,
-          config.tokenPrice,
-        );
-        if (tokenPriceResponse.ok()) {
-          const tokenPrice = await tokenPriceResponse.json();
-          tokenPriceId = tokenPrice.id;
-        }
-
         // 1. Create a test profile
         const createResponse = await createAgent(
           request,
@@ -531,7 +441,43 @@ for (const config of testConfigs) {
         const profile = await createResponse.json();
         profileId = profile.id;
 
-        // 2. Create profile-level limit with high value
+        // 2. Make a setup request to trigger model creation
+        const setupResponse = await makeApiRequest({
+          request,
+          method: "post",
+          urlSuffix: config.endpoint(profileId),
+          headers: config.headers(wiremockStub),
+          data: config.buildRequest("Setup request to create model entry"),
+        });
+
+        if (!setupResponse.ok()) {
+          const errorText = await setupResponse.text();
+          throw new Error(
+            `Setup ${config.providerName} request failed: ${setupResponse.status()} ${errorText}`,
+          );
+        }
+
+        // 3. Sync models from providers (see comment in "blocks request" test)
+        await syncModels(request);
+
+        // 4. Find the model and set custom pricing
+        const modelsResponse = await getModels(request);
+        const allModels = await modelsResponse.json();
+        const targetModel = allModels.find(
+          (m: { modelId: string }) => m.modelId === config.modelName,
+        );
+
+        if (targetModel) {
+          modelUuid = targetModel.id;
+          await updateModelPricing(request, modelUuid, {
+            customPricePerMillionInput:
+              config.customPricing.pricePerMillionInput,
+            customPricePerMillionOutput:
+              config.customPricing.pricePerMillionOutput,
+          });
+        }
+
+        // 5. Create profile-level limit with high value
         const limitResponse = await createLimit(request, {
           entityType: "agent",
           entityId: profileId,
@@ -542,7 +488,7 @@ for (const config of testConfigs) {
         const limit = await limitResponse.json();
         limitId = limit.id;
 
-        // 3. First request should succeed
+        // 6. First request should succeed
         const response1 = await makeApiRequest({
           request,
           method: "post",
@@ -552,7 +498,7 @@ for (const config of testConfigs) {
         });
         expect(response1.ok()).toBeTruthy();
 
-        // 4. Second request should also succeed (still under limit)
+        // 7. Second request should also succeed (still under limit)
         const response2 = await makeApiRequest({
           request,
           method: "post",
@@ -564,7 +510,7 @@ for (const config of testConfigs) {
       });
 
       test.afterEach(
-        async ({ request, deleteLimit, deleteAgent, deleteTokenPrice }) => {
+        async ({ request, deleteLimit, deleteAgent, updateModelPricing }) => {
           if (limitId) {
             await deleteLimit(request, limitId).catch(() => {});
             limitId = "";
@@ -573,9 +519,13 @@ for (const config of testConfigs) {
             await deleteAgent(request, profileId).catch(() => {});
             profileId = "";
           }
-          if (tokenPriceId) {
-            await deleteTokenPrice(request, tokenPriceId).catch(() => {});
-            tokenPriceId = "";
+          // Reset custom pricing back to null so other tests use default pricing
+          if (modelUuid) {
+            await updateModelPricing(request, modelUuid, {
+              customPricePerMillionInput: null,
+              customPricePerMillionOutput: null,
+            }).catch(() => {});
+            modelUuid = "";
           }
         },
       );

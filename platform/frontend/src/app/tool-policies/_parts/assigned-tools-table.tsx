@@ -461,8 +461,12 @@ export function AssignedToolsTable({
           </Button>
         ),
         cell: ({ row }) => {
-          const displayName =
-            parseFullToolName(row.original.name).toolName || row.original.name;
+          // Only trim prefix for MCP tools (which have catalogId set and were slugified with server name)
+          // LLM proxy discovered tools (no catalogId) should show the full name as-is.
+          // It's needed to show the full name in the table to distinguish them from catalog tools. (After prefix-stripping they might look the same)
+          const displayName = row.original.catalogId
+            ? parseFullToolName(row.original.name).toolName || row.original.name
+            : row.original.name;
           return (
             <TruncatedText
               message={displayName}

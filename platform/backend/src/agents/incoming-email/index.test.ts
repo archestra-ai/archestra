@@ -448,14 +448,14 @@ describe("processIncomingEmail", () => {
     expect(calledMessage).not.toContain("[Message truncated");
   });
 
-  test("throws error when agent has no teams", async ({
+  test("processes email for agent with no teams (org-wide agent)", async ({
     makeUser,
     makeOrganization,
   }) => {
     await makeUser(); // Need a user in the system
     const org = await makeOrganization();
 
-    // Create internal agent WITHOUT assigning to any team
+    // Create internal agent WITHOUT assigning to any team (org-wide)
     const internalAgent = await createTestInternalAgent(org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: "public",
@@ -485,9 +485,10 @@ describe("processIncomingEmail", () => {
       receivedAt: new Date(),
     };
 
-    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
-      `No teams found for agent ${agentId}`,
-    );
+    // Teamless agents now fall back to the first organization
+    await expect(
+      processIncomingEmail(email, mockProvider),
+    ).resolves.not.toThrow();
   });
 
   test("skips duplicate emails (deduplication)", async ({

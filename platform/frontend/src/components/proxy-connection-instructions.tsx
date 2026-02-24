@@ -1,11 +1,11 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { Check, Copy, MoreHorizontal } from "lucide-react";
-import { useCallback, useState } from "react";
-import { toast } from "sonner";
+import { MoreHorizontal } from "lucide-react";
+import { useState } from "react";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -76,6 +76,7 @@ const PRIMARY_PROVIDERS: ProviderOption[] = [
   "openai",
   "anthropic",
   "gemini",
+  "bedrock",
   "claude-code",
 ];
 
@@ -172,15 +173,15 @@ export function ProxyConnectionInstructions({
           <p className="text-sm text-muted-foreground">
             Run Claude Code with the Archestra proxy:
           </p>
-          <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-            <CodeText className="text-xs text-primary flex-1 break-all">
+          <CopyableCode
+            value={claudeCodeCommand}
+            toastMessage="Command copied to clipboard"
+            variant="primary"
+          >
+            <CodeText className="text-xs text-primary break-all">
               {claudeCodeCommand}
             </CodeText>
-            <CopyButton
-              textToCopy={claudeCodeCommand}
-              toastMessage="Command copied to clipboard"
-            />
-          </div>
+          </CopyableCode>
         </div>
       ) : (
         <div className="space-y-4">
@@ -193,39 +194,31 @@ export function ProxyConnectionInstructions({
           />
         </div>
       )}
+
+      <div className="mt-4 space-y-1">
+        <p className="text-sm text-muted-foreground">
+          <a
+            href="/llm-proxies/provider-settings?tab=virtual-keys"
+            className="underline hover:text-foreground"
+          >
+            Virtual API Keys
+          </a>{" "}
+          — generate keys for external clients without exposing real provider
+          keys
+        </p>
+        <p className="text-sm text-muted-foreground">
+          <a
+            href="https://archestra.ai/docs/platform-llm-proxy-authentication#jwks-external-identity-provider"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            JWKS Authentication
+          </a>{" "}
+          — authenticate with an external identity provider
+        </p>
+      </div>
     </div>
-  );
-}
-
-function CopyButton({
-  textToCopy,
-  toastMessage,
-}: {
-  textToCopy: string;
-  toastMessage: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    toast.success(toastMessage);
-    setTimeout(() => setCopied(false), 2000);
-  }, [textToCopy, toastMessage]);
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 flex-shrink-0"
-      onClick={handleCopy}
-    >
-      {copied ? (
-        <Check className="h-3 w-3 text-green-500" />
-      ) : (
-        <Copy className="h-3 w-3" />
-      )}
-    </Button>
   );
 }
 
@@ -247,15 +240,13 @@ function UrlReplacementRow({
         </CodeText>
       </div>
       <span className="text-muted-foreground flex-shrink-0">→</span>
-      <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-        <CodeText className="text-xs text-primary flex-1 break-all">
-          {newUrl}
-        </CodeText>
-        <CopyButton
-          textToCopy={newUrl}
-          toastMessage="Proxy URL copied to clipboard"
-        />
-      </div>
+      <CopyableCode
+        value={newUrl}
+        toastMessage="Proxy URL copied to clipboard"
+        variant="primary"
+      >
+        <CodeText className="text-xs text-primary break-all">{newUrl}</CodeText>
+      </CopyableCode>
     </div>
   );
 }

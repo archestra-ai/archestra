@@ -427,12 +427,15 @@ class AgentToolModel {
     const newToolIds = toolIds.filter((toolId) => !existingToolIds.has(toolId));
 
     if (newToolIds.length > 0) {
-      await db.insert(schema.agentToolsTable).values(
-        newToolIds.map((toolId) => ({
-          agentId,
-          toolId,
-        })),
-      );
+      await db
+        .insert(schema.agentToolsTable)
+        .values(
+          newToolIds.map((toolId) => ({
+            agentId,
+            toolId,
+          })),
+        )
+        .onConflictDoNothing();
     }
   }
 
@@ -744,15 +747,9 @@ class AgentToolModel {
       whereConditions.push(eq(schema.agentToolsTable.agentId, filters.agentId));
     }
 
-    // Filter by origin (either "llm-proxy" or a catalogId)
+    // Filter by origin (catalogId)
     if (filters?.origin) {
-      if (filters.origin === "llm-proxy") {
-        // LLM Proxy tools have null catalogId
-        whereConditions.push(sql`${schema.toolsTable.catalogId} IS NULL`);
-      } else {
-        // MCP tools have a catalogId
-        whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
-      }
+      whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
     }
 
     // Filter by credential owner (check both credential source and execution source)

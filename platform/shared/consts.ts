@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { SupportedProvider } from "./model-constants";
 
+/** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
+export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
+
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
@@ -98,6 +101,7 @@ export const PASSWORD_PLACEHOLDER = "password";
 
 export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
+/** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 
 /**
@@ -174,6 +178,12 @@ export const EXECUTION_ID_HEADER = "X-Archestra-Execution-Id";
  * Values must not contain "/" since it is used as the segment delimiter.
  */
 export const META_HEADER = "X-Archestra-Meta";
+
+/**
+ * Header used to pass a per-key provider base URL from chat → LLM proxy.
+ * When present, the proxy uses this value instead of the env-var-based config default.
+ */
+export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
 
 /**
  * SSO Provider IDs - these are the canonical provider identifiers used for:

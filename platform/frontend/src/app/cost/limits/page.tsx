@@ -59,6 +59,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useModelsWithApiKeys } from "@/lib/chat-models.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
@@ -71,11 +72,15 @@ import {
   useUpdateOrganization,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { useTokenPrices } from "@/lib/token-price.query";
 
 // Type aliases for better readability
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
-type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
+type TokenPriceData = {
+  model: string;
+  provider: string;
+  pricePerMillionInput: string;
+  pricePerMillionOutput: string;
+};
 type TeamData = archestraApiTypes.GetTeamsResponses["200"][number];
 type UsageStatus = "safe" | "warning" | "danger";
 type LimitType = Pick<LimitData, "limitType">["limitType"];
@@ -610,7 +615,13 @@ export default function LimitsPage() {
   const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
   const { data: organizationDetails } = useOrganization();
-  const { data: tokenPrices = [] } = useTokenPrices();
+  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const tokenPrices: TokenPriceData[] = modelsWithApiKeys.map((m) => ({
+    model: m.modelId,
+    provider: m.provider,
+    pricePerMillionInput: m.capabilities?.pricePerMillionInput ?? "0",
+    pricePerMillionOutput: m.capabilities?.pricePerMillionOutput ?? "0",
+  }));
 
   const updateCleanupInterval = useUpdateOrganization(
     "Cleanup interval updated successfully",

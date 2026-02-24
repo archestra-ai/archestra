@@ -26,6 +26,12 @@ export const SHORTCUT_DELETE = {
   label: "D",
 } as const;
 
+/** P — pin/unpin conversation */
+export const SHORTCUT_PIN = {
+  key: "p",
+  label: "P",
+} as const;
+
 /** Cmd/Ctrl + B — toggle sidebar */
 export const SHORTCUT_SIDEBAR = {
   key: "b",

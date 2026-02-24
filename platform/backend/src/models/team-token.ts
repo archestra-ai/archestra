@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import SecretModel from "@/models/secret";
@@ -16,9 +17,6 @@ import type {
  * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
  */
 const FORCE_DB = true;
-
-/** Token prefix for identification */
-const TOKEN_PREFIX = "archestra_";
 
 /**
  * Get the single organization ID from the database
@@ -46,7 +44,7 @@ const TOKEN_START_LENGTH = 14;
  */
 function generateToken(): string {
   const randomPart = randomBytes(TOKEN_RANDOM_LENGTH).toString("hex");
-  return `${TOKEN_PREFIX}${randomPart}`;
+  return `${ARCHESTRA_TOKEN_PREFIX}${randomPart}`;
 }
 
 /**
@@ -60,7 +58,7 @@ function getTokenStart(token: string): string {
  * Check if a value looks like a team token (starts with archestra_)
  */
 export function isArchestraPrefixedToken(value: string): boolean {
-  return value.startsWith(TOKEN_PREFIX);
+  return value.startsWith(ARCHESTRA_TOKEN_PREFIX);
 }
 
 class TeamTokenModel {

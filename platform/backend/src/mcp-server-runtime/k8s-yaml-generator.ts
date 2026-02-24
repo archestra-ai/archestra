@@ -25,6 +25,8 @@ export interface DeploymentYamlContext {
   transportType?: "stdio" | "streamable-http";
   /** HTTP port for streamable-http transport (default: 8080) */
   httpPort?: number;
+  /** imagePullSecrets for pulling container images from private registries */
+  imagePullSecrets?: Array<{ name: string }>;
 }
 
 /**
@@ -80,6 +82,7 @@ export function generateDeploymentYamlTemplate(
     environment = [],
     transportType = "stdio",
     httpPort = 8080,
+    imagePullSecrets,
   } = context;
   const needsHttp = transportType === "streamable-http";
 
@@ -171,6 +174,7 @@ export function generateDeploymentYamlTemplate(
         spec: {
           terminationGracePeriodSeconds: 5,
           serviceAccountName: placeholder("archestra", "service_account"),
+          ...(imagePullSecrets?.length ? { imagePullSecrets } : {}),
           containers: [containerSpec],
           restartPolicy: "Always",
         },

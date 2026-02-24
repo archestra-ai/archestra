@@ -1,9 +1,8 @@
-import { ADMIN_ROLE_NAME, DEFAULT_TEAM_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
 import type { BetterAuthSession, BetterAuthSessionUser } from "@/types";
 import InvitationModel from "./invitation";
 import MemberModel from "./member";
-import TeamModel from "./team";
 
 describe("InvitationModel", () => {
   describe("getById", () => {
@@ -306,100 +305,6 @@ describe("InvitationModel", () => {
       expect(member?.role).toBe(ADMIN_ROLE_NAME);
 
       // Check that invitation was updated to accepted
-      const updatedInvitation = await InvitationModel.getById(invitation.id);
-      expect(updatedInvitation?.status).toBe("accepted");
-    });
-
-    test("should auto-assign new member to Default Team", async ({
-      makeOrganization,
-      makeUser,
-      makeInvitation,
-      makeTeam,
-    }) => {
-      const org = await makeOrganization();
-      const inviter = await makeUser();
-      const user = await makeUser({ email: "newmember@example.com" });
-
-      // Create the Default Team
-      const defaultTeam = await makeTeam(org.id, inviter.id, {
-        name: DEFAULT_TEAM_NAME,
-      });
-
-      const invitation = await makeInvitation(org.id, inviter.id, {
-        email: "newmember@example.com",
-      });
-
-      const testSession: BetterAuthSession = {
-        id: crypto.randomUUID(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 86400000),
-        token: "test-session-token",
-      };
-
-      const testUser: BetterAuthSessionUser = {
-        id: user.id,
-        email: "newmember@example.com",
-        name: "New Member",
-        image: null,
-        emailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      await InvitationModel.accept(testSession, testUser, invitation.id);
-
-      // Check that user was auto-assigned to Default Team
-      const isInDefaultTeam = await TeamModel.isUserInTeam(
-        defaultTeam.id,
-        user.id,
-      );
-      expect(isInDefaultTeam).toBe(true);
-    });
-
-    test("should not fail invitation acceptance if Default Team does not exist", async ({
-      makeOrganization,
-      makeUser,
-      makeInvitation,
-    }) => {
-      const org = await makeOrganization();
-      const inviter = await makeUser();
-      const user = await makeUser({ email: "noteam@example.com" });
-
-      // No Default Team created
-
-      const invitation = await makeInvitation(org.id, inviter.id, {
-        email: "noteam@example.com",
-      });
-
-      const testSession: BetterAuthSession = {
-        id: crypto.randomUUID(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 86400000),
-        token: "test-session-token",
-      };
-
-      const testUser: BetterAuthSessionUser = {
-        id: user.id,
-        email: "noteam@example.com",
-        name: "No Team User",
-        image: null,
-        emailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      // Should not throw
-      await InvitationModel.accept(testSession, testUser, invitation.id);
-
-      // Member should still be created
-      const member = await MemberModel.getByUserId(user.id, org.id);
-      expect(member).toBeDefined();
-
-      // Invitation should still be accepted
       const updatedInvitation = await InvitationModel.getById(invitation.id);
       expect(updatedInvitation?.status).toBe("accepted");
     });

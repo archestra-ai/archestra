@@ -3,7 +3,7 @@ import {
   CONTEXT_TEAM_IDS,
   isArchestraMcpServerTool,
 } from "@shared";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
@@ -380,7 +380,7 @@ class TrustedDataPolicyModel {
    * This method fetches all policies and tool configurations in one query to avoid N+1 issues
    */
   static async evaluateBulk(
-    agentId: string,
+    _agentId: string,
     toolCalls: Array<{
       toolName: string;
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
@@ -446,7 +446,7 @@ class TrustedDataPolicyModel {
 
     const toolNames = nonArchestraToolCalls.map(({ toolName }) => toolName);
 
-    // Fetch all policies and tool info in one query
+    // Fetch all policies and tool info in one query (tool-global, not agent-scoped)
     const allPoliciesAndTools = await db
       .select({
         toolId: schema.toolsTable.id,
@@ -457,20 +457,11 @@ class TrustedDataPolicyModel {
         action: schema.trustedDataPoliciesTable.action,
       })
       .from(schema.toolsTable)
-      .innerJoin(
-        schema.agentToolsTable,
-        eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
-      )
       .leftJoin(
         schema.trustedDataPoliciesTable,
         eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
       )
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agentId),
-          inArray(schema.toolsTable.name, toolNames),
-        ),
-      );
+      .where(inArray(schema.toolsTable.name, toolNames));
 
     // Group policies by tool name
     const policiesByTool = new Map<
@@ -483,11 +474,11 @@ class TrustedDataPolicyModel {
       }>
     >();
 
-    // Track tools that have agent-tool relationship
-    const toolsWithRelationship = new Set<string>();
+    // Track tools that exist in the database
+    const knownTools = new Set<string>();
 
     for (const row of allPoliciesAndTools) {
-      toolsWithRelationship.add(row.toolName);
+      knownTools.add(row.toolName);
 
       if (!policiesByTool.has(row.toolName)) {
         policiesByTool.set(row.toolName, []);
@@ -510,13 +501,13 @@ class TrustedDataPolicyModel {
         continue;
       }
 
-      // If tool has no agent-tool relationship
-      if (!toolsWithRelationship.has(toolName)) {
+      // If tool doesn't exist in the database, treat as untrusted
+      if (!knownTools.has(toolName)) {
         results.set(i.toString(), {
           isTrusted: false,
           isBlocked: false,
           shouldSanitizeWithDualLlm: false,
-          reason: `Tool ${toolName} is not registered for this agent`,
+          reason: `Tool ${toolName} not found`,
         });
         continue;
       }

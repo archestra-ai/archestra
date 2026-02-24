@@ -1,10 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type archestraApiTypes,
+  DEFAULT_PROVIDER_BASE_URLS,
+  E2eTestId,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
+} from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -16,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { useProviderBaseUrls } from "@/lib/config.query";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
 import { WithPermissions } from "./roles/with-permissions";
@@ -38,10 +45,13 @@ export type ChatApiKeyFormValues = {
   name: string;
   provider: CreateChatApiKeyBody["provider"];
   apiKey: string | null;
+  baseUrl: string | null;
   scope: NonNullable<CreateChatApiKeyBody["scope"]>;
   teamId: string | null;
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
+  /** When multiple keys exist for the same provider+scope, the primary key is preferred */
+  isPrimary: boolean;
 };
 
 // Response type for existing keys
@@ -168,12 +178,12 @@ interface ChatApiKeyFormProps {
   showConsoleLink?: boolean;
   /**
    * Existing key to edit. When provided, form is in "edit" mode.
-   * Provider is disabled, but scope and team can be changed (with uniqueness constraints).
+   * Provider is disabled, but scope and team can be changed.
    */
   existingKey?: ChatApiKeyResponse;
   /**
    * All existing API keys visible to the user.
-   * Used to disable scope/team options that would violate uniqueness constraints.
+   * Used to determine isPrimary default and show existing primary key info.
    */
   existingKeys?: ChatApiKeyResponse[];
   /**
@@ -206,6 +216,7 @@ export function ChatApiKeyForm({
   geminiVertexAiEnabled = false,
 }: ChatApiKeyFormProps) {
   const byosEnabled = useFeatureFlag("byosEnabled");
+  const { data: providerBaseUrls } = useProviderBaseUrls();
   const isEditMode = Boolean(existingKey);
 
   // Data fetching for team selector
@@ -225,89 +236,44 @@ export function ChatApiKeyForm({
   // Determine if we should show the "configured" styling
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
-  // Compute which scopes are disabled based on existing keys for this provider
-  const disabledScopes = useMemo(() => {
-    if (!existingKeys) {
-      return { personal: false, team: false, org_wide: false };
-    }
+  // Disable team scope if no teams exist
+  const isTeamScopeDisabled = teams.length === 0;
 
-    // In edit mode, exclude the current key from the check (so it doesn't block itself)
+  // Find existing primary key for the current provider+scope combination
+  const existingPrimaryKey = useMemo(() => {
+    if (!existingKeys) return null;
+    // In edit mode, exclude the current key
     const otherKeys = existingKey
       ? existingKeys.filter((k) => k.id !== existingKey.id)
       : existingKeys;
-
-    const keysForProvider = otherKeys.filter((k) => k.provider === provider);
-
-    return {
-      // Personal: disabled if user already has one for this provider
-      personal: keysForProvider.some((k) => k.scope === "personal"),
-      // Org-wide: disabled if org already has one for this provider
-      org_wide: keysForProvider.some((k) => k.scope === "org_wide"),
-      // Team: we'll handle individual teams separately
-      team: false,
-    };
-  }, [existingKeys, provider, existingKey]);
-
-  // Teams already used for this provider
-  const usedTeamIds = useMemo(() => {
-    if (!existingKeys) return new Set<string>();
-
-    // In edit mode, exclude the current key from the check (so it doesn't block itself)
-    const otherKeys = existingKey
-      ? existingKeys.filter((k) => k.id !== existingKey.id)
-      : existingKeys;
-
-    return new Set(
-      otherKeys
-        .filter(
-          (k) => k.provider === provider && k.scope === "team" && k.teamId,
-        )
-        .map((k) => k.teamId as string),
+    return (
+      otherKeys.find(
+        (k) =>
+          k.provider === provider &&
+          k.scope === scope &&
+          (scope !== "team" || k.teamId === teamId) &&
+          k.isPrimary,
+      ) ?? null
     );
-  }, [existingKeys, provider, existingKey]);
+  }, [existingKeys, existingKey, provider, scope, teamId]);
 
-  // Available teams (filter out already-used ones)
-  const availableTeams = useMemo(() => {
-    return teams.filter((t) => !usedTeamIds.has(t.id));
-  }, [teams, usedTeamIds]);
+  // Auto-set isPrimary when no user-created keys exist for this provider+scope (create mode only).
+  // System keys are auto-managed and shouldn't prevent the user from marking their key as primary.
+  const hasAnyKeyForProvider = useMemo(() => {
+    if (!existingKeys) return false;
+    return existingKeys.some(
+      (k) =>
+        k.provider === provider &&
+        k.scope === scope &&
+        (scope !== "team" || k.teamId === teamId) &&
+        !k.isSystem,
+    );
+  }, [existingKeys, provider, scope, teamId]);
 
-  // Disable team scope if no teams are available
-  const isTeamScopeDisabled = availableTeams.length === 0;
-
-  // Track previous provider to detect changes
-  const prevProviderRef = useRef(provider);
-
-  // Auto-select first available scope when provider changes and current scope is disabled
   useEffect(() => {
     if (isEditMode) return;
-
-    const providerChanged = prevProviderRef.current !== provider;
-    prevProviderRef.current = provider;
-
-    const currentScopeDisabled =
-      (scope === "personal" && disabledScopes.personal) ||
-      (scope === "org_wide" && disabledScopes.org_wide) ||
-      (scope === "team" && isTeamScopeDisabled);
-
-    // Re-evaluate scope selection when provider changes or current scope becomes disabled
-    if (providerChanged || currentScopeDisabled) {
-      // Find first non-disabled scope
-      if (!disabledScopes.personal) {
-        form.setValue("scope", "personal");
-      } else if (!isTeamScopeDisabled) {
-        form.setValue("scope", "team");
-      } else if (!disabledScopes.org_wide) {
-        form.setValue("scope", "org_wide");
-      }
-    }
-  }, [provider, disabledScopes, isTeamScopeDisabled, scope, form, isEditMode]);
-
-  // Clear teamId when switching to team scope if current selection is invalid
-  useEffect(() => {
-    if (scope === "team" && teamId && usedTeamIds.has(teamId)) {
-      form.setValue("teamId", "");
-    }
-  }, [scope, teamId, usedTeamIds, form]);
+    form.setValue("isPrimary", !hasAnyKeyForProvider);
+  }, [hasAnyKeyForProvider, isEditMode, form]);
 
   // Clean vault secret values when changing scope
   useEffect(() => {
@@ -340,152 +306,70 @@ export function ChatApiKeyForm({
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        {/* Name field - only in full mode */}
-        {mode === "full" && (
+        {/* Provider + Name (same row in full mode) */}
+        <div className={mode === "full" ? "grid grid-cols-2 gap-4" : ""}>
           <div className="space-y-2">
-            <Label htmlFor="chat-api-key-name">Name</Label>
-            <Input
-              id="chat-api-key-name"
-              placeholder={`My ${providerConfig.name} Key`}
-              disabled={isPending}
-              {...form.register("name")}
-            />
-          </div>
-        )}
-        {/* Provider selector */}
-        <div className="space-y-2">
-          <Label htmlFor="chat-api-key-provider">Provider</Label>
-          <Select
-            value={provider}
-            onValueChange={(v) =>
-              form.setValue("provider", v as CreateChatApiKeyBody["provider"])
-            }
-            disabled={isEditMode || isPending}
-          >
-            <SelectTrigger id="chat-api-key-provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(PROVIDER_CONFIG).map(([key, config]) => {
-                const isGeminiDisabledByVertexAi =
-                  key === "gemini" && geminiVertexAiEnabled;
-                const isDisabled =
-                  !config.enabled || isGeminiDisabledByVertexAi;
-
-                return (
-                  <SelectItem key={key} value={key} disabled={isDisabled}>
-                    <div className="flex items-center gap-2">
-                      <Image
-                        src={config.icon}
-                        alt={config.name}
-                        width={16}
-                        height={16}
-                        className="rounded dark:invert"
-                      />
-                      <span>{config.name}</span>
-                      {!config.enabled && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          Coming Soon
-                        </Badge>
-                      )}
-                      {isGeminiDisabledByVertexAi && (
-                        <Badge variant="secondary" className="ml-2 text-xs">
-                          Vertex AI
-                        </Badge>
-                      )}
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Visibility/Scope selector */}
-        <div className="space-y-2">
-          <Label htmlFor="chat-api-key-scope">Scope</Label>
-          <Select
-            value={scope}
-            onValueChange={(v) => {
-              form.setValue(
-                "scope",
-                v as NonNullable<CreateChatApiKeyBody["scope"]>,
-              );
-              if (v !== "team") {
-                form.setValue("teamId", "");
-              }
-            }}
-            disabled={isPending}
-          >
-            <SelectTrigger id="chat-api-key-scope">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="personal" disabled={disabledScopes.personal}>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  <span>
-                    Personal{disabledScopes.personal && " (already exists)"}
-                  </span>
-                </div>
-              </SelectItem>
-              <SelectItem value="team" disabled={isTeamScopeDisabled}>
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  <span>Team</span>
-                  {isTeamScopeDisabled && (
-                    <span className="text-xs text-muted-foreground">
-                      (no teams available)
-                    </span>
-                  )}
-                </div>
-              </SelectItem>
-              <WithPermissions
-                permissions={{ team: ["admin"] }}
-                noPermissionHandle="hide"
-              >
-                <SelectItem value="org_wide" disabled={disabledScopes.org_wide}>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    <span>
-                      Whole Organization{" "}
-                      {disabledScopes.org_wide ? " (already exists)" : ""}
-                    </span>
-                  </div>
-                </SelectItem>
-              </WithPermissions>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Team selector - only when scope is team */}
-        {scope === "team" && (
-          <div className="space-y-2">
-            <Label htmlFor="chat-api-key-team">Team</Label>
+            <Label htmlFor="chat-api-key-provider">Provider</Label>
             <Select
-              value={teamId ?? undefined}
-              onValueChange={(v) => form.setValue("teamId", v)}
-              disabled={isPending}
+              value={provider}
+              onValueChange={(v) =>
+                form.setValue("provider", v as CreateChatApiKeyBody["provider"])
+              }
+              disabled={isEditMode || isPending}
             >
-              <SelectTrigger id="chat-api-key-team">
-                <SelectValue placeholder="Select a team" />
+              <SelectTrigger id="chat-api-key-provider" className="w-full">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {availableTeams.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground">
-                    All teams already have a {providerConfig.name} key
-                  </div>
-                ) : (
-                  availableTeams.map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
-                    </SelectItem>
-                  ))
-                )}
+                {Object.entries(PROVIDER_CONFIG)
+                  .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+                  .map(([key, config]) => {
+                    const isGeminiDisabledByVertexAi =
+                      key === "gemini" && geminiVertexAiEnabled;
+                    const isDisabled =
+                      !config.enabled || isGeminiDisabledByVertexAi;
+
+                    return (
+                      <SelectItem key={key} value={key} disabled={isDisabled}>
+                        <div className="flex items-center gap-2">
+                          <Image
+                            src={config.icon}
+                            alt={config.name}
+                            width={16}
+                            height={16}
+                            className="rounded dark:invert"
+                          />
+                          <span>{config.name}</span>
+                          {!config.enabled && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              Coming Soon
+                            </Badge>
+                          )}
+                          {isGeminiDisabledByVertexAi && (
+                            <Badge variant="secondary" className="ml-2 text-xs">
+                              Vertex AI
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
               </SelectContent>
             </Select>
           </div>
-        )}
+
+          {mode === "full" && (
+            <div className="space-y-2">
+              <Label htmlFor="chat-api-key-name">Name</Label>
+              <Input
+                id="chat-api-key-name"
+                placeholder={`My ${providerConfig.name} Key`}
+                disabled={isPending}
+                {...form.register("name")}
+              />
+            </div>
+          )}
+        </div>
 
         {/* API Key input */}
         {byosEnabled ? (
@@ -500,10 +384,16 @@ export function ChatApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-value">
               API Key{" "}
-              {isEditMode && (
+              {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
                 <span className="text-muted-foreground font-normal">
-                  (leave blank to keep current)
+                  (optional)
                 </span>
+              ) : (
+                isEditMode && (
+                  <span className="text-muted-foreground font-normal">
+                    (leave blank to keep current)
+                  </span>
+                )
               )}
             </Label>
             {providerConfig.description && (
@@ -541,6 +431,153 @@ export function ChatApiKeyForm({
             )}
           </div>
         )}
+
+        {/* Visibility/Scope selector */}
+        <div className="space-y-2">
+          <Label htmlFor="chat-api-key-scope">Scope</Label>
+          <p className="text-xs text-muted-foreground">
+            Controls who can use this key.{" "}
+            <Link
+              href="https://archestra.ai/docs/platform-llm-proxy-authentication#api-key-scoping"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Learn more
+            </Link>
+          </p>
+          <Select
+            value={scope}
+            onValueChange={(v) => {
+              form.setValue(
+                "scope",
+                v as NonNullable<CreateChatApiKeyBody["scope"]>,
+              );
+              if (v !== "team") {
+                form.setValue("teamId", "");
+              }
+            }}
+            disabled={isPending}
+          >
+            <SelectTrigger id="chat-api-key-scope" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="personal">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  <span>Personal</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="team" disabled={isTeamScopeDisabled}>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>Team</span>
+                  {isTeamScopeDisabled && (
+                    <span className="text-xs text-muted-foreground">
+                      (no teams available)
+                    </span>
+                  )}
+                </div>
+              </SelectItem>
+              <WithPermissions
+                permissions={{ team: ["admin"] }}
+                noPermissionHandle="hide"
+              >
+                <SelectItem value="org_wide">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    <span>Organization</span>
+                  </div>
+                </SelectItem>
+              </WithPermissions>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Team selector - only when scope is team */}
+        {scope === "team" && (
+          <div className="space-y-2">
+            <Label htmlFor="chat-api-key-team">Team</Label>
+            <Select
+              value={teamId ?? undefined}
+              onValueChange={(v) => form.setValue("teamId", v)}
+              disabled={isPending}
+            >
+              <SelectTrigger id="chat-api-key-team" className="w-full">
+                <SelectValue placeholder="Select a team" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Primary key toggle */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="chat-api-key-is-primary">Primary key</Label>
+            <p className="text-xs text-muted-foreground">
+              {existingPrimaryKey
+                ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
+                : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
+            </p>
+          </div>
+          <Switch
+            id="chat-api-key-is-primary"
+            checked={form.watch("isPrimary")}
+            onCheckedChange={(checked) => form.setValue("isPrimary", checked)}
+            disabled={isPending || !!existingPrimaryKey}
+          />
+        </div>
+
+        {/* Base URL input */}
+        <div className="space-y-2">
+          <Label htmlFor="chat-api-key-base-url">
+            Base URL{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Override the default API endpoint. Useful for self-hosted or proxy
+            setups.
+          </p>
+          <Input
+            id="chat-api-key-base-url"
+            type="url"
+            placeholder={
+              providerBaseUrls?.[provider] ||
+              DEFAULT_PROVIDER_BASE_URLS[provider] ||
+              "https://..."
+            }
+            disabled={isPending}
+            {...form.register("baseUrl", {
+              validate: (value) => {
+                if (!value) return true;
+                try {
+                  const url = new URL(value);
+                  if (!["http:", "https:"].includes(url.protocol)) {
+                    return "URL must use http or https protocol";
+                  }
+                  return true;
+                } catch {
+                  return "Please enter a valid URL (e.g. https://api.example.com)";
+                }
+              },
+            })}
+          />
+          {form.formState.errors.baseUrl && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.baseUrl.message}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

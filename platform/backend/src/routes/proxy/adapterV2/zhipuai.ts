@@ -3,7 +3,7 @@ import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import { MockZhipuaiClient } from "@/routes/proxy/mock-zhipuai-client";
 import { getTokenizer } from "@/tokenizers";
@@ -920,12 +920,11 @@ async function convertToolResultsToToon(
   let toonCostSavings = 0;
   const tokensSaved = totalTokensBefore - totalTokensAfter;
   if (tokensSaved > 0) {
-    const tokenPrice = await TokenPriceModel.findByModel(model);
-    if (tokenPrice) {
-      const inputPricePerToken =
-        Number(tokenPrice.pricePerMillionInput) / 1000000;
-      toonCostSavings = tokensSaved * inputPricePerToken;
-    }
+    toonCostSavings = await ModelModel.calculateCostSavings(
+      model,
+      tokensSaved,
+      "zhipuai",
+    );
   }
 
   return {

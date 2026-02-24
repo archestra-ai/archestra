@@ -6,7 +6,12 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
-import { ApiKeyModelModel, ChatApiKeyModel, TeamModel } from "@/models";
+import {
+  ApiKeyModelModel,
+  ChatApiKeyModel,
+  TeamModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
 import {
   assertByosEnabled,
@@ -133,8 +138,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1, "Name is required"),
             provider: SupportedChatProviderSchema,
             apiKey: z.string().min(1).optional(),
+            baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
             teamId: z.string().optional(),
+            isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -239,30 +246,37 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         provider: body.provider,
         secretId: secret?.id ?? null,
+        baseUrl: body.baseUrl ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
+        isPrimary: body.isPrimary ?? false,
       });
 
-      // Sync models for the new API key in background (non-blocking)
-      if (actualApiKeyValue && modelSyncService.hasFetcher(body.provider)) {
-        modelSyncService
-          .syncModelsForApiKey(
+      // Sync models for the new API key before returning so the frontend
+      // can immediately show available models after creation.
+      // For optional-key providers (Ollama, vLLM), sync even without an API key value.
+      const canSync =
+        actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
+      if (canSync && modelSyncService.hasFetcher(body.provider)) {
+        try {
+          await modelSyncService.syncModelsForApiKey(
             createdApiKey.id,
             body.provider,
-            actualApiKeyValue,
-          )
-          .catch((error) => {
-            logger.error(
-              {
-                apiKeyId: createdApiKey.id,
-                provider: body.provider,
-                errorMessage:
-                  error instanceof Error ? error.message : String(error),
-              },
-              "Failed to sync models for new API key",
-            );
-          });
+            actualApiKeyValue ?? "",
+          );
+        } catch (error) {
+          // Model sync failure shouldn't block API key creation
+          logger.error(
+            {
+              apiKeyId: createdApiKey.id,
+              provider: body.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to sync models for new API key",
+          );
+        }
       }
 
       return reply.send(createdApiKey);
@@ -329,8 +343,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
+            baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
+            isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -453,14 +469,24 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Build update object
       const updateData: Partial<{
         name: string;
+        baseUrl: string | null;
         scope: "personal" | "team" | "org_wide";
         userId: string | null;
         teamId: string | null;
         secretId: string | null;
+        isPrimary: boolean;
       }> = {};
 
       if (body.name) {
         updateData.name = body.name;
+      }
+
+      if (body.baseUrl !== undefined) {
+        updateData.baseUrl = body.baseUrl;
+      }
+
+      if (body.isPrimary !== undefined) {
+        updateData.isPrimary = body.isPrimary;
       }
 
       if (newSecretId) {
@@ -518,7 +544,28 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
-      // Delete the associated secret
+      // Delete virtual key secrets before deleting the parent API key.
+      // The DB cascades the virtual key rows, but their secrets in the
+      // secret manager would be orphaned without explicit cleanup.
+      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId(
+        params.id,
+      );
+      for (const vk of virtualKeys) {
+        try {
+          await secretManager().deleteSecret(vk.secretId);
+        } catch (error) {
+          logger.warn(
+            {
+              virtualKeyId: vk.id,
+              secretId: vk.secretId,
+              error: String(error),
+            },
+            "Failed to delete virtual key secret during parent key deletion",
+          );
+        }
+      }
+
+      // Delete the parent key's associated secret
       if (apiKey.secretId) {
         await secretManager().deleteSecret(apiKey.secretId);
       }

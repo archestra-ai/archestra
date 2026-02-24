@@ -1,0 +1,31 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o"
+        },
+        {
+          "id": "gpt-4o-mini",
+          "name": "GPT-4o Mini"
+        }
+      ]
+    }
+  }
+}

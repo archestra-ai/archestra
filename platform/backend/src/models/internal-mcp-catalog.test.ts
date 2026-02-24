@@ -2,6 +2,7 @@ import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { describe, expect, test } from "@/test";
 import { SelectInternalMcpCatalogSchema } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
+import McpCatalogLabelModel from "./mcp-catalog-label";
 
 describe("InternalMcpCatalogModel", () => {
   describe("findAll with expandSecrets", () => {
@@ -208,6 +209,201 @@ describe("InternalMcpCatalogModel", () => {
       expect(catalogItemsMap.size).toBe(1);
       expect(catalogItemsMap.has(catalog.id)).toBe(true);
       expect(catalogItemsMap.get(catalog.id)?.id).toBe(catalog.id);
+    });
+  });
+
+  describe("labels integration", () => {
+    test("create with labels returns labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-with-labels",
+        serverType: "remote",
+        labels: [
+          { key: "category", value: "database" },
+          { key: "tier", value: "premium" },
+        ],
+      });
+
+      expect(catalog.labels).toHaveLength(2);
+      expect(catalog.labels[0].key).toBe("category");
+      expect(catalog.labels[0].value).toBe("database");
+      expect(catalog.labels[1].key).toBe("tier");
+      expect(catalog.labels[1].value).toBe("premium");
+    });
+
+    test("create without labels returns empty labels array", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-no-labels",
+        serverType: "remote",
+      });
+
+      expect(catalog.labels).toEqual([]);
+    });
+
+    test("findById returns labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-find-by-id-labels",
+        serverType: "remote",
+        labels: [{ key: "env", value: "prod" }],
+      });
+
+      const found = await InternalMcpCatalogModel.findById(catalog.id, {
+        expandSecrets: false,
+      });
+
+      expect(found).not.toBeNull();
+      expect(found?.labels).toHaveLength(1);
+      expect(found?.labels[0].key).toBe("env");
+      expect(found?.labels[0].value).toBe("prod");
+    });
+
+    test("findByIdWithResolvedSecrets returns labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-resolved-secrets-labels",
+        serverType: "remote",
+        labels: [{ key: "scope", value: "internal" }],
+      });
+
+      const found = await InternalMcpCatalogModel.findByIdWithResolvedSecrets(
+        catalog.id,
+      );
+
+      expect(found).not.toBeNull();
+      expect(found?.labels).toHaveLength(1);
+      expect(found?.labels[0].key).toBe("scope");
+      expect(found?.labels[0].value).toBe("internal");
+    });
+
+    test("findByName returns labels", async () => {
+      const uniqueName = `catalog-find-by-name-${Date.now()}`;
+      await InternalMcpCatalogModel.create({
+        name: uniqueName,
+        serverType: "remote",
+        labels: [{ key: "type", value: "ai" }],
+      });
+
+      const found = await InternalMcpCatalogModel.findByName(uniqueName);
+
+      expect(found).not.toBeNull();
+      expect(found?.labels).toHaveLength(1);
+      expect(found?.labels[0].key).toBe("type");
+      expect(found?.labels[0].value).toBe("ai");
+    });
+
+    test("findAll returns labels for all items", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-find-all-labels",
+        serverType: "remote",
+        labels: [
+          { key: "region", value: "us-east" },
+          { key: "team", value: "platform" },
+        ],
+      });
+
+      const all = await InternalMcpCatalogModel.findAll({
+        expandSecrets: false,
+      });
+      const found = all.find((item) => item.id === catalog.id);
+
+      expect(found).toBeDefined();
+      expect(found?.labels).toHaveLength(2);
+      expect(found?.labels[0].key).toBe("region");
+      expect(found?.labels[1].key).toBe("team");
+    });
+
+    test("searchByQuery returns labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "unique-searchable-catalog-xyz",
+        serverType: "remote",
+        labels: [{ key: "search-label", value: "found" }],
+      });
+
+      const results = await InternalMcpCatalogModel.searchByQuery(
+        "unique-searchable-catalog-xyz",
+        { expandSecrets: false },
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe(catalog.id);
+      expect(results[0].labels).toHaveLength(1);
+      expect(results[0].labels[0].key).toBe("search-label");
+    });
+
+    test("getByIds returns labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-get-by-ids-labels",
+        serverType: "remote",
+        labels: [{ key: "bulk", value: "yes" }],
+      });
+
+      const map = await InternalMcpCatalogModel.getByIds([catalog.id]);
+      const found = map.get(catalog.id);
+
+      expect(found).toBeDefined();
+      expect(found?.labels).toHaveLength(1);
+      expect(found?.labels[0].key).toBe("bulk");
+      expect(found?.labels[0].value).toBe("yes");
+    });
+
+    test("update with labels replaces existing labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-update-labels",
+        serverType: "remote",
+        labels: [{ key: "version", value: "v1" }],
+      });
+
+      const updated = await InternalMcpCatalogModel.update(catalog.id, {
+        labels: [
+          { key: "version", value: "v2" },
+          { key: "status", value: "active" },
+        ],
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.labels).toHaveLength(2);
+      expect(updated?.labels[0].key).toBe("status");
+      expect(updated?.labels[0].value).toBe("active");
+      expect(updated?.labels[1].key).toBe("version");
+      expect(updated?.labels[1].value).toBe("v2");
+    });
+
+    test("update without labels does not touch existing labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-update-no-labels",
+        serverType: "remote",
+        labels: [{ key: "keep", value: "me" }],
+      });
+
+      const updated = await InternalMcpCatalogModel.update(catalog.id, {
+        name: "catalog-update-no-labels-renamed",
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.name).toBe("catalog-update-no-labels-renamed");
+      expect(updated?.labels).toHaveLength(1);
+      expect(updated?.labels[0].key).toBe("keep");
+      expect(updated?.labels[0].value).toBe("me");
+    });
+
+    test("delete cascades labels", async () => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-delete-cascade",
+        serverType: "remote",
+        labels: [{ key: "delete-me", value: "cascade" }],
+      });
+
+      // Verify labels exist
+      const labelsBefore = await McpCatalogLabelModel.getLabelsForCatalogItem(
+        catalog.id,
+      );
+      expect(labelsBefore).toHaveLength(1);
+
+      await InternalMcpCatalogModel.delete(catalog.id);
+
+      // Labels should be gone (cascade delete)
+      const labelsAfter = await McpCatalogLabelModel.getLabelsForCatalogItem(
+        catalog.id,
+      );
+      expect(labelsAfter).toHaveLength(0);
     });
   });
 

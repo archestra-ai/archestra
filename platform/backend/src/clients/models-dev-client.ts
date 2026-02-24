@@ -2,7 +2,7 @@ import { type SupportedProvider, TimeInMs } from "@shared";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { ModelModel, TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import {
   type CreateModel,
   type ModelInputModality,
@@ -457,7 +457,6 @@ class ModelsDevClient {
 
     if (uniqueModelsToSync.length > 0) {
       await ModelModel.bulkUpsert(uniqueModelsToSync);
-      await this.syncTokenPrices(uniqueModelsToSync);
     }
 
     await this.updateSyncTimestamp();
@@ -536,64 +535,6 @@ class ModelsDevClient {
       Date.now(),
       SYNC_INTERVAL_MS,
     );
-  }
-
-  /**
-   * Auto-populates token_price table with pricing from models.dev.
-   * Only creates entries for models that don't already have pricing.
-   * Uses bulk insert for efficiency.
-   */
-  private async syncTokenPrices(models: CreateModel[]): Promise<void> {
-    const tokenPricesToCreate: Array<{
-      model: string;
-      provider: (typeof models)[number]["provider"];
-      pricePerMillionInput: string;
-      pricePerMillionOutput: string;
-    }> = [];
-
-    for (const model of models) {
-      if (!model.promptPricePerToken || !model.completionPricePerToken) {
-        continue;
-      }
-
-      const inputPrice = Number.parseFloat(model.promptPricePerToken);
-      const outputPrice = Number.parseFloat(model.completionPricePerToken);
-
-      // Skip if either price is NaN (invalid numeric string)
-      if (Number.isNaN(inputPrice) || Number.isNaN(outputPrice)) {
-        logger.warn(
-          {
-            modelId: model.modelId,
-            provider: model.provider,
-            promptPricePerToken: model.promptPricePerToken,
-            completionPricePerToken: model.completionPricePerToken,
-          },
-          "Skipping token price sync due to invalid pricing data",
-        );
-        continue;
-      }
-
-      tokenPricesToCreate.push({
-        model: model.modelId,
-        provider: model.provider,
-        pricePerMillionInput: (inputPrice * 1_000_000).toFixed(2),
-        pricePerMillionOutput: (outputPrice * 1_000_000).toFixed(2),
-      });
-    }
-
-    if (tokenPricesToCreate.length === 0) {
-      return;
-    }
-
-    const createdCount =
-      await TokenPriceModel.bulkCreateIfNotExists(tokenPricesToCreate);
-
-    if (createdCount > 0) {
-      logger.info(
-        { createdCount },
-        "Auto-populated token prices from models.dev data",
-      );
-    }
   }
 }
 

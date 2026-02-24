@@ -143,6 +143,7 @@ export function useUpdateConversation() {
       selectedProvider,
       chatApiKeyId,
       agentId,
+      pinnedAt,
     }: {
       id: string;
       title?: string | null;
@@ -150,10 +151,18 @@ export function useUpdateConversation() {
       selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
       agentId?: string;
+      pinnedAt?: string | null;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
+        body: {
+          title,
+          selectedModel,
+          selectedProvider,
+          chatApiKeyId,
+          agentId,
+          pinnedAt,
+        },
       });
       if (error) {
         handleApiError(error);
@@ -170,6 +179,17 @@ export function useUpdateConversation() {
       if (variables.chatApiKeyId) {
         queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       }
+    },
+  });
+}
+
+export function usePinConversation() {
+  const updateMutation = useUpdateConversation();
+
+  return useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const pinnedAt = pinned ? new Date().toISOString() : null;
+      return updateMutation.mutateAsync({ id, pinnedAt });
     },
   });
 }
@@ -381,7 +401,6 @@ export async function fetchAgentMcpTools(agentId: string | undefined) {
   if (!agentId) return [];
   const { data, error } = await getAgentTools({
     path: { agentId },
-    query: { excludeLlmProxyOrigin: true },
   });
   if (error) {
     handleApiError(error);
@@ -411,7 +430,6 @@ export function useAgentDelegationTools(agentId: string | undefined) {
       if (!agentId) return [];
       const { data, error } = await getAgentTools({
         path: { agentId },
-        query: { excludeLlmProxyOrigin: true },
       });
       if (error) {
         handleApiError(error);

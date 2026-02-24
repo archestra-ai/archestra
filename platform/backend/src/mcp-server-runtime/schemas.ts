@@ -1,3 +1,4 @@
+import type { McpDeploymentState } from "@shared";
 import { z } from "zod";
 
 export type K8sRuntimeStatus =
@@ -7,17 +8,11 @@ export type K8sRuntimeStatus =
   | "error"
   | "stopped";
 
-export type K8sDeploymentState =
-  | "not_created"
-  | "pending"
-  | "running"
-  | "failed"
-  | "succeeded";
-
 export interface K8sDeploymentStatusSummary {
-  state: K8sDeploymentState;
+  state: McpDeploymentState;
   message: string;
   error: string | null;
+  serverName: string;
   deploymentName: string | null;
   namespace: string;
 }

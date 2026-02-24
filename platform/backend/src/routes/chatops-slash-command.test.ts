@@ -27,25 +27,40 @@ const {
   findByIdMock: vi.fn(),
 }));
 
-vi.mock("@/agents/chatops/chatops-manager", () => ({
-  chatOpsManager: {
-    getSlackProvider: vi.fn(() => ({
-      providerId: "slack",
-      displayName: "Slack",
-      isConfigured: () => true,
-      validateWebhookRequest: validateWebhookRequestMock,
-      getUserEmail: getUserEmailMock,
-      sendReply: sendReplyMock,
-      sendAgentSelectionCard: sendAgentSelectionCardMock,
-    })),
-    getMSTeamsProvider: vi.fn(() => null),
-    getChatOpsProvider: vi.fn(() => null),
-    getAccessibleChatopsAgents: vi.fn(() => []),
-    processMessage: vi.fn(),
-    reinitialize: vi.fn(),
-    discoverChannels: vi.fn(),
-  },
-}));
+vi.mock("@/agents/chatops/chatops-manager", async () => {
+  // Use the real SlackProvider.handleSlashCommand so tests exercise actual logic
+  const SlackProviderClass = (await import("@/agents/chatops/slack-provider"))
+    .default;
+
+  const mockProvider = {
+    providerId: "slack",
+    displayName: "Slack",
+    isConfigured: () => true,
+    isSocketMode: () => false,
+    validateWebhookRequest: validateWebhookRequestMock,
+    handleSlashCommand:
+      SlackProviderClass.prototype.handleSlashCommand.bind(null),
+    getUserEmail: getUserEmailMock,
+    sendReply: sendReplyMock,
+    sendAgentSelectionCard: sendAgentSelectionCardMock,
+    eventHandler: null,
+  };
+  // Bind handleSlashCommand so `this` refers to mockProvider
+  mockProvider.handleSlashCommand =
+    SlackProviderClass.prototype.handleSlashCommand.bind(mockProvider);
+
+  return {
+    chatOpsManager: {
+      getSlackProvider: vi.fn(() => mockProvider),
+      getMSTeamsProvider: vi.fn(() => null),
+      getChatOpsProvider: vi.fn(() => null),
+      getAccessibleChatopsAgents: vi.fn(() => []),
+      processMessage: vi.fn(),
+      reinitialize: vi.fn(),
+      discoverChannels: vi.fn(),
+    },
+  };
+});
 
 vi.mock("@/agents/utils", () => ({
   isRateLimited: vi.fn(() => false),

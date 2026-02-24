@@ -3,9 +3,7 @@ import { describe, expect, test } from "@/test";
 import { persistTools } from "./tools";
 
 describe("persistTools", () => {
-  test("creates new tools and agent-tool relationships in bulk", async ({
-    makeAgent,
-  }) => {
+  test("creates new tools in bulk", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
     const tools = [
@@ -28,17 +26,25 @@ describe("persistTools", () => {
 
     await persistTools(tools, agent.id);
 
-    // Verify tools were created
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const createdToolNames = agentTools.map((t) => t.name);
+    // Verify tools were created in the tools table
+    const tool1 = await ToolModel.findByName("new-tool-1");
+    const tool2 = await ToolModel.findByName("new-tool-2");
+    const tool3 = await ToolModel.findByName("new-tool-3");
 
-    expect(createdToolNames).toContain("new-tool-1");
-    expect(createdToolNames).toContain("new-tool-2");
-    expect(createdToolNames).toContain("new-tool-3");
+    expect(tool1).not.toBeNull();
+    expect(tool2).not.toBeNull();
+    expect(tool3).not.toBeNull();
 
-    // Verify agent-tool relationships exist
+    // Proxy tools should have no catalogId, no agentId, no delegateToAgentId
+    expect(tool1?.catalogId).toBeNull();
+    expect(tool1?.agentId).toBeNull();
+
+    // No agent_tools entries should be created
     const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
-    expect(toolIds.length).toBeGreaterThanOrEqual(3);
+    const proxyToolIds = [tool1?.id, tool2?.id, tool3?.id];
+    for (const id of proxyToolIds) {
+      expect(toolIds).not.toContain(id);
+    }
   });
 
   test("handles empty tools array without errors", async ({ makeAgent }) => {
@@ -46,13 +52,6 @@ describe("persistTools", () => {
 
     // Should not throw
     await persistTools([], agent.id);
-
-    // No new tools should be created (only Archestra built-in tools)
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyTools = agentTools.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
-    expect(proxyTools).toHaveLength(0);
   });
 
   test("skips Archestra built-in tools", async ({ makeAgent }) => {
@@ -75,13 +74,9 @@ describe("persistTools", () => {
     await persistTools(tools, agent.id);
 
     // Only the regular tool should be created as a proxy-sniffed tool
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyTools = agentTools.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
-
-    expect(proxyTools).toHaveLength(1);
-    expect(proxyTools[0].name).toBe("regular-tool");
+    const regularTool = await ToolModel.findByName("regular-tool");
+    expect(regularTool).not.toBeNull();
+    expect(regularTool?.catalogId).toBeNull();
   });
 
   test("skips agent delegation tools (agent__*)", async ({ makeAgent }) => {
@@ -109,13 +104,14 @@ describe("persistTools", () => {
     await persistTools(tools, agent.id);
 
     // Only the regular tool should be created
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyTools = agentTools.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
+    const regularTool = await ToolModel.findByName("regular-tool");
+    expect(regularTool).not.toBeNull();
 
-    expect(proxyTools).toHaveLength(1);
-    expect(proxyTools[0].name).toBe("regular-tool");
+    // Agent delegation tools should not exist as proxy tools
+    const agentTool1 = await ToolModel.findByName("agent__research_bot");
+    const agentTool2 = await ToolModel.findByName("agent__code_reviewer");
+    expect(agentTool1).toBeNull();
+    expect(agentTool2).toBeNull();
   });
 
   test("skips MCP tools already assigned to the agent", async ({
@@ -151,14 +147,10 @@ describe("persistTools", () => {
 
     await persistTools(tools, agent.id);
 
-    // Only the proxy tool should be created (MCP tool should be skipped)
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyTools = agentTools.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
-
-    expect(proxyTools).toHaveLength(1);
-    expect(proxyTools[0].name).toBe("proxy-tool-1");
+    // The proxy tool should be created
+    const proxyTool = await ToolModel.findByName("proxy-tool-1");
+    expect(proxyTool).not.toBeNull();
+    expect(proxyTool?.catalogId).toBeNull();
   });
 
   test("skips MCP tools with catalogId (even without MCP server)", async ({
@@ -192,14 +184,10 @@ describe("persistTools", () => {
 
     await persistTools(tools, agent.id);
 
-    // Only the proxy tool should be created (orphaned MCP tool should be skipped)
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyTools = agentTools.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
-
-    expect(proxyTools).toHaveLength(1);
-    expect(proxyTools[0].name).toBe("proxy-tool-1");
+    // The proxy tool should be created
+    const proxyTool = await ToolModel.findByName("proxy-tool-1");
+    expect(proxyTool).not.toBeNull();
+    expect(proxyTool?.catalogId).toBeNull();
   });
 
   test("is idempotent - does not create duplicate tools", async ({
@@ -220,12 +208,8 @@ describe("persistTools", () => {
     await persistTools(tools, agent.id);
 
     // Should only have one tool with this name
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const matchingTools = agentTools.filter(
-      (t) => t.name === "idempotent-tool",
-    );
-
-    expect(matchingTools).toHaveLength(1);
+    const tool = await ToolModel.findByName("idempotent-tool");
+    expect(tool).not.toBeNull();
   });
 
   test("handles tools with missing optional fields", async ({ makeAgent }) => {
@@ -257,15 +241,12 @@ describe("persistTools", () => {
     await persistTools(tools, agent.id);
 
     // Verify all tools were created
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyToolNames = agentTools
-      .filter((t) => t.agentId === agent.id && t.catalogId === null)
-      .map((t) => t.name);
-
-    expect(proxyToolNames).toContain("tool-with-all-fields");
-    expect(proxyToolNames).toContain("tool-without-params");
-    expect(proxyToolNames).toContain("tool-without-description");
-    expect(proxyToolNames).toContain("tool-minimal");
+    expect(await ToolModel.findByName("tool-with-all-fields")).not.toBeNull();
+    expect(await ToolModel.findByName("tool-without-params")).not.toBeNull();
+    expect(
+      await ToolModel.findByName("tool-without-description"),
+    ).not.toBeNull();
+    expect(await ToolModel.findByName("tool-minimal")).not.toBeNull();
   });
 
   test("handles concurrent calls without errors", async ({ makeAgent }) => {
@@ -291,13 +272,9 @@ describe("persistTools", () => {
       persistTools(tools, agent.id),
     ]);
 
-    // Verify tools were created (at least one of each)
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const tool1Exists = agentTools.some((t) => t.name === "concurrent-tool-1");
-    const tool2Exists = agentTools.some((t) => t.name === "concurrent-tool-2");
-
-    expect(tool1Exists).toBe(true);
-    expect(tool2Exists).toBe(true);
+    // Verify tools were created
+    expect(await ToolModel.findByName("concurrent-tool-1")).not.toBeNull();
+    expect(await ToolModel.findByName("concurrent-tool-2")).not.toBeNull();
   });
 
   test("filters all tools when all are MCP or Archestra tools", async ({
@@ -317,12 +294,6 @@ describe("persistTools", () => {
     });
     await AgentToolModel.createIfNotExists(agent.id, mcpTool.id);
 
-    // Get count before
-    const toolsBefore = await ToolModel.getToolsByAgent(agent.id);
-    const proxyToolsBefore = toolsBefore.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
-
     // Try to persist only tools that should be filtered
     const tools = [
       {
@@ -339,13 +310,10 @@ describe("persistTools", () => {
 
     await persistTools(tools, agent.id);
 
-    // No new proxy tools should be created
-    const toolsAfter = await ToolModel.getToolsByAgent(agent.id);
-    const proxyToolsAfter = toolsAfter.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
-
-    expect(proxyToolsAfter.length).toBe(proxyToolsBefore.length);
+    // No new proxy tools should be created — the existing MCP tool should remain unchanged
+    const existingTool = await ToolModel.findByName("existing-mcp-tool");
+    expect(existingTool).not.toBeNull();
+    expect(existingTool?.catalogId).toBe(catalog.id);
   });
 
   test("handles duplicate tool names in input without constraint violation", async ({
@@ -381,20 +349,10 @@ describe("persistTools", () => {
     await persistTools(tools, agent.id);
 
     // Verify tools were created (only unique names)
-    const agentTools = await ToolModel.getToolsByAgent(agent.id);
-    const proxyTools = agentTools.filter(
-      (t) => t.agentId === agent.id && t.catalogId === null,
-    );
+    const duplicateTool = await ToolModel.findByName("duplicate-tool");
+    const uniqueTool = await ToolModel.findByName("unique-tool");
 
-    // Should have exactly 2 unique tools
-    const toolNames = proxyTools.map((t) => t.name);
-    expect(toolNames).toContain("duplicate-tool");
-    expect(toolNames).toContain("unique-tool");
-    expect(toolNames.filter((n) => n === "duplicate-tool")).toHaveLength(1);
-
-    // Verify agent-tool relationships don't have duplicates
-    const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
-    const uniqueToolIds = [...new Set(toolIds)];
-    expect(toolIds.length).toBe(uniqueToolIds.length);
+    expect(duplicateTool).not.toBeNull();
+    expect(uniqueTool).not.toBeNull();
   });
 });

@@ -7193,9 +7193,6 @@ export type GetAgentsResponses = {
             promptHistory: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
-            allowedChatops: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
             description: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -7268,9 +7265,6 @@ export type CreateAgentData = {
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
         userPrompt?: string | null;
-        allowedChatops?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
@@ -7366,9 +7360,6 @@ export type CreateAgentResponses = {
         userPrompt: string | null;
         promptVersion: number | null;
         promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
@@ -7517,9 +7508,6 @@ export type GetAllAgentsResponses = {
         promptHistory: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -7657,9 +7645,6 @@ export type GetDefaultMcpGatewayResponses = {
         promptHistory: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -7795,9 +7780,6 @@ export type GetDefaultLlmProxyResponses = {
         userPrompt: string | null;
         promptVersion: number | null;
         promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
@@ -8018,9 +8000,6 @@ export type GetAgentResponses = {
         promptHistory: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -8084,9 +8063,6 @@ export type UpdateAgentData = {
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
         userPrompt?: string | null;
-        allowedChatops?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
@@ -8184,9 +8160,6 @@ export type UpdateAgentResponses = {
         userPrompt: string | null;
         promptVersion: number | null;
         promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
@@ -8327,9 +8300,6 @@ export type GetAgentVersionsResponses = {
             userPrompt: string | null;
             promptVersion: number | null;
             promptHistory: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             description: string | null;
@@ -8481,9 +8451,6 @@ export type RollbackAgentResponses = {
         userPrompt: string | null;
         promptVersion: number | null;
         promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
@@ -8701,7 +8668,7 @@ export type GetAllAgentToolsData = {
         search?: string;
         agentId?: string;
         /**
-         * Can be 'llm-proxy' or a catalogId
+         * A catalogId to filter by
          */
         origin?: string;
         /**
@@ -9189,9 +9156,7 @@ export type GetAgentToolsData = {
     path: {
         agentId: string;
     };
-    query?: {
-        excludeLlmProxyOrigin?: boolean;
-    };
+    query?: never;
     url: '/api/agents/{agentId}/tools';
 };
 
@@ -12890,7 +12855,9 @@ export type GetChatApiKeysResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -12910,8 +12877,10 @@ export type CreateChatApiKeyData = {
         name: string;
         provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
         apiKey?: string;
+        baseUrl?: string | null;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
+        isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
     };
@@ -12992,7 +12961,9 @@ export type CreateChatApiKeyResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -13082,7 +13053,9 @@ export type GetAvailableChatApiKeysResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -13257,7 +13230,9 @@ export type GetChatApiKeyResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -13276,8 +13251,10 @@ export type UpdateChatApiKeyData = {
     body?: {
         name?: string;
         apiKey?: string;
+        baseUrl?: string | null;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string | null;
+        isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
     };
@@ -13360,7 +13337,9 @@ export type UpdateChatApiKeyResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        baseUrl: string | null;
         isSystem: boolean;
+        isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -13452,6 +13431,8 @@ export type GetChatModelsResponses = {
             supportsToolCalling: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
+            isCustomPrice: boolean;
+            priceSource: 'custom' | 'models_dev' | 'default';
         };
     }>;
 };
@@ -13617,6 +13598,8 @@ export type GetModelsWithApiKeysResponses = {
         supportsToolCalling: boolean | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;
@@ -13636,11 +13619,110 @@ export type GetModelsWithApiKeysResponses = {
             supportsToolCalling: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
+            isCustomPrice: boolean;
+            priceSource: 'custom' | 'models_dev' | 'default';
         };
     }>;
 };
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type UpdateModelPricingData = {
+    body: {
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/models/{id}/pricing';
+};
+
+export type UpdateModelPricingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateModelPricingError = UpdateModelPricingErrors[keyof UpdateModelPricingErrors];
+
+export type UpdateModelPricingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        customPricePerMillionInput: string | null;
+        customPricePerMillionOutput: string | null;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateModelPricingResponse = UpdateModelPricingResponses[keyof UpdateModelPricingResponses];
 
 export type StreamChatData = {
     body: {
@@ -13867,7 +13949,7 @@ export type GetChatConversationsResponses = {
         id: string;
         userId: string;
         organizationId: string;
-        agentId: string;
+        agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -13877,6 +13959,7 @@ export type GetChatConversationsResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -13886,7 +13969,7 @@ export type GetChatConversationsResponses = {
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
-        };
+        } | null;
         messages: Array<unknown>;
     }>;
 };
@@ -13973,7 +14056,7 @@ export type CreateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
-        agentId: string;
+        agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -13983,6 +14066,7 @@ export type CreateChatConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -13992,7 +14076,7 @@ export type CreateChatConversationResponses = {
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
-        };
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -14154,7 +14238,7 @@ export type GetChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
-        agentId: string;
+        agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -14164,6 +14248,7 @@ export type GetChatConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -14173,7 +14258,7 @@ export type GetChatConversationResponses = {
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
-        };
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -14188,6 +14273,7 @@ export type UpdateChatConversationData = {
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
+        pinnedAt?: string | null;
     };
     path: {
         id: string;
@@ -14263,7 +14349,7 @@ export type UpdateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
-        agentId: string;
+        agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -14273,6 +14359,7 @@ export type UpdateChatConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -14282,7 +14369,7 @@ export type UpdateChatConversationResponses = {
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
-        };
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -14453,7 +14540,7 @@ export type GenerateChatConversationTitleResponses = {
         id: string;
         userId: string;
         organizationId: string;
-        agentId: string;
+        agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -14463,6 +14550,7 @@ export type GenerateChatConversationTitleResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -14472,7 +14560,7 @@ export type GenerateChatConversationTitleResponses = {
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
-        };
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -14559,7 +14647,7 @@ export type UpdateChatMessageResponses = {
         id: string;
         userId: string;
         organizationId: string;
-        agentId: string;
+        agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -14569,6 +14657,7 @@ export type UpdateChatMessageResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -14578,7 +14667,7 @@ export type UpdateChatMessageResponses = {
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
-        };
+        } | null;
         messages: Array<unknown>;
     };
 };
@@ -15086,6 +15175,11 @@ export type GetChatOpsStatusResponses = {
             credentials?: {
                 [key: string]: string;
             };
+            dmInfo?: {
+                botUserId?: string;
+                teamId?: string;
+                appId?: string;
+            };
         }>;
     };
 };
@@ -15170,6 +15264,8 @@ export type ListChatOpsBindingsResponses = {
         workspaceId: string | null;
         channelName: string | null;
         workspaceName: string | null;
+        isDm: boolean;
+        dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -15339,6 +15435,8 @@ export type UpdateChatOpsBindingResponses = {
         workspaceId: string | null;
         channelName: string | null;
         workspaceName: string | null;
+        isDm: boolean;
+        dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -15435,6 +15533,8 @@ export type UpdateSlackChatOpsConfigData = {
         botToken?: string;
         signingSecret?: string;
         appId?: string;
+        connectionMode?: 'webhook' | 'socket';
+        appLevelToken?: string;
     };
     path?: never;
     query?: never;
@@ -15761,6 +15861,50 @@ export type CohereChatWithAgentResponses = {
 };
 
 export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
+
+export type GetConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config';
+};
+
+export type GetConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        features: {
+            'orchestrator-k8s-runtime': boolean;
+            byosEnabled: boolean;
+            byosVaultKvVersion: '1' | '2';
+            geminiVertexAiEnabled: boolean;
+            globalToolPolicy: 'permissive' | 'restrictive';
+            browserStreamingEnabled: boolean;
+            incomingEmail: {
+                enabled: boolean;
+                provider?: 'outlook';
+                displayName?: string;
+                emailDomain?: string;
+            };
+            knowledgeGraph: {
+                enabled: boolean;
+                provider?: 'lightrag';
+                displayName?: string;
+            };
+            mcpServerBaseImage: string;
+            orchestratorK8sNamespace: string;
+            isQuickstart: boolean;
+            ngrokDomain: string;
+            virtualKeyDefaultExpirationSeconds: number;
+        };
+        providerBaseUrls: {
+            [key: string]: string | null;
+        };
+    };
+};
+
+export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -16448,48 +16592,6 @@ export type GetDualLlmResultsByInteractionResponses = {
 };
 
 export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
-
-export type GetFeaturesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/features';
-};
-
-export type GetFeaturesResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        'orchestrator-k8s-runtime': boolean;
-        byosEnabled: boolean;
-        byosVaultKvVersion: '1' | '2';
-        geminiVertexAiEnabled: boolean;
-        vllmEnabled: boolean;
-        ollamaEnabled: boolean;
-        mistralEnabled: boolean;
-        perplexityEnabled: boolean;
-        globalToolPolicy: 'permissive' | 'restrictive';
-        browserStreamingEnabled: boolean;
-        incomingEmail: {
-            enabled: boolean;
-            provider?: 'outlook';
-            displayName?: string;
-            emailDomain?: string;
-        };
-        knowledgeGraph: {
-            enabled: boolean;
-            provider?: 'lightrag';
-            displayName?: string;
-        };
-        mcpServerBaseImage: string;
-        orchestratorK8sNamespace: string;
-        isQuickstart: boolean;
-        ngrokDomain: string;
-    };
-};
-
-export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
@@ -17386,7 +17488,7 @@ export type GetInteractionsResponses = {
     200: {
         data: Array<{
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17411,7 +17513,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17436,7 +17538,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17461,7 +17563,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17854,7 +17956,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17879,7 +17981,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17904,7 +18006,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17929,7 +18031,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17952,7 +18054,7 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -17975,7 +18077,7 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -18000,7 +18102,7 @@ export type GetInteractionsResponses = {
             externalAgentIdLabel?: string | null;
         } | {
             id: string;
-            profileId: string;
+            profileId: string | null;
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
@@ -18154,7 +18256,7 @@ export type GetInteractionSessionsResponses = {
             firstRequestTime: string;
             lastRequestTime: string;
             models: Array<string>;
-            profileId: string;
+            profileId: string | null;
             profileName: string | null;
             externalAgentIds: Array<string>;
             externalAgentIdLabels: Array<string | null>;
@@ -18407,7 +18509,7 @@ export type GetInteractionResponses = {
      */
     200: {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18432,7 +18534,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18457,7 +18559,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18482,7 +18584,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18875,7 +18977,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18900,7 +19002,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18925,7 +19027,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18950,7 +19052,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18973,7 +19075,7 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -18996,7 +19098,7 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -19021,7 +19123,7 @@ export type GetInteractionResponses = {
         externalAgentIdLabel?: string | null;
     } | {
         id: string;
-        profileId: string;
+        profileId: string | null;
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
@@ -19160,6 +19262,9 @@ export type GetInternalMcpCatalogResponses = {
             httpPort?: number;
             httpPath?: string;
             nodePort?: number;
+            imagePullSecrets?: Array<{
+                name: string;
+            }>;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -19199,6 +19304,10 @@ export type GetInternalMcpCatalogResponses = {
         } | null;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
     }>;
 };
 
@@ -19246,6 +19355,9 @@ export type CreateInternalMcpCatalogItemData = {
             httpPath?: string;
             nodePort?: number;
             serviceAccount?: string;
+            imagePullSecrets?: Array<{
+                name: string;
+            }>;
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
@@ -19283,6 +19395,10 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+        }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -19397,6 +19513,9 @@ export type CreateInternalMcpCatalogItemResponses = {
             httpPort?: number;
             httpPath?: string;
             nodePort?: number;
+            imagePullSecrets?: Array<{
+                name: string;
+            }>;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -19436,6 +19555,10 @@ export type CreateInternalMcpCatalogItemResponses = {
         } | null;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
     };
 };
 
@@ -19633,6 +19756,9 @@ export type GetInternalMcpCatalogItemResponses = {
             httpPort?: number;
             httpPath?: string;
             nodePort?: number;
+            imagePullSecrets?: Array<{
+                name: string;
+            }>;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -19672,6 +19798,10 @@ export type GetInternalMcpCatalogItemResponses = {
         } | null;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
     };
 };
 
@@ -19718,6 +19848,9 @@ export type UpdateInternalMcpCatalogItemData = {
             httpPath?: string;
             nodePort?: number;
             serviceAccount?: string;
+            imagePullSecrets?: Array<{
+                name: string;
+            }>;
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
@@ -19755,6 +19888,10 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+        }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -19871,6 +20008,9 @@ export type UpdateInternalMcpCatalogItemResponses = {
             httpPort?: number;
             httpPath?: string;
             nodePort?: number;
+            imagePullSecrets?: Array<{
+                name: string;
+            }>;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -19910,6 +20050,10 @@ export type UpdateInternalMcpCatalogItemResponses = {
         } | null;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
     };
 };
 
@@ -20322,6 +20466,161 @@ export type ResetDeploymentYamlResponses = {
 };
 
 export type ResetDeploymentYamlResponse = ResetDeploymentYamlResponses[keyof ResetDeploymentYamlResponses];
+
+export type GetInternalMcpCatalogLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog/labels/keys';
+};
+
+export type GetInternalMcpCatalogLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetInternalMcpCatalogLabelKeysError = GetInternalMcpCatalogLabelKeysErrors[keyof GetInternalMcpCatalogLabelKeysErrors];
+
+export type GetInternalMcpCatalogLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetInternalMcpCatalogLabelKeysResponse = GetInternalMcpCatalogLabelKeysResponses[keyof GetInternalMcpCatalogLabelKeysResponses];
+
+export type GetInternalMcpCatalogLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/internal_mcp_catalog/labels/values';
+};
+
+export type GetInternalMcpCatalogLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetInternalMcpCatalogLabelValuesError = GetInternalMcpCatalogLabelValuesErrors[keyof GetInternalMcpCatalogLabelValuesErrors];
+
+export type GetInternalMcpCatalogLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetInternalMcpCatalogLabelValuesResponse = GetInternalMcpCatalogLabelValuesResponses[keyof GetInternalMcpCatalogLabelValuesResponses];
 
 export type CheckInvitationData = {
     body?: never;
@@ -21070,6 +21369,9 @@ export type GetMcpServerInstallationRequestsResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -21151,6 +21453,9 @@ export type CreateMcpServerInstallationRequestData = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
     };
@@ -21286,6 +21591,9 @@ export type CreateMcpServerInstallationRequestResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -21520,6 +21828,9 @@ export type GetMcpServerInstallationRequestResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -21601,6 +21912,9 @@ export type UpdateMcpServerInstallationRequestData = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse?: string | null;
@@ -21748,6 +22062,9 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -21905,6 +22222,9 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -22062,6 +22382,9 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -22219,6 +22542,9 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 httpPath?: string;
                 nodePort?: number;
                 serviceAccount?: string;
+                imagePullSecrets?: Array<{
+                    name: string;
+                }>;
             };
         } | null;
         adminResponse: string | null;
@@ -23139,7 +23465,7 @@ export type GetMcpToolCallsResponses = {
     200: {
         data: Array<{
             id: string;
-            agentId: string;
+            agentId: string | null;
             mcpServerName: string;
             method: string;
             /**
@@ -23245,7 +23571,7 @@ export type GetMcpToolCallResponses = {
      */
     200: {
         id: string;
-        agentId: string;
+        agentId: string | null;
         mcpServerName: string;
         method: string;
         /**
@@ -27064,431 +27390,6 @@ export type RemoveTeamExternalGroupResponses = {
 
 export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
 
-export type GetTokenPricesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/token-prices';
-};
-
-export type GetTokenPricesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetTokenPricesError = GetTokenPricesErrors[keyof GetTokenPricesErrors];
-
-export type GetTokenPricesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPricesResponses];
-
-export type CreateTokenPriceData = {
-    body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/token-prices';
-};
-
-export type CreateTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateTokenPriceError = CreateTokenPriceErrors[keyof CreateTokenPriceErrors];
-
-export type CreateTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateTokenPriceResponse = CreateTokenPriceResponses[keyof CreateTokenPriceResponses];
-
-export type DeleteTokenPriceData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/token-prices/{id}';
-};
-
-export type DeleteTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteTokenPriceError = DeleteTokenPriceErrors[keyof DeleteTokenPriceErrors];
-
-export type DeleteTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteTokenPriceResponse = DeleteTokenPriceResponses[keyof DeleteTokenPriceResponses];
-
-export type GetTokenPriceData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/token-prices/{id}';
-};
-
-export type GetTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetTokenPriceError = GetTokenPriceErrors[keyof GetTokenPriceErrors];
-
-export type GetTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceResponses];
-
-export type UpdateTokenPriceData = {
-    body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model?: string;
-        pricePerMillionInput?: string;
-        pricePerMillionOutput?: string;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/token-prices/{id}';
-};
-
-export type UpdateTokenPriceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateTokenPriceError = UpdateTokenPriceErrors[keyof UpdateTokenPriceErrors];
-
-export type UpdateTokenPriceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'vllm' | 'ollama' | 'zhipuai';
-        model: string;
-        pricePerMillionInput: string;
-        pricePerMillionOutput: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
-
 export type GetTokensData = {
     body?: never;
     path?: never;
@@ -28393,6 +28294,362 @@ export type RotateUserTokenResponses = {
 };
 
 export type RotateUserTokenResponse = RotateUserTokenResponses[keyof RotateUserTokenResponses];
+
+export type GetAllVirtualApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/virtual-api-keys';
+};
+
+export type GetAllVirtualApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAllVirtualApiKeysError = GetAllVirtualApiKeysErrors[keyof GetAllVirtualApiKeysErrors];
+
+export type GetAllVirtualApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            chatApiKeyId: string;
+            name: string;
+            secretId: string;
+            tokenStart: string;
+            expiresAt: string | null;
+            createdAt: string;
+            lastUsedAt: string | null;
+            parentKeyName: string;
+            parentKeyProvider: string;
+            parentKeyBaseUrl: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAllVirtualApiKeysResponse = GetAllVirtualApiKeysResponses[keyof GetAllVirtualApiKeysResponses];
+
+export type GetVirtualApiKeysData = {
+    body?: never;
+    path: {
+        chatApiKeyId: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys';
+};
+
+export type GetVirtualApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetVirtualApiKeysError = GetVirtualApiKeysErrors[keyof GetVirtualApiKeysErrors];
+
+export type GetVirtualApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        chatApiKeyId: string;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        expiresAt: string | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetVirtualApiKeysResponse = GetVirtualApiKeysResponses[keyof GetVirtualApiKeysResponses];
+
+export type CreateVirtualApiKeyData = {
+    body: {
+        name: string;
+        expiresAt?: unknown;
+    };
+    path: {
+        chatApiKeyId: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys';
+};
+
+export type CreateVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateVirtualApiKeyError = CreateVirtualApiKeyErrors[keyof CreateVirtualApiKeyErrors];
+
+export type CreateVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        chatApiKeyId: string;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        expiresAt: string | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        value: string;
+    };
+};
+
+export type CreateVirtualApiKeyResponse = CreateVirtualApiKeyResponses[keyof CreateVirtualApiKeyResponses];
+
+export type DeleteVirtualApiKeyData = {
+    body?: never;
+    path: {
+        chatApiKeyId: string;
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+};
+
+export type DeleteVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteVirtualApiKeyError = DeleteVirtualApiKeyErrors[keyof DeleteVirtualApiKeyErrors];
+
+export type DeleteVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteVirtualApiKeyResponse = DeleteVirtualApiKeyResponses[keyof DeleteVirtualApiKeyResponses];
 
 export type VllmChatCompletionsWithDefaultAgentData = {
     body?: VllmChatCompletionRequestInput;

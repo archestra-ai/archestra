@@ -114,14 +114,6 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `backend/src/config.ts` | Add `llm.{provider}.baseUrl` and `llm.{provider}.enabled` (typically `Boolean(baseUrl)`) with environment variable (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL`) |
 
-### Feature Flags
-
-Expose provider availability to the frontend for conditional UI rendering.
-
-| File                             | Description                                                         |
-| -------------------------------- | ------------------------------------------------------------------- |
-| `backend/src/routes/features.ts` | Add `{provider}Enabled` boolean to the features schema and response |
-
 ### Tokenizer
 
 > **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
@@ -202,19 +194,19 @@ Each provider must be added to the LLM Proxy and Chat UI e2e tests to ensure all
 
 #### LLM Proxy E2E Tests
 
-| File                                                            | Description                                                                                                                              |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)                              |
-| `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json`      | WireMock stub mapping for Chat UI streaming responses - must use SSE format with `bodyPatterns` matching on `chat-ui-e2e-test`           |
-| `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`)                  |
-| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` map                                                               |
-| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` map                                                                |
-| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` map                                                                     |
-| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` map                                                                   |
-| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` map                                                                    |
-| `e2e-tests/tests/api/llm-proxy/execution-metrics.spec.ts`       | Execution metrics tests (agent execution ID tracking) - add `{provider}Config` to `testConfigs` map                                      |
-| `e2e-tests/tests/api/llm-proxy/streaming-tool-calls.spec.ts`    | Streaming tool call tests - add `{provider}Config` to `testConfigs` map (or `null` if provider uses non-SSE streaming format)            |
-| `e2e-tests/tests/ui/chat.spec.ts`                               | Chat UI tests - add `{provider}Config` to `testConfigs` map with `providerName`, `modelId`, `modelDisplayName`, and `expectedResponse`   |
+| File                                                            | Description                                                                                                                            |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)                            |
+| `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json`      | WireMock stub mapping for Chat UI streaming responses - must use SSE format with `bodyPatterns` matching on `chat-ui-e2e-test`         |
+| `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`)                |
+| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` map                                                             |
+| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` map                                                              |
+| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` map                                                                   |
+| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` map                                                                 |
+| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` map                                                                  |
+| `e2e-tests/tests/api/llm-proxy/execution-metrics.spec.ts`       | Execution metrics tests (agent execution ID tracking) - add `{provider}Config` to `testConfigs` map                                    |
+| `e2e-tests/tests/api/llm-proxy/streaming-tool-calls.spec.ts`    | Streaming tool call tests - add `{provider}Config` to `testConfigs` map (or `null` if provider uses non-SSE streaming format)          |
+| `e2e-tests/tests/ui/chat.spec.ts`                               | Chat UI tests - add `{provider}Config` to `testConfigs` map with `providerName`, `modelId`, `modelDisplayName`, and `expectedResponse` |
 
 All LLM Proxy test files use the `satisfies Record<SupportedProvider, Config>` pattern to enforce at compile time that every provider has a config entry. When a new provider is added to `SupportedProvider` without adding its test config, TypeScript will report a compile error.
 

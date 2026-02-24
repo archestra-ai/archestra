@@ -19,7 +19,7 @@ LLM Proxy is Archestra's security layer that sits between AI agents and LLM prov
 
 ## To use LLM Proxy:
 
-1. Go to **LLM Proxies** and create a new proxy or use an existing one.
+1. Go to **LLM Proxies** and create a new LLM proxy
 2. Click the **Connect** icon, choose the LLM provider you are using, and copy the provided URL.
 3. Use this URL when calling your LLM provider instead of the provider's original endpoint.
 
@@ -34,40 +34,48 @@ graph TB
 
     subgraph Proxy["Archestra"]
         direction LR
-        Entry["Entry Point<br/>:9000/v1/*"]
-        Guard["Guardrails"]
-        Modifier["Response Modifier"]
+        Entry["LLM Proxy"]
+        Guard["Security Policies"]
 
         Entry --> Guard
-        Guard --> Modifier
     end
 
-    subgraph Providers["LLM Providers"]
+    subgraph Cloud["Cloud Providers"]
         direction LR
         P1["OpenAI"]
         P2["Anthropic"]
-        P3["Google AI"]
-        P4["Custom LLM"]
+        P3["Gemini"]
+    end
+
+    subgraph SelfHosted["Self-Hosted"]
+        direction LR
+        P4["vLLM"]
+        P5["Ollama"]
     end
 
     A1 --> Entry
     A2 --> Entry
     A3 --> Entry
 
-    Modifier --> P1
-    Modifier --> P2
-    Modifier --> P3
-    Modifier --> P4
+    Guard --> P1
+    Guard --> P2
+    Guard --> P3
+    Guard --> P4
+    Guard --> P5
 
-    P1 -.->|Response| Modifier
-    P2 -.->|Response| Modifier
-    P3 -.->|Response| Modifier
-    P4 -.->|Response| Modifier
+    P1 -.->|Response| Guard
+    P2 -.->|Response| Guard
+    P3 -.->|Response| Guard
+    P4 -.->|Response| Guard
+    P5 -.->|Response| Guard
 
     style Entry fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
     style Guard fill:#fff2cc,stroke:#d6b656,stroke-width:2px
-    style Modifier fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
+
+## Authentication
+
+The LLM Proxy supports direct provider API keys, virtual API keys, and JWKS via an external identity provider. See [Authentication](/docs/platform-llm-proxy-authentication) for details.
 
 ## Custom Headers
 
@@ -107,3 +115,7 @@ curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Supported Providers
+
+For the full list of supported LLM providers, see [Supported LLM Providers](/docs/platform-supported-llm-providers).

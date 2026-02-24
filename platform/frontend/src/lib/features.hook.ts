@@ -1,10 +1,8 @@
-import type { archestraApiTypes } from "@shared";
 import config, { DEFAULT_BACKEND_URL } from "./config";
-import { useFeatures } from "./features.query";
+import type { FeaturesResponse } from "./config.query";
+import { useFeatures } from "./config.query";
 
-type Features = archestraApiTypes.GetFeaturesResponses["200"];
-
-export function useFeatureFlag(flag: keyof Features): boolean {
+export function useFeatureFlag(flag: keyof FeaturesResponse): boolean {
   const { data: features, isLoading } = useFeatures();
 
   // Return false while loading or if data is not available
@@ -15,9 +13,9 @@ export function useFeatureFlag(flag: keyof Features): boolean {
   return (features[flag] as boolean) ?? false;
 }
 
-export function useFeatureValue<K extends keyof Features>(
+export function useFeatureValue<K extends keyof FeaturesResponse>(
   flag: K,
-): Features[K] | null {
+): FeaturesResponse[K] | null {
   const { data: features, isLoading } = useFeatures();
 
   // Return null while loading or if data is not available

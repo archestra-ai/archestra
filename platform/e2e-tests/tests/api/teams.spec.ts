@@ -72,17 +72,15 @@ test.describe("Teams API", () => {
     test("should create, read, update, and delete a team", async ({
       request,
       makeApiRequest,
+      createTeam,
+      deleteTeam,
     }) => {
       // Create a team
-      const createResponse = await makeApiRequest({
+      const createResponse = await createTeam(
         request,
-        method: "post",
-        urlSuffix: "/api/teams",
-        data: {
-          name: "Test Team",
-          description: "A team for testing purposes",
-        },
-      });
+        "Test Team",
+        "A team for testing purposes",
+      );
       expect(createResponse.status()).toBe(200);
       const team = await createResponse.json();
       expect(team.name).toBe("Test Team");
@@ -116,11 +114,7 @@ test.describe("Teams API", () => {
       expect(updatedTeam.description).toBe("Updated description");
 
       // Delete the team
-      const deleteResponse = await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/teams/${team.id}`,
-      });
+      const deleteResponse = await deleteTeam(request, team.id);
       expect(deleteResponse.status()).toBe(200);
       const deleteResult = await deleteResponse.json();
       expect(deleteResult.success).toBe(true);
@@ -135,16 +129,14 @@ test.describe("Teams API", () => {
       expect(verifyResponse.status()).toBe(404);
     });
 
-    test("should list all teams", async ({ request, makeApiRequest }) => {
+    test("should list all teams", async ({
+      request,
+      makeApiRequest,
+      createTeam,
+      deleteTeam,
+    }) => {
       // Create a team first
-      const createResponse = await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/teams",
-        data: {
-          name: "List Test Team",
-        },
-      });
+      const createResponse = await createTeam(request, "List Test Team");
       const team = await createResponse.json();
 
       // List teams
@@ -159,11 +151,7 @@ test.describe("Teams API", () => {
       expect(teams.some((t: { id: string }) => t.id === team.id)).toBe(true);
 
       // Cleanup
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/teams/${team.id}`,
-      });
+      await deleteTeam(request, team.id);
     });
 
     test("should return 404 for non-existent team", async ({
@@ -184,16 +172,11 @@ test.describe("Teams API", () => {
     test("should add and remove a member from a team", async ({
       request,
       makeApiRequest,
+      createTeam,
+      deleteTeam,
     }) => {
       // Create a team
-      const createTeamResponse = await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/teams",
-        data: {
-          name: "Member Test Team",
-        },
-      });
+      const createTeamResponse = await createTeam(request, "Member Test Team");
       const team = await createTeamResponse.json();
 
       // Get organization members to find a user ID
@@ -251,11 +234,7 @@ test.describe("Teams API", () => {
       ).toBe(false);
 
       // Cleanup
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/teams/${team.id}`,
-      });
+      await deleteTeam(request, team.id);
     });
 
     test("should return 404 for members of non-existent team", async ({
@@ -279,16 +258,14 @@ test.describe("Teams API", () => {
     test("should manage external group mappings when enterprise license is enabled", async ({
       request,
       makeApiRequest,
+      createTeam,
+      deleteTeam,
     }) => {
       // Create a team first
-      const createTeamResponse = await makeApiRequest({
+      const createTeamResponse = await createTeam(
         request,
-        method: "post",
-        urlSuffix: "/api/teams",
-        data: {
-          name: "External Groups Test Team",
-        },
-      });
+        "External Groups Test Team",
+      );
       const team = await createTeamResponse.json();
 
       // Try to get external groups - this will succeed or fail based on license
@@ -348,26 +325,20 @@ test.describe("Teams API", () => {
       }
 
       // Cleanup
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/teams/${team.id}`,
-      });
+      await deleteTeam(request, team.id);
     });
 
     test("should prevent duplicate external group mappings", async ({
       request,
       makeApiRequest,
+      createTeam,
+      deleteTeam,
     }) => {
       // Create a team
-      const createTeamResponse = await makeApiRequest({
+      const createTeamResponse = await createTeam(
         request,
-        method: "post",
-        urlSuffix: "/api/teams",
-        data: {
-          name: "Duplicate Group Test Team",
-        },
-      });
+        "Duplicate Group Test Team",
+      );
       const team = await createTeamResponse.json();
 
       // Try to add an external group
@@ -400,26 +371,20 @@ test.describe("Teams API", () => {
       }
 
       // Cleanup
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/teams/${team.id}`,
-      });
+      await deleteTeam(request, team.id);
     });
 
     test("should normalize group identifiers to lowercase", async ({
       request,
       makeApiRequest,
+      createTeam,
+      deleteTeam,
     }) => {
       // Create a team
-      const createTeamResponse = await makeApiRequest({
+      const createTeamResponse = await createTeam(
         request,
-        method: "post",
-        urlSuffix: "/api/teams",
-        data: {
-          name: "Case Insensitive Test Team",
-        },
-      });
+        "Case Insensitive Test Team",
+      );
       const team = await createTeamResponse.json();
 
       // Try to add an external group with mixed case
@@ -442,11 +407,7 @@ test.describe("Teams API", () => {
       }
 
       // Cleanup
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/teams/${team.id}`,
-      });
+      await deleteTeam(request, team.id);
     });
   });
 });

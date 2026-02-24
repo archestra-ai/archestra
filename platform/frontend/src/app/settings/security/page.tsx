@@ -194,10 +194,10 @@ export default function SecuritySettingsPage() {
               <p className="text-sm text-muted-foreground">
                 Configure in{" "}
                 <Link
-                  href="/settings/llm-api-keys"
+                  href="/llm-proxies/provider-settings"
                   className="text-primary hover:underline"
                 >
-                  LLM API Keys settings
+                  Provider Settings
                 </Link>
               </p>
             </div>

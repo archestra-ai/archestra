@@ -3,7 +3,7 @@ import {
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   parseVaultReference,
 } from "@shared";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
@@ -128,10 +128,12 @@ class ChatApiKeyModel {
         name: schema.chatApiKeysTable.name,
         provider: schema.chatApiKeysTable.provider,
         secretId: schema.chatApiKeysTable.secretId,
+        baseUrl: schema.chatApiKeysTable.baseUrl,
         scope: schema.chatApiKeysTable.scope,
         userId: schema.chatApiKeysTable.userId,
         teamId: schema.chatApiKeysTable.teamId,
         isSystem: schema.chatApiKeysTable.isSystem,
+        isPrimary: schema.chatApiKeysTable.isPrimary,
         createdAt: schema.chatApiKeysTable.createdAt,
         updatedAt: schema.chatApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
@@ -245,10 +247,12 @@ class ChatApiKeyModel {
         name: schema.chatApiKeysTable.name,
         provider: schema.chatApiKeysTable.provider,
         secretId: schema.chatApiKeysTable.secretId,
+        baseUrl: schema.chatApiKeysTable.baseUrl,
         scope: schema.chatApiKeysTable.scope,
         userId: schema.chatApiKeysTable.userId,
         teamId: schema.chatApiKeysTable.teamId,
         isSystem: schema.chatApiKeysTable.isSystem,
+        isPrimary: schema.chatApiKeysTable.isPrimary,
         createdAt: schema.chatApiKeysTable.createdAt,
         updatedAt: schema.chatApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
@@ -369,7 +373,15 @@ class ChatApiKeyModel {
       }
     }
 
-    // 2. Try personal key
+    // Condition: key has a secret OR provider allows optional API keys
+    const hasSecretOrOptional = or(
+      sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+      inArray(schema.chatApiKeysTable.provider, [
+        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
+      ]),
+    );
+
+    // 3. Try personal key (prefer isPrimary, then oldest)
     const [personalKey] = await db
       .select()
       .from(schema.chatApiKeysTable)
@@ -379,8 +391,12 @@ class ChatApiKeyModel {
           eq(schema.chatApiKeysTable.provider, provider),
           eq(schema.chatApiKeysTable.scope, "personal"),
           eq(schema.chatApiKeysTable.userId, userId),
-          sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+          hasSecretOrOptional,
         ),
+      )
+      .orderBy(
+        sql`${schema.chatApiKeysTable.isPrimary} DESC`,
+        schema.chatApiKeysTable.createdAt,
       )
       .limit(1);
 
@@ -388,7 +404,7 @@ class ChatApiKeyModel {
       return personalKey;
     }
 
-    // 3. Try team key (first available from user's teams)
+    // 4. Try team key (prefer isPrimary, then oldest)
     if (userTeamIds.length > 0) {
       const [teamKey] = await db
         .select()
@@ -399,8 +415,12 @@ class ChatApiKeyModel {
             eq(schema.chatApiKeysTable.provider, provider),
             eq(schema.chatApiKeysTable.scope, "team"),
             inArray(schema.chatApiKeysTable.teamId, userTeamIds),
-            sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+            hasSecretOrOptional,
           ),
+        )
+        .orderBy(
+          sql`${schema.chatApiKeysTable.isPrimary} DESC`,
+          schema.chatApiKeysTable.createdAt,
         )
         .limit(1);
 
@@ -409,7 +429,7 @@ class ChatApiKeyModel {
       }
     }
 
-    // 4. Try org-wide key
+    // 5. Try org-wide key (prefer isPrimary, then oldest)
     const [orgWideKey] = await db
       .select()
       .from(schema.chatApiKeysTable)
@@ -418,8 +438,12 @@ class ChatApiKeyModel {
           eq(schema.chatApiKeysTable.organizationId, organizationId),
           eq(schema.chatApiKeysTable.provider, provider),
           eq(schema.chatApiKeysTable.scope, "org_wide"),
-          sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+          hasSecretOrOptional,
         ),
+      )
+      .orderBy(
+        sql`${schema.chatApiKeysTable.isPrimary} DESC`,
+        schema.chatApiKeysTable.createdAt,
       )
       .limit(1);
 
@@ -478,6 +502,10 @@ class ChatApiKeyModel {
       .select()
       .from(schema.chatApiKeysTable)
       .where(and(...conditions))
+      .orderBy(
+        desc(schema.chatApiKeysTable.isPrimary),
+        asc(schema.chatApiKeysTable.createdAt),
+      )
       .limit(1);
 
     return apiKey ?? null;
@@ -620,6 +648,18 @@ class ChatApiKeyModel {
       .select()
       .from(schema.chatApiKeysTable)
       .where(eq(schema.chatApiKeysTable.isSystem, true));
+  }
+
+  /**
+   * Get the set of distinct providers that have at least one API key configured.
+   * Used to determine which providers are "configured" for model filtering,
+   * independent of whether model sync has linked models to those keys.
+   */
+  static async getConfiguredProviders(): Promise<Set<string>> {
+    const rows = await db
+      .selectDistinct({ provider: schema.chatApiKeysTable.provider })
+      .from(schema.chatApiKeysTable);
+    return new Set(rows.map((r) => r.provider));
   }
 }
 

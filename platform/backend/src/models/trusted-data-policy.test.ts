@@ -85,7 +85,7 @@ describe("TrustedDataPolicyModel", () => {
       expect(unknownResult?.isTrusted).toBe(false);
       expect(unknownResult?.isBlocked).toBe(false);
       expect(unknownResult?.shouldSanitizeWithDualLlm).toBe(false);
-      expect(unknownResult?.reason).toContain("not registered");
+      expect(unknownResult?.reason).toContain("not found");
     });
 
     test("handles blocking policies in bulk evaluation", async ({
@@ -174,10 +174,10 @@ describe("TrustedDataPolicyModel", () => {
       expect(createProfileResult?.isTrusted).toBe(true);
       expect(createProfileResult?.reason).toBe("Archestra MCP server tool");
 
-      // Regular tool should be untrusted (not registered) - index 1
+      // Regular tool should be untrusted (not found in database) - index 1
       const regularResult = results.get("1");
       expect(regularResult?.isTrusted).toBe(false);
-      expect(regularResult?.reason).toContain("not registered");
+      expect(regularResult?.reason).toContain("not found");
     });
 
     test("single evaluate method uses bulk internally", async ({
@@ -187,7 +187,7 @@ describe("TrustedDataPolicyModel", () => {
       makeTrustedDataPolicy,
     }) => {
       const agent = await makeAgent();
-      const tool = await makeTool({ name: "test-tool" });
+      const tool = await makeTool({ name: "single-eval-tool" });
       await makeAgentTool(agent.id, tool.id);
       // Delete auto-created default policies to set up our own
       await TrustedDataPolicyModel.deleteByToolId(tool.id);
@@ -199,7 +199,7 @@ describe("TrustedDataPolicyModel", () => {
       // Single evaluation should still work
       const result = await TrustedDataPolicyModel.evaluate(
         agent.id,
-        "test-tool",
+        "single-eval-tool",
         { data: "test" },
         "restrictive",
         { teamIds: [] },
@@ -1878,7 +1878,7 @@ describe("TrustedDataPolicyModel", () => {
       expect(doubleUnderscoreResult?.isTrusted).toBe(true);
     });
 
-    test("marks tool with __ in server name as untrusted when not registered", async ({
+    test("marks tool with __ in server name as untrusted when not found", async ({
       makeAgent,
     }) => {
       const agent = await makeAgent();
@@ -1892,7 +1892,7 @@ describe("TrustedDataPolicyModel", () => {
       );
 
       expect(result.isTrusted).toBe(false);
-      expect(result.reason).toContain("not registered");
+      expect(result.reason).toContain("not found");
     });
   });
 });

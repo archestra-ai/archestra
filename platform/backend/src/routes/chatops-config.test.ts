@@ -122,6 +122,8 @@ describe("PUT /api/chatops/config/slack", () => {
       botToken: "xoxb-test-token",
       signingSecret: "test-secret",
       appId: "A12345",
+      connectionMode: "socket",
+      appLevelToken: "",
     });
 
     expect(reinitializeMock).toHaveBeenCalledTimes(1);

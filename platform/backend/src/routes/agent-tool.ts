@@ -443,13 +443,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        querystring: z.object({
-          excludeLlmProxyOrigin: z.coerce.boolean().optional().default(false),
-        }),
         response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
-    async ({ params: { agentId }, query, user, organizationId }, reply) => {
+    async ({ params: { agentId }, user, organizationId }, reply) => {
       // Validate that agent exists
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
@@ -464,9 +461,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "read",
       });
 
-      const tools = query.excludeLlmProxyOrigin
-        ? await ToolModel.getMcpToolsByAgent(agentId)
-        : await ToolModel.getToolsByAgent(agentId);
+      const tools = await ToolModel.getToolsByAgent(agentId);
 
       return reply.send(tools);
     },

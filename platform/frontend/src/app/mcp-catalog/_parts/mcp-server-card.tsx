@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  type McpDeploymentStatusEntry,
+} from "@shared";
 import {
   AlertTriangle,
   Code,
@@ -14,6 +18,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { LabelTags } from "@/components/label-tags";
 import {
   WithoutPermissions,
   WithPermissions,
@@ -41,6 +46,7 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
+import { DeploymentStatusIndicator } from "./deployment-status";
 import { InstallationProgress } from "./installation-progress";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
@@ -70,6 +76,7 @@ export type McpServerCardProps = {
     | "idle"
     | "discovering-tools"
     | null;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
@@ -97,6 +104,7 @@ export function McpServerCard({
   installedServer,
   installingItemId,
   installationStatus,
+  deploymentStatuses,
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
@@ -263,30 +271,30 @@ export function McpServerCard({
   const hasLocalInstallations = localInstalls.length > 0;
   const isLogsAvailable = variant === "local" && hasLocalInstallations;
 
-  // JSX parts - Action buttons for Edit and Logs
-  const actionButtons = (
-    <div className="flex gap-1 mb-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1 h-8 text-xs"
-        onClick={onEdit}
-      >
-        <Pencil className="h-3 w-3 mr-1" />
-        Edit
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1 h-8 text-xs"
-        onClick={() => setIsLogsDialogOpen(true)}
-        disabled={!isLogsAvailable}
-      >
-        <FileText className="h-3 w-3 mr-1" />
-        Logs
-      </Button>
-    </div>
+  // Collect server IDs for deployment status indicator
+  const deploymentServerIds = (allMcpServers ?? [])
+    .filter((s) => s.catalogId === item.id && s.serverType === "local")
+    .map((s) => s.id);
+
+  // JSX parts - Edit button (admin only) and Logs button (visible to all for local servers)
+  const editButton = (
+    <Button variant="outline" size="sm" className="flex-1 h-8" onClick={onEdit}>
+      <Pencil className="h-3 w-3 mr-1" />
+      Edit
+    </Button>
   );
+
+  const logsButton = isLogsAvailable ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="flex-1 h-8"
+      onClick={() => setIsLogsDialogOpen(true)}
+    >
+      <FileText className="h-3 w-3 mr-1" />
+      Logs
+    </Button>
+  ) : null;
 
   const manageCatalogItemDropdownMenu = (
     <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
@@ -304,7 +312,7 @@ export function McpServerCard({
           {variant === "local" && (
             <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
               <Code className="mr-2 h-4 w-4" />
-              Edit K8S Deployment Yaml
+              Edit K8s Deployment YAML
             </DropdownMenuItem>
           )}
           {!isPlaywrightVariant && (
@@ -470,7 +478,7 @@ export function McpServerCard({
     errorMessage &&
     !isInstalling && (
       <div
-        className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+        className="text-sm text-destructive px-3 py-2 bg-destructive/10 rounded-md"
         data-testid={`${E2eTestId.McpServerError}-${item.name}`}
       >
         Failed to start MCP server,{" "}
@@ -501,7 +509,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {usersAuthenticated}
           </div>
@@ -526,8 +534,12 @@ export function McpServerCard({
             Reconnect Required
           </PermissionButton>
         )}
-      {/* Spacer + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      <div className="mt-auto flex flex-col gap-2">
+        <div className="flex gap-1">
+          {userIsMcpServerAdmin && editButton}
+          {logsButton}
+        </div>
         {!isInstalling && (
           <TooltipProvider>
             <Tooltip>
@@ -564,7 +576,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {localServersInstalled}
           </div>
@@ -587,8 +599,12 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + Connect button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      <div className="mt-auto flex flex-col gap-2">
+        <div className="flex gap-1">
+          {userIsMcpServerAdmin && editButton}
+          {logsButton}
+        </div>
         {/* Show Connect button when user can create new installation */}
         {!isInstalling && (
           <TooltipProvider>
@@ -644,7 +660,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {localServersInstalled}
           </div>
@@ -667,8 +683,12 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + Connect/Uninstall button pinned to bottom */}
-      <div className="mt-auto pt-2">
+      {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
+      <div className="mt-auto flex flex-col gap-2">
+        <div className="flex gap-1">
+          {userIsMcpServerAdmin && editButton}
+          {logsButton}
+        </div>
         {!isInstalling && isCurrentUserAuthenticated && installedServer && (
           <Button
             variant="outline"
@@ -735,7 +755,7 @@ export function McpServerCard({
         permissions={{ tool: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
-        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
@@ -759,6 +779,7 @@ export function McpServerCard({
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
         installs={localInstalls}
+        deploymentStatuses={deploymentStatuses}
       />
 
       <ManageUsersDialog
@@ -784,19 +805,25 @@ export function McpServerCard({
 
   return (
     <Card
-      className="flex flex-col relative pt-4 h-full"
+      className="flex flex-col relative pt-4 gap-4 h-full"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
-      <CardHeader>
+      <CardHeader className="gap-0">
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div
-              className="text-lg font-semibold mb-1 overflow-hidden whitespace-nowrap text-ellipsis w-full"
+              className="flex items-center gap-2 mb-1 overflow-hidden w-full"
               title={item.name}
             >
-              {item.name}
+              <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
+                {item.name}
+              </span>
+              <DeploymentStatusIndicator
+                serverIds={deploymentServerIds}
+                deploymentStatuses={deploymentStatuses}
+              />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {(isBuiltinVariant || isPlaywrightVariant) && (
                 <Badge
                   variant="secondary"
@@ -824,13 +851,15 @@ export function McpServerCard({
                   No auth required
                 </Badge>
               )}
+              {item.labels && item.labels.length > 0 && (
+                <LabelTags labels={item.labels} />
+              )}
             </div>
           </div>
           {userIsMcpServerAdmin && manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 flex-grow">
-        {userIsMcpServerAdmin && !isBuiltinVariant && actionButtons}
+      <CardContent className="flex flex-col gap-4 flex-grow">
         {isBuiltinVariant
           ? builtinCardContent
           : isPlaywrightVariant

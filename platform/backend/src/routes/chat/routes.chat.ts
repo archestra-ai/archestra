@@ -1,6 +1,8 @@
 import {
   type ChatErrorResponse,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
+  type SupportedProvider,
   SupportedProviders,
   TimeInMs,
   type TokenUsage,
@@ -41,7 +43,6 @@ import {
   TeamModel,
 } from "@/models";
 import ApiKeyModelModel from "@/models/api-key-model";
-import { getExternalAgentId } from "@/routes/proxy/utils/headers/external-agent-id";
 import { startActiveChatSpan } from "@/routes/proxy/utils/tracing";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
@@ -53,6 +54,7 @@ import {
   isSupportedChatProvider,
   SelectConversationSchema,
   type SupportedChatProvider,
+  type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
@@ -62,6 +64,24 @@ import {
   stripImagesFromMessages,
   type UiMessage,
 } from "./strip-images-from-messages";
+
+/**
+ * Default model for each provider when no synced "best" model is available.
+ * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
+ */
+const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+  anthropic: "claude-opus-4-1-20250805",
+  openai: "gpt-4o",
+  gemini: "gemini-2.5-pro",
+  cohere: "command-r-08-2024",
+  ollama: "llama3.2",
+  vllm: "default",
+  cerebras: "llama-4-scout-17b-16e-instruct",
+  mistral: "mistral-large-latest",
+  perplexity: "sonar-pro",
+  zhipuai: "glm-4-plus",
+  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
+};
 
 /**
  * Get a smart default model and provider based on available API keys for the user.
@@ -87,24 +107,22 @@ async function getSmartDefaultModel(
       conversationId: null,
     });
 
-    if (resolvedKey?.secretId) {
-      const secretValue = await getSecretValueForLlmProviderApiKey(
-        resolvedKey.secretId,
-      );
+    if (!resolvedKey) continue;
 
-      if (secretValue) {
-        // Found a valid API key for this provider - return appropriate default model
-        switch (provider) {
-          case "anthropic":
-            return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
-          case "gemini":
-            return { model: "gemini-2.5-pro", provider: "gemini" };
-          case "openai":
-            return { model: "gpt-4o", provider: "openai" };
-          case "cohere":
-            return { model: "command-r-08-2024", provider: "cohere" };
-        }
+    // For providers with optional API keys (Ollama, vLLM), a key without a secret is valid
+    const hasSecret = resolvedKey.secretId
+      ? !!(await getSecretValueForLlmProviderApiKey(resolvedKey.secretId))
+      : false;
+
+    if (hasSecret || PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
+      // Try to get the best model from the synced models for this key
+      const bestModel = await ApiKeyModelModel.getBestModel(resolvedKey.id);
+      if (bestModel) {
+        return { model: bestModel.modelId, provider };
       }
+
+      // Fall back to hardcoded defaults
+      return { model: DEFAULT_MODELS[provider], provider };
     }
   }
 
@@ -219,7 +237,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      const externalAgentId = getExternalAgentId(request.headers);
+      // Check if the agent was deleted
+      if (!conversation.agentId || !conversation.agent) {
+        throw new ApiError(
+          400,
+          "The agent associated with this conversation has been deleted",
+        );
+      }
+
+      const { agentId, agent } = conversation;
+
+      const externalAgentId = agentId;
 
       // Fetch enabled tool IDs and custom selection status in parallel
       const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -231,8 +259,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Pass undefined if no custom selection (use all tools)
       // Pass the actual array (even if empty) if there is custom selection
       const mcpTools = await getChatMcpTools({
-        agentName: conversation.agent.name,
-        agentId: conversation.agentId,
+        agentName: agent.name,
+        agentId,
         userId: user.id,
         userIsAgentAdmin,
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
@@ -241,7 +269,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
         sessionId: conversation.id,
         // Pass agentId as initial delegation chain (will be extended by delegated agents)
-        delegationChain: conversation.agentId,
+        delegationChain: agentId,
         abortSignal: chatAbortController.signal,
         user: { id: user.id, email: user.email, name: user.name },
       });
@@ -252,11 +280,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const userPromptParts: string[] = [];
 
       // Collect system and user prompts from the agent
-      if (conversation.agent.systemPrompt) {
-        systemPromptParts.push(conversation.agent.systemPrompt);
+      if (agent.systemPrompt) {
+        systemPromptParts.push(agent.systemPrompt);
       }
-      if (conversation.agent.userPrompt) {
-        userPromptParts.push(conversation.agent.userPrompt);
+      if (agent.userPrompt) {
+        userPromptParts.push(agent.userPrompt);
       }
 
       // Add instruction about tool approval denials
@@ -280,7 +308,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       logger.info(
         {
           conversationId,
-          agentId: conversation.agentId,
+          agentId,
           userId: user.id,
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
@@ -300,8 +328,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
       // and MCP tool executions appear as children of a single trace.
       return startActiveChatSpan({
-        agentName: conversation.agent.name,
-        agentId: conversation.agentId,
+        agentName: agent.name,
+        agentId,
         sessionId: conversationId,
         user: { id: user.id, email: user.email, name: user.name },
         callback: async () => {
@@ -311,13 +339,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const { model } = await createLLMModelForAgent({
             organizationId,
             userId: user.id,
-            agentId: conversation.agentId,
+            agentId,
             model: conversation.selectedModel,
             provider,
             conversationId,
             externalAgentId,
             sessionId: conversationId,
-            agentLlmApiKeyId: conversation.agent.llmApiKeyId,
+            agentLlmApiKeyId: agent.llmApiKeyId,
           });
 
           // Strip images and large browser tool results from messages before sending to LLM
@@ -408,7 +436,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           {
                             error,
                             conversationId,
-                            agentId: conversation.agentId,
+                            agentId,
                           },
                           "Chat stream error occurred",
                         );
@@ -804,7 +832,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (
           !currentConversation ||
-          body.chatApiKeyId !== currentConversation.agent.llmApiKeyId
+          body.chatApiKeyId !== currentConversation.agent?.llmApiKeyId
         ) {
           await validateChatApiKeyAccess(
             body.chatApiKeyId,
@@ -831,11 +859,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Coerce pinnedAt ISO string to Date for database storage
+      const pinnedAtDate =
+        body.pinnedAt != null ? new Date(body.pinnedAt) : body.pinnedAt;
+      const updateData: UpdateConversation = {
+        ...body,
+        pinnedAt: pinnedAtDate,
+      };
+
       const conversation = await ConversationModel.update(
         id,
         user.id,
         organizationId,
-        body,
+        updateData,
       );
 
       if (!conversation) {
@@ -865,7 +901,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      if (conversation && browserStreamFeature.isEnabled()) {
+      if (conversation?.agentId && browserStreamFeature.isEnabled()) {
         // Close browser tab for this conversation (best effort, don't fail if it errors)
         try {
           await browserStreamFeature.closeTab(conversation.agentId, id, {
@@ -952,18 +988,39 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
 
+      logger.debug(
+        {
+          conversationId: id,
+          selectedProvider: conversation.selectedProvider,
+          selectedModel: conversation.selectedModel,
+          resolvedProvider: provider,
+        },
+        "Title generation: resolved provider",
+      );
+
       // Resolve API key using the centralized function (handles all providers)
-      const { apiKey, chatApiKeyId } = await resolveProviderApiKey({
+      const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
         organizationId,
         userId: user.id,
         provider,
         conversationId: id,
       });
 
+      logger.debug(
+        {
+          conversationId: id,
+          provider,
+          hasApiKey: !!apiKey,
+          chatApiKeyId,
+          baseUrl,
+        },
+        "Title generation: resolved API key",
+      );
+
       if (isApiKeyRequired(provider, apiKey)) {
         throw new ApiError(
           400,
-          "LLM Provider API key not configured. Please configure it in Chat Settings.",
+          "LLM Provider API key not configured. Please configure it in Provider Settings.",
         );
       }
 
@@ -972,11 +1029,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         apiKey,
         chatApiKeyId,
+        baseUrl,
         firstUserMessage,
         firstAssistantMessage,
       });
 
       if (!generatedTitle) {
+        logger.warn(
+          { conversationId: id, provider },
+          "Title generation: returned null (generation failed)",
+        );
         // Return the conversation without title update on error
         return reply.send(conversation);
       }
@@ -1273,6 +1335,7 @@ export interface GenerateTitleParams {
   provider: SupportedChatProvider;
   apiKey: string | undefined;
   chatApiKeyId?: string;
+  baseUrl?: string | null;
   firstUserMessage: string;
   firstAssistantMessage: string;
 }
@@ -1288,30 +1351,48 @@ export async function generateConversationTitle(
     provider,
     apiKey,
     chatApiKeyId,
+    baseUrl,
     firstUserMessage,
     firstAssistantMessage,
   } = params;
 
   const modelName = await resolveFastModelName(provider, chatApiKeyId);
 
+  logger.debug(
+    { provider, modelName, chatApiKeyId, hasApiKey: !!apiKey, baseUrl },
+    "Title generation: creating direct LLM model",
+  );
+
   // Create model for title generation (direct call, not through LLM Proxy)
   const model = createDirectLLMModel({
     provider,
     apiKey,
     modelName,
+    baseUrl,
   });
 
   const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
 
   try {
+    logger.debug(
+      { provider, modelName },
+      "Title generation: calling generateText",
+    );
     const result = await generateText({
       model,
       prompt: titlePrompt,
     });
 
+    logger.debug(
+      { provider, modelName, generatedTitle: result.text.trim() },
+      "Title generation: generateText succeeded",
+    );
     return result.text.trim();
   } catch (error) {
-    logger.error({ error, provider }, "Failed to generate conversation title");
+    logger.error(
+      { error, provider, modelName, baseUrl },
+      "Failed to generate conversation title",
+    );
     return null;
   }
 }
@@ -1518,14 +1599,27 @@ async function resolveFastModelName(
   chatApiKeyId: string | undefined,
 ): Promise<string> {
   if (!chatApiKeyId) {
-    return FAST_MODELS[provider];
+    const fallback = FAST_MODELS[provider];
+    logger.debug(
+      { provider, modelName: fallback },
+      "Title generation: no chatApiKeyId, using hardcoded fast model",
+    );
+    return fallback;
   }
 
   try {
     const fastestModel = await ApiKeyModelModel.getFastestModel(chatApiKeyId);
     if (fastestModel) {
+      logger.debug(
+        { provider, chatApiKeyId, modelId: fastestModel.modelId },
+        "Title generation: resolved fastest model from DB",
+      );
       return fastestModel.modelId;
     }
+    logger.debug(
+      { provider, chatApiKeyId },
+      "Title generation: no fastest model in DB, using hardcoded fallback",
+    );
   } catch (error) {
     logger.warn(
       { error, chatApiKeyId },

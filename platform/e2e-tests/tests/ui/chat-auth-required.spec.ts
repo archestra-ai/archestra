@@ -158,13 +158,6 @@ test.describe("Chat - Auth Required Tool", () => {
     await goToMemberPage("/chat");
     await memberPage.waitForLoadState("domcontentloaded");
 
-    // Skip onboarding if present
-    const skipButton = memberPage.getByTestId(E2eTestId.OnboardingSkipButton);
-    if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await skipButton.click();
-      await memberPage.waitForTimeout(500);
-    }
-
     // Wait for the chat page to load
     const textarea = memberPage.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
@@ -189,6 +182,8 @@ test.describe("Chat - Auth Required Tool", () => {
     // Select an Anthropic model — the member's default may be a different
     // provider (e.g. Cohere in CI) whose WireMock stubs won't return our
     // tool_use response. Only the Anthropic stubs are configured for this test.
+    // Use the exact model ID with parentheses to avoid matching Bedrock models
+    // whose IDs contain the same base name (e.g. "us.anthropic.claude-...").
     const modelTrigger = memberPage.getByTestId(
       E2eTestId.ChatModelSelectorTrigger,
     );
@@ -197,11 +192,12 @@ test.describe("Chat - Auth Required Tool", () => {
 
     const modelSearch = memberPage.getByPlaceholder("Search models...");
     await expect(modelSearch).toBeVisible({ timeout: 3_000 });
-    await modelSearch.fill("claude");
+    await modelSearch.fill("claude-3");
 
-    // Pick the first Anthropic Claude model from the results
+    // Pick the Anthropic Claude model (not the Bedrock variant)
     const claudeOption = memberPage
-      .getByRole("option", { name: /claude/i })
+      .getByRole("option")
+      .filter({ hasText: /\(claude-3[^)]*\)/ })
       .first();
     await expect(claudeOption).toBeVisible({ timeout: 5_000 });
     await claudeOption.click();

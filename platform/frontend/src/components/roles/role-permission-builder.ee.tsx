@@ -45,7 +45,7 @@ const resourceCategories: Record<string, Resource[]> = {
     "team",
     "invitation",
     "limit",
-    "tokenPrice",
+    "llmModels",
     "chatSettings",
     "identityProvider",
   ],

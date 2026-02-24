@@ -19,9 +19,11 @@ const mcpToolCallsTable = pgTable(
   "mcp_tool_calls",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    agentId: uuid("agent_id")
-      .notNull()
-      .references(() => agentsTable.id, { onDelete: "cascade" }),
+    // Nullable to preserve MCP tool calls when agent is deleted
+    // null indicates the agent was deleted
+    agentId: uuid("agent_id").references(() => agentsTable.id, {
+      onDelete: "set null",
+    }),
     mcpServerName: varchar("mcp_server_name", { length: 255 }).notNull(),
     method: varchar("method", { length: 255 }).notNull(),
     toolCall: jsonb("tool_call").$type<CommonToolCall | null>(),

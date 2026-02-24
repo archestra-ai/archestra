@@ -19,6 +19,7 @@ export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
 export { default as LimitModel, LimitValidationService } from "./limit";
+export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";
@@ -41,9 +42,9 @@ export {
   default as TeamTokenModel,
   isArchestraPrefixedToken,
 } from "./team-token";
-export { default as TokenPriceModel } from "./token-price";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";
 export { default as UserTokenModel } from "./user-token";
+export { default as VirtualApiKeyModel } from "./virtual-api-key";

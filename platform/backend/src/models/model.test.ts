@@ -65,6 +65,43 @@ describe("ModelModel", () => {
       expect(model?.provider).toBe("anthropic");
       expect(model?.modelId).toBe("claude-3-5-sonnet");
     });
+
+    test("disambiguates same model ID across different providers", async () => {
+      await ModelModel.create({
+        externalId: "openai/shared-model",
+        provider: "openai",
+        modelId: "shared-model",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000010",
+        completionPricePerToken: "0.000030",
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.create({
+        externalId: "anthropic/shared-model",
+        provider: "anthropic",
+        modelId: "shared-model",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        lastSyncedAt: new Date(),
+      });
+
+      const openaiModel = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "shared-model",
+      );
+      const anthropicModel = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "shared-model",
+      );
+
+      expect(openaiModel?.provider).toBe("openai");
+      expect(openaiModel?.promptPricePerToken).toBe("0.000010000000");
+      expect(anthropicModel?.provider).toBe("anthropic");
+      expect(anthropicModel?.promptPricePerToken).toBe("0.000003000000");
+    });
   });
 
   describe("findByProviderModelIds", () => {
@@ -384,6 +421,74 @@ describe("ModelModel", () => {
         "command-r",
       );
       expect(model).toBeNull();
+    });
+  });
+
+  describe("calculateCostSavings", () => {
+    test("uses custom pricing when set", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000005",
+        completionPricePerToken: "0.000015",
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.updatePricing(model.id, {
+        customPricePerMillionInput: "20.00",
+        customPricePerMillionOutput: "60.00",
+      });
+
+      // 1000 tokens saved at $20/M input = 1000 * 20 / 1_000_000 = $0.02
+      const savings = await ModelModel.calculateCostSavings(
+        "gpt-4o",
+        1000,
+        "openai",
+      );
+      expect(savings).toBeCloseTo(0.02);
+    });
+
+    test("uses models.dev synced pricing when no custom price", async () => {
+      await ModelModel.create({
+        externalId: "openai/gpt-4o-mini",
+        provider: "openai",
+        modelId: "gpt-4o-mini",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000005",
+        completionPricePerToken: "0.000015",
+        lastSyncedAt: new Date(),
+      });
+
+      // 1000 tokens saved at $5/M input (0.000005 * 1M) = 1000 * 5 / 1_000_000 = $0.005
+      const savings = await ModelModel.calculateCostSavings(
+        "gpt-4o-mini",
+        1000,
+        "openai",
+      );
+      expect(savings).toBeCloseTo(0.005);
+    });
+
+    test("uses default fallback pricing when model not in database", async () => {
+      // Model doesn't exist — falls through to default pricing
+      const savings = await ModelModel.calculateCostSavings(
+        "nonexistent-model",
+        1000,
+        "openai",
+      );
+      // Default is $50/M for non-mini models → 1000 * 50 / 1_000_000 = $0.05
+      expect(savings).toBeCloseTo(0.05);
+    });
+
+    test("returns 0 when tokensSaved is 0", async () => {
+      const savings = await ModelModel.calculateCostSavings(
+        "gpt-4o",
+        0,
+        "openai",
+      );
+      expect(savings).toBe(0);
     });
   });
 

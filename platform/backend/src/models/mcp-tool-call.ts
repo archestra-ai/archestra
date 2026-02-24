@@ -187,6 +187,10 @@ class McpToolCallModel {
 
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
+      // If agentId is null (agent was deleted), only admins can see the tool call
+      if (!mcpToolCall.agentId) {
+        return null;
+      }
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         mcpToolCall.agentId,

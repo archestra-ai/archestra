@@ -55,6 +55,12 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
 export type UpdateModel = z.infer<typeof UpdateModelSchema>;
 
 /**
+ * Price source indicates where the effective price comes from.
+ */
+export const PriceSourceSchema = z.enum(["custom", "models_dev", "default"]);
+export type PriceSource = z.infer<typeof PriceSourceSchema>;
+
+/**
  * Model capabilities for API responses.
  * Derived from SelectModelSchema with computed price fields.
  */
@@ -68,8 +74,46 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from per-token price) */
   pricePerMillionOutput: z.string().nullable(),
+  /** Whether the price is a custom admin-set override */
+  isCustomPrice: z.boolean(),
+  /** Source of the effective price */
+  priceSource: PriceSourceSchema,
 });
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
+
+/**
+ * Schema for updating custom model pricing
+ */
+export const UpdateModelPricingSchema = z
+  .object({
+    customPricePerMillionInput: z.string().nullable(),
+    customPricePerMillionOutput: z.string().nullable(),
+  })
+  .refine(
+    (data) => {
+      const inputSet = data.customPricePerMillionInput !== null;
+      const outputSet = data.customPricePerMillionOutput !== null;
+      return inputSet === outputSet;
+    },
+    {
+      message: "Both custom prices must be set together or both must be null",
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.customPricePerMillionInput !== null) {
+        const price = parseFloat(data.customPricePerMillionInput);
+        if (Number.isNaN(price) || price < 0) return false;
+      }
+      if (data.customPricePerMillionOutput !== null) {
+        const price = parseFloat(data.customPricePerMillionOutput);
+        if (Number.isNaN(price) || price < 0) return false;
+      }
+      return true;
+    },
+    { message: "Prices must be non-negative numbers" },
+  );
+export type UpdateModelPricing = z.infer<typeof UpdateModelPricingSchema>;
 
 /**
  * Schema for linked API key info (minimal info for display)

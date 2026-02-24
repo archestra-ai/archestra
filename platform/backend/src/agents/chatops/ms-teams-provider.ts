@@ -270,6 +270,33 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
+    let replyText = options.text;
+    if (options.footer) {
+      replyText += `\n\n---\n_${options.footer}_`;
+    }
+
+    // If a placeholder "Thinking..." message was sent (Teams channels),
+    // update it with the actual response instead of sending a new message.
+    const placeholderActivityId = options.originalMessage.metadata
+      ?.placeholderActivityId as string | undefined;
+    const turnContext = options.originalMessage.metadata?.turnContext;
+    if (placeholderActivityId && turnContext instanceof TurnContext) {
+      try {
+        await turnContext.updateActivity({
+          id: placeholderActivityId,
+          type: ActivityTypes.Message,
+          text: replyText,
+        });
+        return placeholderActivityId;
+      } catch (error) {
+        logger.debug(
+          { error: errorMessage(error) },
+          "[MSTeamsProvider] Failed to update placeholder, sending new message",
+        );
+        // Fall through to send a new message
+      }
+    }
+
     const ref =
       (options.conversationReference as ConversationReference | undefined) ||
       (options.originalMessage.metadata?.conversationReference as
@@ -278,11 +305,6 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     if (!ref) {
       throw new Error("No conversation reference available for reply");
-    }
-
-    let replyText = options.text;
-    if (options.footer) {
-      replyText += `\n\n---\n_${options.footer}_`;
     }
 
     let messageId = "";
@@ -506,8 +528,18 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  async getChannelName(_channelId: string): Promise<string | null> {
+    // MS Teams channel names are resolved during discoverChannels via TurnContext
+    return null;
+  }
+
   getWorkspaceId(): string | null {
     // MS Teams requires a TurnContext to determine the team — no eager discovery
+    return null;
+  }
+
+  getWorkspaceName(): string | null {
+    // MS Teams workspace name is per-team — resolved from TurnContext at message time
     return null;
   }
 
@@ -542,6 +574,54 @@ class MSTeamsProvider implements ChatOpsProvider {
         workspaceId,
         workspaceName: teamDetails?.name ?? null,
       }));
+  }
+
+  async setTypingStatus(
+    _channelId: string,
+    _threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const turnContext = metadata?.turnContext;
+      if (turnContext instanceof TurnContext) {
+        const isChannel =
+          turnContext.activity.conversation?.conversationType === "channel";
+
+        if (isChannel) {
+          // Teams channels don't render typing indicators from bots.
+          // Send a placeholder message that will be updated with the real response.
+          const response = await turnContext.sendActivity("Thinking...");
+          if (response?.id && metadata) {
+            metadata.placeholderActivityId = response.id;
+          }
+        } else {
+          // DMs and group chats support native typing indicators
+          await turnContext.sendActivity({ type: ActivityTypes.Typing });
+        }
+        return;
+      }
+
+      // Fallback: proactive messaging via continueConversationAsync.
+      // Works for DMs/group chats but not for channel typing indicators.
+      if (!this.adapter) return;
+      const ref = metadata?.conversationReference as
+        | ConversationReference
+        | undefined;
+      if (!ref) return;
+
+      await this.adapter.continueConversationAsync(
+        this.config.appId,
+        ref,
+        async (context) => {
+          await context.sendActivity({ type: ActivityTypes.Typing });
+        },
+      );
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] setTypingStatus failed (non-fatal)",
+      );
+    }
   }
 
   async processActivity(
@@ -595,6 +675,20 @@ class MSTeamsProvider implements ChatOpsProvider {
     } finally {
       console.error = origConsoleError;
     }
+  }
+
+  parseInteractivePayload(_payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null {
+    // MS Teams handles interactive selections inline via Adaptive Card submissions
+    // in the route handler (TurnContext.activity.value), not through this method.
+    return null;
   }
 
   async sendAgentSelectionCard(params: {

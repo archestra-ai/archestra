@@ -23,7 +23,6 @@ export default function SettingsLayout({
   const tabs = [
     { label: "Your Account", href: "/settings/account" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
-    { label: "LLM API Keys", href: "/settings/llm-api-keys" },
     { label: "Security", href: "/settings/security" },
     ...(userCanReadOrganization
       ? [

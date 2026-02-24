@@ -67,14 +67,14 @@ describe("ChatApiKeyModel", () => {
       expect(apiKey.teamId).toBeNull();
     });
 
-    test("enforces unique constraint for personal keys per user per provider", async ({
+    test("allows multiple keys per provider and scope", async ({
       makeOrganization,
       makeUser,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      await ChatApiKeyModel.create({
+      const key1 = await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "Personal Key 1",
         provider: "anthropic",
@@ -82,15 +82,36 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
       });
 
-      await expect(
-        ChatApiKeyModel.create({
-          organizationId: org.id,
-          name: "Personal Key 2",
-          provider: "anthropic",
-          scope: "personal",
-          userId: user.id,
-        }),
-      ).rejects.toThrow();
+      const key2 = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Personal Key 2",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      expect(key1.id).toBeDefined();
+      expect(key2.id).toBeDefined();
+      expect(key1.id).not.toBe(key2.id);
+    });
+
+    test("can create key with isPrimary", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const key = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+        isPrimary: true,
+      });
+
+      expect(key.isPrimary).toBe(true);
     });
 
     test("allows personal keys for different providers", async ({
@@ -561,6 +582,85 @@ describe("ChatApiKeyModel", () => {
       });
 
       expect(resolved).toBeNull();
+    });
+
+    test("prefers isPrimary key over older key in same scope", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret1 = await makeSecret();
+      const secret2 = await makeSecret();
+
+      // Create an older key (not primary)
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Older Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret1.id,
+        isPrimary: false,
+      });
+
+      // Create a newer key marked as primary
+      const primaryKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret2.id,
+        isPrimary: true,
+      });
+
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(primaryKey.id);
+    });
+
+    test("falls back to oldest key when no primary is set", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret1 = await makeSecret();
+      const secret2 = await makeSecret();
+
+      // Create two keys, neither is primary — oldest should win
+      const olderKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Older Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret1.id,
+      });
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Newer Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret2.id,
+      });
+
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(olderKey.id);
     });
   });
 

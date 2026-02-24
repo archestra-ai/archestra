@@ -56,6 +56,10 @@ inputs:
     description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
     required: false
     default: ""
+  install-calico:
+    description: "Whether to install Calico CNI for NetworkPolicy enforcement. Only needed for SSRF protection tests."
+    required: false
+    default: "false"
 
 outputs:
   backend-url:
@@ -73,6 +77,7 @@ runs:
       with:
         config: ${{ inputs.kind-config-path }}
         cluster-name: ${{ inputs.kind-cluster-name }}
+        install-calico: ${{ inputs.install-calico }}
 
     - name: Debug Kind cluster
       shell: bash
@@ -268,11 +273,27 @@ runs:
 
         if [ "$DEPLOY_E2E_DEPS" = "true" ]; then
           echo "Waiting for e2e dependency pods to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=120s || echo "Warning: Keycloak pod not ready"
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s || echo "Warning: WireMock pod not ready"
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
 
           echo "Verifying Keycloak is accessible..."
-          curl --retry 10 --retry-delay 3 --retry-connrefused --max-time 5 -sf http://localhost:30081/health/ready || echo "Warning: Keycloak health check failed"
+          # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).
+          # The NodePort service routes to 8080, so we check the OIDC discovery endpoint instead.
+          for i in $(seq 1 30); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:30081/realms/archestra/.well-known/openid-configuration 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Keycloak is accessible (HTTP $HTTP_CODE)"
+              break
+            fi
+            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/30)"
+            sleep 5
+          done
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: Keycloak not accessible after 30 attempts (last HTTP $HTTP_CODE)"
+            kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
+            kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
+            exit 1
+          fi
           echo "E2e dependency services are ready"
         fi
 

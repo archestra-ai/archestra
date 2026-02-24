@@ -8,7 +8,12 @@ import {
   mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
 } from "@/mcp-server-runtime/k8s-yaml-generator";
-import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpCatalogLabelModel,
+  McpServerModel,
+  ToolModel,
+} from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   autoReinstallServer,
@@ -781,6 +786,43 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send({ yaml: yamlTemplate });
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogLabelKeys,
+        description: "Get all label keys used by catalog items",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await McpCatalogLabelModel.getAllKeys());
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogLabelValues,
+        description: "Get all label values for catalog items",
+        tags: ["MCP Catalog"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ query: { key } }, reply) => {
+      return reply.send(
+        key
+          ? await McpCatalogLabelModel.getValuesByKey(key)
+          : await McpCatalogLabelModel.getAllValues(),
+      );
     },
   );
 };

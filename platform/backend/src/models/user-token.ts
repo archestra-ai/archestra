@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -11,9 +12,6 @@ import type { SelectUserToken } from "@/types";
  * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
  */
 const FORCE_DB = true;
-
-/** Token prefix for identification */
-const TOKEN_PREFIX = "archestra_";
 
 /** Length of random part (16 bytes = 32 hex chars) */
 const TOKEN_RANDOM_LENGTH = 16;
@@ -28,7 +26,7 @@ const TOKEN_START_LENGTH = 14;
  */
 function generateToken(): string {
   const randomPart = randomBytes(TOKEN_RANDOM_LENGTH).toString("hex");
-  return `${TOKEN_PREFIX}${randomPart}`;
+  return `${ARCHESTRA_TOKEN_PREFIX}${randomPart}`;
 }
 
 /**

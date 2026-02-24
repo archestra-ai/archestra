@@ -9,6 +9,7 @@ import {
   ListTodo,
 } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface Todo {
@@ -21,12 +22,18 @@ interface TodoWriteToolProps {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText?: string;
+  onToolApprovalResponse?: (params: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }) => void;
 }
 
 export function TodoWriteTool({
   part,
   toolResultPart,
   errorText,
+  onToolApprovalResponse,
 }: TodoWriteToolProps) {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -137,6 +144,42 @@ export function TodoWriteTool({
               {errorText}
             </div>
           )}
+
+          {/* Show approval buttons when policy requires approval */}
+          {part.state === "approval-requested" &&
+            onToolApprovalResponse &&
+            "approval" in part &&
+            part.approval?.id && (
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: true,
+                    });
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: false,
+                      reason: "User denied",
+                    });
+                  }}
+                >
+                  Deny
+                </Button>
+              </div>
+            )}
         </div>
       )}
     </div>

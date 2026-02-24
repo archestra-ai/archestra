@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
@@ -48,9 +49,7 @@ export function A2AConnectionInstructions({
   const { data: features } = useFeatures();
 
   const tokens = tokensData?.tokens;
-  const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedChatLink, setCopiedChatLink] = useState(false);
-  const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
@@ -70,14 +69,6 @@ export function A2AConnectionInstructions({
     emailEnabled ? agent.id : null,
   );
   const agentEmailAddress = emailAddressData?.emailAddress ?? null;
-
-  const handleCopyEmail = useCallback(async () => {
-    if (!agentEmailAddress) return;
-    await navigator.clipboard.writeText(agentEmailAddress);
-    setCopiedEmail(true);
-    toast.success("Email address copied");
-    setTimeout(() => setCopiedEmail(false), 2000);
-  }, [agentEmailAddress]);
 
   // A2A endpoint
   const a2aEndpoint = `${connectionUrl}/a2a/${agent.id}`;
@@ -122,13 +113,6 @@ export function A2AConnectionInstructions({
     : hasAdminPermission && selectedTeamToken
       ? `${selectedTeamToken.tokenStart}***`
       : "ask-admin-for-access-token";
-
-  const handleCopyUrl = useCallback(async () => {
-    await navigator.clipboard.writeText(a2aEndpoint);
-    setCopiedUrl(true);
-    toast.success("A2A endpoint URL copied");
-    setTimeout(() => setCopiedUrl(false), 2000);
-  }, [a2aEndpoint]);
 
   const handleCopyChatLink = useCallback(async () => {
     const exampleMessage =
@@ -180,25 +164,15 @@ curl -X GET "${agentCardUrl}" \\
       {/* A2A Endpoint URL */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">A2A Endpoint URL</Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-            <CodeText className="text-xs text-primary break-all flex-1">
-              {a2aEndpoint}
-            </CodeText>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 flex-shrink-0"
-              onClick={handleCopyUrl}
-            >
-              {copiedUrl ? (
-                <Check className="h-3 w-3 text-green-500" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </Button>
-          </div>
-        </div>
+        <CopyableCode
+          value={a2aEndpoint}
+          toastMessage="A2A endpoint URL copied"
+          variant="primary"
+        >
+          <CodeText className="text-xs text-primary break-all">
+            {a2aEndpoint}
+          </CodeText>
+        </CopyableCode>
       </div>
 
       {/* Chat Deep Link */}
@@ -382,26 +356,18 @@ curl -X GET "${agentCardUrl}" \\
                   Send an email to invoke this agent. The email body will be
                   used as the first message.
                 </Label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-                    <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <CodeText className="text-xs text-primary break-all flex-1">
+                <CopyableCode
+                  value={agentEmailAddress}
+                  toastMessage="Email address copied"
+                  variant="primary"
+                >
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <CodeText className="text-xs text-primary break-all">
                       {agentEmailAddress}
                     </CodeText>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={handleCopyEmail}
-                    >
-                      {copiedEmail ? (
-                        <Check className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                    </Button>
                   </div>
-                </div>
+                </CopyableCode>
               </div>
             )}
           </>

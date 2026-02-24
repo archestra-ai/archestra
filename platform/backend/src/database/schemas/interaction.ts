@@ -22,9 +22,11 @@ const interactionsTable = pgTable(
   "interactions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    profileId: uuid("profile_id")
-      .notNull()
-      .references(() => agentsTable.id, { onDelete: "cascade" }),
+    // Nullable to preserve interactions when profile is deleted
+    // null indicates the profile was deleted
+    profileId: uuid("profile_id").references(() => agentsTable.id, {
+      onDelete: "set null",
+    }),
     /**
      * Optional external agent ID passed via X-Archestra-Agent-Id header.
      * This allows clients to associate interactions with their own agent identifiers.

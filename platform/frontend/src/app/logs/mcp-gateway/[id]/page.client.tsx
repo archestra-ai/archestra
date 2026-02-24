@@ -113,7 +113,12 @@ function McpToolCallDetail({
                 <div className="text-sm text-muted-foreground mb-2">
                   MCP Gateway
                 </div>
-                <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+                <div className="font-medium">
+                  {agent?.name ??
+                    (mcpToolCall.agentId === null
+                      ? "Deleted MCP Gateway"
+                      : "Unknown")}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">Method</div>

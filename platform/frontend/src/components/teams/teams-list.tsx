@@ -1,22 +1,8 @@
 "use client";
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  DEFAULT_TEAM_NAME,
-  E2eTestId,
-} from "@shared";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import {
-  Info,
-  Key,
-  Link2,
-  Plus,
-  Settings,
-  Trash2,
-  Users,
-  Vault,
-} from "lucide-react";
+import { Key, Link2, Plus, Settings, Trash2, Users, Vault } from "lucide-react";
 
 import { lazy, useState } from "react";
 import { toast } from "sonner";
@@ -211,13 +197,6 @@ export function TeamsList() {
                       {team.members?.length || 0} member
                       {(team.members?.length || 0) !== 1 ? "s" : ""}
                     </p>
-                    {team.name === DEFAULT_TEAM_NAME && (
-                      <p className="mt-1 flex gap-1 text-xs text-muted-foreground">
-                        <Info className="h-3.5 w-3.5 shrink-0 mt-[1px]" />
-                        New members are automatically added to this team when
-                        they join the organization.
-                      </p>
-                    )}
                   </div>
                   <div className="flex gap-2">
                     <PermissionButton

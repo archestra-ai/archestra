@@ -1,7 +1,7 @@
 import { isAgentTool } from "@shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import logger from "@/logging";
-import { AgentToolModel, ToolModel } from "@/models";
+import { ToolModel } from "@/models";
 
 /**
  * Persist tools if present in the request
@@ -28,12 +28,14 @@ export const persistTools = async (
     return;
   }
 
-  // Get names of all MCP tools already assigned to this agent
-  const mcpToolNames = await ToolModel.getMcpToolNamesByAgent(agentId);
-  const mcpToolNamesSet = new Set(mcpToolNames);
+  // Get names of tools that already exist in the database (any type: catalog, proxy, etc.)
+  const existingToolNames = await ToolModel.getExistingToolNames(
+    tools.map((t) => t.toolName),
+  );
+  const existingToolNamesSet = new Set(existingToolNames);
   logger.debug(
-    { agentId, mcpToolCount: mcpToolNames.length },
-    "[tools] persistTools: fetched existing MCP tools for agent",
+    { agentId, existingToolCount: existingToolNames.length },
+    "[tools] persistTools: fetched existing tools globally",
   );
 
   // Get Archestra built-in tool names
@@ -46,12 +48,12 @@ export const persistTools = async (
     "[tools] persistTools: fetched Archestra built-in tools",
   );
 
-  // Filter out tools that are already available via MCP servers, are Archestra built-in tools,
+  // Filter out tools that already exist in the database, are Archestra built-in tools,
   // or are agent delegation tools (agent__*). Also deduplicate by tool name to avoid constraint violations
   const seenToolNames = new Set<string>();
   const toolsToAutoDiscover = tools.filter(({ toolName }) => {
     if (
-      mcpToolNamesSet.has(toolName) ||
+      existingToolNamesSet.has(toolName) ||
       archestraToolNamesSet.has(toolName) ||
       isAgentTool(toolName) ||
       seenToolNames.has(toolName)
@@ -67,8 +69,9 @@ export const persistTools = async (
       agentId,
       originalCount: tools.length,
       filteredCount: toolsToAutoDiscover.length,
-      skippedMcpTools: tools.filter((t) => mcpToolNamesSet.has(t.toolName))
-        .length,
+      skippedExistingTools: tools.filter((t) =>
+        existingToolNamesSet.has(t.toolName),
+      ).length,
       skippedArchestraTools: tools.filter((t) =>
         archestraToolNamesSet.has(t.toolName),
       ).length,
@@ -90,7 +93,7 @@ export const persistTools = async (
     { agentId, toolCount: toolsToAutoDiscover.length },
     "[tools] persistTools: bulk creating tools",
   );
-  const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+  await ToolModel.bulkCreateProxyToolsIfNotExists(
     toolsToAutoDiscover.map(
       ({ toolName, toolParameters, toolDescription }) => ({
         name: toolName,
@@ -101,16 +104,8 @@ export const persistTools = async (
     agentId,
   );
 
-  // Bulk create agent-tool relationships (single query to check existing + single insert for new)
-  // Deduplicate tool IDs in case input contained duplicate tool names
-  const toolIds = [...new Set(createdTools.map((tool) => tool.id))];
   logger.debug(
-    { agentId, toolIdCount: toolIds.length },
-    "[tools] persistTools: creating agent-tool relationships",
-  );
-  await AgentToolModel.createManyIfNotExists(agentId, toolIds);
-  logger.debug(
-    { agentId, createdToolCount: toolIds.length },
+    { agentId, toolCount: toolsToAutoDiscover.length },
     "[tools] persistTools: tool persistence complete",
   );
 };

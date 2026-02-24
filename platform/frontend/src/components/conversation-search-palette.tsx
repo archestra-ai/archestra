@@ -6,17 +6,19 @@ import {
   Bot,
   Cable,
   Home,
+  Key,
   MessageCircle,
   MessagesSquare,
   Network,
   Pencil,
+  Pin,
   Router,
   Settings,
   Shield,
   Wrench,
   Zap,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,11 +32,16 @@ import {
 } from "@/components/ui/command";
 import { usePlatform } from "@/hooks/use-platform";
 import { useIsAuthenticated } from "@/lib/auth.hook";
-import { useConversations, useDeleteConversation } from "@/lib/chat.query";
+import {
+  useConversations,
+  useDeleteConversation,
+  usePinConversation,
+} from "@/lib/chat.query";
 import { getConversationDisplayTitle } from "@/lib/chat-utils";
 import {
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
+  SHORTCUT_PIN,
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/lib/keyboard-shortcuts";
@@ -63,9 +70,10 @@ function extractTextFromMessages(
 }
 
 /** Groups conversations into time-based buckets for organized display */
-function groupConversationsByDate<T extends { updatedAt: string | Date }>(
-  conversations: T[],
-) {
+function groupConversationsByDate<
+  T extends { updatedAt: string | Date; pinnedAt?: string | Date | null },
+>(conversations: T[]) {
+  const pinned: T[] = [];
   const today: T[] = [];
   const yesterday: T[] = [];
   const previous7Days: T[] = [];
@@ -75,6 +83,10 @@ function groupConversationsByDate<T extends { updatedAt: string | Date }>(
   const sevenDaysAgo = subDays(now, 7);
 
   for (const conv of conversations) {
+    if (conv.pinnedAt) {
+      pinned.push(conv);
+      continue;
+    }
     const updatedAt = new Date(conv.updatedAt);
     if (isToday(updatedAt)) {
       today.push(conv);
@@ -87,7 +99,7 @@ function groupConversationsByDate<T extends { updatedAt: string | Date }>(
     }
   }
 
-  return { today, yesterday, previous7Days, older };
+  return { pinned, today, yesterday, previous7Days, older };
 }
 
 // Product navigation items matching sidebar names
@@ -119,6 +131,13 @@ const navigationItems = [
     value: "llm-proxies",
     keywords: "proxies llm network",
     href: "/llm-proxies",
+  },
+  {
+    icon: Key,
+    label: "Provider Settings",
+    value: "provider-settings",
+    keywords: "provider settings api keys virtual keys models llm",
+    href: "/llm-proxies/provider-settings",
   },
   {
     icon: MessagesSquare,
@@ -167,13 +186,16 @@ const navigationItems = [
 interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  recentChatsView?: boolean;
 }
 
 export function ConversationSearchPalette({
   open,
   onOpenChange,
+  recentChatsView = false,
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
@@ -183,6 +205,7 @@ export function ConversationSearchPalette({
   const { modKey, altKey } = usePlatform();
 
   const deleteMutation = useDeleteConversation();
+  const pinMutation = usePinConversation();
 
   // Debounce search query to reduce API calls while typing
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -250,8 +273,22 @@ export function ConversationSearchPalette({
       }
       deleteMutation.mutate(conversationId);
       setIsPendingDeletion(null);
+
+      // Redirect to new chat if the deleted conversation is currently open
+      if (searchParams.get("conversation") === conversationId) {
+        router.push("/chat");
+      }
     },
-    [deleteMutation, conversations],
+    [deleteMutation, conversations, searchParams, router],
+  );
+
+  const handlePinConversation = useCallback(
+    (conversationId: string) => {
+      const conv = conversations.find((c) => c.id === conversationId);
+      if (!conv) return;
+      pinMutation.mutate({ id: conversationId, pinned: !conv.pinnedAt });
+    },
+    [pinMutation, conversations],
   );
 
   // Keyboard shortcuts for search palette
@@ -260,8 +297,8 @@ export function ConversationSearchPalette({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // In cmdk, the input always retains focus even during arrow-key navigation.
-      // Only intercept 'd' when the search input is empty (browse mode).
-      // When the user is typing a search query, let 'd' pass through normally.
+      // Only intercept shortcuts when the search input is empty (browse mode).
+      // When the user is typing a search query, let keys pass through normally.
       if (searchQuery) return;
 
       // 'd' for delete when conversation is selected
@@ -276,6 +313,14 @@ export function ConversationSearchPalette({
           setIsPendingDeletion(conversationId);
         }
       }
+
+      // 'p' for pin/unpin when conversation is selected
+      if (e.key === SHORTCUT_PIN.key && selectedValue?.startsWith("conv-")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const conversationId = selectedValue.substring(5);
+        handlePinConversation(conversationId);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
@@ -287,6 +332,7 @@ export function ConversationSearchPalette({
     searchQuery,
     isPendingDeletion,
     handleDeleteConversation,
+    handlePinConversation,
   ]);
 
   /** Generates a contextual preview snippet with search term context */
@@ -364,13 +410,17 @@ export function ConversationSearchPalette({
     </div>
   );
 
-  const renderConversationItem = (conv: (typeof conversations)[number]) => {
+  const renderConversationItem = (
+    conv: (typeof conversations)[number],
+    showPinIcon = false,
+  ) => {
     const isSearchActive = debouncedSearch.trim().length > 0;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
     const preview = isSearchActive
       ? getPreviewText(conv.messages, debouncedSearch)
       : "";
     const isPending = isPendingDeletion === conv.id;
+    const IconComponent = showPinIcon ? Pin : MessageCircle;
 
     return (
       <CommandItem
@@ -380,7 +430,7 @@ export function ConversationSearchPalette({
         className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full relative"
       >
         <div className="flex items-start gap-2 w-full min-w-0">
-          <MessageCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>
@@ -433,56 +483,60 @@ export function ConversationSearchPalette({
                   <CommandItem
                     value="new-chat"
                     onSelect={handleNewChat}
-                    className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
+                    className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
                   >
                     <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium">New chat</span>
                   </CommandItem>
                 </CommandGroup>
 
-                <CommandSeparator className="my-2" />
+                {!recentChatsView && (
+                  <>
+                    <CommandSeparator className="my-2" />
 
-                <div className="px-2 pb-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Pages
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Jump to
-                    </span>
-                  </div>
-                </div>
-                <CommandGroup>
-                  {navigationItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <CommandItem
-                        key={item.value}
-                        value={`${item.value} ${item.keywords} ${item.label}`}
-                        onSelect={() => {
-                          router.push(item.href);
-                          onOpenChange(false);
-                        }}
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
-                      >
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="text-sm font-medium">
-                          {item.label}
+                    <div className="px-2 pb-1.5">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Pages
                         </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
+                        <span className="text-xs text-muted-foreground">
+                          Jump to
+                        </span>
+                      </div>
+                    </div>
+                    <CommandGroup>
+                      {navigationItems.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <CommandItem
+                            key={item.value}
+                            value={`${item.value} ${item.keywords} ${item.label}`}
+                            onSelect={() => {
+                              router.push(item.href);
+                              onOpenChange(false);
+                            }}
+                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
+                          >
+                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="text-sm font-medium">
+                              {item.label}
+                            </span>
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
 
-                <CommandSeparator className="my-2" />
+                    <CommandSeparator className="my-2" />
 
-                <div className="px-2 pb-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Chats
-                    </span>
-                  </div>
-                </div>
+                    <div className="px-2 pb-1.5">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Chats
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -496,6 +550,13 @@ export function ConversationSearchPalette({
               )
             ) : groupedConversations ? (
               <>
+                {groupedConversations.pinned.length > 0 && (
+                  <CommandGroup heading="Pinned">
+                    {groupedConversations.pinned.map((conv) =>
+                      renderConversationItem(conv, true),
+                    )}
+                  </CommandGroup>
+                )}
                 {groupedConversations.today.length > 0 && (
                   <CommandGroup heading="Today">
                     {groupedConversations.today.map((conv) =>
@@ -525,7 +586,9 @@ export function ConversationSearchPalette({
                   </CommandGroup>
                 )}
                 {conversations.length === 0 && (
-                  <CommandEmpty>No conversations yet.</CommandEmpty>
+                  <div className="py-4 text-center text-sm text-muted-foreground">
+                    No recent chats
+                  </div>
                 )}
               </>
             ) : null}
@@ -556,6 +619,12 @@ export function ConversationSearchPalette({
               </kbd>
             </div>
             <span className="text-muted-foreground/70">New Chat</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+              {SHORTCUT_PIN.label}
+            </kbd>
+            <span className="text-muted-foreground/70">Pin / Unpin Chat</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">

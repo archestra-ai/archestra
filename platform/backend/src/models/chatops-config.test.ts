@@ -69,7 +69,11 @@ describe("ChatOpsConfigModel", () => {
       await ChatOpsConfigModel.saveSlackConfig(slackConfig);
       const result = await ChatOpsConfigModel.getSlackConfig();
 
-      expect(result).toEqual(slackConfig);
+      expect(result).toEqual({
+        ...slackConfig,
+        connectionMode: "webhook",
+        appLevelToken: "",
+      });
     });
 
     test("updates existing Slack config", async () => {
@@ -91,7 +95,11 @@ describe("ChatOpsConfigModel", () => {
       await ChatOpsConfigModel.saveSlackConfig(updated);
       const result = await ChatOpsConfigModel.getSlackConfig();
 
-      expect(result).toEqual(updated);
+      expect(result).toEqual({
+        ...updated,
+        connectionMode: "webhook",
+        appLevelToken: "",
+      });
       expect(result?.botToken).toBe("xoxb-token-2");
       expect(result?.enabled).toBe(false);
     });
@@ -123,7 +131,11 @@ describe("ChatOpsConfigModel", () => {
       const slack = await ChatOpsConfigModel.getSlackConfig();
 
       expect(teams).toEqual(msTeamsConfig);
-      expect(slack).toEqual(slackConfig);
+      expect(slack).toEqual({
+        ...slackConfig,
+        connectionMode: "webhook",
+        appLevelToken: "",
+      });
     });
   });
 });

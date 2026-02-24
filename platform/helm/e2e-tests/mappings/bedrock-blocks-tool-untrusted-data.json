@@ -21,7 +21,7 @@
             {
               "toolUse": {
                 "toolUseId": "call_bedrock_test_123",
-                "name": "read_file",
+                "name": "e2e_read_file_bedrock",
                 "input": {
                   "file_path": "/etc/passwd"
                 }

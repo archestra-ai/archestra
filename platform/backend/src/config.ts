@@ -387,6 +387,59 @@ export const parseContentMaxLength = (
   return parsed;
 };
 
+/**
+ * Parse virtual key default expiration from environment variable.
+ * Must be a non-negative integer (seconds). 0 means "never expires".
+ * Returns the default (30 days) for invalid or negative values.
+ * Capped at 1 year (31,536,000 seconds) to prevent unreasonably long expirations.
+ */
+export const parseVirtualKeyDefaultExpiration = (
+  envValue: string | undefined,
+): number => {
+  const DEFAULT_EXPIRATION = 2592000; // 30 days in seconds
+  const MAX_EXPIRATION = 31_536_000; // 1 year in seconds
+  if (!envValue) return DEFAULT_EXPIRATION;
+
+  const trimmed = envValue.trim();
+  if (!trimmed) return DEFAULT_EXPIRATION;
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "${trimmed}", using default ${DEFAULT_EXPIRATION}`,
+    );
+    return DEFAULT_EXPIRATION;
+  }
+
+  if (parsed === 0) {
+    logger.info(
+      "ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS set to 0: virtual keys will not expire by default",
+    );
+    return 0;
+  }
+
+  if (parsed > MAX_EXPIRATION) {
+    logger.warn(
+      `ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "${trimmed}" exceeds maximum (${MAX_EXPIRATION}s / 1 year), capping to ${MAX_EXPIRATION}`,
+    );
+    return MAX_EXPIRATION;
+  }
+
+  return parsed;
+};
+
+/**
+ * Parse a positive integer from an environment variable string, with a default fallback.
+ */
+const parsePositiveInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
 export default {
   frontendBaseUrl,
   api: {
@@ -594,7 +647,7 @@ export default {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.46", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.49", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -640,6 +693,15 @@ export default {
   debug: isDevelopment,
   production: isProduction,
   environment,
+  llmProxy: {
+    maxVirtualKeysPerApiKey: parsePositiveInt(
+      process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
+      10,
+    ),
+    virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
+      process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
+    ),
+  },
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },

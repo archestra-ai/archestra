@@ -9,6 +9,7 @@ import {
 import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
+  ARCHESTRA_TOKEN_PREFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
@@ -30,7 +31,6 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
-  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -446,16 +446,14 @@ export async function validateTeamToken(
 
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
-    // Team token: profile must be assigned to this team
-    const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-    const hasAccess = token.teamId && profileTeamIds.includes(token.teamId);
-    logger.debug(
-      { profileId, tokenTeamId: token.teamId, profileTeamIds, hasAccess },
-      "validateTeamToken: checking team access",
+    // Team token: profile must be assigned to this team, or be teamless (org-wide)
+    const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+      profileId,
+      token.teamId,
     );
     if (!hasAccess) {
       logger.warn(
-        { profileId, tokenTeamId: token.teamId, profileTeamIds },
+        { profileId, tokenTeamId: token.teamId },
         "Profile not accessible via team token",
       );
       return null;
@@ -515,16 +513,12 @@ export async function validateUserToken(
     };
   }
 
-  // Non-admin: user can access profile if they are a member of any team assigned to the profile
-  const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-  const hasAccess = userTeamIds.some((teamId) =>
-    profileTeamIds.includes(teamId),
-  );
-
-  if (!hasAccess) {
+  // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+  if (
+    !(await AgentTeamModel.userHasAgentAccess(token.userId, profileId, false))
+  ) {
     logger.warn(
-      { profileId, userId: token.userId, userTeamIds, profileTeamIds },
+      { profileId, userId: token.userId },
       "Profile not accessible via user token (no shared teams)",
     );
     return null;
@@ -615,16 +609,10 @@ export async function validateOAuthToken(
       };
     }
 
-    // Non-admin: user can access profile if they are a member of any team assigned to the profile
-    const userTeamIds = await TeamModel.getUserTeamIds(userId);
-    const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-    const hasAccess = userTeamIds.some((teamId) =>
-      profileTeamIds.includes(teamId),
-    );
-
-    if (!hasAccess) {
+    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+    if (!(await AgentTeamModel.userHasAgentAccess(userId, profileId, false))) {
       logger.warn(
-        { profileId, userId, userTeamIds, profileTeamIds },
+        { profileId, userId },
         "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
       );
       return null;
@@ -660,7 +648,7 @@ export async function validateMCPGatewayToken(
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
   // Try external IdP JWKS validation first (if profile has an IdP configured)
-  if (!tokenValue.startsWith("archestra_")) {
+  if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
     const externalIdpResult = await validateExternalIdpToken(
       profileId,
       tokenValue,
@@ -683,7 +671,7 @@ export async function validateMCPGatewayToken(
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
-  if (!tokenValue.startsWith("archestra_")) {
+  if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
     const oauthResult = await validateOAuthToken(profileId, tokenValue);
     if (oauthResult) {
       return oauthResult;
@@ -706,6 +694,7 @@ export async function validateMCPGatewayToken(
 export async function validateExternalIdpToken(
   profileId: string,
   tokenValue: string,
+  permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
 ): Promise<TokenAuthResult | null> {
   try {
     // Look up the agent to check if it has an identity provider configured
@@ -805,15 +794,15 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    // Check if user has MCP gateway admin permission (can access all gateways)
-    const isGatewayAdmin = await userHasPermission(
+    // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
+    const isAdmin = await userHasPermission(
       user.id,
       agent.organizationId,
-      "mcpGateway",
+      permissionResource,
       "admin",
     );
 
-    if (isGatewayAdmin) {
+    if (isAdmin) {
       return {
         tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
         teamId: null,
@@ -826,16 +815,10 @@ export async function validateExternalIdpToken(
       };
     }
 
-    // Non-admin: user can access profile if they are a member of any team assigned to the profile
-    const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-    const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-    const hasAccess = userTeamIds.some((teamId) =>
-      profileTeamIds.includes(teamId),
-    );
-
-    if (!hasAccess) {
+    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
       logger.warn(
-        { profileId, userId: user.id, userTeamIds, profileTeamIds },
+        { profileId, userId: user.id },
         "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
       );
       return null;

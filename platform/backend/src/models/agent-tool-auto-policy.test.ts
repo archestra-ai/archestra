@@ -21,6 +21,7 @@ const NO_KEY = {
   apiKey: undefined,
   source: "environment",
   chatApiKeyId: undefined,
+  baseUrl: null,
 };
 
 const MOCK_MODEL = {
@@ -35,6 +36,8 @@ const MOCK_MODEL = {
   supportsToolCalling: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
+  customPricePerMillionInput: null,
+  customPricePerMillionOutput: null,
   lastSyncedAt: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -51,7 +54,7 @@ function mockProviderKey(
 ) {
   vi.mocked(resolveProviderApiKey).mockImplementation(async (params) => {
     if (params.provider === provider) {
-      return { apiKey, source: "org_wide", chatApiKeyId };
+      return { apiKey, source: "org_wide", chatApiKeyId, baseUrl: null };
     }
     return NO_KEY;
   });

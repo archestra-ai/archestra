@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { useFeatures } from "@/lib/features.query";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -24,9 +23,6 @@ export function MsTeamsSetupDialog({
   open,
   onOpenChange,
 }: MsTeamsSetupDialogProps) {
-  const { data: features } = useFeatures();
-  const ngrokDomain = features?.ngrokDomain ?? "";
-
   const mutation = useUpdateChatOpsConfigInQuickstart();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
@@ -61,7 +57,6 @@ export function MsTeamsSetupDialog({
             key={step.title}
             stepNumber={index + 1}
             video={step.video}
-            ngrokDomain={ngrokDomain}
             appId={sharedAppId}
             appSecret={sharedAppSecret}
             tenantId={sharedTenantId}
@@ -86,10 +81,6 @@ export function MsTeamsSetupDialog({
             key={step.title}
             stepNumber={index + 1}
             video={step.video}
-            appId={sharedAppId}
-            appSecret={sharedAppSecret}
-            tenantId={sharedTenantId}
-            creds={creds}
           />
         );
       }
@@ -103,7 +94,7 @@ export function MsTeamsSetupDialog({
         />
       );
     });
-  }, [ngrokDomain, sharedAppId, sharedAppSecret, sharedTenantId, creds]);
+  }, [sharedAppId, sharedAppSecret, sharedTenantId]);
 
   const lastStepAction = {
     label: saving ? "Connecting..." : "Connect",
@@ -275,7 +266,6 @@ function StepSlide({
 function StepBotSettings({
   stepNumber,
   video,
-  ngrokDomain,
   appId,
   appSecret,
   tenantId,
@@ -285,7 +275,6 @@ function StepBotSettings({
 }: {
   stepNumber: number;
   video?: string;
-  ngrokDomain: string;
   appId: string;
   appSecret: string;
   tenantId: string;
@@ -322,7 +311,7 @@ function StepBotSettings({
               3
             </span>
             <span className="pt-0.5 flex-1">
-              Copy the <strong>Microsoft App ID</strong> and paste it here
+              Copy the <strong>Microsoft App ID</strong>
               <Input
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
@@ -353,8 +342,7 @@ function StepBotSettings({
             </span>
             <span className="pt-0.5 flex-1">
               Click <strong>Manage Password</strong> →{" "}
-              <strong>New client secret</strong> → copy the secret value and
-              paste it here
+              <strong>New client secret</strong> → copy the secret value
               <Input
                 type="password"
                 value={appSecret}
@@ -385,22 +373,10 @@ function StepBotSettings({
 function StepInstallAndConnect({
   stepNumber,
   video,
-  appId,
-  appSecret,
-  tenantId,
-  creds,
 }: {
   stepNumber: number;
   video?: string;
-  appId: string;
-  appSecret: string;
-  tenantId: string;
-  creds?: { appId?: string; appSecret?: string; tenantId?: string };
 }) {
-  const displayAppId = appId || creds?.appId || "";
-  const displayTenantId = tenantId || creds?.tenantId || "";
-  const hasSecret = Boolean(appSecret || creds?.appSecret);
-
   return (
     <div
       className="grid flex-1 gap-6"
@@ -442,44 +418,6 @@ function StepInstallAndConnect({
             </span>
             <span className="pt-0.5 flex-1">
               Click <strong>Connect</strong> in the bottom right corner
-              <div className="mt-2 space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono">
-                <div className="flex gap-1.5">
-                  <span className="text-muted-foreground shrink-0">
-                    App ID:
-                  </span>
-                  {displayAppId ? (
-                    <span className="break-all">{displayAppId}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">
-                      Not set
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-1.5">
-                  <span className="text-muted-foreground shrink-0">
-                    Tenant ID:
-                  </span>
-                  {displayTenantId ? (
-                    <span className="break-all">{displayTenantId}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">
-                      Not set
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-1.5">
-                  <span className="text-muted-foreground shrink-0">
-                    App Secret:
-                  </span>
-                  {hasSecret ? (
-                    <span>{"••••••••"}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">
-                      Not set
-                    </span>
-                  )}
-                </div>
-              </div>
             </span>
           </li>
         </ol>
@@ -504,13 +442,14 @@ function buildManifest(params: {
   botAppId: string;
   nameShort: string;
   nameFull: string;
+  version: string;
 }) {
-  const { botAppId, nameShort, nameFull } = params;
+  const { botAppId, nameShort, nameFull, version } = params;
   return {
     $schema:
       "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
     manifestVersion: "1.16",
-    version: "1.0.0",
+    version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     packageName: "com.archestra.bot",
     developer: {
@@ -526,20 +465,20 @@ function buildManifest(params: {
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupchat"],
+        scopes: ["team", "groupchat", "personal"],
         supportsFiles: false,
         isNotificationOnly: false,
         commandLists: [
           {
-            scopes: ["team", "groupchat"],
+            scopes: ["team", "groupchat", "personal"],
             commands: [
               {
                 title: "/select-agent",
-                description: "Change which agent handles this channel",
+                description: "Change which agent handles this conversation",
               },
               {
                 title: "/status",
-                description: "Show current agent for this channel",
+                description: "Show current agent for this conversation",
               },
               { title: "/help", description: "Show available commands" },
             ],
@@ -576,6 +515,7 @@ function StepManifest({
   const [botAppId, setBotAppId] = useState("");
   const [nameShort, setNameShort] = useState("Archestra");
   const [nameFull, setNameFull] = useState("Archestra Bot");
+  const [version, setVersion] = useState("1.0.0");
   const [downloading, setDownloading] = useState(false);
 
   const effectiveAppId = botAppId || prefillAppId || "";
@@ -583,6 +523,7 @@ function StepManifest({
     botAppId: effectiveAppId,
     nameShort,
     nameFull,
+    version,
   });
   const manifestJson = JSON.stringify(manifest, null, 2);
 
@@ -655,6 +596,16 @@ function StepManifest({
               placeholder="Archestra Bot"
             />
           </div>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="manifest-version">Version</Label>
+          <Input
+            id="manifest-version"
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="1.0.0"
+          />
         </div>
 
         <Button

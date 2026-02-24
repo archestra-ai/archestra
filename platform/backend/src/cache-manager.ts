@@ -34,6 +34,8 @@ export const CacheKey = {
   ChannelDiscovery: "channel-discovery",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
+  /** Virtual API key brute-force rate limiting per IP */
+  VirtualKeyRateLimit: "virtual-key-rate-limit",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

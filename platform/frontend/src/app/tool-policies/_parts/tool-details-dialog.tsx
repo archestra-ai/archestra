@@ -47,7 +47,11 @@ export function ToolDetailsDialog({
 
   if (!tool) return null;
 
-  const displayName = parseFullToolName(tool.name).toolName || tool.name;
+  // Only trim prefix for MCP tools (which have catalogId set and were slugified with server name)
+  // LLM proxy discovered tools (no catalogId) should show the full name as-is
+  const displayName = tool.catalogId
+    ? parseFullToolName(tool.name).toolName || tool.name
+    : tool.name;
 
   const catalogItem = internalMcpCatalogItems?.find(
     (item) => item.id === tool.catalogId,

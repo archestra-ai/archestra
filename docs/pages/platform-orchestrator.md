@@ -56,6 +56,23 @@ Each MCP server runs as a dedicated Kubernetes Deployment:
 - **Custom Images**: Supports both standard and custom Docker images for MCP servers
 - **Secret Management**: The orchestrator injects credentials and configuration
 
+#### Configuration
+
+MCP servers can be configured in two ways:
+
+- **Remote** — Connect to an MCP server running outside your cluster by providing its URL. No K8s deployment is created.
+- **Self-hosted** — Run an MCP server as a K8s deployment in your cluster. Two options:
+  - **Base image + command/args** — Use the built-in MCP server base image and specify the command and arguments to run (e.g., `npx @modelcontextprotocol/server-github`), along with environment variables and other settings.
+  - **Bring your own Docker image** — Provide a custom Docker image for the MCP server deployment.
+
+For advanced use cases, you can directly edit the Kubernetes deployment YAML for a self-hosted MCP server, giving you full control over the pod spec.
+
+#### Scheduling Defaults
+
+If `tolerations` or `nodeSelector` are configured in the Helm values for the Archestra platform pod, those values are automatically inherited as defaults by all self-hosted MCP server deployments. This ensures MCP servers are scheduled on the same node pool as the platform without additional configuration.
+
+These defaults can be overridden per-server via the advanced YAML config. See [Service, Deployment, & Ingress Configuration](/docs/platform-deployment#service-deployment--ingress-configuration) for the relevant Helm values.
+
 ### Credentials
 
 The orchestrator securely manages credentials for each MCP server. When you install a server from the [Private Registry](/docs/platform-private-registry), you authenticate with the external service — the resulting credential is stored and injected into the deployment at runtime.

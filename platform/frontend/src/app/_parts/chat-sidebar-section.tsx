@@ -311,7 +311,7 @@ export function ChatSidebarSection() {
                         "h-4 w-4 p-0 shrink-0 transition-opacity",
                         isMenuOpen
                           ? "opacity-100"
-                          : "opacity-0 group-hover/menu-item:opacity-100",
+                          : "opacity-0 group-hover/menu-sub-item:opacity-100",
                       )}
                     />
                   </DropdownMenuTrigger>

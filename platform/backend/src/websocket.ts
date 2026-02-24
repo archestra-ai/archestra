@@ -20,6 +20,7 @@ import { BrowserStreamSocketClientContext } from "@/features/browser-stream/webs
 import logger from "@/logging";
 import McpServerRuntimeManager from "@/mcp-server-runtime/manager";
 import { McpServerModel, UserModel } from "@/models";
+import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -375,30 +376,50 @@ class WebSocketService {
     );
 
     // Filter to local servers only (remote servers don't have K8s deployments)
-    const localServerIds = allServers
-      .filter((s) => s.serverType === "local")
-      .map((s) => s.id);
+    const localServers = allServers.filter((s) => s.serverType === "local");
+    const localServerIds = localServers.map((s) => s.id);
+    const serverNameById = Object.fromEntries(
+      localServers.map((s) => [s.id, s.name]),
+    );
 
-    // Build initial statuses from the runtime manager
-    const statuses: Record<string, McpDeploymentStatusEntry> = {};
-    const runtimeSummary = McpServerRuntimeManager.statusSummary;
+    // Build statuses from the runtime manager and update Prometheus metric
+    const buildAndReportStatuses = (
+      summary: typeof McpServerRuntimeManager.statusSummary,
+    ): Record<string, McpDeploymentStatusEntry> => {
+      const result: Record<string, McpDeploymentStatusEntry> = {};
+      const metricStatuses: Record<
+        string,
+        { serverName: string; state: string }
+      > = {};
 
-    for (const serverId of localServerIds) {
-      const deploymentStatus = runtimeSummary.mcpServers[serverId];
-      if (deploymentStatus) {
-        statuses[serverId] = {
-          state: deploymentStatus.state,
-          message: deploymentStatus.message,
-          error: deploymentStatus.error,
-        };
-      } else {
-        statuses[serverId] = {
-          state: "not_created",
-          message: "Deployment not created",
-          error: null,
+      for (const serverId of localServerIds) {
+        const deploymentStatus = summary.mcpServers[serverId];
+        if (deploymentStatus) {
+          result[serverId] = {
+            state: deploymentStatus.state,
+            message: deploymentStatus.message,
+            error: deploymentStatus.error,
+          };
+        } else {
+          result[serverId] = {
+            state: "not_created",
+            message: "Deployment not created",
+            error: null,
+          };
+        }
+        metricStatuses[serverId] = {
+          serverName: serverNameById[serverId] ?? serverId,
+          state: result[serverId].state,
         };
       }
-    }
+
+      reportMcpDeploymentStatuses(metricStatuses);
+      return result;
+    };
+
+    // Build initial statuses from the runtime manager
+    const runtimeSummary = McpServerRuntimeManager.statusSummary;
+    const statuses = buildAndReportStatuses(runtimeSummary);
 
     // Send initial statuses
     this.sendToClient(ws, {
@@ -418,24 +439,7 @@ class WebSocketService {
 
       try {
         const currentSummary = McpServerRuntimeManager.statusSummary;
-        const currentStatuses: Record<string, McpDeploymentStatusEntry> = {};
-
-        for (const serverId of localServerIds) {
-          const deploymentStatus = currentSummary.mcpServers[serverId];
-          if (deploymentStatus) {
-            currentStatuses[serverId] = {
-              state: deploymentStatus.state,
-              message: deploymentStatus.message,
-              error: deploymentStatus.error,
-            };
-          } else {
-            currentStatuses[serverId] = {
-              state: "not_created",
-              message: "Deployment not created",
-              error: null,
-            };
-          }
-        }
+        const currentStatuses = buildAndReportStatuses(currentSummary);
 
         // Only send if statuses changed
         const sub = this.mcpDeploymentStatusSubscriptions.get(ws);

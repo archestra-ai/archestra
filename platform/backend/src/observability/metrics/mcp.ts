@@ -1,6 +1,7 @@
 /**
- * Prometheus metrics for MCP tool calls.
- * Tracks tool call execution duration, total calls, and error rates.
+ * Prometheus metrics for MCP tool calls and deployment status.
+ * Tracks tool call execution duration, total calls, error rates,
+ * and K8s deployment states for self-hosted MCP servers.
  *
  * To calculate tool calls per second, use the rate() function in Prometheus:
  * rate(mcp_tool_calls_total{agent_name="my-agent"}[5m])
@@ -15,6 +16,16 @@ let mcpToolCallDuration: client.Histogram<string>;
 let mcpToolCallsTotal: client.Counter<string>;
 let mcpRequestSizeBytes: client.Histogram<string>;
 let mcpResponseSizeBytes: client.Histogram<string>;
+
+// Deployment status gauge — one series per (server_name, state) combination.
+// Each server has exactly one active state at a time (value=1), with all other
+// states at 0. This enables queries like:
+//   count(mcp_server_deployment_status{state="running"} == 1)
+const mcpServerDeploymentStatus = new client.Gauge({
+  name: "mcp_server_deployment_status",
+  help: "Current deployment state of self-hosted MCP servers (1 = active state)",
+  labelNames: ["server_name", "state"],
+});
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -188,5 +199,34 @@ export function reportMcpToolCall(params: {
       value: params.responseSizeBytes,
       exemplarLabels,
     });
+  }
+}
+
+const DEPLOYMENT_STATES = [
+  "not_created",
+  "pending",
+  "running",
+  "failed",
+  "succeeded",
+] as const;
+
+/**
+ * Update the mcp_server_deployment_status gauge from a map of server statuses.
+ * Each server gets value=1 for its current state and value=0 for all other states.
+ * Stale servers (present in the gauge but absent from `statuses`) are removed.
+ */
+export function reportMcpDeploymentStatuses(
+  statuses: Record<string, { serverName: string; state: string }>,
+): void {
+  // Reset gauge to remove stale series from servers that no longer exist
+  mcpServerDeploymentStatus.reset();
+
+  for (const { serverName, state } of Object.values(statuses)) {
+    for (const s of DEPLOYMENT_STATES) {
+      mcpServerDeploymentStatus.set(
+        { server_name: serverName, state: s },
+        s === state ? 1 : 0,
+      );
+    }
   }
 }

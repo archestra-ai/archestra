@@ -1,13 +1,8 @@
 "use client";
 
-import {
-  type AnyRoleName,
-  DEFAULT_TEAM_NAME,
-  E2eTestId,
-  MEMBER_ROLE_NAME,
-} from "@shared";
+import { type AnyRoleName, E2eTestId, MEMBER_ROLE_NAME } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import { Check, Copy, Info, Link as LinkIcon, Loader2 } from "lucide-react";
+import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
@@ -118,15 +113,6 @@ function InviteByLinkCardContent({
                 The role this person will have in your organization
               </p>
             </div>
-
-            <p className="gap-1 flex text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-[1px]" />
-              <span>
-                New members will be automatically added to the{" "}
-                <span className="font-medium">{DEFAULT_TEAM_NAME}</span> when
-                they accept the invitation.
-              </span>
-            </p>
 
             <PermissionButton
               permissions={{ invitation: ["create"] }}

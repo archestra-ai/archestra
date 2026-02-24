@@ -6,6 +6,7 @@ import {
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  DEFAULT_TEAM_NAME,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
@@ -213,17 +214,28 @@ setup("setup teams and assignments", async ({ page }) => {
   // Get organization members to find editor and member user IDs
   const members = await listOrgMembers(page.request);
 
+  const adminMember = members.find((m) => m.user.email === ADMIN_EMAIL);
   const editorMember = members.find((m) => m.user.email === EDITOR_EMAIL);
   const memberMember = members.find((m) => m.user.email === MEMBER_EMAIL);
 
+  expect(adminMember, `Admin user ${ADMIN_EMAIL} not found`).toBeTruthy();
   expect(editorMember, `Editor user ${EDITOR_EMAIL} not found`).toBeTruthy();
   expect(memberMember, `Member user ${MEMBER_EMAIL} not found`).toBeTruthy();
 
+  const adminUserId = adminMember?.userId ?? "";
   const editorUserId = editorMember?.userId ?? "";
   const memberUserId = memberMember?.userId ?? "";
 
   // Get existing teams
   const existingTeams = await getTeams(page.request);
+
+  // Create Default Team if not exists (no longer auto-created by seed)
+  const defaultTeam = await createTeamIfNotExists(
+    page.request,
+    DEFAULT_TEAM_NAME,
+    "Default team for e2e tests",
+    existingTeams,
+  );
 
   // Create Engineering Team if not exists
   const engineeringTeam = await createTeamIfNotExists(
@@ -242,13 +254,37 @@ setup("setup teams and assignments", async ({ page }) => {
   );
 
   // Get team members
+  const defaultMembers = await getTeamMembers(page.request, defaultTeam.id);
   const engineeringMembers = await getTeamMembers(
     page.request,
     engineeringTeam.id,
   );
   const marketingMembers = await getTeamMembers(page.request, marketingTeam.id);
 
-  // Add Editor to both teams
+  // Add all users to Default Team (previously handled by seed auto-assignment)
+  await addUserToTeamIfNotMember(
+    page.request,
+    defaultTeam.id,
+    adminUserId,
+    "member",
+    defaultMembers,
+  );
+  await addUserToTeamIfNotMember(
+    page.request,
+    defaultTeam.id,
+    editorUserId,
+    "member",
+    defaultMembers,
+  );
+  await addUserToTeamIfNotMember(
+    page.request,
+    defaultTeam.id,
+    memberUserId,
+    "member",
+    defaultMembers,
+  );
+
+  // Add Editor to both Engineering and Marketing teams
   await addUserToTeamIfNotMember(
     page.request,
     engineeringTeam.id,

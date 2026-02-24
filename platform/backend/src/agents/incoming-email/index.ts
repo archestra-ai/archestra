@@ -5,6 +5,7 @@ import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import OrganizationModel from "@/models/organization";
 import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
@@ -688,17 +689,22 @@ export async function processIncomingEmail(
     }
   }
 
-  // Get organization from agent's team
+  // Get organization from agent's team, or fall back to first org for teamless agents
   const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agent.id);
-  if (agentTeamIds.length === 0) {
-    throw new Error(`No teams found for agent ${agent.id}`);
+  let organization: string;
+  if (agentTeamIds.length > 0) {
+    const teams = await TeamModel.findByIds(agentTeamIds);
+    if (teams.length === 0 || !teams[0].organizationId) {
+      throw new Error(`No organization found for agent ${agent.id}`);
+    }
+    organization = teams[0].organizationId;
+  } else {
+    const firstOrg = await OrganizationModel.getFirst();
+    if (!firstOrg) {
+      throw new Error(`No organization found for teamless agent ${agent.id}`);
+    }
+    organization = firstOrg.id;
   }
-
-  const teams = await TeamModel.findByIds(agentTeamIds);
-  if (teams.length === 0 || !teams[0].organizationId) {
-    throw new Error(`No organization found for agent ${agent.id}`);
-  }
-  const organization = teams[0].organizationId;
 
   // Fetch conversation history if this is part of a thread
   let conversationContext = "";

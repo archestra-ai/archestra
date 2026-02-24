@@ -252,14 +252,9 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
         "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
       );
     }
-    const anthropicBaseUrl = baseUrl ?? config.llm.anthropic.baseUrl;
     const client = createAnthropic({
       apiKey,
-      // @ai-sdk/anthropic expects baseURL to include /v1 (e.g. https://api.anthropic.com/v1)
-      // Append /v1 if not already present to match the SDK's expectation
-      baseURL: anthropicBaseUrl.endsWith("/v1")
-        ? anthropicBaseUrl
-        : `${anthropicBaseUrl}/v1`,
+      baseURL: baseUrl ?? config.llm.anthropic.baseUrl,
     });
     return client(modelName);
   },

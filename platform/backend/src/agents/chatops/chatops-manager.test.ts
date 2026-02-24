@@ -176,6 +176,7 @@ describe("ChatOpsManager security validation", () => {
       sendAgentSelectionCard: async () => {},
       getThreadHistory: async () => [],
       getUserEmail: overrides.getUserEmail ?? (async () => null),
+      getChannelName: async () => null,
       getWorkspaceId: () => null,
       getWorkspaceName: () => null,
       discoverChannels: async () => null,

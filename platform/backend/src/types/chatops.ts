@@ -197,6 +197,14 @@ export interface ChatOpsProvider {
   getUserEmail(userId: string): Promise<string | null>;
 
   /**
+   * Get a channel's display name from its provider-specific ID.
+   * Used when creating early bindings for channels not yet in the discovery cache.
+   * @param channelId - The channel ID in the provider's system
+   * @returns The channel name, or null if not available
+   */
+  getChannelName(channelId: string): Promise<string | null>;
+
+  /**
    * Parse an interactive payload (e.g. button click) into a structured selection.
    * Each provider implements its own payload parsing (Block Kit for Slack, Adaptive Card for MS Teams).
    * @param payload - The raw interactive payload from the provider

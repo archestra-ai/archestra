@@ -330,6 +330,9 @@ export class ChatOpsManager implements SlackEventHandler {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
         const isDm = message.metadata?.channelType === "im";
+        const channelName = isDm
+          ? `Direct Message - ${message.senderEmail}`
+          : await provider.getChannelName(message.channelId);
         const organizationId = await getDefaultOrganizationId();
         await ChatOpsChannelBindingModel.upsertByChannel({
           organizationId,
@@ -337,9 +340,7 @@ export class ChatOpsManager implements SlackEventHandler {
           channelId: message.channelId,
           workspaceId: message.workspaceId,
           workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: isDm
-            ? `Direct Message - ${message.senderEmail}`
-            : undefined,
+          channelName: channelName ?? undefined,
           isDm,
           dmOwnerEmail: isDm ? message.senderEmail : undefined,
         });
@@ -392,13 +393,16 @@ export class ChatOpsManager implements SlackEventHandler {
 
     // Create or update binding
     const isDm = selection.channelId.startsWith("D");
+    const channelName = isDm
+      ? `Direct Message - ${senderEmail}`
+      : await provider.getChannelName(selection.channelId);
     await ChatOpsChannelBindingModel.upsertByChannel({
       organizationId,
       provider: provider.providerId,
       channelId: selection.channelId,
       workspaceId: selection.workspaceId,
       workspaceName: provider.getWorkspaceName() ?? undefined,
-      channelName: isDm ? `Direct Message - ${senderEmail}` : undefined,
+      channelName: channelName ?? undefined,
       isDm,
       dmOwnerEmail: isDm ? senderEmail : undefined,
       agentId: selection.agentId,

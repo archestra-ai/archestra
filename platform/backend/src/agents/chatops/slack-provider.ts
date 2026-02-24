@@ -454,6 +454,22 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async getChannelName(channelId: string): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const result = await this.client.conversations.info({
+        channel: channelId,
+      });
+      return (result.channel as { name?: string })?.name || null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId },
+        "[SlackProvider] Failed to get channel name",
+      );
+      return null;
+    }
+  }
+
   async discoverChannels(_context: unknown): Promise<DiscoveredChannel[]> {
     if (!this.client) {
       return [];

@@ -169,11 +169,17 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
 
-  # Release-please PRs run automatically to auto-commit codegen changes (e.g. docs/openapi.json version bump).
-  # Regular PRs use workflow_dispatch on platform-linting-and-tests.yml for on-demand checks.
-  platform-linting-and-tests-release-please:
-    name: Platform Linting and Tests (Release Please)
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+  # Automatic checks for special PR types:
+  # - Release-please PRs: auto-commit codegen changes (e.g. docs/openapi.json version bump)
+  # - Fork PRs: run automatically since maintainer already explicitly approves workflows to run
+  # Regular PRs from team members use workflow_dispatch on platform-linting-and-tests.yml for on-demand checks.
+  platform-linting-and-tests-pr:
+    name: Platform Linting and Tests (PR)
+    if: |
+      github.event_name == 'pull_request' && (
+        startsWith(github.head_ref, 'release-please--') ||
+        github.event.pull_request.head.repo.fork == true
+      )
     permissions:
       contents: write
       packages: write
@@ -182,9 +188,9 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
-      is-release-please-pr: true
+      is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
       should-skip-running-and-always-succeed: false
-      is-fork-pr: false
+      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

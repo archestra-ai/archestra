@@ -161,7 +161,7 @@ async function seedChatAssistantAgent(): Promise<void> {
 
   const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
 
-  const [inserted] = await db
+  const [_inserted] = await db
     .insert(schema.agentsTable)
     .values({
       organizationId: org.id,

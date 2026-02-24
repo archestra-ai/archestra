@@ -447,7 +447,10 @@ export async function validateTeamToken(
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
     // Team token: profile must be assigned to this team, or be teamless (org-wide)
-    const hasAccess = await AgentTeamModel.teamHasAgentAccess(profileId, token.teamId);
+    const hasAccess = await AgentTeamModel.teamHasAgentAccess(
+      profileId,
+      token.teamId,
+    );
     if (!hasAccess) {
       logger.warn(
         { profileId, tokenTeamId: token.teamId },
@@ -511,7 +514,9 @@ export async function validateUserToken(
   }
 
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-  if (!(await AgentTeamModel.userHasAgentAccess(token.userId, profileId, false))) {
+  if (
+    !(await AgentTeamModel.userHasAgentAccess(token.userId, profileId, false))
+  ) {
     logger.warn(
       { profileId, userId: token.userId },
       "Profile not accessible via user token (no shared teams)",

@@ -308,7 +308,6 @@ describe("InvitationModel", () => {
       const updatedInvitation = await InvitationModel.getById(invitation.id);
       expect(updatedInvitation?.status).toBe("accepted");
     });
-
   });
 
   describe("findByEmail", () => {

@@ -202,10 +202,7 @@ describe("AgentTeamModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({ organizationId: org.id });
 
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        agent.id,
-        null,
-      );
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(agent.id, null);
 
       expect(hasAccess).toBe(true);
     });
@@ -242,10 +239,7 @@ describe("AgentTeamModel", () => {
       const agent = await makeAgent({ organizationId: org.id });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
-      const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-        agent.id,
-        null,
-      );
+      const hasAccess = await AgentTeamModel.teamHasAgentAccess(agent.id, null);
 
       expect(hasAccess).toBe(false);
     });

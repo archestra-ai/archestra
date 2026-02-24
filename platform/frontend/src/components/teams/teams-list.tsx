@@ -2,15 +2,7 @@
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import {
-  Key,
-  Link2,
-  Plus,
-  Settings,
-  Trash2,
-  Users,
-  Vault,
-} from "lucide-react";
+import { Key, Link2, Plus, Settings, Trash2, Users, Vault } from "lucide-react";
 
 import { lazy, useState } from "react";
 import { toast } from "sonner";

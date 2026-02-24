@@ -450,7 +450,6 @@ class AgentTeamModel {
     );
     return teamsMap;
   }
-
 }
 
 export default AgentTeamModel;

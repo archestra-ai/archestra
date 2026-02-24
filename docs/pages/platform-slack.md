@@ -61,6 +61,9 @@ Pick the manifest for your chosen connection mode:
       "display_name": "Archestra",
       "always_online": true
     },
+    "assistant_view": {
+      "assistant_description": "Your AI-powered Archestra assistant"
+    },
     "slash_commands": [
       {
         "command": "/archestra-select-agent",
@@ -79,6 +82,7 @@ Pick the manifest for your chosen connection mode:
   "oauth_config": {
     "scopes": {
       "bot": [
+        "assistant:write",
         "commands",
         "app_mentions:read",
         "channels:history",
@@ -98,6 +102,8 @@ Pick the manifest for your chosen connection mode:
     "event_subscriptions": {
       "bot_events": [
         "app_mention",
+        "assistant_thread_started",
+        "assistant_thread_context_changed",
         "message.channels",
         "message.groups",
         "message.im"
@@ -142,6 +148,9 @@ Replace the URLs with your Archestra domain.
       "display_name": "Archestra",
       "always_online": true
     },
+    "assistant_view": {
+      "assistant_description": "Your AI-powered Archestra assistant"
+    },
     "slash_commands": [
       {
         "command": "/archestra-select-agent",
@@ -163,6 +172,7 @@ Replace the URLs with your Archestra domain.
   "oauth_config": {
     "scopes": {
       "bot": [
+        "assistant:write",
         "commands",
         "app_mentions:read",
         "channels:history",
@@ -183,6 +193,8 @@ Replace the URLs with your Archestra domain.
       "request_url": "https://your-archestra-domain/api/webhooks/chatops/slack",
       "bot_events": [
         "app_mention",
+        "assistant_thread_started",
+        "assistant_thread_context_changed",
         "message.channels",
         "message.groups",
         "message.im"

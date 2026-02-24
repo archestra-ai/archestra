@@ -197,7 +197,11 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
-    // Only process message and app_mention events
+    // Only process message and app_mention events.
+    // assistant_thread_started and assistant_thread_context_changed events are
+    // subscribed in the manifest (required for "Agents & AI Apps" designation)
+    // but intentionally dropped here — handling them (e.g., welcome messages,
+    // suggested prompts) is deferred to a future phase.
     if (event.type !== "message" && event.type !== "app_mention") {
       return null;
     }
@@ -633,6 +637,23 @@ class SlackProvider implements ChatOpsProvider {
           response_type: "ephemeral",
           text: "Unknown command. Use `/archestra-help` to see available commands.",
         };
+    }
+  }
+
+  async setTypingStatus(channelId: string, threadTs: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.assistant.threads.setStatus({
+        channel_id: channelId,
+        thread_ts: threadTs,
+        status: "is thinking...",
+      });
+    } catch (error) {
+      // Non-fatal: fails if "Agents & AI Apps" isn't enabled or scope missing
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] setTypingStatus failed (non-fatal)",
+      );
     }
   }
 

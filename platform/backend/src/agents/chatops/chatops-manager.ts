@@ -931,6 +931,19 @@ export class ChatOpsManager {
       userId,
     } = params;
 
+    // Send typing indicator before execution starts (non-fatal).
+    // Slack always has threadId (falls back to event.ts); Teams may not
+    // (only set for thread replies) but doesn't need it (uses conversationReference).
+    if (sendReply && provider.setTypingStatus) {
+      await provider
+        .setTypingStatus(
+          message.channelId,
+          message.threadId ?? "",
+          message.metadata,
+        )
+        .catch(() => {});
+    }
+
     try {
       // Resolve user for span attributes
       const chatOpsUser =
@@ -962,13 +975,25 @@ export class ChatOpsManager {
         },
       });
 
-      const agentResponse = result.text || "";
+      const agentResponse = stripThinkingBlocks(result.text || "");
 
       if (sendReply && agentResponse) {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
           footer: `Via ${agent.name}`,
+          conversationReference: message.metadata?.conversationReference,
+        });
+      } else if (
+        sendReply &&
+        !agentResponse &&
+        message.metadata?.placeholderActivityId
+      ) {
+        // Agent returned no visible content but a placeholder "Thinking..."
+        // message was sent (Teams channels) — update it so it doesn't linger.
+        await provider.sendReply({
+          originalMessage: message,
+          text: "_(No response)_",
           conversationReference: message.metadata?.conversationReference,
         });
       }
@@ -1009,6 +1034,19 @@ async function getDefaultOrganizationId(): Promise<string> {
     throw new Error("No organizations found");
   }
   return org.id;
+}
+
+/**
+ * Strip `<thinking>...</thinking>` blocks from LLM responses.
+ * These are internal reasoning blocks that should not be shown to users.
+ *
+ * Uses non-greedy matching (`*?`) so multiple separate thinking blocks are
+ * stripped independently without eating content between them. This assumes
+ * blocks are not nested — nested `<thinking>` tags would leave the tail
+ * visible, but LLMs do not produce nested thinking blocks in practice.
+ */
+function stripThinkingBlocks(text: string): string {
+  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }
 
 /**

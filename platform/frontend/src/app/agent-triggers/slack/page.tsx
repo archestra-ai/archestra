@@ -115,26 +115,29 @@ export default function SlackPage() {
             className="flex gap-6"
           >
             {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <RadioGroupItem value="socket" />
-              <span className="text-sm">
-                WebSocket{" "}
-                <span className="text-muted-foreground">
-                  — Archestra exchanges WebSocket messages with Slack, no public
+            <label className="flex items-start gap-2 cursor-pointer">
+              <RadioGroupItem value="socket" className="mt-1" />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">
+                  WebSocket
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Archestra exchanges WebSocket messages with Slack, no public
                   URL needed
                 </span>
-              </span>
+              </div>
             </label>
             {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <RadioGroupItem value="webhook" />
-              <span className="text-sm">
-                Webhook{" "}
-                <span className="text-muted-foreground">
-                  — Slack makes HTTP requests to Archestra, requires a public
-                  URL
+            <label className="flex items-start gap-2 cursor-pointer">
+              <RadioGroupItem value="webhook" className="mt-1" />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">
+                  Webhook
                 </span>
-              </span>
+                <span className="text-xs text-muted-foreground">
+                  Slack makes HTTP requests to Archestra, requires a public URL
+                </span>
+              </div>
             </label>
           </RadioGroup>
           {selectedMode === "webhook" && !hasModeChange && (

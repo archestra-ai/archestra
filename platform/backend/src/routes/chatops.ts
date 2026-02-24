@@ -246,6 +246,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
+            // Attach TurnContext so the provider can send typing indicators
+            // using the live conversation turn (works in channels, group chats, and DMs).
+            // Safe: setTypingStatus is called inside executeAndReply which runs
+            // within this processActivity callback, so the TurnContext is still valid.
+            message.metadata = {
+              ...message.metadata,
+              turnContext: context,
+            };
+
             // Resolve workspaceId to proper UUID (aadGroupId) for team channels.
             // Bot Framework may provide team.id (thread format) instead of aadGroupId.
             // TeamsInfo.getTeamDetails() uses RSC permissions — no Azure AD app permissions needed.

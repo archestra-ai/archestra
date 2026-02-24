@@ -636,6 +636,26 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async setTypingStatus(
+    channelId: string,
+    threadTs: string,
+  ): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.assistant.threads.setStatus({
+        channel_id: channelId,
+        thread_ts: threadTs,
+        status: "is thinking...",
+      });
+    } catch (error) {
+      // Non-fatal: fails if "Agents & AI Apps" isn't enabled or scope missing
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] setTypingStatus failed (non-fatal)",
+      );
+    }
+  }
+
   getBotUserId(): string | null {
     return this.botUserId;
   }

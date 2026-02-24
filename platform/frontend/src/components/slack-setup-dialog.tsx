@@ -389,12 +389,15 @@ function StepAppLevelToken({
           </li>
         </ol>
       </StepCard>
-      <div className="flex items-center justify-center rounded-lg border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground text-center max-w-xs">
-          The App-Level Token enables Socket Mode, allowing Archestra to connect
-          to Slack via an outbound WebSocket — no public URL needed.
-        </p>
-      </div>
+      <video
+        src="/slack/slack-app-level-token.mp4"
+        controls
+        muted
+        autoPlay
+        loop
+        playsInline
+        className="rounded-md w-full"
+      />
     </div>
   );
 }
@@ -429,6 +432,9 @@ function buildSlackManifest(params: {
       bot_user: {
         display_name: appName,
         always_online: true,
+      },
+      assistant_view: {
+        assistant_description: "Your AI-powered Archestra assistant",
       },
       slash_commands: isSocket
         ? [
@@ -466,6 +472,7 @@ function buildSlackManifest(params: {
     oauth_config: {
       scopes: {
         bot: [
+          "assistant:write",
           "commands",
           "app_mentions:read",
           "channels:history",
@@ -486,6 +493,8 @@ function buildSlackManifest(params: {
         ? {
             bot_events: [
               "app_mention",
+              "assistant_thread_started",
+              "assistant_thread_context_changed",
               "message.channels",
               "message.groups",
               "message.im",
@@ -495,6 +504,8 @@ function buildSlackManifest(params: {
             request_url: webhookUrl,
             bot_events: [
               "app_mention",
+              "assistant_thread_started",
+              "assistant_thread_context_changed",
               "message.channels",
               "message.groups",
               "message.im",

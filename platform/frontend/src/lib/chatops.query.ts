@@ -67,6 +67,7 @@ export function useDeleteChatOpsBinding() {
 }
 
 export function useRefreshChatOpsChannelDiscovery() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (provider: string) => {
       const { error } = await archestraApiSdk.refreshChatOpsChannelDiscovery({
@@ -77,6 +78,10 @@ export function useRefreshChatOpsChannelDiscovery() {
         return null;
       }
       return true;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
   });
 }

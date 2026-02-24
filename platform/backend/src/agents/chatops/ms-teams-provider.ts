@@ -511,6 +511,11 @@ class MSTeamsProvider implements ChatOpsProvider {
     return null;
   }
 
+  getWorkspaceName(): string | null {
+    // MS Teams workspace name is per-team — resolved from TurnContext at message time
+    return null;
+  }
+
   async discoverChannels(
     context: unknown,
   ): Promise<DiscoveredChannel[] | null> {

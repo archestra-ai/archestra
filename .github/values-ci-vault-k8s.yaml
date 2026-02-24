@@ -34,6 +34,8 @@ archestra:
     ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
     ARCHESTRA_CHAT_ZHIPUAI_API_KEY: test-key
     ARCHESTRA_CHAT_MISTRAL_API_KEY: test-key
+    ARCHESTRA_CHAT_PERPLEXITY_API_KEY: test-key
+    ARCHESTRA_CHAT_BEDROCK_API_KEY: test-key
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"

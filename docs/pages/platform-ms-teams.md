@@ -49,15 +49,6 @@ ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=<Client Secret>
 ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<Azure AD Tenant ID>
 ```
 
-Then enable Agent for MS Teams:
-
-1. In Archestra, go to **Chat** → open the **Agent Library**
-2. **Edit** the agent you want to use with Teams
-3. Under **Integrations**, check **Microsoft Teams**
-4. **Save**
-
-Only agents with **Microsoft Teams enabled** will appear in the channel selection dropdown.
-
 ### Teams App Manifest
 
 Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png](/docs/outline.png)** (32x32) and **`manifest.json`**:
@@ -192,7 +183,7 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 ### Direct Messages
 
-DMs work the same as channels. Click the **DM** button next to any agent in the Agent Triggers page to open a Teams DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
+DMs work the same as channels. In the **Agent Triggers** → **MS Teams** page, click **Start DM** in the channels section to open a Teams DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
 
 > If you update from a previous manifest without the `"personal"` scope, re-upload the updated manifest to enable DMs.
 

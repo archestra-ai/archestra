@@ -298,6 +298,58 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Set workspaceName on all bindings for a provider where it is currently null.
+   * If an explicit workspaceName is provided, uses that directly.
+   * Otherwise, infers the name from sibling bindings that already have one
+   * (useful for MS Teams DMs that lack workspace context).
+   */
+  static async backfillWorkspaceName(params: {
+    provider: ChatOpsProviderType;
+    workspaceName?: string;
+  }): Promise<void> {
+    if (params.workspaceName) {
+      await db
+        .update(schema.chatopsChannelBindingsTable)
+        .set({ workspaceName: params.workspaceName, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+            isNull(schema.chatopsChannelBindingsTable.workspaceName),
+          ),
+        );
+      return;
+    }
+
+    // Infer from sibling bindings: pick the most common workspace name for this provider
+    const [result] = await db
+      .select({
+        workspaceName: schema.chatopsChannelBindingsTable.workspaceName,
+      })
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          sql`${schema.chatopsChannelBindingsTable.workspaceName} IS NOT NULL`,
+        ),
+      )
+      .groupBy(schema.chatopsChannelBindingsTable.workspaceName)
+      .orderBy(sql`count(*) DESC`)
+      .limit(1);
+
+    if (result?.workspaceName) {
+      await db
+        .update(schema.chatopsChannelBindingsTable)
+        .set({ workspaceName: result.workspaceName, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+            isNull(schema.chatopsChannelBindingsTable.workspaceName),
+          ),
+        );
+    }
+  }
+
+  /**
    * Remove bindings for channels that no longer exist in Teams.
    * Accepts multiple workspace IDs to handle the case where the same team
    * has bindings stored with different ID formats (UUID aadGroupId vs thread ID).
@@ -426,31 +478,6 @@ class ChatOpsChannelBindingModel {
       .returning();
 
     return deleted.length;
-  }
-
-  /**
-   * Unbind an agent from all channels for specific providers.
-   * Sets agentId to null (preserves the discovered channel binding).
-   * Used when an agent's allowedChatops is updated to remove providers.
-   */
-  static async unbindAgentFromProviders(
-    agentId: string,
-    providers: ChatOpsProviderType[],
-  ): Promise<number> {
-    if (providers.length === 0) return 0;
-
-    const updated = await db
-      .update(schema.chatopsChannelBindingsTable)
-      .set({ agentId: null, updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.chatopsChannelBindingsTable.agentId, agentId),
-          inArray(schema.chatopsChannelBindingsTable.provider, providers),
-        ),
-      )
-      .returning();
-
-    return updated.length;
   }
 }
 

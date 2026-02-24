@@ -424,7 +424,40 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             if (!binding || !binding.agentId) {
-              // No binding — show agent selection
+              // Create binding early (without agent) so the DM/channel appears in the UI
+              if (!binding) {
+                const isTeamsDm =
+                  context.activity.conversation?.conversationType ===
+                  "personal";
+                const resolvedNames = await resolveTeamsNames(
+                  context,
+                  message.channelId,
+                ).catch((error) => {
+                  logger.warn(
+                    { error, channelId: message.channelId },
+                    "[ChatOps] Failed to resolve Teams names for early binding",
+                  );
+                  return {} as {
+                    channelName?: string;
+                    workspaceName?: string;
+                  };
+                });
+                const organizationId = await getDefaultOrganizationId();
+                await ChatOpsChannelBindingModel.upsertByChannel({
+                  organizationId,
+                  provider: "ms-teams",
+                  channelId: message.channelId,
+                  workspaceId: message.workspaceId,
+                  workspaceName: resolvedNames.workspaceName,
+                  channelName: isTeamsDm
+                    ? `Direct Message - ${message.senderEmail}`
+                    : resolvedNames.channelName,
+                  isDm: isTeamsDm,
+                  dmOwnerEmail: isTeamsDm ? message.senderEmail : undefined,
+                });
+              }
+
+              // Discover channels + show agent selection
               await awaitDiscovery(provider, context);
               await sendAgentSelectionCard({
                 provider,
@@ -632,7 +665,25 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           if (!binding || !binding.agentId) {
-            // No binding — show agent selection
+            // Create binding early (without agent) so the DM/channel appears in the UI
+            if (!binding) {
+              const isSlackDm = message.metadata?.channelType === "im";
+              const organizationId = await getDefaultOrganizationId();
+              await ChatOpsChannelBindingModel.upsertByChannel({
+                organizationId,
+                provider: "slack",
+                channelId: message.channelId,
+                workspaceId: message.workspaceId,
+                workspaceName: provider.getWorkspaceName() ?? undefined,
+                channelName: isSlackDm
+                  ? `Direct Message - ${message.senderEmail}`
+                  : undefined,
+                isDm: isSlackDm,
+                dmOwnerEmail: isSlackDm ? message.senderEmail : undefined,
+              });
+            }
+
+            // Show agent selection
             await sendAgentSelectionCard({
               provider,
               message,
@@ -773,13 +824,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({ ok: true });
       }
 
-      // Verify agent exists and allows Slack
+      // Verify agent exists
       const agent = await AgentModel.findById(selection.agentId);
       if (!agent) {
-        return reply.send({ ok: true });
-      }
-
-      if (!agent.allowedChatops?.includes("slack")) {
         return reply.send({ ok: true });
       }
 
@@ -793,6 +840,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: "slack",
         channelId: selection.channelId,
         workspaceId: selection.workspaceId,
+        workspaceName: provider.getWorkspaceName() ?? undefined,
         channelName: isSlackDm ? `Direct Message - ${senderEmail}` : undefined,
         isDm: isSlackDm,
         dmOwnerEmail: isSlackDm ? senderEmail : undefined,
@@ -1269,6 +1317,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Backfill workspace name on bindings that are missing it (e.g. DMs)
+      await ChatOpsChannelBindingModel.backfillWorkspaceName({
+        provider: providerType,
+        workspaceName: provider?.getWorkspaceName() ?? undefined,
+      });
+
       return reply.send({ success: true });
     },
   );
@@ -1360,7 +1414,6 @@ async function sendAgentSelectionCard(params: {
   providerContext?: unknown;
 }): Promise<void> {
   const agents = await chatOpsManager.getAccessibleChatopsAgents({
-    provider: params.provider.providerId,
     senderEmail: params.message.senderEmail,
   });
 
@@ -1402,18 +1455,11 @@ async function handleAgentSelection(
     return;
   }
 
-  // Verify the agent exists and allows MS Teams
+  // Verify the agent exists
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
     await context.sendActivity(
       "The selected agent no longer exists. Please try again.",
-    );
-    return;
-  }
-
-  if (!agent.allowedChatops?.includes("ms-teams")) {
-    await context.sendActivity(
-      `The agent "${agent.name}" is no longer available for Microsoft Teams. Please select a different agent.`,
     );
     return;
   }

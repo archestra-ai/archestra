@@ -211,7 +211,7 @@ export function isApiKeyRequired(
  * This map serves as a fallback when no database result is available.
  */
 export const FAST_MODELS: Record<SupportedChatProvider, string> = {
-  anthropic: "claude-3-5-haiku-20241022",
+  anthropic: "claude-haiku-4-5-20251001",
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast

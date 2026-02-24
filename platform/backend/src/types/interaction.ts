@@ -186,7 +186,11 @@ export const InsertInteractionSchema = createInsertSchema(
     response: InteractionResponseSchema,
     toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   },
-);
+).extend({
+  // Override profileId to be required for creating interactions
+  // (it's nullable in the DB schema to preserve interactions when agents are deleted)
+  profileId: z.string().uuid(),
+});
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;
 

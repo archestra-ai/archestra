@@ -196,10 +196,12 @@ for (const config of testConfigs) {
         await page.waitForTimeout(500);
       }
 
-      // Click on the model option that contains our model ID
+      // Click on the model option that matches our exact model ID.
+      // Use parentheses to avoid matching Bedrock models whose IDs contain
+      // the same base model name (e.g. "us.anthropic.claude-3-5-sonnet-20241022-v2:0").
       const modelOption = page
         .getByRole("option")
-        .filter({ hasText: config.modelId });
+        .filter({ hasText: `(${config.modelId})` });
       await expect(modelOption.first()).toBeVisible({ timeout: 5_000 });
       await modelOption.first().click();
 

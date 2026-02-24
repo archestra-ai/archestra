@@ -1014,8 +1014,9 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     await ChatOpsConfigModel.saveSlackConfig({
       enabled: true,
       botToken: "xoxb-test",
-      signingSecret: "test-secret",
+      signingSecret: "",
       appId: "A123",
+      appLevelToken: "xapp-test-token",
     });
 
     const manager = new ChatOpsManager();

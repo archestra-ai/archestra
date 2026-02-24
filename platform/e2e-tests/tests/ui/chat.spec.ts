@@ -230,7 +230,8 @@ for (const config of testConfigs) {
       });
 
       // Verify the user's message also appears in the chat
-      await expect(page.getByText(testMessage)).toBeVisible();
+      // Use .first() because the message text may also appear in the sidebar title
+      await expect(page.getByText(testMessage).first()).toBeVisible();
     });
   });
 }

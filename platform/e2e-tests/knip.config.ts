@@ -12,9 +12,6 @@ const config: KnipConfig = {
     "biome",
     // tsc is in root package.json (typescript)
     "tsc",
-    // Provided by devDependencies but knip doesn't resolve in pnpm monorepo
-    "playwright",
-    "knip",
   ],
 };
 

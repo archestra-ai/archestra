@@ -1397,6 +1397,80 @@ describe("ConversationModel", () => {
     expect(results[0].messages.length).toBeLessThanOrEqual(10);
   });
 
+  test("can pin a conversation by setting pinnedAt", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Pin Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Pin Test",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    expect(created.pinnedAt).toBeNull();
+
+    const pinnedDate = new Date();
+    const updated = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      { pinnedAt: pinnedDate },
+    );
+
+    expect(updated).toBeDefined();
+    expect(updated?.pinnedAt).toBeInstanceOf(Date);
+    expect(updated?.pinnedAt?.getTime()).toBe(pinnedDate.getTime());
+  });
+
+  test("can unpin a conversation by setting pinnedAt to null", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Unpin Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Unpin Test",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Pin it first
+    await ConversationModel.update(created.id, user.id, org.id, {
+      pinnedAt: new Date(),
+    });
+
+    // Verify it's pinned
+    const pinned = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    expect(pinned?.pinnedAt).toBeInstanceOf(Date);
+
+    // Unpin it
+    const unpinned = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      { pinnedAt: null },
+    );
+
+    expect(unpinned).toBeDefined();
+    expect(unpinned?.pinnedAt).toBeNull();
+  });
+
   test("findAll search returns results ordered by updatedAt descending", async ({
     makeUser,
     makeOrganization,

@@ -8,8 +8,10 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 
 export function DefaultCredentialsWarning({
   alwaysShow = false,
+  showCopyButtons = true,
 }: {
   alwaysShow?: boolean;
+  showCopyButtons?: boolean;
 }) {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
@@ -31,58 +33,68 @@ export function DefaultCredentialsWarning({
     return null;
   }
 
-  const alertContent = (
+  return (
     <Alert variant="destructive" className="text-xs">
       <AlertTitle className="text-xs font-semibold">
         Default Admin Credentials Enabled
       </AlertTitle>
       <AlertDescription className="text-xs mt-1">
         <div className="space-y-1">
-          <div className="flex items-center gap-1">
-            <code className="break-all">- {DEFAULT_ADMIN_EMAIL}</code>
-            <CopyButton
-              text={DEFAULT_ADMIN_EMAIL}
-              className="h-4 w-4 hover:bg-transparent"
-              size={10}
-              behavior="text"
-            />
-          </div>
-          <div className="flex items-center gap-1">
-            <code className="break-all">- {DEFAULT_ADMIN_PASSWORD}</code>
-            <CopyButton
-              text={DEFAULT_ADMIN_PASSWORD}
-              className="h-4 w-4 hover:bg-transparent"
-              size={10}
-              behavior="text"
-            />
-          </div>
+          {showCopyButtons ? (
+            <>
+              <div className="flex items-center gap-1">
+                <code className="break-all">- {DEFAULT_ADMIN_EMAIL}</code>
+                <CopyButton
+                  text={DEFAULT_ADMIN_EMAIL}
+                  className="h-4 w-4 hover:bg-transparent"
+                  size={10}
+                  behavior="text"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <code className="break-all">- {DEFAULT_ADMIN_PASSWORD}</code>
+                <CopyButton
+                  text={DEFAULT_ADMIN_PASSWORD}
+                  className="h-4 w-4 hover:bg-transparent"
+                  size={10}
+                  behavior="text"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <code className="break-all block">- {DEFAULT_ADMIN_EMAIL}</code>
+              <code className="break-all block">
+                - {DEFAULT_ADMIN_PASSWORD}
+              </code>
+            </>
+          )}
         </div>
         <p className="mt-1">
           <a
-            href="https://archestra.ai/docs/platform-deployment#environment-variables"
+            href="https://archestra.ai/docs/platform-deployment#authentication--security"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center underline"
           >
             Set ENV
-          </a>{" "}
-          or{" "}
-          <a
-            href="/settings/account"
-            className="inline-flex items-center underline"
-          >
-            Change
           </a>
+          {alwaysShow ? (
+            " to change"
+          ) : (
+            <>
+              {" "}
+              or{" "}
+              <a
+                href="/settings/account"
+                className="inline-flex items-center underline"
+              >
+                Change
+              </a>
+            </>
+          )}
         </p>
       </AlertDescription>
     </Alert>
   );
-
-  // For sign-in page, don't wrap with padding
-  if (alwaysShow) {
-    return alertContent;
-  }
-
-  // For sidebar, keep the padding
-  return <div className="px-2 pb-1">{alertContent}</div>;
 }

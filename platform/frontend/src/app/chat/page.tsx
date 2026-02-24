@@ -69,6 +69,12 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
@@ -87,7 +93,10 @@ import {
   useChatApiKeys,
   useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
-import { conversationStorageKeys } from "@/lib/chat-utils";
+import {
+  conversationStorageKeys,
+  getConversationDisplayTitle,
+} from "@/lib/chat-utils";
 import { useFeatures } from "@/lib/config.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
@@ -1177,45 +1186,63 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2">
-            <div className="flex items-start justify-between gap-2">
-              {/* Left side - agent selector stays fixed, tools wrap internally */}
-              <div className="flex items-start gap-2 min-w-0 flex-1">
-                {/* Agent/Profile selector - fixed width */}
-                <div className="flex-shrink-0 flex items-center gap-2">
-                  {isAgentDeleted ? null : conversationId ? (
-                    <AgentSelector
-                      currentPromptId={
-                        conversation?.agent?.agentType === "agent"
-                          ? (conversation?.agentId ?? null)
-                          : null
-                      }
-                      currentAgentId={conversation?.agentId ?? ""}
-                      currentModel={conversation?.selectedModel ?? ""}
-                    />
-                  ) : (
-                    <InitialAgentSelector
-                      currentAgentId={initialAgentId}
-                      onAgentChange={handleInitialAgentChange}
-                    />
+            <div className="relative flex items-center justify-between gap-2">
+              {/* Left side - agent selector */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isAgentDeleted ? null : conversationId ? (
+                  <AgentSelector
+                    currentPromptId={
+                      conversation?.agent?.agentType === "agent"
+                        ? (conversation?.agentId ?? null)
+                        : null
+                    }
+                    currentAgentId={conversation?.agentId ?? ""}
+                    currentModel={conversation?.selectedModel ?? ""}
+                  />
+                ) : (
+                  <InitialAgentSelector
+                    currentAgentId={initialAgentId}
+                    onAgentChange={handleInitialAgentChange}
+                  />
+                )}
+                {/* Edit agent button */}
+                {!isAgentDeleted &&
+                  (conversationId ? conversation?.agentId : initialAgentId) && (
+                    <PermissionButton
+                      permissions={{ agent: ["update"] }}
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDialog("edit-agent")}
+                      title="Edit agent, tools, sub-agents"
+                      className="h-8 px-2"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </PermissionButton>
                   )}
-                  {/* Edit agent button */}
-                  {!isAgentDeleted &&
-                    (conversationId
-                      ? conversation?.agentId
-                      : initialAgentId) && (
-                      <PermissionButton
-                        permissions={{ agent: ["update"] }}
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDialog("edit-agent")}
-                        title="Edit agent, tools, sub-agents"
-                        className="h-8 px-2"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </PermissionButton>
-                    )}
-                </div>
               </div>
+              {/* Center - conversation title (absolutely positioned for true centering) */}
+              {conversationId && conversation && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
+                          {getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
+                          )}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {getConversationDisplayTitle(
+                          conversation.title,
+                          conversation.messages,
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
               {/* Right side - show/hide controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Button

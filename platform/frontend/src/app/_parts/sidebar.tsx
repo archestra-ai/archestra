@@ -1,5 +1,5 @@
 "use client";
-import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
+import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
 import { E2eTestId } from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
@@ -9,9 +9,7 @@ import {
   Cable,
   DollarSign,
   Github,
-  History,
   Key,
-  LogIn,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -27,8 +25,9 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { SecurityEngineWarning } from "@/components/security-engine-warning";
+import React from "react";
+import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
   SidebarContent,
@@ -76,19 +75,6 @@ const getNavigationGroups = (isAuthenticated: boolean): MenuGroup[] => {
           icon: MessageCircle,
           customIsActive: (pathname: string, searchParams: URLSearchParams) =>
             pathname === "/chat" && !searchParams.get("conversation"),
-        },
-        {
-          title: "Recent Chats",
-          url: "/chat",
-          icon: History,
-          onClick: () => {
-            window.dispatchEvent(
-              new CustomEvent("open-conversation-search", {
-                detail: { recentChatsView: true },
-              }),
-            );
-          },
-          customIsActive: () => false,
         },
       ],
     },
@@ -181,15 +167,6 @@ const getNavigationGroups = (isAuthenticated: boolean): MenuGroup[] => {
   ];
 };
 
-const userItems: MenuItem[] = [
-  {
-    title: "Sign in",
-    url: "/auth/sign-in",
-    icon: LogIn,
-  },
-  // Sign up is disabled - users must use invitation links to join
-];
-
 const CommunitySideBarSection = ({ starCount }: { starCount: string }) => (
   <SidebarGroup className="px-4 py-0">
     <SidebarGroupLabel>Community</SidebarGroupLabel>
@@ -279,46 +256,46 @@ const MainSideBarSection = ({
         if (permittedItems.length === 0) return null;
 
         return (
-          <SidebarGroup
-            key={group.label ?? `group-${groupIndex}`}
-            className="px-4 py-1"
-          >
-            {group.label && (
-              <SidebarGroupLabel className="text-xs text-muted-foreground uppercase tracking-wider">
-                {group.label}
-              </SidebarGroupLabel>
-            )}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {permittedItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    {item.onClick ? (
-                      <SidebarMenuButton
-                        onClick={item.onClick}
-                        isActive={false}
-                      >
-                        <item.icon className={item.iconClassName} />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    ) : (
-                      <SidebarMenuButton
-                        asChild
-                        isActive={
-                          item.customIsActive?.(pathname, searchParams) ??
-                          pathname.startsWith(item.url)
-                        }
-                      >
-                        <Link href={item.url}>
+          <React.Fragment key={group.label ?? `group-${groupIndex}`}>
+            <SidebarGroup className="px-4 py-0.5">
+              {group.label && (
+                <SidebarGroupLabel className="text-xs text-muted-foreground uppercase tracking-wider">
+                  {group.label}
+                </SidebarGroupLabel>
+              )}
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {permittedItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      {item.onClick ? (
+                        <SidebarMenuButton
+                          onClick={item.onClick}
+                          isActive={false}
+                        >
                           <item.icon className={item.iconClassName} />
                           <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    )}
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+                        </SidebarMenuButton>
+                      ) : (
+                        <SidebarMenuButton
+                          asChild
+                          isActive={
+                            item.customIsActive?.(pathname, searchParams) ??
+                            pathname.startsWith(item.url)
+                          }
+                        >
+                          <Link href={item.url}>
+                            <item.icon className={item.iconClassName} />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      )}
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            {group.label === "Chat" && <ChatSidebarSection />}
+          </React.Fragment>
         );
       })}
       {!config.enterpriseLicenseActivated && (
@@ -328,10 +305,9 @@ const MainSideBarSection = ({
   );
 };
 
-const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
+const FooterSideBarSection = () => (
   <SidebarFooter>
-    <SecurityEngineWarning />
-    <DefaultCredentialsWarning />
+    <SidebarWarningsAccordion />
     <SignedIn>
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>
@@ -346,23 +322,7 @@ const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
         </SidebarGroupContent>
       </SidebarGroup>
     </SignedIn>
-    <SignedOut>
-      <SidebarGroupContent className="mb-4">
-        <SidebarGroupLabel>User</SidebarGroupLabel>
-        <SidebarMenu>
-          {userItems.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild isActive={item.url === pathname}>
-                <Link href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SignedOut>
+    {/* Sign-in link hidden — unauthenticated users are already on the sign-in page */}
   </SidebarFooter>
 );
 
@@ -419,7 +379,7 @@ export function AppSidebar() {
           <CommunitySideBarSection starCount={formattedStarCount} />
         )}
       </SidebarContent>
-      <FooterSideBarSection pathname={pathname} />
+      <FooterSideBarSection />
     </Sidebar>
   );
 }

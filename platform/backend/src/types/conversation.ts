@@ -62,8 +62,13 @@ export const UpdateConversationSchema = createUpdateSchema(
     chatApiKeyId: true,
     agentId: true,
     artifact: true,
+    pinnedAt: true,
   })
   .extend({
+    // Override pinnedAt to accept ISO date strings from the frontend.
+    // Uses z.string().datetime() instead of z.coerce.date() so OpenAPI codegen
+    // emits a proper string type rather than unknown.
+    pinnedAt: z.string().datetime().nullable().optional(),
     // Prevent explicit nullification of agentId via API
     // (null is only set by ON DELETE SET NULL when the agent is deleted)
     agentId: z.string().uuid().optional(),
@@ -71,4 +76,9 @@ export const UpdateConversationSchema = createUpdateSchema(
 
 export type Conversation = z.infer<typeof SelectConversationSchema>;
 export type InsertConversation = z.infer<typeof InsertConversationSchema>;
-export type UpdateConversation = z.infer<typeof UpdateConversationSchema>;
+/** API request body type (pinnedAt as ISO string) */
+export type UpdateConversationInput = z.infer<typeof UpdateConversationSchema>;
+/** Model-level type (pinnedAt coerced to Date) */
+export type UpdateConversation = Omit<UpdateConversationInput, "pinnedAt"> & {
+  pinnedAt?: Date | null;
+};

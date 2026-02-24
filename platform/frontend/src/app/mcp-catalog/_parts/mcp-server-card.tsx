@@ -478,7 +478,7 @@ export function McpServerCard({
     errorMessage &&
     !isInstalling && (
       <div
-        className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+        className="text-sm text-destructive px-3 py-2 bg-destructive/10 rounded-md"
         data-testid={`${E2eTestId.McpServerError}-${item.name}`}
       >
         Failed to start MCP server,{" "}

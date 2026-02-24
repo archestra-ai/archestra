@@ -11,6 +11,7 @@ import {
   UserModel,
 } from "@/models";
 import type {
+  ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -25,24 +26,6 @@ import {
   SLACK_SLASH_COMMANDS,
 } from "./constants";
 import { errorMessage } from "./utils";
-
-/**
- * Handler interface that SlackProvider uses to delegate event processing
- * to the ChatOpsManager without creating a direct dependency.
- */
-export interface SlackEventHandler {
-  handleIncomingMessage(
-    provider: ChatOpsProvider,
-    body: unknown,
-  ): Promise<void>;
-  handleInteractiveSelection(
-    provider: ChatOpsProvider,
-    payload: unknown,
-  ): Promise<void>;
-  getAccessibleChatopsAgents(params: {
-    senderEmail?: string;
-  }): Promise<{ id: string; name: string }[]>;
-}
 
 /**
  * Slack provider using Slack Web API.
@@ -61,7 +44,7 @@ class SlackProvider implements ChatOpsProvider {
   private teamName: string | null = null;
   private config: SlackConfig;
   private socketModeClient: SocketModeClient | null = null;
-  private eventHandler: SlackEventHandler | null = null;
+  private eventHandler: ChatOpsEventHandler | null = null;
   private recentSocketEvents = new Map<string, true>();
 
   constructor(slackConfig: SlackConfig) {
@@ -86,7 +69,7 @@ class SlackProvider implements ChatOpsProvider {
       : SLACK_DEFAULT_CONNECTION_MODE;
   }
 
-  setEventHandler(handler: SlackEventHandler): void {
+  setEventHandler(handler: ChatOpsEventHandler): void {
     this.eventHandler = handler;
   }
 

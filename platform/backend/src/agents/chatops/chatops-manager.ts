@@ -27,13 +27,13 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
-import SlackProvider, { type SlackEventHandler } from "./slack-provider";
+import SlackProvider from "./slack-provider";
 import { errorMessage } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
  */
-export class ChatOpsManager implements SlackEventHandler {
+export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;

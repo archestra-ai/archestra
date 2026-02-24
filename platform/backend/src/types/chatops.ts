@@ -259,6 +259,24 @@ export interface ChatOpsProvider {
 }
 
 /**
+ * Callback interface for socket-mode providers to delegate events
+ * back to the ChatOpsManager without depending on it directly.
+ */
+export interface ChatOpsEventHandler {
+  handleIncomingMessage(
+    provider: ChatOpsProvider,
+    body: unknown,
+  ): Promise<void>;
+  handleInteractiveSelection(
+    provider: ChatOpsProvider,
+    payload: unknown,
+  ): Promise<void>;
+  getAccessibleChatopsAgents(params: {
+    senderEmail?: string;
+  }): Promise<{ id: string; name: string }[]>;
+}
+
+/**
  * MS Teams specific configuration from environment variables
  */
 export interface MSTeamsConfig {

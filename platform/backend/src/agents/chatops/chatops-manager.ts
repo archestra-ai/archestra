@@ -24,16 +24,15 @@ import type {
 import {
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
-  SLACK_SLASH_COMMANDS,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
-import SlackProvider, { type SlackInteractivePayload } from "./slack-provider";
+import SlackProvider, { type SlackEventHandler } from "./slack-provider";
 import { errorMessage } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
  */
-export class ChatOpsManager {
+export class ChatOpsManager implements SlackEventHandler {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -198,6 +197,9 @@ export class ChatOpsManager {
     }
     if (slackConfig) {
       this.slackProvider = new SlackProvider(slackConfig);
+      // Wire event handler so the provider can dispatch socket events and
+      // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
+      this.slackProvider.setEventHandler(this);
     }
 
     if (!this.isAnyProviderConfigured()) {
@@ -221,18 +223,6 @@ export class ChatOpsManager {
           );
         }
       }
-    }
-
-    // Wire socket mode events for Slack if in socket mode
-    if (this.slackProvider?.isSocketMode()) {
-      this.slackProvider.setSocketEventHandler((type, payload) => {
-        this.processSlackSocketEvent(type, payload).catch((error) => {
-          logger.error(
-            { error: errorMessage(error), eventType: type },
-            "[ChatOps] Error processing Slack socket event",
-          );
-        });
-      });
     }
 
     // Eager channel discovery for providers that support it (fire-and-forget).
@@ -282,12 +272,12 @@ export class ChatOpsManager {
   }
 
   /**
-   * Handle a Slack message event (extracted from webhook route for reuse by socket mode).
-   * Covers: dedup, channel discovery, email resolution, user verification,
+   * Handle an incoming message event from any provider.
+   * Covers: channel discovery, email resolution, user verification,
    * binding check, agent selection or processMessage().
    */
-  async handleSlackMessage(
-    provider: SlackProvider,
+  async handleIncomingMessage(
+    provider: ChatOpsProvider,
     body: unknown,
   ): Promise<void> {
     const headers: Record<string, string | string[] | undefined> = {};
@@ -311,10 +301,10 @@ export class ChatOpsManager {
 
     // Verify sender is a registered user
     if (!message.senderEmail) {
-      logger.warn("[ChatOps] Could not resolve Slack user email");
+      logger.warn("[ChatOps] Could not resolve user email");
       await provider.sendReply({
         originalMessage: message,
-        text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
+        text: "Could not verify your identity. Please ensure your profile has an email configured.",
       });
       return;
     }
@@ -330,7 +320,7 @@ export class ChatOpsManager {
 
     // Check for existing binding
     const binding = await ChatOpsChannelBindingModel.findByChannel({
-      provider: "slack",
+      provider: provider.providerId,
       channelId: message.channelId,
       workspaceId: message.workspaceId,
     });
@@ -338,24 +328,24 @@ export class ChatOpsManager {
     if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
-        const isSlackDm = message.metadata?.channelType === "im";
+        const isDm = message.metadata?.channelType === "im";
         const organizationId = await getDefaultOrganizationId();
         await ChatOpsChannelBindingModel.upsertByChannel({
           organizationId,
-          provider: "slack",
+          provider: provider.providerId,
           channelId: message.channelId,
           workspaceId: message.workspaceId,
           workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: isSlackDm
+          channelName: isDm
             ? `Direct Message - ${message.senderEmail}`
             : undefined,
-          isDm: isSlackDm,
-          dmOwnerEmail: isSlackDm ? message.senderEmail : undefined,
+          isDm,
+          dmOwnerEmail: isDm ? message.senderEmail : undefined,
         });
       }
 
       // Show agent selection
-      await this.sendSlackAgentSelectionCard(provider, message, true);
+      await this.sendAgentSelectionCard(provider, message, true);
       return;
     }
 
@@ -368,12 +358,12 @@ export class ChatOpsManager {
   }
 
   /**
-   * Handle a Slack interactive payload (extracted from webhook route for reuse by socket mode).
+   * Handle an interactive payload (e.g. agent selection button click) from any provider.
    * Covers: parse selection, verify user, verify agent, upsert binding, confirm.
    */
-  async handleSlackInteractive(
-    provider: SlackProvider,
-    payload: SlackInteractivePayload,
+  async handleInteractiveSelection(
+    provider: ChatOpsProvider,
+    payload: unknown,
   ): Promise<void> {
     const selection = provider.parseInteractivePayload(payload);
     if (!selection) return;
@@ -381,14 +371,14 @@ export class ChatOpsManager {
     // Verify the user clicking the button is a registered Archestra user
     const senderEmail = await provider.getUserEmail(selection.userId);
     if (!senderEmail) {
-      logger.warn("[ChatOps] Could not resolve Slack interactive user email");
+      logger.warn("[ChatOps] Could not resolve interactive user email");
       return;
     }
     const user = await UserModel.findByEmail(senderEmail.toLowerCase());
     if (!user) {
       logger.warn(
         { senderEmail },
-        "[ChatOps] Slack interactive user not registered in Archestra",
+        "[ChatOps] Interactive user not registered in Archestra",
       );
       return;
     }
@@ -400,22 +390,22 @@ export class ChatOpsManager {
     const organizationId = await getDefaultOrganizationId();
 
     // Create or update binding
-    const isSlackDm = selection.channelId.startsWith("D");
+    const isDm = selection.channelId.startsWith("D");
     await ChatOpsChannelBindingModel.upsertByChannel({
       organizationId,
-      provider: "slack",
+      provider: provider.providerId,
       channelId: selection.channelId,
       workspaceId: selection.workspaceId,
       workspaceName: provider.getWorkspaceName() ?? undefined,
-      channelName: isSlackDm ? `Direct Message - ${senderEmail}` : undefined,
-      isDm: isSlackDm,
-      dmOwnerEmail: isSlackDm ? senderEmail : undefined,
+      channelName: isDm ? `Direct Message - ${senderEmail}` : undefined,
+      isDm,
+      dmOwnerEmail: isDm ? senderEmail : undefined,
       agentId: selection.agentId,
     });
 
     // Confirm the selection in the thread
     const message: IncomingChatMessage = {
-      messageId: `slack-selection-${Date.now()}`,
+      messageId: `${provider.providerId}-selection-${Date.now()}`,
       channelId: selection.channelId,
       workspaceId: selection.workspaceId,
       threadId: selection.threadTs,
@@ -429,114 +419,8 @@ export class ChatOpsManager {
 
     await provider.sendReply({
       originalMessage: message,
-      text: `Agent *${agent.name}* is now bound to this ${isSlackDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
+      text: `Agent *${agent.name}* is now bound to this ${isDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
     });
-  }
-
-  /**
-   * Handle a Slack slash command (extracted from webhook route for reuse by socket mode).
-   * Returns the response text/object. Caller is responsible for delivery
-   * (HTTP response for webhooks, response_url POST for socket mode).
-   */
-  async handleSlackSlashCommand(
-    provider: SlackProvider,
-    body: {
-      command?: string;
-      text?: string;
-      user_id?: string;
-      user_name?: string;
-      channel_id?: string;
-      channel_name?: string;
-      team_id?: string;
-      response_url?: string;
-      trigger_id?: string;
-    },
-  ): Promise<{ response_type: string; text: string } | null> {
-    const command = body.command;
-    const channelId = body.channel_id || "";
-    const workspaceId = body.team_id || null;
-    const userId = body.user_id || "unknown";
-
-    // Resolve sender email and verify user
-    const senderEmail = await provider.getUserEmail(userId);
-    if (!senderEmail) {
-      return {
-        response_type: "ephemeral",
-        text: "Could not verify your identity. Please ensure your Slack profile has an email configured.",
-      };
-    }
-
-    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
-    if (!user) {
-      return {
-        response_type: "ephemeral",
-        text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-      };
-    }
-
-    // Build an IncomingChatMessage for reuse with existing helpers
-    const message: IncomingChatMessage = {
-      messageId: `slack-slash-${Date.now()}`,
-      channelId,
-      workspaceId,
-      threadId: undefined,
-      senderId: userId,
-      senderName: body.user_name || "Unknown User",
-      senderEmail,
-      text: body.text || "",
-      rawText: body.text || "",
-      timestamp: new Date(),
-      isThreadReply: false,
-    };
-
-    switch (command) {
-      case SLACK_SLASH_COMMANDS.HELP:
-        return {
-          response_type: "ephemeral",
-          text:
-            "*Available commands:*\n" +
-            "`/archestra-select-agent` — Change the default agent\n" +
-            "`/archestra-status` — Show current agent binding\n" +
-            "`/archestra-help` — Show this help message\n\n" +
-            "Or just send a message to interact with the bound agent.",
-        };
-
-      case SLACK_SLASH_COMMANDS.STATUS: {
-        const binding = await ChatOpsChannelBindingModel.findByChannel({
-          provider: "slack",
-          channelId,
-          workspaceId,
-        });
-
-        if (binding?.agentId) {
-          const agent = await AgentModel.findById(binding.agentId);
-          return {
-            response_type: "ephemeral",
-            text:
-              `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
-              "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
-              "Use `/archestra-select-agent` to change the default agent.",
-          };
-        }
-
-        return {
-          response_type: "ephemeral",
-          text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
-        };
-      }
-
-      case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
-        // Send agent selection card (visible to all in channel)
-        await this.sendSlackAgentSelectionCard(provider, message, false);
-        return { response_type: "in_channel", text: "" };
-      }
-
-      default:
-        return {
-          response_type: "ephemeral",
-          text: "Unknown command. Use `/archestra-help` to see available commands.",
-        };
-    }
   }
 
   /**
@@ -652,8 +536,8 @@ export class ChatOpsManager {
   // Private Methods
   // ===========================================================================
 
-  private async sendSlackAgentSelectionCard(
-    provider: SlackProvider,
+  private async sendAgentSelectionCard(
+    provider: ChatOpsProvider,
     message: IncomingChatMessage,
     isWelcome: boolean,
   ): Promise<void> {
@@ -664,7 +548,7 @@ export class ChatOpsManager {
     if (agents.length === 0) {
       await provider.sendReply({
         originalMessage: message,
-        text: "No agents are available for you in Slack.\nContact your administrator to get access to an agent with Slack enabled.",
+        text: `No agents are available for you in ${provider.displayName}.\nContact your administrator to get access to an agent with ${provider.displayName} enabled.`,
       });
       return;
     }
@@ -674,59 +558,6 @@ export class ChatOpsManager {
       agents,
       isWelcome,
     });
-  }
-
-  private async processSlackSocketEvent(
-    type: "event" | "interactive" | "slash_command",
-    payload: unknown,
-  ): Promise<void> {
-    const provider = this.slackProvider;
-    if (!provider) {
-      logger.warn("[ChatOps] Socket event received but Slack provider is null");
-      return;
-    }
-
-    switch (type) {
-      case "event":
-        await this.handleSlackMessage(provider, payload);
-        break;
-      case "interactive":
-        await this.handleSlackInteractive(
-          provider,
-          payload as SlackInteractivePayload,
-        );
-        break;
-      case "slash_command": {
-        const body = payload as {
-          command?: string;
-          text?: string;
-          user_id?: string;
-          user_name?: string;
-          channel_id?: string;
-          channel_name?: string;
-          team_id?: string;
-          response_url?: string;
-          trigger_id?: string;
-        };
-        const response = await this.handleSlackSlashCommand(provider, body);
-        // In socket mode, slash commands are already ack'd. Send response via response_url.
-        if (response && body.response_url) {
-          try {
-            await fetch(body.response_url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(response),
-            });
-          } catch (error) {
-            logger.error(
-              { error: errorMessage(error) },
-              "[ChatOps] Failed to send slash command response via response_url",
-            );
-          }
-        }
-        break;
-      }
-    }
   }
 
   private startProcessedMessageCleanup(): void {

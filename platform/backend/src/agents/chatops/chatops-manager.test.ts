@@ -172,6 +172,7 @@ describe("ChatOpsManager security validation", () => {
       handleValidationChallenge: () => null,
       parseWebhookNotification: async () => null,
       sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
       sendAgentSelectionCard: async () => {},
       getThreadHistory: async () => [],
       getUserEmail: overrides.getUserEmail ?? (async () => null),

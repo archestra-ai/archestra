@@ -197,6 +197,22 @@ export interface ChatOpsProvider {
   getUserEmail(userId: string): Promise<string | null>;
 
   /**
+   * Parse an interactive payload (e.g. button click) into a structured selection.
+   * Each provider implements its own payload parsing (Block Kit for Slack, Adaptive Card for MS Teams).
+   * @param payload - The raw interactive payload from the provider
+   * @returns Parsed selection or null if not a valid agent selection
+   */
+  parseInteractivePayload(payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null;
+
+  /**
    * Send an agent selection card/message to a channel.
    * Each provider renders the card in its native format (Adaptive Card for MS Teams, Block Kit for Slack).
    * @param params.message - The incoming message that triggered the selection

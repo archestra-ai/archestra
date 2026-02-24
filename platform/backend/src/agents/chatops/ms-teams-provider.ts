@@ -602,6 +602,20 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  parseInteractivePayload(_payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null {
+    // MS Teams handles interactive selections inline via Adaptive Card submissions
+    // in the route handler (TurnContext.activity.value), not through this method.
+    return null;
+  }
+
   async sendAgentSelectionCard(params: {
     message: IncomingChatMessage;
     agents: { id: string; name: string }[];

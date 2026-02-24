@@ -7,7 +7,6 @@ import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
 } from "@/agents/chatops/constants";
-import type { SlackInteractivePayload } from "@/agents/chatops/slack-provider";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -618,14 +617,16 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)
-          chatOpsManager.handleSlackMessage(provider, body).catch((error) => {
-            logger.error(
-              {
-                error: error instanceof Error ? error.message : String(error),
-              },
-              "[ChatOps] Error processing Slack message (async)",
-            );
-          });
+          chatOpsManager
+            .handleIncomingMessage(provider, body)
+            .catch((error) => {
+              logger.error(
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                "[ChatOps] Error processing Slack message (async)",
+              );
+            });
         }
 
         return reply.send({ ok: true });
@@ -721,14 +722,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Missing payload");
       }
 
-      let payload: SlackInteractivePayload;
+      let payload: unknown;
       try {
-        payload = JSON.parse(payloadStr) as SlackInteractivePayload;
+        payload = JSON.parse(payloadStr);
       } catch {
         throw new ApiError(400, "Invalid payload JSON");
       }
 
-      await chatOpsManager.handleSlackInteractive(provider, payload);
+      await chatOpsManager.handleInteractiveSelection(provider, payload);
       return reply.send({ ok: true });
     },
   );
@@ -821,10 +822,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         trigger_id?: string;
       };
 
-      const response = await chatOpsManager.handleSlackSlashCommand(
-        provider,
-        body,
-      );
+      const response = await provider.handleSlashCommand(body);
 
       if (response) {
         return reply.send(response);

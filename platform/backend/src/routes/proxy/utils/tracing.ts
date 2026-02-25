@@ -377,6 +377,79 @@ export async function startActiveChatSpan<T>(params: {
   );
 }
 
+/**
+ * Records short-lived spans for tool calls that were blocked by tool invocation policies.
+ * Each blocked tool call gets its own span with `mcp.blocked=true` and `mcp.blocked_reason`.
+ *
+ * These spans have the same attributes as normal MCP tool call spans so they appear alongside
+ * executed tool calls in trace views and can be filtered by `mcp.blocked`.
+ */
+export function recordBlockedToolSpans(params: {
+  toolCallNames: string[];
+  blockedReason: string;
+  agent: { id: string; name: string; labels?: Agent["labels"] };
+  sessionId?: string | null;
+  agentType?: AgentType;
+  user?: { id: string; email?: string; name?: string } | null;
+}): void {
+  const tracer = trace.getTracer("archestra");
+
+  let ctx = context.active();
+  if (params.sessionId) {
+    ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
+  }
+
+  for (const toolName of params.toolCallNames) {
+    // Extract MCP server name from tool name convention: "servername__toolname"
+    const separatorIndex = toolName.indexOf("__");
+    const mcpServerName =
+      separatorIndex > 0 ? toolName.substring(0, separatorIndex) : "unknown";
+
+    const span = tracer.startSpan(
+      `execute_tool ${toolName}`,
+      {
+        attributes: {
+          "route.category": RouteCategory.MCP_GATEWAY,
+          "gen_ai.operation.name": "execute_tool",
+          "mcp.server.name": mcpServerName,
+          "gen_ai.tool.name": toolName,
+          "gen_ai.tool.type": "function",
+          "gen_ai.agent.id": params.agent.id,
+          "gen_ai.agent.name": params.agent.name,
+          "mcp.blocked": true,
+          "mcp.blocked_reason": params.blockedReason,
+        },
+      },
+      ctx,
+    );
+
+    if (params.agent.labels && params.agent.labels.length > 0) {
+      for (const label of params.agent.labels) {
+        span.setAttribute(`archestra.label.${label.key}`, label.value);
+      }
+    }
+    if (params.sessionId) {
+      span.setAttribute("gen_ai.conversation.id", params.sessionId);
+    }
+    if (params.agentType) {
+      span.setAttribute("archestra.agent.type", params.agentType);
+    }
+    if (params.user) {
+      span.setAttribute("archestra.user.id", params.user.id);
+      if (params.user.email)
+        span.setAttribute("archestra.user.email", params.user.email);
+      if (params.user.name)
+        span.setAttribute("archestra.user.name", params.user.name);
+    }
+
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: params.blockedReason,
+    });
+    span.end();
+  }
+}
+
 // ============================================================
 // Internal helpers
 // ============================================================

@@ -702,7 +702,8 @@ async function handleStreaming<
 
     // Evaluate tool invocation policies
     const toolCalls = streamAdapter.state.toolCalls;
-    let toolInvocationRefusal: [string, string] | null = null;
+    let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
+      null;
 
     if (toolCalls.length > 0) {
       logger.info(
@@ -748,7 +749,8 @@ async function handleStreaming<
     }
 
     if (toolInvocationRefusal) {
-      const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+      const { contentMessage, reason, allToolCallNames } =
+        toolInvocationRefusal;
 
       // Stream refusal
       ensureStreamHeaders();
@@ -756,6 +758,22 @@ async function handleStreaming<
       for (const event of refusalEvents) {
         reply.raw.write(event);
       }
+
+      // Record blocked tool spans for trace visibility
+      utils.tracing.recordBlockedToolSpans({
+        toolCallNames: allToolCallNames,
+        blockedReason: reason,
+        agent,
+        sessionId,
+        agentType: agent.agentType ?? undefined,
+        user: resolvedUser
+          ? {
+              id: resolvedUser.id,
+              email: resolvedUser.email,
+              name: resolvedUser.name,
+            }
+          : null,
+      });
 
       withSessionContext(sessionId, () =>
         metrics.llm.reportBlockedTools(
@@ -1014,7 +1032,8 @@ async function handleNonStreaming<
     );
 
     if (toolInvocationRefusal) {
-      const [refusalMessage, contentMessage] = toolInvocationRefusal;
+      const { refusalMessage, contentMessage, reason, allToolCallNames } =
+        toolInvocationRefusal;
       logger.debug(
         { toolCallCount: toolCalls.length },
         `[${providerName}Proxy] Tool invocation blocked by policy`,
@@ -1024,6 +1043,22 @@ async function handleNonStreaming<
         refusalMessage,
         contentMessage,
       );
+
+      // Record blocked tool spans for trace visibility
+      utils.tracing.recordBlockedToolSpans({
+        toolCallNames: allToolCallNames,
+        blockedReason: reason,
+        agent,
+        sessionId,
+        agentType: agent.agentType ?? undefined,
+        user: resolvedUser
+          ? {
+              id: resolvedUser.id,
+              email: resolvedUser.email,
+              name: resolvedUser.name,
+            }
+          : null,
+      });
 
       withSessionContext(sessionId, () =>
         metrics.llm.reportBlockedTools(

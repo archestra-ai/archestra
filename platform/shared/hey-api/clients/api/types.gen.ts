@@ -7182,6 +7182,8 @@ export type GetAgentsResponses = {
         data: Array<{
             id: string;
             organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             isDemo: boolean;
             isDefault: boolean;
@@ -7241,6 +7243,7 @@ export type GetAgentsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            authorName?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -7258,6 +7261,7 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
+        scope?: 'personal' | 'team' | 'org';
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
@@ -7351,6 +7355,8 @@ export type CreateAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -7410,6 +7416,7 @@ export type CreateAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -7497,6 +7504,8 @@ export type GetAllAgentsResponses = {
     200: Array<{
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -7556,6 +7565,7 @@ export type GetAllAgentsResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     }>;
 };
 
@@ -7634,6 +7644,8 @@ export type GetDefaultMcpGatewayResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -7693,6 +7705,7 @@ export type GetDefaultMcpGatewayResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -7771,6 +7784,8 @@ export type GetDefaultLlmProxyResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -7830,6 +7845,7 @@ export type GetDefaultLlmProxyResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -7989,6 +8005,8 @@ export type GetAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -8048,6 +8066,7 @@ export type GetAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -8056,6 +8075,7 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body?: {
         organizationId?: string;
+        scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
@@ -8151,6 +8171,8 @@ export type UpdateAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -8210,6 +8232,7 @@ export type UpdateAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -8291,6 +8314,8 @@ export type GetAgentVersionsResponses = {
         current: {
             id: string;
             organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             isDemo: boolean;
             isDefault: boolean;
@@ -8350,6 +8375,7 @@ export type GetAgentVersionsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            authorName?: string | null;
         };
         history: Array<{
             version: number;
@@ -8442,6 +8468,8 @@ export type RollbackAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -8501,6 +8529,7 @@ export type RollbackAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 

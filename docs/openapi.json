@@ -23842,6 +23842,18 @@
                           "organizationId": {
                             "type": "string"
                           },
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -24088,11 +24100,17 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
                           "organizationId",
+                          "authorId",
+                          "scope",
                           "name",
                           "isDemo",
                           "isDefault",
@@ -24395,6 +24413,14 @@
                   "organizationId": {
                     "type": "string"
                   },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -24516,6 +24542,18 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -24763,11 +24801,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "isDemo",
                     "isDefault",
@@ -25068,6 +25112,18 @@
                       "organizationId": {
                         "type": "string"
                       },
+                      "authorId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
                       "name": {
                         "type": "string"
                       },
@@ -25314,11 +25370,17 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "authorName": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
                       "id",
                       "organizationId",
+                      "authorId",
+                      "scope",
                       "name",
                       "isDemo",
                       "isDefault",
@@ -25583,6 +25645,18 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -25829,11 +25903,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "isDemo",
                     "isDefault",
@@ -26097,6 +26177,18 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -26343,11 +26435,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "isDemo",
                     "isDefault",
@@ -26623,6 +26721,18 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -26869,11 +26979,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "isDemo",
                     "isDefault",
@@ -27128,6 +27244,14 @@
                   "organizationId": {
                     "type": "string"
                   },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -27256,6 +27380,18 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -27503,11 +27639,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "isDemo",
                     "isDefault",
@@ -28036,6 +28178,18 @@
                         "organizationId": {
                           "type": "string"
                         },
+                        "authorId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "personal",
+                            "team",
+                            "org"
+                          ]
+                        },
                         "name": {
                           "type": "string"
                         },
@@ -28282,11 +28436,17 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "authorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
                         "id",
                         "organizationId",
+                        "authorId",
+                        "scope",
                         "name",
                         "isDemo",
                         "isDefault",
@@ -28619,6 +28779,18 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -28865,11 +29037,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "isDemo",
                     "isDefault",

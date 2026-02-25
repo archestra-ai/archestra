@@ -28,6 +28,7 @@ interface MultiSelectComboboxProps {
   placeholder?: string;
   emptyMessage?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function MultiSelectCombobox({
@@ -37,6 +38,7 @@ export function MultiSelectCombobox({
   placeholder = "Search...",
   emptyMessage = "No items found.",
   className,
+  disabled,
 }: MultiSelectComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -89,22 +91,26 @@ export function MultiSelectCombobox({
   }, [open]);
 
   return (
-    <Popover open={open}>
+    <Popover open={disabled ? false : open}>
       <PopoverAnchor asChild>
         <div
           ref={containerRef}
           role="combobox"
           aria-expanded={open}
-          tabIndex={-1}
+          aria-disabled={disabled}
+          tabIndex={disabled ? undefined : -1}
           className={cn(
             "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+            disabled && "opacity-50 cursor-not-allowed",
             className,
           )}
           onClick={() => {
+            if (disabled) return;
             inputRef.current?.focus();
             setOpen(true);
           }}
           onKeyDown={(e) => {
+            if (disabled) return;
             if (e.key === "Enter" || e.key === " ") {
               inputRef.current?.focus();
               setOpen(true);
@@ -129,6 +135,7 @@ export function MultiSelectCombobox({
           <input
             ref={inputRef}
             value={search}
+            disabled={disabled}
             onChange={(e) => {
               setSearch(e.target.value);
               setOpen(true);
@@ -136,7 +143,7 @@ export function MultiSelectCombobox({
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={selectedOptions.length === 0 ? placeholder : ""}
-            className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground min-w-[60px]"
+            className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground min-w-[60px] disabled:cursor-not-allowed"
           />
         </div>
       </PopoverAnchor>

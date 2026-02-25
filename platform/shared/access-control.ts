@@ -74,9 +74,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  agent: ["read"],
-  mcpGateway: ["read"],
-  llmProxy: ["read"],
+  agent: ["create", "read", "update", "delete"],
+  mcpGateway: ["create", "read", "update", "delete"],
+  llmProxy: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["read"],
   interaction: ["create", "read", "update", "delete"],

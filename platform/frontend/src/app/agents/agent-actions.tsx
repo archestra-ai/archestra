@@ -13,6 +13,7 @@ type Agent = NonNullable<
 
 type AgentActionsProps = {
   agent: Agent;
+  canModify: boolean;
   onConnect: (agent: Pick<Agent, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
@@ -20,6 +21,7 @@ type AgentActionsProps = {
 
 export function AgentActions({
   agent,
+  canModify,
   onConnect,
   onEdit,
   onDelete,
@@ -65,6 +67,7 @@ export function AgentActions({
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
+        disabled={!canModify}
         data-testid={`${E2eTestId.EditAgentButton}-${agent.name}`}
         onClick={(e) => {
           e.stopPropagation();
@@ -78,6 +81,7 @@ export function AgentActions({
         aria-label="Delete"
         variant="outline"
         size="icon-sm"
+        disabled={!canModify}
         onClick={(e) => {
           e.stopPropagation();
           onDelete(agent.id);

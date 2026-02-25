@@ -167,6 +167,7 @@ async function seedChatAssistantAgent(): Promise<void> {
       organizationId: org.id,
       name: "Chat Assistant",
       agentType: "agent",
+      scope: "org",
       systemPrompt,
     })
     .returning({ id: schema.agentsTable.id });

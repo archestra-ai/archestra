@@ -35,11 +35,34 @@ import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
 
 class AgentModel {
-  static async create({
-    teams,
-    labels,
-    ...agent
-  }: InsertAgent): Promise<Agent> {
+  /**
+   * Populate authorName on agents by looking up user names from the user table.
+   */
+  private static async populateAuthorNames(agents: Agent[]): Promise<void> {
+    const authorIds = [
+      ...new Set(
+        agents.map((a) => a.authorId).filter((id): id is string => id !== null),
+      ),
+    ];
+    if (authorIds.length === 0) return;
+
+    const users = await db
+      .select({ id: schema.usersTable.id, name: schema.usersTable.name })
+      .from(schema.usersTable)
+      .where(inArray(schema.usersTable.id, authorIds));
+
+    const nameMap = new Map(users.map((u) => [u.id, u.name]));
+    for (const agent of agents) {
+      agent.authorName = agent.authorId
+        ? (nameMap.get(agent.authorId) ?? null)
+        : null;
+    }
+  }
+
+  static async create(
+    { teams, labels, ...agent }: InsertAgent,
+    authorId?: string,
+  ): Promise<Agent> {
     // Auto-assign organizationId if not provided
     let organizationId = agent.organizationId;
     if (!organizationId) {
@@ -52,7 +75,7 @@ class AgentModel {
 
     const [createdAgent] = await db
       .insert(schema.agentsTable)
-      .values({ ...agent, organizationId })
+      .values({ ...agent, organizationId, ...(authorId && { authorId }) })
       .returning();
 
     // Assign teams to the agent if provided
@@ -191,6 +214,8 @@ class AgentModel {
       agent.teams = teamsMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
+
+    await AgentModel.populateAuthorNames(agents);
 
     return agents;
   }
@@ -524,6 +549,8 @@ class AgentModel {
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
+    await AgentModel.populateAuthorNames(agents);
+
     return createPaginatedResult(agents, Number(totalResult), pagination);
   }
 
@@ -746,6 +773,7 @@ class AgentModel {
       agentType,
       isDefault: true,
       organizationId: orgId || "",
+      scope: "org",
       teams: [],
       labels: [],
     });

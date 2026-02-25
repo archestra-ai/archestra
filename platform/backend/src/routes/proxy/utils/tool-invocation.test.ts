@@ -236,8 +236,8 @@ describe("evaluatePolicies", () => {
     );
 
     expect(result).not.toBeNull();
-    // allToolCallNames should include ALL tool calls (enabled + disabled)
-    expect(result?.allToolCallNames).toEqual(["allowed_tool", "disabled_tool"]);
+    // allToolCallNames should only include the disabled tools (not the allowed ones)
+    expect(result?.allToolCallNames).toEqual(["disabled_tool"]);
     expect(result?.blockedToolName).toBe("disabled_tool");
   });
 

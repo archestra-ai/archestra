@@ -94,7 +94,7 @@ export const evaluatePolicies = async (
       contentMessage: message,
       reason,
       blockedToolName: disabledToolNames[0],
-      allToolCallNames: toolCalls.map((tc) => tc.toolCallName),
+      allToolCallNames: disabledToolNames,
     };
   }
 

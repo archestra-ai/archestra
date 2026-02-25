@@ -160,7 +160,7 @@ export function recordBlockedToolSpans(params: {
           [ATTR_GENAI_AGENT_ID]: params.agent.id,
           [ATTR_GENAI_AGENT_NAME]: params.agent.name,
           [ATTR_MCP_BLOCKED]: true,
-          [ATTR_MCP_BLOCKED_REASON]: params.blockedReason,
+          [ATTR_MCP_BLOCKED_REASON]: truncateContent(params.blockedReason),
         },
       },
       ctx,

@@ -317,6 +317,7 @@ export const RouteId = {
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
+  BulkUpdateChatOpsBindings: "bulkUpdateChatOpsBindings",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",

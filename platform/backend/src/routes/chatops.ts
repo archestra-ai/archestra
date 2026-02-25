@@ -1,5 +1,7 @@
 import { RouteId } from "@shared";
+import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
+import { MicrosoftAppCredentials } from "botframework-connector";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -974,6 +976,45 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Bulk-update agent assignment for multiple channel bindings
+   */
+  fastify.patch(
+    "/api/chatops/bindings",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateChatOpsBindings,
+        description:
+          "Bulk-update agent assignment for multiple channel bindings",
+        tags: ["ChatOps"],
+        body: z.object({
+          ids: z.array(z.string().uuid()).min(1).max(500),
+          agentId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(
+          z.array(ChatOpsChannelBindingResponseSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { ids, agentId } = request.body;
+
+      const updated = await ChatOpsChannelBindingModel.bulkUpdateAgent(
+        ids,
+        request.organizationId,
+        agentId,
+      );
+
+      return reply.send(
+        updated.map((b) => ({
+          ...b,
+          createdAt: b.createdAt.toISOString(),
+          updatedAt: b.updatedAt.toISOString(),
+        })),
+      );
+    },
+  );
+
+  /**
    * Update MS Teams chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
    */
@@ -1007,6 +1048,23 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         graphClientId: appId ?? existing?.graphClientId ?? "",
         graphClientSecret: appSecret ?? existing?.graphClientSecret ?? "",
       };
+
+      // Validate credentials by requesting an OAuth token from Azure AD
+      if (merged.enabled && merged.appId && merged.appSecret) {
+        try {
+          const creds = new MicrosoftAppCredentials(
+            merged.appId,
+            merged.appSecret,
+            merged.tenantId || undefined,
+          );
+          await creds.getToken();
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid MS Teams credentials — could not authenticate with Azure AD. Please check your App ID, App Secret, and Tenant ID.",
+          );
+        }
+      }
 
       await ChatOpsConfigModel.saveMsTeamsConfig(merged);
       await chatOpsManager.reinitialize();
@@ -1059,6 +1117,19 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           SLACK_DEFAULT_CONNECTION_MODE,
         appLevelToken: appLevelToken ?? existing?.appLevelToken ?? "",
       };
+
+      // Validate bot token by calling auth.test()
+      if (merged.enabled && merged.botToken) {
+        try {
+          const client = new WebClient(merged.botToken);
+          await client.auth.test();
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Slack credentials — could not authenticate with Slack. Please check your Bot Token.",
+          );
+        }
+      }
 
       await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();

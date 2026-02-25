@@ -69,7 +69,11 @@ export function CollapsibleSetupSection({
                 <ExternalLink className="h-3 w-3" />
               </Link>
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-xs">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs hover:bg-transparent"
+                >
                   {open ? (
                     <>
                       Hide details

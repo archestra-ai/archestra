@@ -160,6 +160,31 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Bulk-update the agentId for multiple bindings belonging to the same organization.
+   * Returns the updated bindings.
+   */
+  static async bulkUpdateAgent(
+    ids: string[],
+    organizationId: string,
+    agentId: string | null,
+  ): Promise<ChatOpsChannelBinding[]> {
+    if (ids.length === 0) return [];
+
+    const updated = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({ agentId })
+      .where(
+        and(
+          inArray(schema.chatopsChannelBindingsTable.id, ids),
+          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+        ),
+      )
+      .returning();
+
+    return updated as ChatOpsChannelBinding[];
+  }
+
+  /**
    * Update channel and workspace display names (internal use only).
    * Used by the name refresh mechanism — not exposed via API.
    */

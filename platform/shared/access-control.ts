@@ -649,6 +649,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatOpsBinding]: {
     organization: ["update"],
   },
+  [RouteId.BulkUpdateChatOpsBindings]: {
+    organization: ["update"],
+  },
   [RouteId.UpdateChatOpsConfigInQuickstart]: {
     organization: ["update"],
   },

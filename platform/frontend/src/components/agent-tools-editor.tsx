@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
   type archestraApiTypes,
   isPlaywrightCatalogItem,
   parseFullToolName,
@@ -166,6 +168,46 @@ const AgentToolsEditorContent = forwardRef<
   const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
     new Map(),
   );
+
+  // Track whether default tools have been pre-selected for new agent creation
+  const defaultToolsInitializedRef = useRef(false);
+
+  // Pre-select default Archestra tools when creating a new agent (no agentId)
+  useEffect(() => {
+    if (agentId) return; // Only for new agent creation
+    if (defaultToolsInitializedRef.current) return; // Only initialize once
+
+    const archestraCatalog = catalogItems.find(
+      (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+    );
+    if (!archestraCatalog) return; // Catalog not loaded yet
+
+    const catalogIdx = catalogItems.findIndex(
+      (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+    );
+    const toolQuery = toolCountQueries[catalogIdx];
+    const tools = (toolQuery?.data as CatalogTool[] | undefined) ?? [];
+    if (tools.length === 0) return; // Tools not loaded yet
+
+    // Filter to only default tools
+    const defaultToolIds = new Set(
+      tools
+        .filter((t) => DEFAULT_ARCHESTRA_TOOL_NAMES.includes(t.name))
+        .map((t) => t.id),
+    );
+
+    if (defaultToolIds.size === 0) return;
+
+    defaultToolsInitializedRef.current = true;
+    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
+      selectedToolIds: defaultToolIds,
+      credentialSourceId: null,
+      catalogItem: archestraCatalog,
+      selectAll: false,
+    });
+    onSelectedCountChange?.(defaultToolIds.size);
+    setPendingVersion((v) => v + 1);
+  }, [agentId, catalogItems, toolCountQueries, onSelectedCountChange]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {

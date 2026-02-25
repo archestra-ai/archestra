@@ -12,10 +12,6 @@ import IdentityProviderModel, {
 import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
 
-// NOTE: better-auth and @better-auth/sso are pinned to 1.4.17. Do NOT upgrade to 1.4.18+
-// until https://github.com/better-auth/better-auth/issues/7777 is resolved.
-// In 1.4.18, the SAML ACS endpoint uses the new cryptographic RelayState token directly as a
-// redirect URL instead of parsing it to extract the callbackURL, breaking SP-initiated SAML login.
 export const ssoConfig = {
   organizationProvisioning: {
     disabled: false,

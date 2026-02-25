@@ -11,9 +11,9 @@ import { useMemo, useRef } from "react";
  *
  * Adapted from the approach in PR #2811 (originally copied from Claude's sidebar).
  */
-export function useStableConversations<
-  T extends { id: string },
->(conversations: T[]): T[] {
+export function useStableConversations<T extends { id: string }>(
+  conversations: T[],
+): T[] {
   const stableOrderRef = useRef<string[] | null>(null);
 
   return useMemo(() => {

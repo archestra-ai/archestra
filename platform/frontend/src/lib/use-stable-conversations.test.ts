@@ -136,11 +136,7 @@ describe("useStableConversations", () => {
       { initialProps: { items: initial } },
     );
 
-    const withMultipleNew: Item[] = [
-      { id: "x" },
-      { id: "y" },
-      { id: "a" },
-    ];
+    const withMultipleNew: Item[] = [{ id: "x" }, { id: "y" }, { id: "a" }];
     rerender({ items: withMultipleNew });
 
     // New items prepended in their original relative order

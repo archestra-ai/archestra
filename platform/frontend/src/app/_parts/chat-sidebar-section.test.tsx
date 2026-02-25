@@ -68,6 +68,7 @@ vi.mock("@/lib/chat.query", () => ({
 
 // Minimal sidebar UI mock - render children directly
 vi.mock("@/components/ui/sidebar", () => ({
+  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn() }),
   SidebarMenuButton: ({
     children,
     onClick,

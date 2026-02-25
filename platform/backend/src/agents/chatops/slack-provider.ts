@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
+import { slackifyMarkdown } from "slackify-markdown";
+import { agentFooter } from "@/agents/chatops/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {
@@ -262,24 +264,63 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
+    const mrkdwn = slackifyMarkdown(options.text);
+
+    // Slack section blocks have a 3000-char limit; split long responses
+    // into multiple blocks to avoid silent truncation.
     // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-    const blocks: any[] = [
-      { type: "section", text: { type: "mrkdwn", text: options.text } },
-    ];
+    const blocks: any[] = [];
+    const SECTION_LIMIT = 3000;
+    if (mrkdwn.length <= SECTION_LIMIT) {
+      blocks.push({
+        type: "section",
+        text: { type: "mrkdwn", text: mrkdwn },
+      });
+    } else {
+      // Split on double-newline boundaries to keep paragraphs intact
+      let remaining = mrkdwn;
+      while (remaining.length > 0) {
+        if (remaining.length <= SECTION_LIMIT) {
+          blocks.push({
+            type: "section",
+            text: { type: "mrkdwn", text: remaining },
+          });
+          break;
+        }
+        // Find last double-newline within the limit
+        let splitAt = remaining.lastIndexOf("\n\n", SECTION_LIMIT);
+        if (splitAt <= 0) {
+          // Fall back to last single newline
+          splitAt = remaining.lastIndexOf("\n", SECTION_LIMIT);
+        }
+        if (splitAt <= 0) {
+          // No good break point — hard split
+          splitAt = SECTION_LIMIT;
+        }
+        blocks.push({
+          type: "section",
+          text: { type: "mrkdwn", text: remaining.slice(0, splitAt) },
+        });
+        remaining = remaining.slice(splitAt).trim();
+      }
+    }
 
     if (options.footer) {
-      blocks.push(
-        { type: "divider" },
-        {
-          type: "context",
-          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
-        },
-      );
+      blocks.push({
+        type: "context",
+        elements: [
+          {
+            type: "plain_text",
+            text: agentFooter(options.footer),
+            emoji: true,
+          },
+        ],
+      });
     }
 
     const result = await this.client.chat.postMessage({
       channel: options.originalMessage.channelId,
-      text: options.text,
+      text: mrkdwn,
       blocks,
       thread_ts: options.originalMessage.threadId,
     });

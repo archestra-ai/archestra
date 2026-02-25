@@ -155,7 +155,7 @@ export function TeamsList() {
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <CardTitle>Teams</CardTitle>
               <CardDescription>
@@ -165,6 +165,7 @@ export function TeamsList() {
             <PermissionButton
               permissions={{ team: ["create"] }}
               onClick={() => setCreateDialogOpen(true)}
+              className="shrink-0 self-start md:self-auto"
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Team
@@ -184,9 +185,9 @@ export function TeamsList() {
               {teams.map((team) => (
                 <div
                   key={team.id}
-                  className="flex items-center justify-between rounded-lg border p-4"
+                  className="flex flex-col md:flex-row md:items-center md:justify-between rounded-lg border p-4 gap-3"
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold">{team.name}</h3>
                     {team.description && (
                       <p className="text-sm text-muted-foreground">
@@ -198,7 +199,7 @@ export function TeamsList() {
                       {(team.members?.length || 0) !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 shrink-0">
                     <PermissionButton
                       permissions={{ team: ["update"] }}
                       variant="outline"
@@ -323,9 +324,9 @@ export function TeamsList() {
                   );
                 }
                 return (
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="flex-1">
-                      <p className="font-mono text-sm text-muted-foreground">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between rounded-lg border p-4 gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-sm text-muted-foreground truncate">
                         {orgToken.tokenStart}...
                       </p>
                     </div>

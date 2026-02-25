@@ -36,3 +36,30 @@ export const PROCESSED_EMAIL_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  * Used when the agent's name is not available
  */
 export const DEFAULT_AGENT_EMAIL_NAME = "Archestra Agent";
+
+/**
+ * Maximum size for a single email attachment in bytes (10MB)
+ * Attachments larger than this will be skipped
+ */
+export const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB
+
+/**
+ * Maximum total size for all attachments per email in bytes (25MB)
+ * Microsoft Graph API has a 25MB limit for message + attachments
+ */
+export const MAX_TOTAL_ATTACHMENTS_SIZE = 25 * 1024 * 1024; // 25MB
+
+/**
+ * Maximum number of attachments to process per email
+ * Prevents excessive API calls and processing time
+ */
+export const MAX_ATTACHMENTS_PER_EMAIL = 20;
+
+/**
+ * Minimum size for image attachments in bytes (2KB)
+ * Filters out broken inline image references that email clients include when
+ * forwarding/replying (e.g., Outlook includes tiny ~988 byte broken references
+ * to the previous message's inline images). These broken images cause LLM
+ * providers like Gemini to reject the request with "Provided image is not valid".
+ */
+export const MIN_IMAGE_ATTACHMENT_SIZE = 2 * 1024; // 2KB

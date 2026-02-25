@@ -10,7 +10,7 @@ import {
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
-import { EventDedupMap } from "@/agents/chatops/utils";
+import { agentFooter, EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -1495,7 +1495,7 @@ async function handleAgentSelection(
       if (result.success && result.agentResponse) {
         // Send agent response via turn context (ensures correct thread)
         await context.sendActivity(
-          `${result.agentResponse}\n\n---\n_Via ${agent.name}_`,
+          `${result.agentResponse}\n\n---\n_${agentFooter(agent.name)}_`,
         );
       } else if (!result.success && result.error) {
         // Send error message via turn context (ensures correct thread)

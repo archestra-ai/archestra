@@ -4,6 +4,7 @@ import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
   CopyIcon,
+  Paperclip,
   RefreshCcwIcon,
   ShieldCheck,
   TriangleAlert,
@@ -173,6 +174,41 @@ const ChatBotDemo = ({
                                 </Actions>
                               )}
                           </Fragment>
+                        );
+                      }
+                      case "file": {
+                        const filePart = part as {
+                          type: "file";
+                          url: string;
+                          mediaType: string;
+                          filename?: string;
+                        };
+                        if (filePart.mediaType?.startsWith("image/")) {
+                          return (
+                            <div
+                              key={`${message.id}-${i}`}
+                              className="py-1 flex justify-start"
+                            >
+                              <img
+                                src={filePart.url}
+                                alt={filePart.filename || "Image"}
+                                className="max-h-32 rounded-lg object-cover"
+                              />
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            key={`${message.id}-${i}`}
+                            className="py-1 flex justify-start"
+                          >
+                            <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                              <Paperclip className="size-4 text-muted-foreground" />
+                              <span className="truncate">
+                                {filePart.filename || "Attached file"}
+                              </span>
+                            </div>
+                          </div>
                         );
                       }
                       case "tool-invocation":

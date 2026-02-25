@@ -22,6 +22,7 @@ import {
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
+import { agentFooter } from "@/agents/chatops/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel, type MsTeamsConfig } from "@/models";
@@ -272,7 +273,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     let replyText = options.text;
     if (options.footer) {
-      replyText += `\n\n---\n_${options.footer}_`;
+      replyText += `\n\n---\n_${agentFooter(options.footer)}_`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),

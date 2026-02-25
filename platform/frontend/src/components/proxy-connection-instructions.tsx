@@ -120,55 +120,57 @@ export function ProxyConnectionInstructions({
 
   return (
     <div className="space-y-3">
-      <ButtonGroup>
-        {PRIMARY_PROVIDERS.map((provider) => (
-          <Button
-            key={provider}
-            variant={selectedProvider === provider ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedProvider(provider)}
-          >
-            {PROVIDER_CONFIG[provider].label}
-          </Button>
-        ))}
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-          <PopoverTrigger asChild>
+      <div className="overflow-x-auto -mx-1 px-1">
+        <ButtonGroup className="flex-wrap">
+          {PRIMARY_PROVIDERS.map((provider) => (
             <Button
-              variant={
-                DROPDOWN_PROVIDERS.includes(selectedProvider)
-                  ? "default"
-                  : "outline"
-              }
+              key={provider}
+              variant={selectedProvider === provider ? "default" : "outline"}
               size="sm"
-              aria-label="More providers"
+              onClick={() => setSelectedProvider(provider)}
             >
-              {DROPDOWN_PROVIDERS.includes(selectedProvider)
-                ? PROVIDER_CONFIG[selectedProvider].label
-                : null}
-              <MoreHorizontal className="h-4 w-4" />
+              {PROVIDER_CONFIG[provider].label}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-auto p-1 flex flex-col"
-            aria-label="Additional providers"
-          >
-            {DROPDOWN_PROVIDERS.map((provider) => (
+          ))}
+          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+            <PopoverTrigger asChild>
               <Button
-                key={provider}
-                variant={selectedProvider === provider ? "default" : "ghost"}
+                variant={
+                  DROPDOWN_PROVIDERS.includes(selectedProvider)
+                    ? "default"
+                    : "outline"
+                }
                 size="sm"
-                className="justify-start"
-                onClick={() => {
-                  setSelectedProvider(provider);
-                  setPopoverOpen(false);
-                }}
+                aria-label="More providers"
               >
-                {PROVIDER_CONFIG[provider].label}
+                {DROPDOWN_PROVIDERS.includes(selectedProvider)
+                  ? PROVIDER_CONFIG[selectedProvider].label
+                  : null}
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            ))}
-          </PopoverContent>
-        </Popover>
-      </ButtonGroup>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-auto p-1 flex flex-col"
+              aria-label="Additional providers"
+            >
+              {DROPDOWN_PROVIDERS.map((provider) => (
+                <Button
+                  key={provider}
+                  variant={selectedProvider === provider ? "default" : "ghost"}
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => {
+                    setSelectedProvider(provider);
+                    setPopoverOpen(false);
+                  }}
+                >
+                  {PROVIDER_CONFIG[provider].label}
+                </Button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        </ButtonGroup>
+      </div>
 
       <ConnectionBaseUrlSelect
         value={connectionUrl}
@@ -241,19 +243,24 @@ function UrlReplacementRow({
     return null;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
-        <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+    <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-2 min-w-0">
+      <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 min-w-0 max-w-full overflow-hidden">
+        <CodeText className="text-xs line-through opacity-50 break-all">
           {originalUrl}
         </CodeText>
       </div>
-      <span className="text-muted-foreground flex-shrink-0">→</span>
+      <span className="text-muted-foreground flex-shrink-0 text-center md:text-left">
+        →
+      </span>
       <CopyableCode
         value={newUrl}
         toastMessage="Proxy URL copied to clipboard"
         variant="primary"
+        className="flex-1 min-w-0 max-w-full overflow-hidden"
       >
-        <CodeText className="text-xs text-primary break-all">{newUrl}</CodeText>
+        <CodeText className="text-xs text-primary break-all min-w-0">
+          {newUrl}
+        </CodeText>
       </CopyableCode>
     </div>
   );

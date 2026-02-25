@@ -9,6 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
   ChatOpsChannelBinding,
@@ -258,7 +259,11 @@ class ChatOpsChannelBindingModel {
 
   /**
    * Update a binding by channel (upsert pattern)
-   * Creates if not exists, updates if exists
+   * Creates if not exists, updates if exists.
+   *
+   * For DM bindings: removes stale bindings for the same user+provider
+   * with a different channelId (Slack/Teams can assign new channel IDs
+   * when a user re-initiates a DM conversation).
    */
   static async upsertByChannel(
     input: InsertChatOpsChannelBinding,
@@ -289,6 +294,41 @@ class ChatOpsChannelBindingModel {
         return (updated as ChatOpsChannelBinding) ?? existing;
       }
       return existing;
+    }
+
+    // For DM bindings, remove stale entries for the same user before creating
+    // a new one. Slack/Teams can assign new channel IDs when a user
+    // re-initiates a DM, leading to duplicate rows for the same person.
+    if (input.isDm && input.dmOwnerEmail) {
+      const deleted = await db
+        .delete(schema.chatopsChannelBindingsTable)
+        .where(
+          and(
+            eq(
+              schema.chatopsChannelBindingsTable.organizationId,
+              input.organizationId,
+            ),
+            eq(schema.chatopsChannelBindingsTable.provider, input.provider),
+            eq(schema.chatopsChannelBindingsTable.isDm, true),
+            eq(
+              schema.chatopsChannelBindingsTable.dmOwnerEmail,
+              input.dmOwnerEmail,
+            ),
+            ne(schema.chatopsChannelBindingsTable.channelId, input.channelId),
+          ),
+        )
+        .returning();
+
+      if (deleted.length > 0) {
+        logger.debug(
+          {
+            provider: input.provider,
+            dmOwnerEmail: input.dmOwnerEmail,
+            deletedCount: deleted.length,
+          },
+          "[ChatOpsChannelBinding] Removed stale DM bindings",
+        );
+      }
     }
 
     return ChatOpsChannelBindingModel.create(input);

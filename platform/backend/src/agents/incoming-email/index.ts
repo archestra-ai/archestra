@@ -1,4 +1,5 @@
-import { executeA2AMessage } from "@/agents/a2a-executor";
+import crypto from "node:crypto";
+import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -55,6 +56,24 @@ export async function tryMarkEmailAsProcessed(
   messageId: string,
 ): Promise<boolean> {
   return ProcessedEmailModel.tryMarkAsProcessed(messageId);
+}
+
+/**
+ * Derive a short, deterministic session ID from an email conversation ID.
+ * The raw Outlook conversation ID is too long (90+ chars) and exceeds
+ * upstream label size limits (e.g., Vertex AI 128 UTF-8 char constraint).
+ * Returns undefined when no conversation ID is available.
+ */
+export function buildEmailSessionId(
+  conversationId: string | undefined,
+): string | undefined {
+  if (!conversationId) return undefined;
+  const hash = crypto
+    .createHash("sha256")
+    .update(conversationId)
+    .digest("hex")
+    .substring(0, 16);
+  return `email-${hash}`;
 }
 
 /**
@@ -784,6 +803,16 @@ ${formattedHistory}
     );
   }
 
+  // Transform email attachments to source-agnostic A2A format
+  // Only include attachments that have content (contentBase64)
+  const a2aAttachments: A2AAttachment[] = (email.attachments ?? [])
+    .filter((a): a is typeof a & { contentBase64: string } => !!a.contentBase64)
+    .map((a) => ({
+      contentType: a.contentType,
+      contentBase64: a.contentBase64,
+      name: a.name,
+    }));
+
   logger.info(
     {
       agentId,
@@ -791,6 +820,8 @@ ${formattedHistory}
       organizationId: organization,
       messageLength: message.length,
       hasConversationHistory: conversationContext.length > 0,
+      attachmentCount: email.attachments?.length ?? 0,
+      a2aAttachmentCount: a2aAttachments.length,
     },
     "[IncomingEmail] Invoking agent with email content",
   );
@@ -818,6 +849,8 @@ ${formattedHistory}
         message,
         organizationId: organization,
         userId,
+        sessionId: buildEmailSessionId(email.conversationId),
+        attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
       });
     },
   });

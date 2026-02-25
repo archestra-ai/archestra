@@ -37,6 +37,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { usePermissionMap } from "@/lib/auth.query";
@@ -183,6 +184,8 @@ const NavPrimary = ({
   permissionMap: Record<string, boolean>;
   chatSection?: React.ReactNode;
 }) => {
+  const { isMobile, setOpenMobile } = useSidebar();
+
   const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
@@ -192,7 +195,12 @@ const NavPrimary = ({
           pathname.startsWith(item.url)
         }
       >
-        <Link href={item.url}>
+        <Link
+          href={item.url}
+          onClick={() => {
+            if (isMobile) setOpenMobile(false);
+          }}
+        >
           <item.icon className={item.iconClassName} />
           <span>{item.title}</span>
         </Link>
@@ -209,7 +217,12 @@ const NavPrimary = ({
                   pathname.startsWith(sub.url)
                 }
               >
-                <Link href={sub.url}>
+                <Link
+                  href={sub.url}
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                >
                   <span>{sub.title}</span>
                 </Link>
               </SidebarMenuSubButton>

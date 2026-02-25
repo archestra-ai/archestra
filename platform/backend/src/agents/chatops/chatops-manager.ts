@@ -505,7 +505,7 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText, fallbackMessage } =
+    const { agentToUse, cleanedMessageText } =
       await this.resolveInlineAgentMention({
         messageText: message.text,
         defaultAgent: agent,
@@ -552,7 +552,6 @@ export class ChatOpsManager {
       provider,
       fullMessage,
       sendReply,
-      fallbackMessage,
       userId: authResult.userId,
     });
   }
@@ -622,7 +621,6 @@ export class ChatOpsManager {
   }): Promise<{
     agentToUse: { id: string; name: string };
     cleanedMessageText: string;
-    fallbackMessage?: string;
   }> {
     const { messageText, defaultAgent } = params;
 
@@ -656,7 +654,6 @@ export class ChatOpsManager {
     return {
       agentToUse: defaultAgent,
       cleanedMessageText: messageAfterDelimiter || messageText,
-      fallbackMessage: `"${potentialAgentName}" not found, using ${defaultAgent.name}`,
     };
   }
 
@@ -840,7 +837,6 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: `⚠️ **Access Denied**\n\n${errorText}`,
-        footer: "Security check failed",
       });
       logger.debug("[ChatOps] Security error reply sent successfully");
     } catch (error) {
@@ -938,7 +934,6 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     sendReply: boolean;
-    fallbackMessage?: string;
     userId: string;
   }): Promise<ChatOpsProcessingResult> {
     const {
@@ -1001,7 +996,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `Via ${agent.name}`,
+          footer: agent.name,
           conversationReference: message.metadata?.conversationReference,
         });
       } else if (
@@ -1070,17 +1065,13 @@ function stripThinkingBlocks(text: string): string {
 }
 
 /**
- * Strip bot footer from message text to avoid LLM repeating it.
- * Handles markdown, HTML, and plain text footer formats.
+ * Strip bot footer from message text to avoid the LLM repeating it.
+ * Handles the "🤖 AgentName" footer in markdown (Teams) and plain text (Slack) formats.
  */
 function stripBotFooter(text: string): string {
   return text
-    .replace(/\n\n---\n_(?:Via .+?|.+? not found, using .+?)_$/i, "")
-    .replace(
-      /<hr\s*\/?>\s*<em>(?:Via .+?|.+? not found, using .+?)<\/em>$/i,
-      "",
-    )
-    .replace(/\s*(?:Via .+?|.+? not found, using .+?)$/i, "")
+    .replace(/\n\n---\n_🤖 .+?_$/i, "")
+    .replace(/\n🤖 .+$/, "")
     .trim();
 }
 

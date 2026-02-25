@@ -1,11 +1,17 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CodeText } from "@/components/code-text";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -190,7 +196,198 @@ function DualLLMContent({
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
       <div>
         <div className="space-y-6">
-          <div className="bg-card rounded-lg p-8 shadow-sm">
+          {/* Mobile: Collapsible "How it works" */}
+          <Collapsible className="bg-card rounded-lg p-4 shadow-sm md:hidden">
+            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group">
+              <h2 className="text-lg font-semibold">How it works</h2>
+              <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <p className="text-sm text-muted-foreground mb-6 mt-4">
+                The Dual LLM quarantine pattern protects your main agent from
+                prompt injection attacks by isolating untrusted data in a
+                separate agent that can only respond via structured multiple
+                choice answers.{" "}
+                <a
+                  href="https://archestra.ai/docs/platform-dual-llm"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Read the docs →
+                </a>
+              </p>
+
+              <div className="relative">
+                {/* Mobile: Vertical step layout with trail animation */}
+                <div className="flex flex-col items-center gap-0 md:hidden py-2">
+                  <style>{`
+                  /* Comet trail moves through each connector */
+                  @keyframes comet1 {
+                    0% { top: -20px; opacity: 0; }
+                    1% { opacity: 1; }
+                    20% { top: 100%; opacity: 1; }
+                    21% { opacity: 0; }
+                    21.1%, 100% { top: -20px; opacity: 0; }
+                  }
+                  @keyframes comet2 {
+                    0%, 28% { top: -20px; opacity: 0; }
+                    29% { opacity: 1; }
+                    48% { top: 100%; opacity: 1; }
+                    49% { opacity: 0; }
+                    49.1%, 100% { top: -20px; opacity: 0; }
+                  }
+                  @keyframes comet3 {
+                    0%, 56% { top: -20px; opacity: 0; }
+                    57% { opacity: 1; }
+                    76% { top: 100%; opacity: 1; }
+                    77% { opacity: 0; }
+                    77.1%, 100% { top: -20px; opacity: 0; }
+                  }
+
+                  /* Brief circle flash when comet arrives */
+                  @keyframes flashRed {
+                    0% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+                    0.5% { box-shadow: 0 0 20px 6px rgba(239,68,68,0.6); }
+                    10.5% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+                    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+                  }
+                  @keyframes flashYellow {
+                    0%, 20.5% { box-shadow: 0 0 0 0 rgba(234,179,8,0); }
+                    21% { box-shadow: 0 0 20px 6px rgba(234,179,8,0.6); }
+                    30.5% { box-shadow: 0 0 0 0 rgba(234,179,8,0); }
+                    100% { box-shadow: 0 0 0 0 rgba(234,179,8,0); }
+                  }
+                  @keyframes flashGreen {
+                    0%, 48.5% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+                    49% { box-shadow: 0 0 20px 6px rgba(34,197,94,0.6); }
+                    58.5% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+                    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+                  }
+                  @keyframes flashOutput {
+                    0%, 76.5% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+                    77% { box-shadow: 0 0 20px 6px rgba(34,197,94,0.6); }
+                    86.5% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+                    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+                  }
+                `}</style>
+
+                  {/* Step 1: Tool Result */}
+                  <div className="flex flex-col items-center">
+                    <div
+                      className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center border-2 border-red-300 dark:border-red-800"
+                      style={{ animation: "flashRed 10s ease-in-out infinite" }}
+                    >
+                      <span className="text-xl">🔴</span>
+                    </div>
+                    <span className="mt-1.5 font-medium text-sm">
+                      Tool Result
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Unsafe Data
+                    </span>
+                  </div>
+
+                  {/* Connector 1: Red comet */}
+                  <div className="relative w-1 h-14 bg-muted-foreground/10 my-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="absolute left-0 right-0 h-5 rounded-full"
+                      style={{
+                        background:
+                          "linear-gradient(to bottom, transparent, rgba(239,68,68,0.15), rgba(239,68,68,0.5), rgba(239,68,68,1))",
+                        boxShadow: "0 2px 10px 1px rgba(239,68,68,0.7)",
+                        animation: "comet1 10s ease-in-out infinite",
+                      }}
+                    />
+                  </div>
+
+                  {/* Step 2: Quarantined LLM */}
+                  <div className="flex flex-col items-center">
+                    <div
+                      className="w-14 h-14 rounded-full bg-yellow-50 dark:bg-yellow-950/30 flex items-center justify-center border-2 border-yellow-300 dark:border-yellow-800"
+                      style={{
+                        animation: "flashYellow 10s ease-in-out infinite",
+                      }}
+                    >
+                      <span className="text-xl">🔒</span>
+                    </div>
+                    <span className="mt-1.5 font-medium text-sm">
+                      Quarantined LLM
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Restricted
+                    </span>
+                  </div>
+
+                  {/* N rounds Q&A label */}
+                  <span className="text-xs text-muted-foreground bg-card px-2 py-0.5 rounded border border-border my-1.5">
+                    N rounds Q&A
+                  </span>
+
+                  {/* Connector 2: Yellow comet */}
+                  <div className="relative w-1 h-14 bg-muted-foreground/10 my-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="absolute left-0 right-0 h-5 rounded-full"
+                      style={{
+                        background:
+                          "linear-gradient(to bottom, transparent, rgba(234,179,8,0.15), rgba(234,179,8,0.5), rgba(234,179,8,1))",
+                        boxShadow: "0 2px 10px 1px rgba(234,179,8,0.7)",
+                        animation: "comet2 10s ease-in-out infinite",
+                      }}
+                    />
+                  </div>
+
+                  {/* Step 3: Main LLM */}
+                  <div className="flex flex-col items-center">
+                    <div
+                      className="w-14 h-14 rounded-full bg-green-50 dark:bg-green-950/30 flex items-center justify-center border-2 border-green-300 dark:border-green-800"
+                      style={{
+                        animation: "flashGreen 10s ease-in-out infinite",
+                      }}
+                    >
+                      <span className="text-xl">✅</span>
+                    </div>
+                    <span className="mt-1.5 font-medium text-sm">Main LLM</span>
+                    <span className="text-xs text-muted-foreground">
+                      Privileged
+                    </span>
+                  </div>
+
+                  {/* Connector 3: Green comet */}
+                  <div className="relative w-1 h-14 bg-muted-foreground/10 my-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="absolute left-0 right-0 h-5 rounded-full"
+                      style={{
+                        background:
+                          "linear-gradient(to bottom, transparent, rgba(34,197,94,0.15), rgba(34,197,94,0.5), rgba(34,197,94,1))",
+                        boxShadow: "0 2px 10px 1px rgba(34,197,94,0.7)",
+                        animation: "comet3 10s ease-in-out infinite",
+                      }}
+                    />
+                  </div>
+
+                  {/* Step 4: Output */}
+                  <div className="flex flex-col items-center">
+                    <div
+                      className="w-14 h-14 rounded-full bg-green-50 dark:bg-green-950/30 flex items-center justify-center border-2 border-green-300 dark:border-green-800"
+                      style={{
+                        animation: "flashOutput 10s ease-in-out infinite",
+                      }}
+                    >
+                      <span className="text-xl">✅</span>
+                    </div>
+                    <span className="mt-1.5 font-medium text-sm">Output</span>
+                    <span className="text-xs text-muted-foreground">
+                      Safe Result
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Desktop: Always-visible "How it works" */}
+          <div className="hidden md:block bg-card rounded-lg p-8 shadow-sm">
             <h2 className="text-lg font-semibold mb-2">How it works</h2>
             <p className="text-sm text-muted-foreground mb-6">
               The Dual LLM quarantine pattern protects your main agent from
@@ -208,6 +405,7 @@ function DualLLMContent({
             </p>
 
             <div className="relative">
+              {/* Desktop: Horizontal animated layout */}
               <div className="flex items-center justify-between gap-8">
                 <div className="flex flex-col items-center z-10">
                   <div className="w-24 h-24 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center border-2 border-red-300 dark:border-red-800 relative">
@@ -389,6 +587,7 @@ function DualLLMContent({
               </p>
             </div>
           </div>
+
           <div className="border border-border rounded-lg p-6 bg-card">
             <Label htmlFor="max-rounds" className="text-sm font-semibold">
               Max Quarantine Rounds

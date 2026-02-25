@@ -53,6 +53,18 @@ jobs:
         run: |
           echo "$OUTPUTS"
 
+      # Re-draft the release so it's not visible until all artifacts are built.
+      # We removed "draft: true" from release-please-config.json because draft releases
+      # don't create git tags, and release-please needs the tag to exist when calculating
+      # the next version (otherwise it creates bogus PRs with stale versions).
+      - name: Re-draft release until artifacts are ready
+        if: steps.release-please.outputs['platform--release_created']
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
+        run: gh release edit "$TAG_NAME" --draft=true
+
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
     if: needs.release-please.outputs.platform_release_created

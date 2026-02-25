@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.0.50](https://github.com/archestra-ai/archestra/compare/platform-v1.0.49...platform-v1.0.50) (2026-02-25)
+
+
+### Features
+
+* add groq provider support ([#2936](https://github.com/archestra-ai/archestra/issues/2936)) ([a273416](https://github.com/archestra-ai/archestra/commit/a2734168caedbf9df103f2082ed6d0e992e8f2c9))
+* add MiniMax provider support ([#2527](https://github.com/archestra-ai/archestra/issues/2527)) ([98abda4](https://github.com/archestra-ai/archestra/commit/98abda4ecb1ec933191eb2954b1f251bd040f5d5))
+* email attachment support for agent incoming emails ([#2445](https://github.com/archestra-ai/archestra/issues/2445)) ([0b13c42](https://github.com/archestra-ai/archestra/commit/0b13c42ef7bd5889fd5feabb4103a8510c5137af))
+* inherit platform tolerations for MCP server pods ([#2986](https://github.com/archestra-ai/archestra/issues/2986)) ([94836d8](https://github.com/archestra-ai/archestra/commit/94836d8f94f69a1a3fd6bece08bc016b533ed7c8)), closes [#2976](https://github.com/archestra-ai/archestra/issues/2976)
+* org-wide agents ([#2980](https://github.com/archestra-ai/archestra/issues/2980)) ([9299fc6](https://github.com/archestra-ai/archestra/commit/9299fc6ba3c9962ca3683ab53d3543e7acb474be))
+* support Slack socket mode ([#2979](https://github.com/archestra-ai/archestra/issues/2979)) ([6ac7672](https://github.com/archestra-ai/archestra/commit/6ac7672cd02e193028785c18aabaf1653501fad8))
+
+
+### Bug Fixes
+
+* change sidebar layout ([#2985](https://github.com/archestra-ai/archestra/issues/2985)) ([f02f956](https://github.com/archestra-ai/archestra/commit/f02f956ea107567dab4d3384338096b802d92f6d))
+* minor layout fixes ([#2990](https://github.com/archestra-ai/archestra/issues/2990)) ([f523445](https://github.com/archestra-ai/archestra/commit/f5234450c7704302829935a9fa8e6881df8e52c3))
+* slim inline sidebar security warnings, remove accordion ([#2981](https://github.com/archestra-ai/archestra/issues/2981)) ([e95b749](https://github.com/archestra-ai/archestra/commit/e95b749d0114f0bde28c400b43e7e4f20fab301b))
+
+
+### Miscellaneous Chores
+
+* ability to choose unix / windows before docker command copy ([#2992](https://github.com/archestra-ai/archestra/issues/2992)) ([3ee80c3](https://github.com/archestra-ai/archestra/commit/3ee80c343b949e8a241e520fa881415fb3bc63dd))
+* bots improvements ([#2996](https://github.com/archestra-ai/archestra/issues/2996)) ([3f4ef04](https://github.com/archestra-ai/archestra/commit/3f4ef047b60c04aa4a407db89189880bcf5c4259))
+* make archestra bot an agent app ([#2987](https://github.com/archestra-ai/archestra/issues/2987)) ([63e394b](https://github.com/archestra-ai/archestra/commit/63e394b7fe12da51a4d8925d0083e8562fe40e8a))
+* mobile UI responsiveness improvements ([#2875](https://github.com/archestra-ai/archestra/issues/2875)) ([b9c2c3b](https://github.com/archestra-ai/archestra/commit/b9c2c3b5e01f741090f388f5485a80ebfc75ea3d))
+* polish role card ([#2983](https://github.com/archestra-ai/archestra/issues/2983)) ([8a6efd6](https://github.com/archestra-ai/archestra/commit/8a6efd66cd5300110fdb876fd5d13b0c8684c3d5))
+
 ## [1.0.49](https://github.com/archestra-ai/archestra/compare/platform-v1.0.48...platform-v1.0.49) (2026-02-24)
 
 

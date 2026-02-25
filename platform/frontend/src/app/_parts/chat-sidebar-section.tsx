@@ -112,14 +112,12 @@ export function ChatSidebarSection() {
 
   // Split conversations into pinned and unpinned.
   // Default view shows exactly SIDEBAR_CHAT_SLOTS items:
-  // pinned chats first (most recently active), then recent unpinned to fill remaining slots.
+  // pinned chats first, then recent unpinned to fill remaining slots.
+  // No re-sorting here — stable order from useStableConversations is preserved
+  // for both pinned and unpinned groups to prevent jumping.
   const { pinnedChats, recentUnpinnedChats } = useMemo(() => {
     const pinned = stableConversations
       .filter((c) => c.pinnedAt)
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      )
       .slice(0, SIDEBAR_CHAT_SLOTS);
 
     const pinnedIds = new Set(pinned.map((c) => c.id));

@@ -10,6 +10,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Fragment } from "react";
+import { preserveNewlines } from "@/lib/chat-utils";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
@@ -157,7 +158,7 @@ const ChatBotDemo = ({
                                     System Prompt
                                   </div>
                                 )}
-                                <Response>{part.text}</Response>
+                                <Response>{message.role === "user" ? preserveNewlines(part.text) : part.text}</Response>
                               </MessageContent>
                             </Message>
                             {message.role === "assistant" &&

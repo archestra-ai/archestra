@@ -119,6 +119,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.15",
+    "@microsoft/microsoft-graph-types": "^2.43.1",
     "@sentry/cli": "^3.1.0",
     "@types/js-yaml": "^4.0.9",
     "@types/lodash-es": "^4.17.12",

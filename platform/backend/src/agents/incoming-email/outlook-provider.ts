@@ -2,6 +2,11 @@ import crypto from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
+import type {
+  ChangeNotification,
+  ChangeNotificationCollection,
+  Message,
+} from "@microsoft/microsoft-graph-types";
 import logger from "@/logging";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import type {
@@ -18,6 +23,21 @@ import {
   MAX_ATTACHMENTS_PER_EMAIL,
   MAX_TOTAL_ATTACHMENTS_SIZE,
 } from "./constants";
+
+/**
+ * Determine whether attachments should be fetched for a message.
+ * The Graph API's `hasAttachments` flag can be `false` for messages that only
+ * contain inline images (pasted/dragged into the body). We detect those by
+ * looking for `cid:` references in the HTML body.
+ */
+export function shouldFetchAttachments(
+  hasAttachments: boolean,
+  htmlBody: string | undefined,
+): boolean {
+  if (hasAttachments) return true;
+  if (!htmlBody) return false;
+  return /src=["']cid:/i.test(htmlBody);
+}
 
 /**
  * Microsoft Outlook/Exchange email provider using Microsoft Graph API
@@ -184,11 +204,10 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     // Microsoft Graph uses client state for validation
     // The client state is set when creating the subscription and stored in DB
     if (typeof payload === "object" && payload !== null && "value" in payload) {
-      const notifications = (payload as { value: unknown[] }).value;
+      const collection = payload as ChangeNotificationCollection;
+      const notifications = collection.value;
       if (Array.isArray(notifications) && notifications.length > 0) {
-        const notification = notifications[0] as {
-          clientState?: string;
-        };
+        const notification: ChangeNotification = notifications[0];
 
         if (!notification.clientState) {
           logger.warn(
@@ -250,7 +269,8 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       return null;
     }
 
-    const notifications = (payload as { value: unknown[] }).value;
+    const collection = payload as ChangeNotificationCollection;
+    const notifications = collection.value;
     if (!Array.isArray(notifications) || notifications.length === 0) {
       return null;
     }
@@ -258,21 +278,15 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     const emails: IncomingEmail[] = [];
     const client = this.getGraphClient();
 
-    for (const notification of notifications) {
-      const notif = notification as {
-        resource?: string;
-        resourceData?: {
-          id?: string;
-        };
-        changeType?: string;
-      };
-
+    for (const notif of notifications as ChangeNotification[]) {
       // Only process new message notifications
       if (notif.changeType !== "created") {
         continue;
       }
 
-      const messageId = notif.resourceData?.id;
+      // ResourceData is an empty interface in the types package;
+      // the actual webhook payload includes an `id` field.
+      const messageId = (notif.resourceData as { id?: string } | undefined)?.id;
       if (!messageId) {
         continue;
       }
@@ -280,7 +294,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       try {
         // Fetch the full message including conversationId for thread context
         // Also include hasAttachments to determine if we need to fetch attachments
-        const message = await client
+        const message: Message = await client
           .api(`/users/${this.config.mailboxAddress}/messages/${messageId}`)
           .select(
             "id,conversationId,subject,body,bodyPreview,from,toRecipients,receivedDateTime,hasAttachments",
@@ -318,24 +332,26 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           body = this.stripHtml(message.body.content);
         }
 
-        // Fetch attachments if the message has any
+        // Fetch attachments if the message has any, or if the HTML body
+        // contains inline images (cid: references).
         let attachments: EmailAttachment[] = [];
-        if (message.hasAttachments) {
-          attachments = await this.getAttachments(message.id, true);
+        const htmlBody =
+          message.body?.contentType === "html"
+            ? (message.body.content ?? undefined)
+            : undefined;
+        if (shouldFetchAttachments(!!message.hasAttachments, htmlBody)) {
+          attachments = await this.getAttachments(message.id as string, true);
         }
 
         emails.push({
-          messageId: message.id,
-          conversationId: message.conversationId,
+          messageId: message.id as string,
+          conversationId: message.conversationId ?? undefined,
           toAddress: agentEmailAddress,
           fromAddress: message.from?.emailAddress?.address || "unknown",
           subject: message.subject || "",
           body,
-          htmlBody:
-            message.body?.contentType === "html"
-              ? message.body.content
-              : undefined,
-          receivedAt: new Date(message.receivedDateTime),
+          htmlBody,
+          receivedAt: new Date(message.receivedDateTime as string),
           metadata: {
             provider: this.providerId,
             originalResource: notif.resource,

@@ -105,9 +105,9 @@ describe("buildUserContent", () => {
     const result = buildUserContent("Describe", attachments);
 
     expect(result).toHaveLength(6); // 1 text + 5 images
-    expect(result![0]).toEqual({ type: "text", text: "Describe" });
-    for (let i = 1; i < result!.length; i++) {
-      expect(result![i]).toHaveProperty("type", "image");
+    expect(result?.[0]).toEqual({ type: "text", text: "Describe" });
+    for (let i = 1; i < (result?.length ?? 0); i++) {
+      expect(result?.[i]).toHaveProperty("type", "image");
     }
   });
 

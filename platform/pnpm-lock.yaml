@@ -313,6 +313,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.3.15
         version: 0.3.15
+      '@microsoft/microsoft-graph-types':
+        specifier: ^2.43.1
+        version: 2.43.1
       '@sentry/cli':
         specifier: ^3.1.0
         version: 3.1.0
@@ -1955,6 +1958,9 @@ packages:
         optional: true
       stream-browserify:
         optional: true
+
+  '@microsoft/microsoft-graph-types@2.43.1':
+    resolution: {integrity: sha512-7r3FiJYW2qTWnl+Li8GV5MzJqPiJp27hvY98kH5V/ZMzGuIOkcJqOfIpusoIQrskLDfYk5kFT8AjpeW713qcIg==}
 
   '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
     resolution: {integrity: sha512-HktFFU5e1W2zJin3QB5nMEHcTm+vRop5WarDHm5fy50KVsofiWPkyET3ja1iyIHLFspO6EUMIKwSgSWZyPZD/w==}
@@ -10452,6 +10458,8 @@ snapshots:
       tslib: 2.8.1
     optionalDependencies:
       '@azure/identity': 4.13.0
+
+  '@microsoft/microsoft-graph-types@2.43.1': {}
 
   '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
     dependencies:

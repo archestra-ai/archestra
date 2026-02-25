@@ -2,7 +2,10 @@ import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
 import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_EMAIL } from "./constants";
-import { OutlookEmailProvider } from "./outlook-provider";
+import {
+  OutlookEmailProvider,
+  shouldFetchAttachments,
+} from "./outlook-provider";
 
 const validConfig = {
   tenantId: "test-tenant-id",
@@ -1167,5 +1170,506 @@ describe("OutlookEmailProvider", () => {
       expect(result).toContain("> Agent's first response");
       expect(result).toContain("> User's first message");
     });
+  });
+});
+
+describe("shouldFetchAttachments", () => {
+  test("returns true when hasAttachments is true", () => {
+    expect(shouldFetchAttachments(true, undefined)).toBe(true);
+  });
+
+  test("returns true when hasAttachments is true even with no HTML body", () => {
+    expect(shouldFetchAttachments(true, "")).toBe(true);
+  });
+
+  test("returns false when hasAttachments is false and no HTML body", () => {
+    expect(shouldFetchAttachments(false, undefined)).toBe(false);
+  });
+
+  test("returns false when hasAttachments is false and HTML has no inline images", () => {
+    const html = "<html><body><p>Hello world</p></body></html>";
+    expect(shouldFetchAttachments(false, html)).toBe(false);
+  });
+
+  test("returns true when HTML body contains cid: reference with double quotes", () => {
+    const html =
+      '<html><body><img src="cid:image001@01D00000.00000000"></body></html>';
+    expect(shouldFetchAttachments(false, html)).toBe(true);
+  });
+
+  test("returns true when HTML body contains cid: reference with single quotes", () => {
+    const html = "<html><body><img src='cid:ii_abc123'></body></html>";
+    expect(shouldFetchAttachments(false, html)).toBe(true);
+  });
+
+  test("returns true for case-insensitive CID references", () => {
+    const html = '<html><body><img SRC="CID:image001"></body></html>';
+    expect(shouldFetchAttachments(false, html)).toBe(true);
+  });
+
+  test("returns false for non-cid image sources", () => {
+    const html =
+      '<html><body><img src="https://example.com/photo.png"></body></html>';
+    expect(shouldFetchAttachments(false, html)).toBe(false);
+  });
+
+  test("returns true with multiple inline images", () => {
+    const html = `
+      <html><body>
+        <p>Here are photos:</p>
+        <img src="cid:image001@exchange">
+        <img src="cid:image002@exchange">
+      </body></html>`;
+    expect(shouldFetchAttachments(false, html)).toBe(true);
+  });
+
+  test("returns false for empty HTML body", () => {
+    expect(shouldFetchAttachments(false, "")).toBe(false);
+  });
+});
+
+describe("parseWebhookNotification", () => {
+  const AGENT_UUID_NO_DASHES = "c47915015ce24f89a26f00a86e0cdf76";
+  const AGENT_EMAIL = `agents+agent-${AGENT_UUID_NO_DASHES}@example.com`;
+
+  const createMockGraphClient = () => ({
+    api: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    top: vi.fn().mockReturnThis(),
+    get: vi.fn(),
+  });
+
+  /**
+   * Helper: build a minimal valid webhook payload
+   */
+  const buildPayload = (
+    notifications: Array<{
+      changeType?: string;
+      resource?: string;
+      resourceData?: { id?: string };
+    }>,
+  ) => ({
+    value: notifications.map((n) => ({
+      changeType: n.changeType ?? "created",
+      resource:
+        n.resource ??
+        `Users/agents@example.com/Messages/${n.resourceData?.id ?? "msg-1"}`,
+      resourceData: n.resourceData ?? { id: "msg-1" },
+      clientState: "test-state",
+    })),
+  });
+
+  /**
+   * Helper: build a Graph API message response
+   */
+  const buildGraphMessage = (overrides: Record<string, unknown> = {}) => ({
+    id: "msg-1",
+    conversationId: "conv-1",
+    subject: "Test Subject",
+    body: { contentType: "text", content: "Hello from sender" },
+    bodyPreview: "Hello from sender",
+    from: {
+      emailAddress: { address: "sender@example.com", name: "Sender" },
+    },
+    toRecipients: [{ emailAddress: { address: AGENT_EMAIL, name: "Agent" } }],
+    receivedDateTime: "2024-06-15T12:00:00Z",
+    hasAttachments: false,
+    ...overrides,
+  });
+
+  // ----------------------------------------------------------------
+  // Null / invalid payloads
+  // ----------------------------------------------------------------
+
+  test("returns null for null payload", async () => {
+    const provider = new OutlookEmailProvider(validConfig);
+    const result = await provider.parseWebhookNotification(null, {});
+    expect(result).toBeNull();
+  });
+
+  test("returns null for non-object payload (string)", async () => {
+    const provider = new OutlookEmailProvider(validConfig);
+    const result = await provider.parseWebhookNotification("hello", {});
+    expect(result).toBeNull();
+  });
+
+  test("returns null for non-object payload (number)", async () => {
+    const provider = new OutlookEmailProvider(validConfig);
+    const result = await provider.parseWebhookNotification(42, {});
+    expect(result).toBeNull();
+  });
+
+  test("returns null for object without value key", async () => {
+    const provider = new OutlookEmailProvider(validConfig);
+    const result = await provider.parseWebhookNotification({ foo: "bar" }, {});
+    expect(result).toBeNull();
+  });
+
+  test("returns null for payload with empty value array", async () => {
+    const provider = new OutlookEmailProvider(validConfig);
+    const result = await provider.parseWebhookNotification({ value: [] }, {});
+    expect(result).toBeNull();
+  });
+
+  // ----------------------------------------------------------------
+  // Filtering
+  // ----------------------------------------------------------------
+
+  test("skips notifications where changeType is not 'created'", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    const payload = buildPayload([
+      { changeType: "updated", resourceData: { id: "msg-update" } },
+      { changeType: "deleted", resourceData: { id: "msg-delete" } },
+    ]);
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    // Neither notification should trigger a Graph API call
+    expect(mockGraphClient.api).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+  });
+
+  test("skips notifications with missing resourceData.id", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    const payload = {
+      value: [
+        { changeType: "created", resourceData: {} },
+        { changeType: "created", resourceData: undefined },
+      ],
+    };
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(mockGraphClient.api).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+  });
+
+  // ----------------------------------------------------------------
+  // Successful parsing — plain text email
+  // ----------------------------------------------------------------
+
+  test("parses a valid notification with text body", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(buildGraphMessage());
+
+    const payload = buildPayload([{ resourceData: { id: "msg-1" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: length asserted above
+    const email = result![0];
+    expect(email.messageId).toBe("msg-1");
+    expect(email.conversationId).toBe("conv-1");
+    expect(email.toAddress).toBe(AGENT_EMAIL);
+    expect(email.fromAddress).toBe("sender@example.com");
+    expect(email.subject).toBe("Test Subject");
+    expect(email.body).toBe("Hello from sender");
+    expect(email.htmlBody).toBeUndefined();
+    expect(email.receivedAt).toEqual(new Date("2024-06-15T12:00:00Z"));
+    expect(email.metadata).toEqual({
+      provider: "outlook",
+      originalResource: expect.any(String),
+    });
+    expect(email.attachments).toBeUndefined();
+  });
+
+  // ----------------------------------------------------------------
+  // HTML body emails
+  // ----------------------------------------------------------------
+
+  test("parses notification with HTML body — strips to plain text and sets htmlBody", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        body: {
+          contentType: "html",
+          content: "<p>Hello <b>world</b></p>",
+        },
+      }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-html" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].body).toBe("Hello world");
+    expect(result?.[0].htmlBody).toBe("<p>Hello <b>world</b></p>");
+  });
+
+  test("fetches attachments when HTML body contains cid: inline images", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    const htmlContent =
+      '<p>See image:</p><img src="cid:image001@01D00000.00000000">';
+
+    // First call: message fetch
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        id: "msg-cid",
+        body: { contentType: "html", content: htmlContent },
+        hasAttachments: false,
+      }),
+    );
+    // Second call: attachment list (getAttachments -> list)
+    mockGraphClient.get.mockResolvedValueOnce({
+      value: [
+        {
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          id: "att-inline",
+          name: "image001.png",
+          contentType: "image/png",
+          size: 512,
+          isInline: true,
+        },
+      ],
+    });
+    // Third call: attachment content
+    mockGraphClient.get.mockResolvedValueOnce({
+      id: "att-inline",
+      contentBytes: "iVBORw0KGgo=",
+      contentId: "image001@01D00000.00000000",
+    });
+
+    const payload = buildPayload([{ resourceData: { id: "msg-cid" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].attachments).toHaveLength(1);
+    expect(result?.[0].attachments?.[0].isInline).toBe(true);
+    expect(result?.[0].attachments?.[0].contentId).toBe(
+      "image001@01D00000.00000000",
+    );
+  });
+
+  // ----------------------------------------------------------------
+  // Attachments
+  // ----------------------------------------------------------------
+
+  test("fetches attachments when hasAttachments is true", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get
+      .mockResolvedValueOnce(
+        buildGraphMessage({
+          id: "msg-att",
+          hasAttachments: true,
+        }),
+      )
+      .mockResolvedValueOnce({
+        value: [
+          {
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            id: "att-1",
+            name: "report.pdf",
+            contentType: "application/pdf",
+            size: 2048,
+            isInline: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: "att-1",
+        contentBytes: "JVBERi0xLjQ=",
+      });
+
+    const payload = buildPayload([{ resourceData: { id: "msg-att" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].attachments).toHaveLength(1);
+    expect(result?.[0].attachments?.[0].name).toBe("report.pdf");
+    expect(result?.[0].attachments?.[0].contentBase64).toBe("JVBERi0xLjQ=");
+  });
+
+  test("does not fetch attachments when hasAttachments is false and no cid references", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        hasAttachments: false,
+        body: { contentType: "text", content: "Plain text" },
+      }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-noatt" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].attachments).toBeUndefined();
+    // Only one API call (message fetch), no attachment calls
+    expect(mockGraphClient.get).toHaveBeenCalledTimes(1);
+  });
+
+  // ----------------------------------------------------------------
+  // Recipient matching
+  // ----------------------------------------------------------------
+
+  test("skips message when no recipient matches agent email pattern", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        toRecipients: [
+          {
+            emailAddress: {
+              address: "random-user@example.com",
+              name: "Random",
+            },
+          },
+        ],
+      }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-nomatch" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+  });
+
+  test("handles multiple recipients — picks the one matching agent pattern", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        toRecipients: [
+          {
+            emailAddress: {
+              address: "colleague@example.com",
+              name: "Colleague",
+            },
+          },
+          { emailAddress: { address: AGENT_EMAIL, name: "Agent" } },
+          {
+            emailAddress: {
+              address: "another@example.com",
+              name: "Another",
+            },
+          },
+        ],
+      }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-multi" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].toAddress).toBe(AGENT_EMAIL);
+  });
+
+  // ----------------------------------------------------------------
+  // Error handling
+  // ----------------------------------------------------------------
+
+  test("handles Graph API error gracefully — logs and continues", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockRejectedValueOnce(
+      new Error("Graph API 404: Message not found"),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-err" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    // Error should not throw; result should be null since no emails succeeded
+    expect(result).toBeNull();
+  });
+
+  test("processes multiple notifications — returns only successful ones", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    // First notification: Graph API error
+    mockGraphClient.get.mockRejectedValueOnce(new Error("API Error"));
+    // Second notification: success
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        id: "msg-success",
+        subject: "Success Email",
+      }),
+    );
+
+    const payload = buildPayload([
+      { resourceData: { id: "msg-fail" } },
+      { resourceData: { id: "msg-success" } },
+    ]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].messageId).toBe("msg-success");
+    expect(result?.[0].subject).toBe("Success Email");
+  });
+
+  // ----------------------------------------------------------------
+  // Edge cases
+  // ----------------------------------------------------------------
+
+  test("uses 'unknown' as fromAddress when from field is missing", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({ from: undefined }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-nofrom" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].fromAddress).toBe("unknown");
+  });
+
+  test("uses empty string as subject when subject is missing", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({ subject: undefined }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-nosubject" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].subject).toBe("");
   });
 });

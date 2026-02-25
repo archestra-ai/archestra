@@ -1,4 +1,7 @@
-import { executeA2AMessage } from "@/agents/a2a-executor";
+import {
+  executeA2AMessage,
+  type A2AAttachment,
+} from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -784,6 +787,16 @@ ${formattedHistory}
     );
   }
 
+  // Transform email attachments to source-agnostic A2A format
+  // Only include attachments that have content (contentBase64)
+  const a2aAttachments: A2AAttachment[] = (email.attachments ?? [])
+    .filter((a) => a.contentBase64)
+    .map((a) => ({
+      contentType: a.contentType,
+      contentBase64: a.contentBase64!,
+      name: a.name,
+    }));
+
   logger.info(
     {
       agentId,
@@ -791,6 +804,8 @@ ${formattedHistory}
       organizationId: organization,
       messageLength: message.length,
       hasConversationHistory: conversationContext.length > 0,
+      attachmentCount: email.attachments?.length ?? 0,
+      a2aAttachmentCount: a2aAttachments.length,
     },
     "[IncomingEmail] Invoking agent with email content",
   );
@@ -818,6 +833,7 @@ ${formattedHistory}
         message,
         organizationId: organization,
         userId,
+        attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
       });
     },
   });

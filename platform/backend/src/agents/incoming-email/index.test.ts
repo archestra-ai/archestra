@@ -1629,4 +1629,210 @@ describe("processIncomingEmail security modes", () => {
     );
     expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
   });
+
+  test("passes image attachments to executeA2AMessage as A2AAttachments", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = agent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-attachments-${Date.now()}`,
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Photos",
+      body: "What are these?",
+      receivedAt: new Date(),
+      attachments: [
+        {
+          id: "att-1",
+          name: "cat.png",
+          contentType: "image/png",
+          size: 1024,
+          isInline: false,
+          contentBase64: "iVBORw0KGgo=",
+        },
+        {
+          id: "att-2",
+          name: "dog.jpeg",
+          contentType: "image/jpeg",
+          size: 2048,
+          isInline: false,
+          contentBase64: "/9j/4AAQ",
+        },
+      ],
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId,
+        message: "What are these?",
+        attachments: [
+          {
+            contentType: "image/png",
+            contentBase64: "iVBORw0KGgo=",
+            name: "cat.png",
+          },
+          {
+            contentType: "image/jpeg",
+            contentBase64: "/9j/4AAQ",
+            name: "dog.jpeg",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("excludes attachments without content from A2A params", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = agent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-no-content-${Date.now()}`,
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Photos",
+      body: "What is this?",
+      receivedAt: new Date(),
+      attachments: [
+        {
+          id: "att-1",
+          name: "cat.png",
+          contentType: "image/png",
+          size: 1024,
+          isInline: false,
+          // No contentBase64 — content fetch failed
+        },
+        {
+          id: "att-2",
+          name: "dog.jpeg",
+          contentType: "image/jpeg",
+          size: 2048,
+          isInline: false,
+          contentBase64: "/9j/4AAQ",
+        },
+      ],
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    // Only attachment with content should be passed
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            contentType: "image/jpeg",
+            contentBase64: "/9j/4AAQ",
+            name: "dog.jpeg",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("does not pass attachments when email has none", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = agent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-no-attachments-${Date.now()}`,
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test",
+      body: "No attachments here",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    const callArgs = vi.mocked(executeA2AMessage).mock.calls[0][0];
+    expect(callArgs.attachments).toBeUndefined();
+  });
 });

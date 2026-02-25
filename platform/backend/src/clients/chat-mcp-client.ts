@@ -171,7 +171,9 @@ export async function selectMCPGatewayToken(
 
   // 1. Always try to get/create a personal user token first
   // This ensures userId is available in the token for global catalog tools
-  {
+  // Skip when userId is "system" (e.g., internal/public email security modes)
+  // since "system" is not a real user and cannot have a user token
+  if (userId !== "system") {
     // Ensure user has a token (creates one if missing)
     const userToken = await UserTokenModel.ensureUserToken(
       userId,

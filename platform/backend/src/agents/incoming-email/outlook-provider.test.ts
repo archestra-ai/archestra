@@ -1,11 +1,7 @@
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
-import {
-  MAX_ATTACHMENT_SIZE,
-  MAX_ATTACHMENTS_PER_EMAIL,
-  MAX_TOTAL_ATTACHMENTS_SIZE,
-} from "./constants";
+import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_EMAIL } from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 const validConfig = {
@@ -699,6 +695,7 @@ describe("OutlookEmailProvider", () => {
           contentType: "image/png",
           size: 2048,
           contentBytes: "iVBORw0KGgo=", // partial PNG base64
+          contentId: "image001",
         });
 
       const attachments = await provider.getAttachments("msg-123", true);
@@ -710,7 +707,6 @@ describe("OutlookEmailProvider", () => {
         contentType: "application/pdf",
         size: 1024,
         isInline: false,
-        contentId: undefined,
         contentBase64: "SGVsbG8gV29ybGQ=",
       });
       expect(attachments[1]).toEqual({
@@ -796,8 +792,10 @@ describe("OutlookEmailProvider", () => {
       // @ts-expect-error - accessing private property for testing
       provider.graphClient = mockGraphClient;
 
-      // Create attachments that together exceed MAX_TOTAL_ATTACHMENTS_SIZE
-      const attachmentSize = MAX_TOTAL_ATTACHMENTS_SIZE / 2 + 1;
+      // Create 3 attachments that individually fit within MAX_ATTACHMENT_SIZE
+      // but together exceed MAX_TOTAL_ATTACHMENTS_SIZE (25MB).
+      // Each file is ~9MB, so first two fit (~18MB) but third would exceed limit.
+      const attachmentSize = MAX_ATTACHMENT_SIZE - 1024 * 1024; // ~9MB each
       mockGraphClient.get
         .mockResolvedValueOnce({
           value: [
@@ -817,19 +815,32 @@ describe("OutlookEmailProvider", () => {
               size: attachmentSize,
               isInline: false,
             },
+            {
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              id: "file-3",
+              name: "file3.bin",
+              contentType: "application/octet-stream",
+              size: attachmentSize,
+              isInline: false,
+            },
           ],
         })
         .mockResolvedValueOnce({
           id: "file-1",
           contentBytes: "ZmlsZTE=",
+        })
+        .mockResolvedValueOnce({
+          id: "file-2",
+          contentBytes: "ZmlsZTI=",
         });
-      // Note: file-2 content is never requested because total limit reached
+      // Note: file-3 content is never requested because total limit reached
 
       const attachments = await provider.getAttachments("msg-123", true);
 
-      // Only one file should be included (second would exceed total limit)
-      expect(attachments).toHaveLength(1);
+      // First two files fit (~18MB total), third would exceed 25MB limit
+      expect(attachments).toHaveLength(2);
       expect(attachments[0].name).toBe("file1.bin");
+      expect(attachments[1].name).toBe("file2.bin");
     });
 
     test("skips non-file attachments (item and reference attachments)", async () => {
@@ -851,7 +862,8 @@ describe("OutlookEmailProvider", () => {
             "@odata.type": "#microsoft.graph.referenceAttachment",
             id: "cloud-file",
             name: "Cloud File.docx",
-            contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            contentType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             size: 10000,
           },
           {
@@ -942,7 +954,9 @@ describe("OutlookEmailProvider", () => {
       await provider.getAttachments("msg-123", false);
 
       // Verify that .top() was called with MAX_ATTACHMENTS_PER_EMAIL
-      expect(mockGraphClient.top).toHaveBeenCalledWith(MAX_ATTACHMENTS_PER_EMAIL);
+      expect(mockGraphClient.top).toHaveBeenCalledWith(
+        MAX_ATTACHMENTS_PER_EMAIL,
+      );
     });
 
     test("uses default values for missing attachment properties", async () => {

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
+import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -16,6 +17,20 @@ import {
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import type { SupportedChatProvider } from "@/types";
+
+/**
+ * Source-agnostic attachment for A2A execution.
+ * Callers (email, Slack, Teams, etc.) should transform their provider-specific
+ * attachment types into this format before passing to executeA2AMessage.
+ */
+export interface A2AAttachment {
+  /** MIME content type (e.g., 'image/png', 'application/pdf') */
+  contentType: string;
+  /** Base64-encoded content */
+  contentBase64: string;
+  /** Optional filename for context */
+  name?: string;
+}
 
 export interface A2AExecuteParams {
   /**
@@ -42,6 +57,8 @@ export interface A2AExecuteParams {
   conversationId?: string;
   /** Optional cancellation signal propagated from parent chat/tool execution */
   abortSignal?: AbortSignal;
+  /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
+  attachments?: A2AAttachment[];
 }
 
 export interface A2AExecuteResult {
@@ -70,6 +87,7 @@ export async function executeA2AMessage(
     sessionId,
     parentDelegationChain,
     abortSignal,
+    attachments,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -175,18 +193,35 @@ export async function executeA2AMessage(
     // We stream internally but collect the full result.
     // Capture stream-level errors (e.g. API billing errors) via onError so we
     // can surface the real cause instead of a generic NoOutputGeneratedError.
+
+    // Build multimodal user content when image attachments are present
+    const userContent = buildUserContent(message, attachments);
+
     let capturedStreamError: unknown;
-    const stream = streamText({
-      model,
-      system: systemPrompt,
-      prompt: message,
-      tools: mcpTools,
-      stopWhen: stepCountIs(500),
-      abortSignal,
-      onError: ({ error }) => {
-        capturedStreamError = error;
-      },
-    });
+    const onError = ({ error }: { error: unknown }) => {
+      capturedStreamError = error;
+    };
+
+    // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
+    const stream = userContent
+      ? streamText({
+          model,
+          system: systemPrompt,
+          messages: [{ role: "user" as const, content: userContent }],
+          tools: mcpTools,
+          stopWhen: stepCountIs(500),
+          abortSignal,
+          onError,
+        })
+      : streamText({
+          model,
+          system: systemPrompt,
+          prompt: message,
+          tools: mcpTools,
+          stopWhen: stepCountIs(500),
+          abortSignal,
+          onError,
+        });
 
     // Wait for the stream to complete and get the final text.
     // When the underlying provider returns an error (e.g. 400 insufficient
@@ -257,7 +292,39 @@ export async function executeA2AMessage(
 }
 
 // ============================================================================
-// Helper functions
+// Exported helper functions
+// ============================================================================
+
+/**
+ * Build AI SDK UserContent from a text message and optional attachments.
+ * Returns `null` when there are no image attachments (caller should use plain `prompt` instead).
+ *
+ * Only image attachments are currently supported as inline content parts.
+ * Non-image attachments are ignored (they could be handled as tool inputs in the future).
+ */
+export function buildUserContent(
+  message: string,
+  attachments?: A2AAttachment[],
+): UserContent | null {
+  const imageAttachments = (attachments ?? []).filter((a) =>
+    a.contentType.startsWith("image/"),
+  );
+
+  if (imageAttachments.length === 0) {
+    return null;
+  }
+
+  return [
+    { type: "text" as const, text: message },
+    ...imageAttachments.map((a) => ({
+      type: "image" as const,
+      image: `data:${a.contentType};base64,${a.contentBase64}`,
+    })),
+  ];
+}
+
+// ============================================================================
+// Internal helper functions
 // ============================================================================
 
 /**

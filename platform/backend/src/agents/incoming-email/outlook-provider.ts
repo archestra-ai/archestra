@@ -893,7 +893,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         .api(
           `/users/${this.config.mailboxAddress}/messages/${messageId}/attachments`,
         )
-        .select("id,name,contentType,size,isInline,contentId")
+        .select("id,name,contentType,size,isInline")
         .top(MAX_ATTACHMENTS_PER_EMAIL)
         .get();
 
@@ -959,7 +959,6 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           contentType: attachment.contentType || "application/octet-stream",
           size: attachment.size || 0,
           isInline: attachment.isInline || false,
-          contentId: attachment.contentId,
         };
 
         // Fetch content if requested
@@ -974,6 +973,10 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
             // Microsoft Graph returns content as contentBytes for file attachments
             if (fullAttachment.contentBytes) {
               emailAttachment.contentBase64 = fullAttachment.contentBytes;
+            }
+            // contentId is only available on fileAttachment, not the base attachment type
+            if (fullAttachment.contentId) {
+              emailAttachment.contentId = fullAttachment.contentId;
             }
           } catch (contentError) {
             logger.error(

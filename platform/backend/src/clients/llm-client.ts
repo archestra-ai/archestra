@@ -90,6 +90,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   minimax: () => config.chat.minimax.apiKey,
   mistral: () => config.chat.mistral.apiKey,
@@ -223,6 +224,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
+  deepseek: "deepseek-chat", // DeepSeek's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
@@ -381,6 +383,20 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       baseURL: config.llm.groq.baseUrl,
     });
     return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName, baseUrl }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure ARCHESTRA_CHAT_DEEPSEEK_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: baseUrl ?? config.llm.deepseek.baseUrl,
+    });
+    return client.chat(modelName);
   },
 
   vllm: ({ apiKey, modelName, baseUrl }) => {
@@ -634,6 +650,22 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         fetch: createTracedFetch(),
       });
       return client(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      if (!apiKey) {
+        throw new ApiError(
+          400,
+          "DeepSeek API key is required. Please configure ARCHESTRA_CHAT_DEEPSEEK_API_KEY.",
+        );
+      }
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client.chat(modelName);
     },
 
     vllm: ({ apiKey, agentId, modelName, headers }) => {

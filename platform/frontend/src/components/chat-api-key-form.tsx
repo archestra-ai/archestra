@@ -134,6 +134,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.groq.com/keys",
     consoleName: "Groq Console",
   },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

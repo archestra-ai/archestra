@@ -1219,6 +1219,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
   perplexity: parseOpenAIError, // Perplexity uses OpenAI-compatible API
   groq: parseOpenAIError, // Groq uses OpenAI-compatible API
+  deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
@@ -1240,6 +1241,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
   perplexity: mapOpenAIErrorWrapper, // Perplexity uses OpenAI-compatible API
   groq: mapOpenAIErrorWrapper, // Groq uses OpenAI-compatible API
+  deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,

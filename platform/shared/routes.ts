@@ -183,6 +183,11 @@ export const RouteId = {
   GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
   GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
 
+  // Proxy Routes - DeepSeek
+  DeepSeekChatCompletionsWithDefaultAgent:
+    "deepSeekChatCompletionsWithDefaultAgent",
+  DeepSeekChatCompletionsWithAgent: "deepSeekChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",

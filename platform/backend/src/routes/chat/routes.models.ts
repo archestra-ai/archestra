@@ -344,6 +344,41 @@ async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
   }));
 }
 
+async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "deepseek" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
 /**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
@@ -812,6 +847,7 @@ async function getProviderApiKey({
     openai: () => config.chat.openai.apiKey || null,
     perplexity: () => config.chat.perplexity?.apiKey || null,
     groq: () => config.chat.groq?.apiKey || null,
+    deepseek: () => config.chat.deepseek?.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
@@ -834,6 +870,7 @@ const modelFetchers: Record<
   openai: fetchOpenAiModels,
   perplexity: fetchPerplexityModels,
   groq: fetchGroqModels,
+  deepseek: fetchDeepSeekModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
@@ -909,6 +946,7 @@ export async function fetchModelsForProvider({
         "anthropic",
         "cerebras",
         "cohere",
+        "deepseek",
         "groq",
         "mistral",
         "openai",

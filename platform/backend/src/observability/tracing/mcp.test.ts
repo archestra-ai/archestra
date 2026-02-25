@@ -50,35 +50,33 @@ describe("recordBlockedToolSpans", () => {
     expect(spans).toHaveLength(2);
 
     // First span - github tool
-    const githubSpan = spans.find((s) =>
-      s.name.includes("github__list_repos"),
-    )!;
+    const githubSpan = spans.find((s) => s.name.includes("github__list_repos"));
     expect(githubSpan).toBeDefined();
-    expect(githubSpan.name).toBe("execute_tool github__list_repos");
-    expect(githubSpan.attributes["route.category"]).toBe(
+    expect(githubSpan?.name).toBe("execute_tool github__list_repos");
+    expect(githubSpan?.attributes["route.category"]).toBe(
       RouteCategory.MCP_GATEWAY,
     );
-    expect(githubSpan.attributes["gen_ai.operation.name"]).toBe("execute_tool");
-    expect(githubSpan.attributes["gen_ai.tool.name"]).toBe(
+    expect(githubSpan?.attributes["gen_ai.operation.name"]).toBe(
+      "execute_tool",
+    );
+    expect(githubSpan?.attributes["gen_ai.tool.name"]).toBe(
       "github__list_repos",
     );
-    expect(githubSpan.attributes["gen_ai.tool.type"]).toBe("function");
-    expect(githubSpan.attributes["mcp.server.name"]).toBe("github");
-    expect(githubSpan.attributes["gen_ai.agent.id"]).toBe("agent-123");
-    expect(githubSpan.attributes["gen_ai.agent.name"]).toBe("test-agent");
-    expect(githubSpan.attributes["mcp.blocked"]).toBe(true);
-    expect(githubSpan.attributes["mcp.blocked_reason"]).toBe(
+    expect(githubSpan?.attributes["gen_ai.tool.type"]).toBe("function");
+    expect(githubSpan?.attributes["mcp.server.name"]).toBe("github");
+    expect(githubSpan?.attributes["gen_ai.agent.id"]).toBe("agent-123");
+    expect(githubSpan?.attributes["gen_ai.agent.name"]).toBe("test-agent");
+    expect(githubSpan?.attributes["mcp.blocked"]).toBe(true);
+    expect(githubSpan?.attributes["mcp.blocked_reason"]).toBe(
       "Tool invocation blocked: policy is configured to always block tool call",
     );
-    expect(githubSpan.status.code).toBe(SpanStatusCode.ERROR);
+    expect(githubSpan?.status.code).toBe(SpanStatusCode.ERROR);
 
     // Second span - slack tool
-    const slackSpan = spans.find((s) =>
-      s.name.includes("slack__send_message"),
-    )!;
+    const slackSpan = spans.find((s) => s.name.includes("slack__send_message"));
     expect(slackSpan).toBeDefined();
-    expect(slackSpan.attributes["mcp.server.name"]).toBe("slack");
-    expect(slackSpan.attributes["mcp.blocked"]).toBe(true);
+    expect(slackSpan?.attributes["mcp.server.name"]).toBe("slack");
+    expect(slackSpan?.attributes["mcp.blocked"]).toBe(true);
   });
 
   test("extracts mcp server name from tool name prefix", () => {

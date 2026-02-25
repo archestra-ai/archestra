@@ -477,9 +477,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="agent"
-              onCreated={(agent) => {
+              onCreated={() => {
                 setIsCreateDialogOpen(false);
-                setConnectingAgent({ ...agent, agentType: "agent" });
               }}
               onViewVersionHistory={setVersionHistoryAgent}
             />

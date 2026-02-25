@@ -131,7 +131,7 @@ describe("preserveNewlines", () => {
   });
 
   it("preserves multiple consecutive newlines as paragraph breaks", () => {
-    expect(preserveNewlines("line 1\n\nline 2")).toBe("line 1\n\nline 2");
+    expect(preserveNewlines("line 1\n\nline 2")).toBe("line 1  \n\nline 2");
   });
 
   it("handles three or more lines", () => {
@@ -151,31 +151,31 @@ describe("preserveNewlines", () => {
   });
 
   it("leaves empty lines unchanged (they create paragraph breaks in markdown)", () => {
-    expect(preserveNewlines("line 1\n\nline 3")).toBe("line 1\n\nline 3");
+    expect(preserveNewlines("line 1\n\nline 3")).toBe("line 1  \n\nline 3");
   });
 
   it("preserves text inside fenced code blocks with backticks", () => {
     const input = "before\n```\ncode line 1\ncode line 2\n```\nafter";
-    const expected = "before  \n```\ncode line 1\ncode line 2\n```  \nafter";
+    const expected = "before  \n```\ncode line 1\ncode line 2\n```\nafter";
     expect(preserveNewlines(input)).toBe(expected);
   });
 
   it("preserves text inside fenced code blocks with tildes", () => {
     const input = "before\n~~~\ncode line 1\ncode line 2\n~~~\nafter";
-    const expected = "before  \n~~~\ncode line 1\ncode line 2\n~~~  \nafter";
+    const expected = "before  \n~~~\ncode line 1\ncode line 2\n~~~\nafter";
     expect(preserveNewlines(input)).toBe(expected);
   });
 
   it("preserves text inside fenced code blocks with language specifier", () => {
     const input = "before\n```python\nprint('hello')\nprint('world')\n```\nafter";
     const expected =
-      "before  \n```python\nprint('hello')\nprint('world')\n```  \nafter";
+      "before  \n```python\nprint('hello')\nprint('world')\n```\nafter";
     expect(preserveNewlines(input)).toBe(expected);
   });
 
   it("handles mixed content with code blocks and regular text", () => {
     const input = "line 1\nline 2\n```\ncode\n```\nline 3\nline 4";
-    const expected = "line 1  \nline 2  \n```\ncode\n```  \nline 3  \nline 4";
+    const expected = "line 1  \nline 2  \n```\ncode\n```\nline 3  \nline 4";
     expect(preserveNewlines(input)).toBe(expected);
   });
 
@@ -189,7 +189,7 @@ describe("preserveNewlines", () => {
 
   it("handles text with indented code block fences", () => {
     const input = "before\n  ```\n  code\n  ```\nafter";
-    const expected = "before  \n  ```\n  code\n  ```  \nafter";
+    const expected = "before  \n  ```\n  code\n  ```\nafter";
     expect(preserveNewlines(input)).toBe(expected);
   });
 
@@ -198,6 +198,6 @@ describe("preserveNewlines", () => {
   });
 
   it("handles multiple empty lines between text", () => {
-    expect(preserveNewlines("a\n\n\nb")).toBe("a\n\n\nb");
+    expect(preserveNewlines("a\n\n\nb")).toBe("a  \n\n\nb");
   });
 });

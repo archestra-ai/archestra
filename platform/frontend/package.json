@@ -12,8 +12,8 @@
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
     "test": "vitest",
-    "check:ci": "pnpm type-check && pnpm test && pnpm knip && biome ci",
-    "check:commit": "pnpm type-check && pnpm knip && biome ci",
+    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
+    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
     "knip": "knip"
   },
   "dependencies": {

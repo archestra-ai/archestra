@@ -13,8 +13,9 @@ const config: KnipConfig = {
     "tsx",
   ],
   ignoreBinaries: [
-    // biome is in root package.json
+    // biome and concurrently are in root package.json
     "biome",
+    "concurrently",
     // Provided by devDependencies but knip doesn't resolve in pnpm monorepo
     "tsdown",
     "vitest",

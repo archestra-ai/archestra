@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Copy, Pencil, Sparkles } from "lucide-react";
+import { Check, Copy, Pencil, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,27 +40,17 @@ export function MessageActions({
     >
       {isRegenerateConfirming ? (
         <>
-          <div className="flex items-center gap-1 px-1.5">
-            <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              Click again to regenerate the response and remove all subsequent
-              messages
-            </span>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 hover:bg-muted"
-                onClick={onRegenerateClick}
-              >
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                <span className="sr-only">Confirm regenerate</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Confirm regenerate</TooltipContent>
-          </Tooltip>
+          <span className="text-xs text-muted-foreground whitespace-nowrap px-1.5">
+            All messages below will be regenerated
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-amber-500 hover:text-amber-600 hover:bg-muted"
+            onClick={onRegenerateClick}
+          >
+            Confirm
+          </Button>
         </>
       ) : (
         <>
@@ -109,7 +99,7 @@ export function MessageActions({
                   onClick={onRegenerateClick}
                   disabled={editDisabled}
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                  <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="sr-only">Regenerate</span>
                 </Button>
               </TooltipTrigger>

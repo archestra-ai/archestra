@@ -4,6 +4,7 @@ export { default as Cerebras } from "./cerebras";
 export { default as Cohere } from "./cohere";
 export { default as Gemini } from "./gemini";
 export { default as Groq } from "./groq";
+export { default as Minimax } from "./minimax";
 export { default as Mistral } from "./mistral";
 export { default as Ollama } from "./ollama";
 export { default as OpenAi } from "./openai";

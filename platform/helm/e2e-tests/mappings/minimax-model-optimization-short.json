@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/minimax/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "minimax-model-optimization-short"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-minimax-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-model-opt-short",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-minimax-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "This is a short response for model optimization test."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1500,
+        "completion_tokens": 15,
+        "total_tokens": 1515
+      }
+    }
+  }
+}

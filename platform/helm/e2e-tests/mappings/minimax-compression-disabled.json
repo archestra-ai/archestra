@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/minimax/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "minimax-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "{\\\"files\\\":[{\\\"name\\\":\\\"README.md\\\",\\\"size\\\":1024"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-compression-disabled",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "MiniMax-M2.1",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "I have processed the JSON tool result."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 150,
+        "completion_tokens": 10,
+        "total_tokens": 160
+      }
+    }
+  }
+}

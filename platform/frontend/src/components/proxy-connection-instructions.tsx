@@ -68,6 +68,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
   },
+  minimax: {
+    label: providerDisplayNames.minimax,
+    originalUrl: "https://api.minimax.io/v1/",
+  },
   bedrock: {
     label: providerDisplayNames.bedrock,
     originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",

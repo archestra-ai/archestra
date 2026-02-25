@@ -175,12 +175,21 @@ function NgrokSetupDialog({
   const [step, setStep] = useState<1 | 2>(1);
   const [authToken, setAuthToken] = useState("");
 
-  const dockerCommand = `docker run -p 9000:9000 -p 3000:3000 \\
+  const token = authToken || "<your-ngrok-auth-token>";
+  const dockerCommandUnix = `docker run -p 9000:9000 -p 3000:3000 \\
   -e ARCHESTRA_QUICKSTART=true \\
-  -e ARCHESTRA_NGROK_AUTH_TOKEN=${authToken || "<your-ngrok-auth-token>"} \\
+  -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \\
   -v /var/run/docker.sock:/var/run/docker.sock \\
   -v archestra-postgres-data:/var/lib/postgresql/data \\
   -v archestra-app-data:/app/data \\
+  archestra/platform`;
+
+  const dockerCommandWindows = `docker run -p 9000:9000 -p 3000:3000 \`
+  -e ARCHESTRA_QUICKSTART=true \`
+  -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \`
+  -v /var/run/docker.sock:/var/run/docker.sock \`
+  -v archestra-postgres-data:/var/lib/postgresql/data \`
+  -v archestra-app-data:/app/data \`
   archestra/platform`;
 
   const ngrokCommand = `ngrok http --authtoken=${authToken || "<your-ngrok-auth-token>"} 9000`;
@@ -247,14 +256,36 @@ function NgrokSetupDialog({
                 <p className="text-xs text-muted-foreground">
                   Restart Archestra using the following command to enable ngrok:
                 </p>
-                <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
-                    {dockerCommand}
-                  </pre>
-                  <div className="absolute top-2 right-2">
-                    <CopyButton text={dockerCommand} />
-                  </div>
-                </div>
+                <Tabs defaultValue="unix">
+                  <TabsList className="h-7 p-0.5">
+                    <TabsTrigger value="unix" className="text-xs h-6 px-2">
+                      Mac / Linux
+                    </TabsTrigger>
+                    <TabsTrigger value="windows" className="text-xs h-6 px-2">
+                      Windows
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="unix" className="mt-2">
+                    <div className="relative">
+                      <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
+                        {dockerCommandUnix}
+                      </pre>
+                      <div className="absolute top-2 right-2">
+                        <CopyButton text={dockerCommandUnix} />
+                      </div>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="windows" className="mt-2">
+                    <div className="relative">
+                      <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
+                        {dockerCommandWindows}
+                      </pre>
+                      <div className="absolute top-2 right-2">
+                        <CopyButton text={dockerCommandWindows} />
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
                 <p className="text-xs text-muted-foreground">
                   Then open{" "}
                   <code className="bg-muted px-1 py-0.5 rounded">

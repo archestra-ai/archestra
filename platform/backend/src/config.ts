@@ -583,6 +583,10 @@ export default {
       inferenceProfilePrefix:
         process.env.ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX || "",
     },
+    minimax: {
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
+    },
   },
   chat: {
     openai: {
@@ -620,6 +624,9 @@ export default {
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
+    },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

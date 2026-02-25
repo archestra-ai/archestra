@@ -64,6 +64,7 @@ import {
   Cohere,
   Gemini,
   Groq,
+  Minimax,
   Mistral,
   Ollama,
   OpenAi,
@@ -167,6 +168,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
+    id: "MinimaxChatCompletionRequest",
+  });
+  z.globalRegistry.add(Minimax.API.ChatCompletionResponseSchema, {
+    id: "MinimaxChatCompletionResponse",
   });
 }
 

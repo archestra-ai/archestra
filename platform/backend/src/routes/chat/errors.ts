@@ -105,6 +105,12 @@ interface ParsedZhipuaiError {
   message?: string;
 }
 
+interface ParsedMinimaxError {
+  type?: string;
+  message?: string;
+  http_code?: string;
+}
+
 interface ParsedBedrockError {
   type?: string;
   message?: string;
@@ -206,6 +212,37 @@ function parseZhipuaiError(responseBody: string): ParsedZhipuaiError | null {
     if (parsed?.error) {
       return {
         code: parsed.error.code,
+        message: parsed.error.message,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse MiniMax error response body.
+ * MiniMax has a unique error structure: { type: "error", error: { type, message, http_code } }
+ * Note: Different from OpenAI despite being "OpenAI-compatible" for chat completions
+ *
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+function parseMinimaxError(responseBody: string): ParsedMinimaxError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+    // MiniMax wraps errors with type: "error"
+    if (parsed?.type === "error" && parsed?.error) {
+      return {
+        type: parsed.error.type,
+        message: parsed.error.message,
+        http_code: parsed.error.http_code,
+      };
+    }
+    // Fallback to standard OpenAI format if MiniMax changes their API
+    if (parsed?.error) {
+      return {
+        type: parsed.error.type,
         message: parsed.error.message,
       };
     }
@@ -955,6 +992,62 @@ function mapZhipuaiErrorWrapper(
   );
 }
 
+/**
+ * Map MiniMax error to ChatErrorCode.
+ * MiniMax has unique error types like "insufficient_balance_error"
+ *
+ * Error format: { type: "error", error: { type, message, http_code } }
+ * Common error types:
+ * - insufficient_balance_error (429) -> account has no balance
+ * - invalid_api_key (401) -> invalid authentication
+ * - rate_limit_exceeded (429) -> too many requests
+ */
+function mapMinimaxErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedMinimaxError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const httpCode = parsedError?.http_code;
+
+  // MiniMax-specific error types
+  if (errorType) {
+    switch (errorType) {
+      case "insufficient_balance_error":
+        // Insufficient balance should map to PermissionDenied (account issue)
+        return ChatErrorCode.PermissionDenied;
+      case "invalid_api_key":
+      case "authentication_error":
+        return ChatErrorCode.Authentication;
+      case "rate_limit_exceeded":
+        return ChatErrorCode.RateLimit;
+      case "invalid_request_error":
+        return ChatErrorCode.InvalidRequest;
+      case "not_found_error":
+      case "model_not_found":
+        return ChatErrorCode.NotFound;
+      case "context_length_exceeded":
+        return ChatErrorCode.ContextTooLong;
+      case "server_error":
+      case "service_unavailable":
+        return ChatErrorCode.ServerError;
+    }
+  }
+
+  // Use http_code from MiniMax response if available
+  const effectiveStatus = httpCode ? Number.parseInt(httpCode, 10) : statusCode;
+  return mapStatusCodeToErrorCode(effectiveStatus);
+}
+
+function mapMinimaxErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapMinimaxErrorToCode(
+    statusCode,
+    parsedError as ParsedMinimaxError | null,
+  );
+}
+
 function mapBedrockErrorWrapper(
   statusCode: number | undefined,
   parsedError: ParsedProviderError | null,
@@ -1129,6 +1222,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  minimax: parseMinimaxError, // MiniMax has unique error format
 };
 
 /**
@@ -1149,6 +1243,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  minimax: mapMinimaxErrorWrapper,
 };
 
 // =============================================================================

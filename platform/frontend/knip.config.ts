@@ -26,8 +26,9 @@ const config: KnipConfig = {
     "tailwindcss",
   ],
   ignoreBinaries: [
-    // biome is in root package.json
+    // biome and concurrently are in root package.json
     "biome",
+    "concurrently",
     // Provided by devDependencies but knip doesn't resolve in pnpm monorepo
     "next",
     "tsc",

@@ -184,6 +184,22 @@ const zhipuaiConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const minimaxConfig: ExecutionMetricsTestConfig = {
+  providerName: "Minimax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "MiniMax-M2.1",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const bedrockConfig: ExecutionMetricsTestConfig = {
   providerName: "Bedrock",
 
@@ -216,6 +232,7 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  minimax: minimaxConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;

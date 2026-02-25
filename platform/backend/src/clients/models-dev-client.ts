@@ -47,6 +47,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cohere: "cohere",
   cerebras: "cerebras",
   mistral: "mistral",
+  minimax: "minimax",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
   deepseek: "openai",
@@ -413,6 +414,7 @@ class ModelsDevClient {
       ollama: ["ollama/"],
       vllm: ["vllm/"],
       zhipuai: ["zhipuai/"],
+      minimax: ["minimax/"],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

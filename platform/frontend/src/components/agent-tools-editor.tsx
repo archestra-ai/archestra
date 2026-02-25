@@ -3,7 +3,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@shared";
@@ -44,6 +43,10 @@ import {
 } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import {
+  getDefaultArchestraToolIds,
+  sortAndFilterTools,
+} from "./agent-tools-editor.utils";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
@@ -60,6 +63,8 @@ interface PendingCatalogChanges {
   catalogItem: InternalMcpCatalogItem;
   /** When true, all tools should be selected once they load */
   selectAll?: boolean;
+  /** Whether the catalog pill should remain visible. Only set to false when explicitly toggled off via combobox. */
+  isActive?: boolean;
 }
 
 export interface AgentToolsEditorRef {
@@ -164,6 +169,11 @@ const AgentToolsEditorContent = forwardRef<
   // State counter to force re-renders when pendingChangesRef updates
   const [pendingVersion, setPendingVersion] = useState(0);
 
+  // Track which catalog pill should auto-open its popover after being added
+  const [autoOpenCatalogId, setAutoOpenCatalogId] = useState<string | null>(
+    null,
+  );
+
   // Track pending changes for all catalogs
   const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
     new Map(),
@@ -177,35 +187,26 @@ const AgentToolsEditorContent = forwardRef<
     if (agentId) return; // Only for new agent creation
     if (defaultToolsInitializedRef.current) return; // Only initialize once
 
-    const archestraCatalog = catalogItems.find(
-      (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+    const toolsByCatalogIndex = toolCountQueries.map(
+      (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
     );
-    if (!archestraCatalog) return; // Catalog not loaded yet
-
-    const catalogIdx = catalogItems.findIndex(
-      (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+    const result = getDefaultArchestraToolIds(
+      catalogItems,
+      toolsByCatalogIndex,
     );
-    const toolQuery = toolCountQueries[catalogIdx];
-    const tools = (toolQuery?.data as CatalogTool[] | undefined) ?? [];
-    if (tools.length === 0) return; // Tools not loaded yet
+    if (!result) return;
 
-    // Filter to only default tools
-    const defaultToolIds = new Set(
-      tools
-        .filter((t) => DEFAULT_ARCHESTRA_TOOL_NAMES.includes(t.name))
-        .map((t) => t.id),
-    );
-
-    if (defaultToolIds.size === 0) return;
+    const archestraCatalog = catalogItems[result.catalogIndex];
+    if (!archestraCatalog) return;
 
     defaultToolsInitializedRef.current = true;
     pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
-      selectedToolIds: defaultToolIds,
+      selectedToolIds: result.toolIds,
       credentialSourceId: null,
       catalogItem: archestraCatalog,
       selectAll: false,
     });
-    onSelectedCountChange?.(defaultToolIds.size);
+    onSelectedCountChange?.(result.toolIds.size);
     setPendingVersion((v) => v + 1);
   }, [agentId, catalogItems, toolCountQueries, onSelectedCountChange]);
 
@@ -318,8 +319,9 @@ const AgentToolsEditorContent = forwardRef<
     for (const catalog of sortedCatalogItems) {
       const pending = pendingChangesRef.current.get(catalog.id);
       if (pending) {
-        if (pending.selectAll || pending.selectedToolIds.size > 0)
-          ids.push(catalog.id);
+        // Show the pill as long as it hasn't been explicitly toggled off via the combobox.
+        // This keeps the pill visible when the user clicks "Deselect All" inside the popover.
+        if (pending.isActive !== false) ids.push(catalog.id);
       } else {
         const assigned = assignedToolsByCatalog.get(catalog.id);
         if (assigned && assigned.length > 0) ids.push(catalog.id);
@@ -337,16 +339,17 @@ const AgentToolsEditorContent = forwardRef<
       const pending = pendingChangesRef.current.get(catalogId);
       const assigned = assignedToolsByCatalog.get(catalogId) ?? [];
       const currentlySelected = pending
-        ? pending.selectAll || pending.selectedToolIds.size > 0
+        ? pending.isActive !== false
         : assigned.length > 0;
 
       if (currentlySelected) {
-        // Toggle OFF: clear all tools
+        // Toggle OFF: clear all tools and hide the pill
         registerPendingChanges(catalogId, {
           selectedToolIds: new Set(),
           credentialSourceId: pending?.credentialSourceId ?? null,
           catalogItem: catalog,
           selectAll: false,
+          isActive: false,
         });
       } else {
         // Toggle ON: pre-select all tools using cached data
@@ -364,6 +367,7 @@ const AgentToolsEditorContent = forwardRef<
           credentialSourceId: pending?.credentialSourceId ?? defaultCredential,
           catalogItem: catalog,
           selectAll: true,
+          isActive: true,
         });
       }
     },
@@ -439,12 +443,15 @@ const AgentToolsEditorContent = forwardRef<
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
           onClearPendingChanges={clearPendingChanges}
+          autoOpen={catalog.id === autoOpenCatalogId}
+          onAutoOpened={() => setAutoOpenCatalogId(null)}
         />
       ))}
       <AssignmentCombobox
         items={comboboxItems}
         selectedIds={selectedCatalogIds}
         onToggle={handleCatalogToggle}
+        onItemAdded={setAutoOpenCatalogId}
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
         createAction={{
@@ -462,6 +469,10 @@ interface McpServerPillProps {
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
   onClearPendingChanges: (catalogId: string) => void;
+  /** When true, the pill's popover opens automatically after mount */
+  autoOpen?: boolean;
+  /** Called after the auto-open has been consumed */
+  onAutoOpened?: () => void;
 }
 
 function McpServerPill({
@@ -470,9 +481,19 @@ function McpServerPill({
   initialPendingChanges,
   onPendingChanges,
   onClearPendingChanges,
+  autoOpen,
+  onAutoOpened,
 }: McpServerPillProps) {
   const [open, setOpen] = useState(false);
   const [changedInSession, setChangedInSession] = useState(false);
+
+  // Auto-open the popover when this pill was just added from the combobox
+  useEffect(() => {
+    if (autoOpen) {
+      setOpen(true);
+      onAutoOpened?.();
+    }
+  }, [autoOpen, onAutoOpened]);
 
   // Fetch tools for this catalog item
   const { data: allTools = [], isLoading: isLoadingTools } = useCatalogTools(
@@ -530,16 +551,19 @@ function McpServerPill({
     onClearPendingChanges(catalogItem.id);
   }, [currentAssignedToolIdsKey]);
 
-  // Auto-select all tools when selectAll flag is set and tools finish loading
+  // Auto-select all tools when selectAll flag is set and tools finish loading.
+  // Use a ref so auto-select only fires once (at mount) and doesn't fight user deselections.
+  const pendingSelectAllRef = useRef(initialPendingChanges?.selectAll ?? false);
   useEffect(() => {
-    if (
-      initialPendingChanges?.selectAll &&
-      selectedToolIds.size === 0 &&
-      allTools.length > 0
-    ) {
+    if (!pendingSelectAllRef.current || allTools.length === 0) return;
+
+    if (selectedToolIds.size === 0) {
+      // Tools loaded but nothing selected — auto-select all
       setSelectedToolIds(new Set(allTools.map((t) => t.id)));
     }
-  }, [initialPendingChanges?.selectAll, selectedToolIds.size, allTools]);
+    // Clear the flag regardless so we don't fight user deselections
+    pendingSelectAllRef.current = false;
+  }, [selectedToolIds.size, allTools]);
 
   // Report pending changes to parent whenever local state changes
   useEffect(() => {
@@ -547,7 +571,6 @@ function McpServerPill({
       selectedToolIds,
       credentialSourceId: selectedCredential,
       catalogItem,
-      selectAll: selectedToolIds.size > 0,
     });
   }, [selectedToolIds, selectedCredential, catalogItem, onPendingChanges]);
 
@@ -749,15 +772,10 @@ export function ToolChecklist({
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredTools = useMemo(() => {
-    if (!searchQuery.trim()) return tools;
-    const query = searchQuery.toLowerCase();
-    return tools.filter(
-      (tool) =>
-        formatToolName(tool.name).toLowerCase().includes(query) ||
-        (tool.description?.toLowerCase().includes(query) ?? false),
-    );
-  }, [tools, searchQuery]);
+  const filteredTools = useMemo(
+    () => sortAndFilterTools(tools, selectedToolIds, searchQuery),
+    [tools, selectedToolIds, searchQuery],
+  );
 
   const allSelected = filteredTools.every((tool) =>
     selectedToolIds.has(tool.id),

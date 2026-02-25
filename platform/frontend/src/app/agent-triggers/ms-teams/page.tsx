@@ -69,7 +69,7 @@ export default function MsTeamsPage() {
   const { msTeams: allStepsCompleted } = useTriggerStatuses();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}

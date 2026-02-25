@@ -84,7 +84,7 @@ export default function SlackPage() {
   const { slack: allStepsCompleted } = useTriggerStatuses();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}

@@ -58,35 +58,39 @@ export function CollapsibleSetupSection({
                 </Badge>
               )}
             </div>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-xs">
-                {open ? (
-                  <>
-                    Hide details
-                    <ChevronUp className="h-3 w-3 ml-1" />
-                  </>
-                ) : (
-                  <>
-                    Show details
-                    <ChevronDown className="h-3 w-3 ml-1" />
-                  </>
-                )}
-              </Button>
-            </CollapsibleTrigger>
+            <div className="flex items-center gap-1">
+              <Link
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                Learn more
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-xs">
+                  {open ? (
+                    <>
+                      Hide details
+                      <ChevronUp className="h-3 w-3 ml-1" />
+                    </>
+                  ) : (
+                    <>
+                      Show details
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </>
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Connect {providerLabel} so agents can receive and respond to
-            messages.{" "}
-            <Link
-              href={docsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              Learn more
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          </p>
+          {open && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Connect {providerLabel} so agents can receive and respond to
+              messages.
+            </p>
+          )}
         </div>
         <CollapsibleContent className="flex flex-col gap-4">
           {children}

@@ -275,7 +275,11 @@ class SlackProvider implements ChatOpsProvider {
       blocks.push({
         type: "context",
         elements: [
-          { type: "plain_text", text: agentFooter(options.footer), emoji: true },
+          {
+            type: "plain_text",
+            text: agentFooter(options.footer),
+            emoji: true,
+          },
         ],
       });
     }

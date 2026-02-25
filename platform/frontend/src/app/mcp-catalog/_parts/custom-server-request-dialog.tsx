@@ -13,6 +13,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -149,51 +150,170 @@ export function CustomServerRequestDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <div className="space-y-4 py-4">
-            <FormField
-              control={form.control}
-              name="serverType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Server Type *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select server type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="remote">Remote</SelectItem>
-                      <SelectItem value="local">Local</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
+          <DialogForm onSubmit={form.handleSubmit(onSubmit)}>
+            <div className="space-y-4 py-4">
               <FormField
                 control={form.control}
-                name="label"
+                name="serverType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Display Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="My Custom MCP Server" {...field} />
-                    </FormControl>
+                    <FormLabel>Server Type *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select server type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="remote">Remote</SelectItem>
+                        <SelectItem value="local">Local</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="label"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="My Custom MCP Server" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Technical Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="my-custom-server" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="version"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Version</FormLabel>
+                      <FormControl>
+                        <Input placeholder="1.0.0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {form.watch("serverType") === "remote" && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="serverUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Server URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://example.com/mcp"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="docsUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Documentation URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://example.com/docs"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {form.watch("serverType") === "local" && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="command"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Command *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="node" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="arguments"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Arguments (one per line)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder={`/path/to/server.js\n--verbose`}
+                            rows={3}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <EnvironmentVariablesFormField
+                    control={form.control}
+                    fields={fields}
+                    append={append}
+                    remove={remove}
+                    fieldNamePrefix="environment"
+                    form={form}
+                  />
+                </>
+              )}
+
               <FormField
                 control={form.control}
-                name="name"
+                name="requestReason"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Technical Name *</FormLabel>
+                    <FormLabel>
+                      Reason for Request{" "}
+                      <span className="text-muted-foreground">(optional)</span>
+                    </FormLabel>
                     <FormControl>
-                      <Input placeholder="my-custom-server" {...field} />
+                      <Textarea
+                        placeholder="Explain why your team needs this custom MCP server..."
+                        rows={3}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -201,138 +321,18 @@ export function CustomServerRequestDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="version"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Version</FormLabel>
-                    <FormControl>
-                      <Input placeholder="1.0.0" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createRequest.isPending}>
+                {createRequest.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-              />
-            </div>
-
-            {form.watch("serverType") === "remote" && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="serverUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Server URL</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="https://example.com/mcp"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="docsUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Documentation URL</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="https://example.com/docs"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </>
-            )}
-
-            {form.watch("serverType") === "local" && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="command"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Command *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="node" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="arguments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Arguments (one per line)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder={`/path/to/server.js\n--verbose`}
-                          rows={3}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <EnvironmentVariablesFormField
-                  control={form.control}
-                  fields={fields}
-                  append={append}
-                  remove={remove}
-                  fieldNamePrefix="environment"
-                  form={form}
-                />
-              </>
-            )}
-
-            <FormField
-              control={form.control}
-              name="requestReason"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Reason for Request{" "}
-                    <span className="text-muted-foreground">(optional)</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Explain why your team needs this custom MCP server..."
-                      rows={3}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={createRequest.isPending}
-            >
-              {createRequest.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Submit Request
-            </Button>
-          </DialogFooter>
+                Submit Request
+              </Button>
+            </DialogFooter>
+          </DialogForm>
         </Form>
       </DialogContent>
     </Dialog>

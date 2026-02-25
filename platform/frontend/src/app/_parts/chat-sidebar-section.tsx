@@ -175,14 +175,13 @@ export function ChatSidebarSection() {
   };
 
   const handleDeleteConversation = async (id: string) => {
-    const shouldNavigate = currentConversationId === id;
+    // Navigate away before deleting to avoid "conversation not found" flash
+    if (currentConversationId === id) {
+      router.push("/chat");
+    }
 
     try {
       await deleteConversationMutation.mutateAsync(id);
-      // Navigate only after successful deletion
-      if (shouldNavigate) {
-        router.push("/chat");
-      }
     } catch {
       // Error is handled by the mutation's onError callback
     }
@@ -428,7 +427,16 @@ export function ChatSidebarSection() {
         open={deleteConfirmId !== null}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            const target = e.currentTarget as HTMLElement | null;
+            const action = target?.querySelector<HTMLButtonElement>(
+              "[data-slot='alert-dialog-action']",
+            );
+            action?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
             <AlertDialogDescription>

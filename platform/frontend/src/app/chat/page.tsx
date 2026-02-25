@@ -85,12 +85,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Version } from "@/components/version";
 import { TypingText } from "@/components/ui/typing-text";
+import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import { useHasPermissions } from "@/lib/auth.query";
+import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   fetchConversationEnabledTools,
   useConversation,

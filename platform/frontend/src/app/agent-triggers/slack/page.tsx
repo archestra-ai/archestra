@@ -229,9 +229,12 @@ export default function SlackPage() {
         </SetupStep>
       </CollapsibleSetupSection>
 
-      <Divider />
-
-      <ChannelTilesSection providerConfig={slackProviderConfig} />
+      {allStepsCompleted && (
+        <>
+          <Divider />
+          <ChannelTilesSection providerConfig={slackProviderConfig} />
+        </>
+      )}
 
       <SlackSetupDialog
         open={slackSetupOpen}

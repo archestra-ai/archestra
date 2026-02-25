@@ -68,6 +68,30 @@ export function useBulkUpdateChatOpsBindings() {
   });
 }
 
+export function useCreateChatOpsDmBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      provider: "ms-teams" | "slack";
+      agentId: string | null;
+    }) => {
+      const { data, error } = await archestraApiSdk.createChatOpsDmBinding({
+        body: params,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("DM agent updated");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useDeleteChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({

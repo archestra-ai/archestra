@@ -43,6 +43,7 @@ import {
   useBulkUpdateChatOpsBindings,
   useChatOpsBindings,
   useChatOpsStatus,
+  useCreateChatOpsDmBinding,
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
@@ -97,6 +98,7 @@ export function ChannelTilesSection({
   const { data: chatOpsProviders } = useChatOpsStatus();
   const updateMutation = useUpdateChatOpsBinding();
   const bulkMutation = useBulkUpdateChatOpsBindings();
+  const dmMutation = useCreateChatOpsDmBinding();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
 
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(
@@ -199,17 +201,28 @@ export function ChannelTilesSection({
     [filteredBindings],
   );
 
-  // Show "Start DM" row when no DM binding exists and we can build a deep link
+  // Show a virtual DM row when the provider is configured but no DM binding exists yet
   const hasDmBinding = providerBindings.some((b) => b.isDm);
-  const dmDeepLink =
-    !hasDmBinding && providerStatus
-      ? (providerConfig.getDmDeepLink?.(providerStatus) ?? null)
-      : null;
-  const showDmRow =
-    dmDeepLink && (!lowerSearch || "direct message".includes(lowerSearch));
+  const providerConfigured = providerStatus
+    ? !!(providerStatus as { configured?: boolean }).configured
+    : false;
+  const showVirtualDmRow =
+    !hasDmBinding &&
+    providerConfigured &&
+    (!lowerSearch || "direct message".includes(lowerSearch));
+  const dmDeepLink = providerStatus
+    ? (providerConfig.getDmDeepLink?.(providerStatus) ?? null)
+    : null;
+
+  // Count virtual DM row in not-configured if shown
+  const virtualDmCount = showVirtualDmRow ? 1 : 0;
 
   const handleAssignAgent = (bindingId: string, agentId: string | null) => {
     updateMutation.mutate({ id: bindingId, agentId });
+  };
+
+  const handleDmAssignAgent = (agentId: string | null) => {
+    dmMutation.mutate({ provider: providerConfig.provider, agentId });
   };
 
   const handleBulkAssign = (agentId: string | null) => {
@@ -221,7 +234,7 @@ export function ChannelTilesSection({
     );
   };
 
-  const hasAnyChannels = workspaceBindings.length > 0 || dmDeepLink;
+  const hasAnyChannels = workspaceBindings.length > 0 || showVirtualDmRow;
 
   return (
     <section className="flex flex-col gap-4">
@@ -311,11 +324,11 @@ export function ChannelTilesSection({
           )}
 
           {(notConfigured.length > 0 ||
-            showDmRow ||
+            showVirtualDmRow ||
             (notConfiguredCount > 0 && lowerSearch)) && (
             <CollapsibleChannelTable
               variant="not-configured"
-              count={notConfiguredCount + (dmDeepLink ? 1 : 0)}
+              count={notConfiguredCount + virtualDmCount}
               storageKey={`${providerConfig.provider}:not-configured`}
               bindings={notConfigured}
               agentList={agentList}
@@ -323,7 +336,15 @@ export function ChannelTilesSection({
               providerStatus={providerStatus}
               onAssignAgent={handleAssignAgent}
               isUpdating={updateMutation.isPending}
-              dmDeepLink={showDmRow ? dmDeepLink : undefined}
+              virtualDm={
+                showVirtualDmRow
+                  ? {
+                      deepLink: dmDeepLink,
+                      onAssignAgent: handleDmAssignAgent,
+                      isUpdating: dmMutation.isPending,
+                    }
+                  : undefined
+              }
               agentMap={agentMap}
               selectedIds={selectedIds}
               onToggleSelected={toggleSelected}
@@ -457,7 +478,7 @@ function CollapsibleChannelTable({
   providerStatus,
   onAssignAgent,
   isUpdating,
-  dmDeepLink,
+  virtualDm,
   agentMap,
   selectedIds,
   onToggleSelected,
@@ -474,7 +495,11 @@ function CollapsibleChannelTable({
   } | null;
   onAssignAgent: (bindingId: string, agentId: string | null) => void;
   isUpdating: boolean;
-  dmDeepLink?: string | null;
+  virtualDm?: {
+    deepLink: string | null;
+    onAssignAgent: (agentId: string | null) => void;
+    isUpdating: boolean;
+  };
   agentMap: Map<string, string>;
   selectedIds: Set<string>;
   onToggleSelected: (id: string) => void;
@@ -549,14 +574,14 @@ function CollapsibleChannelTable({
                 : "text-amber-600 dark:text-amber-400",
             )}
           >
-            {isConfigured ? "Configured" : "Not Configured"}
+            {isConfigured ? "Configured" : "Not configured"}
           </span>
           <span
             className={cn(
-              "text-xs px-1.5 py-0.5 rounded-full font-medium",
+              "text-xs px-1.5 py-0.5 rounded-full font-medium w-5 h-5 flex items-center justify-center border border-border",
               isConfigured
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
             )}
           >
             {count}
@@ -616,45 +641,50 @@ function CollapsibleChannelTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dmDeepLink && (
+              {virtualDm && (
                 <TableRow>
                   <TableCell />
                   <TableCell>
                     <span className="text-sm font-medium">Direct Message</span>
                   </TableCell>
                   <TableCell>
-                    <span className="text-xs text-muted-foreground">
-                      Send your first DM to the bot
-                    </span>
+                    <AgentPicker
+                      agents={agentList}
+                      assignedAgent={undefined}
+                      isUpdating={virtualDm.isUpdating}
+                      onAssign={virtualDm.onAssignAgent}
+                    />
                   </TableCell>
                   <TableCell>
                     <StatusBadge assigned={false} />
                   </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      asChild
-                    >
-                      <a
-                        href={dmDeepLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                  <TableCell className="pr-2">
+                    {virtualDm.deepLink && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        asChild
                       >
-                        <Image
-                          src={providerConfig.providerIcon}
-                          alt={providerConfig.providerLabel}
-                          width={14}
-                          height={14}
-                        />
-                        Open
-                      </a>
-                    </Button>
+                        <a
+                          href={virtualDm.deepLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Image
+                            src={providerConfig.providerIcon}
+                            alt={providerConfig.providerLabel}
+                            width={14}
+                            height={14}
+                          />
+                          Open
+                        </a>
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
-              {sortedBindings.length === 0 && !dmDeepLink && (
+              {sortedBindings.length === 0 && !virtualDm && (
                 <TableRow>
                   <TableCell
                     colSpan={5}

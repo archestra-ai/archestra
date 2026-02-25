@@ -148,9 +148,12 @@ export default function MsTeamsPage() {
         </SetupStep>
       </CollapsibleSetupSection>
 
-      <Divider />
-
-      <ChannelTilesSection providerConfig={msTeamsProviderConfig} />
+      {allStepsCompleted && (
+        <>
+          <Divider />
+          <ChannelTilesSection providerConfig={msTeamsProviderConfig} />
+        </>
+      )}
 
       <MsTeamsSetupDialog
         open={msTeamsSetupOpen}

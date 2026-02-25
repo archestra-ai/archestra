@@ -976,6 +976,74 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Create a pending DM binding (before actual DM interaction).
+   * Uses a placeholder channelId that gets fulfilled on first real DM.
+   */
+  fastify.post(
+    "/api/chatops/bindings/dm",
+    {
+      schema: {
+        operationId: RouteId.CreateChatOpsDmBinding,
+        description:
+          "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction",
+        tags: ["ChatOps"],
+        body: z.object({
+          provider: ChatOpsProviderTypeSchema,
+          agentId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(ChatOpsChannelBindingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { provider, agentId } = request.body;
+      const userEmail = request.user.email;
+
+      // Check if user already has a DM binding (real or pending) for this provider
+      const existingBindings =
+        await ChatOpsChannelBindingModel.findByOrganization(
+          request.organizationId,
+        );
+      const existingDm = existingBindings.find(
+        (b) =>
+          b.provider === provider && b.isDm && b.dmOwnerEmail === userEmail,
+      );
+
+      if (existingDm) {
+        // Update the existing binding's agent
+        const updated = await ChatOpsChannelBindingModel.update(existingDm.id, {
+          agentId,
+        });
+        if (!updated) {
+          throw new ApiError(500, "Failed to update DM binding");
+        }
+        return reply.send({
+          ...updated,
+          createdAt: updated.createdAt.toISOString(),
+          updatedAt: updated.updatedAt.toISOString(),
+        });
+      }
+
+      // Create a new pending DM binding with placeholder channelId
+      const pendingChannelId = `dm:pending:${userEmail}`;
+      const binding = await ChatOpsChannelBindingModel.create({
+        organizationId: request.organizationId,
+        provider,
+        channelId: pendingChannelId,
+        isDm: true,
+        dmOwnerEmail: userEmail,
+        channelName: `Direct Message - ${userEmail}`,
+        agentId,
+      });
+
+      return reply.send({
+        ...binding,
+        createdAt: binding.createdAt.toISOString(),
+        updatedAt: binding.updatedAt.toISOString(),
+      });
+    },
+  );
+
+  /**
    * Bulk-update agent assignment for multiple channel bindings
    */
   fastify.patch(

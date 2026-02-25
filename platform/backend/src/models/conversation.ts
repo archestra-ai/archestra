@@ -1,9 +1,4 @@
 import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
-import {
   and,
   desc,
   eq,
@@ -19,8 +14,6 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
-import ConversationEnabledToolModel from "./conversation-enabled-tool";
-import ToolModel from "./tool";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -29,40 +22,8 @@ class ConversationModel {
       .values(data)
       .returning();
 
-    // Disable Archestra tools by default for new conversations (except todo_write and artifact_write)
-    // Get all tools assigned to the agent (profile tools)
-    // Note: agentId is required for creating conversations but nullable in schema for deleted agents
-    if (!data.agentId) {
-      throw new Error("agentId is required when creating a conversation");
-    }
-    const agentTools = await ToolModel.getToolsByAgent(data.agentId);
-
-    // Get agent delegation tools
-    const delegationTools = await ToolModel.getDelegationToolsByAgent(
-      data.agentId,
-    );
-    const delegationToolIds = delegationTools.map((d) => d.tool);
-
-    // Combine profile tools and delegation tools
-    const allTools = [...agentTools, ...delegationToolIds];
-
-    // Filter out Archestra tools, but keep default Archestra tools enabled
-    // Agent delegation tools (agent__*) should be enabled by default
-    const nonArchestraToolIds = allTools
-      .filter(
-        (tool) =>
-          !tool.name.startsWith(
-            `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
-          ) || DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
-      )
-      .map((tool) => tool.id);
-
-    // Set enabled tools to non-Archestra tools plus default Archestra tools
-    // This creates a custom tool selection with most Archestra tools disabled
-    await ConversationEnabledToolModel.setEnabledTools(
-      conversation.id,
-      nonArchestraToolIds,
-    );
+    // All tools assigned to the agent are enabled by default.
+    // Users can customize enabled tools per-conversation after creation.
 
     const conversationWithAgent = (await ConversationModel.findById({
       id: conversation.id,

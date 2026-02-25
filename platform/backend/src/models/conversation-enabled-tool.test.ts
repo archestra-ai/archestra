@@ -1,16 +1,9 @@
-import { vi } from "vitest";
-import * as knowledgeGraph from "@/knowledge-graph";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
 import ConversationEnabledToolModel from "./conversation-enabled-tool";
 
-// Mock knowledge graph as configured so all default Archestra tools (including query_knowledge_graph) are available
-vi.spyOn(knowledgeGraph, "getKnowledgeGraphProviderType").mockReturnValue(
-  "lightrag",
-);
-
 describe("ConversationEnabledToolModel", () => {
-  test("returns todo_write and artifact_write tools enabled by default", async ({
+  test("new conversation has no custom tool selection (all assigned tools enabled)", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -35,37 +28,15 @@ describe("ConversationEnabledToolModel", () => {
       conversation.id,
     );
 
-    // Should have default Archestra tools enabled by default
-    expect(enabledTools).toHaveLength(3);
-  });
-
-  test("hasCustomSelection returns true for new conversation (Archestra tools disabled by default)", async ({
-    makeUser,
-    makeOrganization,
-    makeAgent,
-    seedAndAssignArchestraTools,
-  }) => {
-    const user = await makeUser();
-    const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Test Agent", teams: [] });
-
-    // Seed and assign Archestra tools to the agent
-    await seedAndAssignArchestraTools(agent.id);
-
-    const conversation = await ConversationModel.create({
-      userId: user.id,
-      organizationId: org.id,
-      agentId: agent.id,
-      title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
-    });
+    // No custom selection → empty enabled tools list (all assigned tools available)
+    expect(enabledTools).toHaveLength(0);
 
     const hasCustom = await ConversationEnabledToolModel.hasCustomSelection(
       conversation.id,
     );
 
-    // New conversations have custom selection because Archestra tools are disabled by default
-    expect(hasCustom).toBe(true);
+    // New conversations do NOT have custom selection; all assigned tools are enabled by default
+    expect(hasCustom).toBe(false);
   });
 
   test("can set enabled tools for a conversation", async ({
@@ -299,7 +270,7 @@ describe("ConversationEnabledToolModel", () => {
     expect(toolsMap.get(conversation2.id)).not.toContain(tool1.id);
   });
 
-  test("findByConversations returns todo_write and artifact_write for conversations by default", async ({
+  test("findByConversations returns empty lists for new conversations (no custom selection)", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -333,9 +304,9 @@ describe("ConversationEnabledToolModel", () => {
       conversation2.id,
     ]);
 
-    // Should have default Archestra tools enabled by default
-    expect(toolsMap.get(conversation1.id)).toHaveLength(3);
-    expect(toolsMap.get(conversation2.id)).toHaveLength(3);
+    // No custom selection → empty lists (all assigned tools available by default)
+    expect(toolsMap.get(conversation1.id)).toHaveLength(0);
+    expect(toolsMap.get(conversation2.id)).toHaveLength(0);
   });
 
   test("findByConversations returns empty map for empty input", async () => {
@@ -382,17 +353,17 @@ describe("ConversationEnabledToolModel", () => {
       tool2.id,
     ]);
 
-    // Conversation 1 should have the tools
+    // Conversation 1 should have the custom tools
     const tools1 = await ConversationEnabledToolModel.findByConversation(
       conversation1.id,
     );
     expect(tools1).toHaveLength(2);
 
-    // Conversation 2 has custom selection with todo_write and artifact_write by default
+    // Conversation 2 has no custom selection (all assigned tools enabled by default)
     const tools2 = await ConversationEnabledToolModel.findByConversation(
       conversation2.id,
     );
-    expect(tools2).toHaveLength(3); // default Archestra tools
+    expect(tools2).toHaveLength(0);
 
     const hasCustom1 = await ConversationEnabledToolModel.hasCustomSelection(
       conversation1.id,
@@ -402,7 +373,7 @@ describe("ConversationEnabledToolModel", () => {
     );
 
     expect(hasCustom1).toBe(true);
-    // Conversation 2 also has custom selection due to default Archestra tool disabling
-    expect(hasCustom2).toBe(true);
+    // Conversation 2 has no custom selection
+    expect(hasCustom2).toBe(false);
   });
 });

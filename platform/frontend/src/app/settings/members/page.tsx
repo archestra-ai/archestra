@@ -2,7 +2,7 @@
 
 import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
@@ -20,39 +20,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { authClient } from "@/lib/clients/auth/auth-client";
+
 import config from "@/lib/config";
 import {
   organizationKeys,
   useActiveMemberRole,
   useActiveOrganization,
 } from "@/lib/organization.query";
-import { useTeams } from "@/lib/team.query";
 
 function MembersSettingsContent() {
   const queryClient = useQueryClient();
   const { data: activeOrg, isPending } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
-  const { data: session } = authClient.useSession();
-  const { data: teams } = useTeams();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const isAdmin = activeMemberRole === "admin";
-  const teammateUserIds = useMemo(() => {
-    if (isAdmin || !session?.user?.id || !teams) return null;
-    const currentUserId = session.user.id;
-    const ids = new Set<string>();
-    for (const team of teams) {
-      const isMember = team.members?.some((m) => m.userId === currentUserId);
-      if (isMember) {
-        for (const m of team.members ?? []) {
-          ids.add(m.userId);
-        }
-      }
-    }
-    return ids;
-  }, [isAdmin, session?.user?.id, teams]);
 
   const hasPermissionTodo = "TODO:";
   const invitationsEnabled = !config.disableInvitations;
@@ -87,10 +68,6 @@ function MembersSettingsContent() {
           actionLabel: null,
           instructions: null,
         })}
-        filterFn={(member) => {
-          if (isAdmin || !teammateUserIds) return true;
-          return teammateUserIds.has(member.userId);
-        }}
         action={
           invitationsEnabled
             ? () => {

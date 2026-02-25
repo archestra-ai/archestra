@@ -399,7 +399,7 @@ export function ProviderSettingsApiKeys() {
       }
     >
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
           <div>
             <h2 className="text-lg font-semibold">LLM API Keys</h2>
             <p className="text-sm text-muted-foreground">
@@ -407,6 +407,7 @@ export function ProviderSettingsApiKeys() {
             </p>
           </div>
           <Button
+            className="shrink-0"
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.AddChatApiKeyButton}
           >

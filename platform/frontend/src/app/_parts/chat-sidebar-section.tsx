@@ -34,6 +34,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Tooltip,
@@ -98,6 +99,8 @@ export function ChatSidebarSection() {
   const { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration } =
     useRecentlyGeneratedTitles(conversations);
 
+  const { isMobile, setOpenMobile } = useSidebar();
+
   const currentConversationId = pathname.startsWith("/chat")
     ? searchParams.get(CONVERSATION_QUERY_PARAM)
     : null;
@@ -132,6 +135,9 @@ export function ChatSidebarSection() {
   }, [editingId]);
 
   const handleSelectConversation = (id: string) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
     router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
   };
 

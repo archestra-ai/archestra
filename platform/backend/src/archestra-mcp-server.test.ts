@@ -56,14 +56,25 @@ describe("getArchestraMcpTools", () => {
     expect(searchTool?.title).toBe("Search Private MCP Registry");
   });
 
-  test("should have create_profile tool", () => {
+  test("should have create_agent tool", () => {
     const tools = getArchestraMcpTools();
-    const createProfileTool = tools.find((t) =>
-      t.name.endsWith("create_profile"),
-    );
+    const tool = tools.find((t) => t.name.endsWith("create_agent"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Create Agent");
+  });
 
-    expect(createProfileTool).toBeDefined();
-    expect(createProfileTool?.title).toBe("Create Profile");
+  test("should have create_llm_proxy tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) => t.name.endsWith("create_llm_proxy"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Create LLM Proxy");
+  });
+
+  test("should have create_mcp_gateway tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) => t.name.endsWith("create_mcp_gateway"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Create MCP Gateway");
   });
 
   test("should have create_limit tool", () => {
@@ -98,12 +109,20 @@ describe("getArchestraMcpTools", () => {
     expect(tool?.title).toBe("Delete Limit");
   });
 
-  test("should have get_profile_token_usage tool", () => {
+  test("should have get_agent_token_usage tool", () => {
     const tools = getArchestraMcpTools();
-    const tool = tools.find((t) => t.name.endsWith("get_profile_token_usage"));
-
+    const tool = tools.find((t) => t.name.endsWith("get_agent_token_usage"));
     expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Profile Token Usage");
+    expect(tool?.title).toBe("Get Agent Token Usage");
+  });
+
+  test("should have get_llm_proxy_token_usage tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) =>
+      t.name.endsWith("get_llm_proxy_token_usage"),
+    );
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Get LLM Proxy Token Usage");
   });
 
   test("should have query_knowledge_graph tool", () => {
@@ -133,21 +152,21 @@ describe("getArchestraMcpTools", () => {
 });
 
 describe("executeArchestraTool", () => {
-  let testProfile: Agent;
+  let testAgent: Agent;
   let mockContext: ArchestraContext;
 
   beforeEach(async ({ makeAgent }) => {
-    testProfile = await makeAgent({ name: "Test Profile" });
+    testAgent = await makeAgent({ name: "Test Agent" });
     mockContext = {
-      profile: {
-        id: testProfile.id,
-        name: testProfile.name,
+      agent: {
+        id: testAgent.id,
+        name: testAgent.name,
       },
     };
   });
 
   describe("whoami tool", () => {
-    test("should return profile information", async () => {
+    test("should return agent information", async () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
         undefined,
@@ -157,8 +176,10 @@ describe("executeArchestraTool", () => {
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toHaveProperty("type", "text");
-      expect((result.content[0] as any).text).toContain("Test Profile");
-      expect((result.content[0] as any).text).toContain(testProfile.id);
+      expect((result.content[0] as any).text).toContain("Agent Name:");
+      expect((result.content[0] as any).text).toContain("Test Agent");
+      expect((result.content[0] as any).text).toContain("Agent ID:");
+      expect((result.content[0] as any).text).toContain(testAgent.id);
     });
   });
 
@@ -271,24 +292,24 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  describe("create_profile tool", () => {
-    test("should create a new profile with required fields only", async () => {
+  describe("create_agent tool", () => {
+    test("should create a new agent with required fields only", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
-        { name: "New Test Profile" },
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "New Test Agent" },
         mockContext,
       );
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
       expect((result.content[0] as any).text).toContain(
-        "Successfully created profile",
+        "Successfully created agent",
       );
-      expect((result.content[0] as any).text).toContain("New Test Profile");
-      expect((result.content[0] as any).text).toContain("Profile ID:");
+      expect((result.content[0] as any).text).toContain("New Test Agent");
+      expect((result.content[0] as any).text).toContain("ID:");
     });
 
-    test("should create a new profile with all optional fields", async ({
+    test("should create a new agent with all optional fields", async ({
       makeTeam,
       makeUser,
       makeOrganization,
@@ -300,9 +321,9 @@ describe("executeArchestraTool", () => {
       });
 
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         {
-          name: "Full Featured Profile",
+          name: "Full Featured Agent",
           teams: [team.id],
           labels: [{ key: "environment", value: "production" }],
         },
@@ -311,61 +332,83 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
-        "Successfully created profile",
+        "Successfully created agent",
       );
-      expect((result.content[0] as any).text).toContain(
-        "Full Featured Profile",
-      );
+      expect((result.content[0] as any).text).toContain("Full Featured Agent");
       expect((result.content[0] as any).text).toContain(team.name);
     });
 
     test("should return error when name is missing", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         {},
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Profile name is required",
-      );
+      expect((result.content[0] as any).text).toContain("name is required");
     });
 
     test("should return error when name is empty string", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         { name: "   " },
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Profile name is required",
-      );
+      expect((result.content[0] as any).text).toContain("name is required");
     });
 
     test("should handle errors gracefully", async () => {
-      // Mock the AgentModel.create method to throw an error
       const originalCreate = AgentModel.create;
       AgentModel.create = vi
         .fn()
         .mockRejectedValue(new Error("Database error"));
 
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
-        { name: "Test Profile" },
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "Test Agent" },
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Error creating profile",
-      );
+      expect((result.content[0] as any).text).toContain("Error creating agent");
       expect((result.content[0] as any).text).toContain("Database error");
 
-      // Restore the original method
       AgentModel.create = originalCreate;
+    });
+  });
+
+  describe("create_llm_proxy tool", () => {
+    test("should create a new LLM proxy", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_llm_proxy`,
+        { name: "New LLM Proxy" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created llm proxy",
+      );
+      expect((result.content[0] as any).text).toContain("New LLM Proxy");
+    });
+  });
+
+  describe("create_mcp_gateway tool", () => {
+    test("should create a new MCP gateway", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_gateway`,
+        { name: "New MCP Gateway" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created mcp gateway",
+      );
+      expect((result.content[0] as any).text).toContain("New MCP Gateway");
     });
   });
 
@@ -394,8 +437,8 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -416,7 +459,7 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
+          entity_type: "agent",
         },
         mockContext,
       );
@@ -429,8 +472,8 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
         },
@@ -448,8 +491,8 @@ describe("executeArchestraTool", () => {
       await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -471,8 +514,8 @@ describe("executeArchestraTool", () => {
       await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -482,7 +525,7 @@ describe("executeArchestraTool", () => {
 
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
-        { entity_type: "profile" },
+        { entity_type: "agent" },
         mockContext,
       );
 
@@ -507,8 +550,8 @@ describe("executeArchestraTool", () => {
       const createResult = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -570,8 +613,8 @@ describe("executeArchestraTool", () => {
       const createResult = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -623,38 +666,56 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  describe("get_profile_token_usage tool", () => {
-    test("should return token usage for current profile", async () => {
+  describe("get_agent_token_usage tool", () => {
+    test("should return token usage for current agent", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent_token_usage`,
         undefined,
         mockContext,
       );
 
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
-        "Token usage for profile",
+        "Token usage for agent",
       );
       expect((result.content[0] as any).text).toContain("Total Input Tokens:");
       expect((result.content[0] as any).text).toContain("Total Output Tokens:");
       expect((result.content[0] as any).text).toContain("Total Tokens:");
     });
 
-    test("should return token usage for specified profile", async ({
+    test("should return token usage for specified agent", async ({
       makeAgent,
     }) => {
-      const otherProfile = await makeAgent({ name: "Other Profile" });
+      const otherAgent = await makeAgent({ name: "Other Agent" });
 
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
-        { profile_id: otherProfile.id },
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent_token_usage`,
+        { id: otherAgent.id },
         mockContext,
       );
 
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
-        `Token usage for profile ${otherProfile.id}`,
+        `Token usage for agent ${otherAgent.id}`,
       );
+    });
+  });
+
+  describe("get_llm_proxy_token_usage tool", () => {
+    test("should return token usage for current agent context", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_llm_proxy_token_usage`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Token usage for llm proxy",
+      );
+      expect((result.content[0] as any).text).toContain("Total Input Tokens:");
+      expect((result.content[0] as any).text).toContain("Total Output Tokens:");
+      expect((result.content[0] as any).text).toContain("Total Tokens:");
     });
   });
 
@@ -856,6 +917,504 @@ describe("executeArchestraTool", () => {
     });
   });
 
+  describe("create_tool_invocation_policy tool", () => {
+    test("should create a policy with correct fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "url", operator: "contains", value: "example.com" },
+          ],
+          action: "block_always",
+          reason: "Test reason",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.toolId).toBe(tool.id);
+      expect(policy.conditions).toEqual([
+        { key: "url", operator: "contains", value: "example.com" },
+      ]);
+      expect(policy.action).toBe("block_always");
+      expect(policy.reason).toBe("Test reason");
+      expect(policy.id).toBeDefined();
+    });
+
+    test("should create a policy with empty conditions", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_when_context_is_untrusted",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.toolId).toBe(tool.id);
+      expect(policy.conditions).toEqual([]);
+      expect(policy.action).toBe("block_when_context_is_untrusted");
+    });
+
+    test("should create a policy with allow_when_context_is_untrusted action", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "context.externalAgentId", operator: "equal", value: "abc" },
+          ],
+          action: "allow_when_context_is_untrusted",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.action).toBe("allow_when_context_is_untrusted");
+    });
+  });
+
+  describe("get_tool_invocation_policy tool", () => {
+    test("should retrieve a policy by id", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "url", operator: "startsWith", value: "https://" },
+          ],
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+        { id: created.id },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const fetched = JSON.parse((result.content[0] as any).text);
+      expect(fetched.id).toBe(created.id);
+      expect(fetched.toolId).toBe(tool.id);
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("update_tool_invocation_policy tool", () => {
+    test("should update policy fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_always",
+          reason: "Original reason",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+        {
+          id: created.id,
+          conditions: [{ key: "source", operator: "equal", value: "external" }],
+          action: "block_when_context_is_untrusted",
+          reason: "Updated reason",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const updated = JSON.parse((result.content[0] as any).text);
+      expect(updated.id).toBe(created.id);
+      expect(updated.conditions).toEqual([
+        { key: "source", operator: "equal", value: "external" },
+      ]);
+      expect(updated.action).toBe("block_when_context_is_untrusted");
+      expect(updated.reason).toBe("Updated reason");
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+        { action: "block_always" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+        {
+          id: "00000000-0000-0000-0000-000000000000",
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("delete_tool_invocation_policy tool", () => {
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("get_tool_invocation_policies tool", () => {
+    test("should return all policies", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policies`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policies = JSON.parse((result.content[0] as any).text);
+      expect(policies.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("create_trusted_data_policy tool", () => {
+    test("should create a policy with correct fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            {
+              key: "emails[*].from",
+              operator: "contains",
+              value: "@trusted.com",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Trust emails from trusted.com",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.toolId).toBe(tool.id);
+      expect(policy.conditions).toEqual([
+        {
+          key: "emails[*].from",
+          operator: "contains",
+          value: "@trusted.com",
+        },
+      ]);
+      expect(policy.action).toBe("mark_as_trusted");
+      expect(policy.description).toBe("Trust emails from trusted.com");
+      expect(policy.id).toBeDefined();
+    });
+
+    test("should create a policy with mark_as_untrusted action", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "mark_as_untrusted",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.action).toBe("mark_as_untrusted");
+    });
+
+    test("should create a policy with sanitize_with_dual_llm action", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [
+            { key: "source", operator: "equal", value: "untrusted" },
+          ],
+          action: "sanitize_with_dual_llm",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policy = JSON.parse((result.content[0] as any).text);
+      expect(policy.action).toBe("sanitize_with_dual_llm");
+    });
+  });
+
+  describe("get_trusted_data_policy tool", () => {
+    test("should retrieve a policy by id", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [{ key: "source", operator: "equal", value: "internal" }],
+          action: "mark_as_trusted",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+        { id: created.id },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const fetched = JSON.parse((result.content[0] as any).text);
+      expect(fetched.id).toBe(created.id);
+      expect(fetched.toolId).toBe(tool.id);
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("update_trusted_data_policy tool", () => {
+    test("should update policy fields", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      const createResult = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "mark_as_trusted",
+          description: "Original description",
+        },
+        mockContext,
+      );
+
+      const created = JSON.parse((createResult.content[0] as any).text);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+        {
+          id: created.id,
+          conditions: [
+            { key: "data.type", operator: "notEqual", value: "sensitive" },
+          ],
+          action: "sanitize_with_dual_llm",
+          description: "Updated description",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const updated = JSON.parse((result.content[0] as any).text);
+      expect(updated.id).toBe(created.id);
+      expect(updated.conditions).toEqual([
+        { key: "data.type", operator: "notEqual", value: "sensitive" },
+      ]);
+      expect(updated.action).toBe("sanitize_with_dual_llm");
+      expect(updated.description).toBe("Updated description");
+    });
+
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+        { action: "block_always" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+        {
+          id: "00000000-0000-0000-0000-000000000000",
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("delete_trusted_data_policy tool", () => {
+    test("should return error when id is missing", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "id parameter is required",
+      );
+    });
+
+    test("should return error when policy not found", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+        { id: "00000000-0000-0000-0000-000000000000" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("get_trusted_data_policies tool", () => {
+    test("should return all policies", async ({ makeTool }) => {
+      const tool = await makeTool();
+
+      await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+        {
+          toolId: tool.id,
+          conditions: [],
+          action: "block_always",
+        },
+        mockContext,
+      );
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policies`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const policies = JSON.parse((result.content[0] as any).text);
+      expect(policies.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe("unknown tool", () => {
     test("should throw error for unknown tool name", async () => {
       await expect(
@@ -870,6 +1429,6 @@ describe("executeArchestraTool", () => {
 
 test("isArchestraMcpServerTool", () => {
   expect(isArchestraMcpServerTool("archestra__whoami")).toBe(true);
-  expect(isArchestraMcpServerTool("archestra__create_profile")).toBe(true);
+  expect(isArchestraMcpServerTool("archestra__create_agent")).toBe(true);
   expect(isArchestraMcpServerTool("mcp_server__tool")).toBe(false);
 });

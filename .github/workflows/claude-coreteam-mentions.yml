@@ -1,0 +1,66 @@
+# NOTE! This workflow will only run if the pull request was opened by
+# the below configured users.
+#
+# It will "invoke Claude" using the user's specific OAuth token. This is being done so that
+# we respect Anthropic's terms-of-service wrt Max accounts/oauth tokens only being able to be
+# used by a single account.
+#
+# See here for more details:
+# https://github.com/anthropics/claude-code-action/issues/4#issuecomment-3046770474
+name: Claude Core Team Mentions
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  ildar-claude-code:
+    if: |
+      (github.event_name == 'issue_comment' && github.event.comment.user.login == 'iskhakov') ||
+      (github.event_name == 'pull_request_review_comment' && github.event.comment.user.login == 'iskhakov') ||
+      (github.event_name == 'pull_request_review' && github.event.review.user.login == 'iskhakov')
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
+    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  joey-claude-code:
+    if: |
+      (github.event_name == 'issue_comment' && github.event.comment.user.login == 'joeyorlando') ||
+      (github.event_name == 'pull_request_review_comment' && github.event.comment.user.login == 'joeyorlando') ||
+      (github.event_name == 'pull_request_review' && github.event.review.user.login == 'joeyorlando')
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
+    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  dominik-claude-code:
+    if: |
+      (github.event_name == 'issue_comment' && github.event.comment.user.login == 'brojd') ||
+      (github.event_name == 'pull_request_review_comment' && github.event.comment.user.login == 'brojd') ||
+      (github.event_name == 'pull_request_review' && github.event.review.user.login == 'brojd')
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
+    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.DOMINIK_CLAUDE_CODE_OAUTH_TOKEN }}

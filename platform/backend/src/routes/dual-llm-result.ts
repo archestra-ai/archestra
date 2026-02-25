@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { DualLlmResultModel, InteractionModel } from "@/models";
 import {
   ApiError,
@@ -42,11 +42,11 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectDualLlmResultSchema)),
       },
     },
-    async ({ params: { interactionId }, user, headers }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+    async ({ params: { interactionId }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Get the interaction with access control
       const interaction = await InteractionModel.findById(

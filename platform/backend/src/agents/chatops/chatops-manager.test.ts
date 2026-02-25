@@ -1,6 +1,10 @@
 import * as a2aExecutor from "@/agents/a2a-executor";
-import { AgentTeamModel, ChatOpsChannelBindingModel } from "@/models";
-import { describe, expect, test, vi } from "@/test";
+import {
+  AgentTeamModel,
+  ChatOpsChannelBindingModel,
+  ChatOpsConfigModel,
+} from "@/models";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type {
   ChatOpsProvider,
   ChatReplyOptions,
@@ -168,8 +172,14 @@ describe("ChatOpsManager security validation", () => {
       handleValidationChallenge: () => null,
       parseWebhookNotification: async () => null,
       sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
       getThreadHistory: async () => [],
       getUserEmail: overrides.getUserEmail ?? (async () => null),
+      getChannelName: async () => null,
+      getWorkspaceId: () => null,
+      getWorkspaceName: () => null,
+      discoverChannels: async () => null,
     };
   }
 
@@ -221,7 +231,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -263,7 +272,63 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
-  test("rejects when getUserEmail returns null (Graph API permission missing)", async ({
+  test("resolves user via senderEmail without calling getUserEmail", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+
+    // Setup
+    const user = await makeUser({ email: "preresolved@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    // getUserEmail should NOT be called when senderEmail is provided
+    const getUserEmailSpy = vi
+      .fn()
+      .mockResolvedValue("should-not-be-used@example.com");
+    const mockProvider = createMockProvider({
+      getUserEmail: getUserEmailSpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    // Message with pre-resolved senderEmail (from TeamsInfo)
+    const message = createMockMessage({
+      senderEmail: "preresolved@example.com",
+    });
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.agentResponse).toBe("Agent response");
+    // getUserEmail should NOT have been called since senderEmail was provided
+    expect(getUserEmailSpy).not.toHaveBeenCalled();
+  });
+
+  test("rejects when both senderEmail and getUserEmail return null", async ({
     makeUser,
     makeOrganization,
     makeTeam,
@@ -280,7 +345,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -292,7 +356,7 @@ describe("ChatOpsManager security validation", () => {
       agentId: agent.id,
     });
 
-    // Provider returns null for getUserEmail (simulating missing Graph permission)
+    // No senderEmail on message AND provider returns null for getUserEmail
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
       getUserEmail: async () => null,
@@ -311,11 +375,11 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("User.ReadBasic.All permission");
+    expect(result.error).toContain("Could not resolve user email");
     // Should send error reply to user
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("User.ReadBasic.All"),
+        text: expect.stringContaining("Could not verify your identity"),
       }),
     );
   });
@@ -337,7 +401,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -396,7 +459,6 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
       name: "Sales Agent",
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -452,7 +514,6 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       teams: [team.id],
-      allowedChatops: ["ms-teams"],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -482,5 +543,490 @@ describe("ChatOpsManager security validation", () => {
         userId: user.id, // Real user ID, not "chatops-ms-teams-xxx"
       }),
     );
+  });
+});
+
+describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
+  test("returns only agents the user has team access to", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "teamuser@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    // Agent the user HAS access to
+    const accessibleAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Accessible Agent",
+    });
+    await AgentTeamModel.assignTeamsToAgent(accessibleAgent.id, [team.id]);
+
+    // Agent the user does NOT have access to (different team)
+    const otherUser = await makeUser({ email: "other@example.com" });
+    const otherTeam = await makeTeam(org.id, otherUser.id);
+    const inaccessibleAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Inaccessible Agent",
+    });
+    await AgentTeamModel.assignTeamsToAgent(inaccessibleAgent.id, [
+      otherTeam.id,
+    ]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "teamuser@example.com",
+    });
+
+    expect(agents).toHaveLength(1);
+    expect(agents[0].id).toBe(accessibleAgent.id);
+    expect(agents[0].name).toBe("Accessible Agent");
+  });
+
+  test("returns all agents when senderEmail is not provided", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "admin@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Some Agent",
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({});
+
+    expect(agents.length).toBeGreaterThanOrEqual(1);
+    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+
+  test("returns all agents when senderEmail does not match any user", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "admin@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Some Agent",
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "nonexistent@example.com",
+    });
+
+    // Falls back to all agents when user can't be resolved
+    expect(agents.length).toBeGreaterThanOrEqual(1);
+    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+
+  test("admin user sees all agents regardless of team membership", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalAgent,
+    makeMember,
+  }) => {
+    const adminUser = await makeUser({ email: "fulladmin@example.com" });
+    const org = await makeOrganization();
+    // Make user an admin (admins have all permissions including agent:admin)
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    // Agent NOT in any of admin's teams
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Unassigned Agent",
+    });
+    // Agent has a team but admin is NOT a member of it
+    const otherUser = await makeUser({ email: "otheruser@example.com" });
+    const otherTeam = await makeTeam(org.id, otherUser.id);
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [otherTeam.id]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "fulladmin@example.com",
+    });
+
+    // Admin should see all agents
+    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+});
+
+describe("ChatOpsManager.initialize — partial config", () => {
+  // Clear all chatops env vars to prevent seed logic from running
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("initializes Slack when only Slack config exists in DB", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "test-secret",
+      appId: "A123",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).not.toBeNull();
+    expect(manager.getSlackProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
+  test("initializes MS Teams when only MS Teams config exists in DB", async () => {
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "test-app-id",
+      appSecret: "test-secret",
+      tenantId: "test-tenant",
+      graphTenantId: "test-tenant",
+      graphClientId: "test-app-id",
+      graphClientSecret: "test-secret",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getMSTeamsProvider()).not.toBeNull();
+    expect(manager.getMSTeamsProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
+  test("handles no config in DB gracefully", async () => {
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.isAnyProviderConfigured()).toBe(false);
+
+    await manager.cleanup();
+  });
+});
+
+// =============================================================================
+// seedConfigFromEnvVars (private, tested via cast)
+// =============================================================================
+
+describe("ChatOpsManager.seedConfigFromEnvVars", () => {
+  // Clear all chatops env vars before each test to prevent real dev-env values from leaking
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("seeds MS Teams config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "env-app-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "env-tenant-id");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config).not.toBeNull();
+    expect(config?.enabled).toBe(true);
+    expect(config?.appId).toBe("env-app-id");
+    expect(config?.appSecret).toBe("env-app-secret");
+    expect(config?.tenantId).toBe("env-tenant-id");
+  });
+
+  test("seeds Slack config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-test-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "test-signing-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "A12345");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config).not.toBeNull();
+    expect(config?.enabled).toBe(true);
+    expect(config?.botToken).toBe("xoxb-test-token");
+    expect(config?.signingSecret).toBe("test-signing-secret");
+    expect(config?.appId).toBe("A12345");
+  });
+
+  test("does not overwrite existing MS Teams DB config", async () => {
+    // Pre-seed DB
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "db-app-id",
+      appSecret: "db-app-secret",
+      tenantId: "db-tenant",
+      graphTenantId: "db-tenant",
+      graphClientId: "db-app-id",
+      graphClientSecret: "db-app-secret",
+    });
+
+    // Set different env vars
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "env-app-secret");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    // DB config should be unchanged
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config?.appId).toBe("db-app-id");
+  });
+
+  test("does not overwrite existing Slack DB config", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-db-token",
+      signingSecret: "db-signing-secret",
+      appId: "DB_APP",
+    });
+
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-env-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "env-signing-secret");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config?.botToken).toBe("xoxb-db-token");
+  });
+
+  test("no-op when no DB config and no env vars", async () => {
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const msTeams = await ChatOpsConfigModel.getMsTeamsConfig();
+    const slack = await ChatOpsConfigModel.getSlackConfig();
+    expect(msTeams).toBeNull();
+    expect(slack).toBeNull();
+  });
+
+  test("MS Teams graph credentials fall back to bot credentials when not set", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "bot-app-id");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "bot-app-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "bot-tenant-id");
+    // Graph env vars NOT set — should fall back to bot values
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config?.graphTenantId).toBe("bot-tenant-id");
+    expect(config?.graphClientId).toBe("bot-app-id");
+    expect(config?.graphClientSecret).toBe("bot-app-secret");
+  });
+
+  test("does not seed MS Teams when only appId is set (missing appSecret)", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
+    // appSecret not set
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getMsTeamsConfig();
+    expect(config).toBeNull();
+  });
+
+  test("seeds Slack socket mode config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-socket-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "socket");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "xapp-test-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "A_SOCKET");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config).not.toBeNull();
+    expect(config?.enabled).toBe(true);
+    expect(config?.botToken).toBe("xoxb-socket-token");
+    expect(config?.connectionMode).toBe("socket");
+    expect(config?.appLevelToken).toBe("xapp-test-token");
+    expect(config?.appId).toBe("A_SOCKET");
+  });
+
+  test("does not seed Slack socket mode when appLevelToken is missing", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "socket");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-token");
+    // No signing secret and no app-level token
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getSlackConfig();
+    expect(config).toBeNull();
+  });
+});
+
+// =============================================================================
+// Slack Socket Mode — isConfigured validation
+// =============================================================================
+
+describe("ChatOpsManager.initialize — Slack socket mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test("socket mode config is configured when botToken and appLevelToken are set", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      connectionMode: "socket",
+      appLevelToken: "xapp-test-token",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isConfigured()).toBe(true);
+    expect(provider?.isSocketMode()).toBe(true);
+    expect(provider?.getConnectionMode()).toBe("socket");
+
+    await manager.cleanup();
+  });
+
+  test("socket mode config is not configured when appLevelToken is missing", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      connectionMode: "socket",
+      // no appLevelToken
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isConfigured()).toBe(false);
+
+    await manager.cleanup();
+  });
+
+  test("webhook mode config is not configured when signingSecret is missing", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      connectionMode: "webhook",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isConfigured()).toBe(false);
+    expect(provider?.isSocketMode()).toBe(false);
+
+    await manager.cleanup();
+  });
+
+  test("defaults to socket mode when connectionMode is not set", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "",
+      appId: "A123",
+      appLevelToken: "xapp-test-token",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    const provider = manager.getSlackProvider();
+    expect(provider).not.toBeNull();
+    expect(provider?.isSocketMode()).toBe(true);
+    expect(provider?.getConnectionMode()).toBe("socket");
+
+    await manager.cleanup();
   });
 });

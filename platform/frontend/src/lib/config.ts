@@ -1,9 +1,11 @@
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
-const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const environment: "development" | "production" =
+  (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
+  "development";
 
-const DEFAULT_BACKEND_URL = "http://localhost:9000";
+export const DEFAULT_BACKEND_URL = "http://localhost:9000";
 
 /**
  * Get the backend API base URL.
@@ -139,6 +141,7 @@ export default {
     },
   },
   debug: process.env.NODE_ENV !== "production",
+  environment,
   posthog: {
     // Analytics is enabled by default, disabled only when explicitly set to "disabled"
     get enabled() {
@@ -148,6 +151,28 @@ export default {
     config: {
       api_host: "https://eu.i.posthog.com",
       person_profiles: "identified_only",
+      session_recording: {
+        recordHeaders: true,
+        recordBody: true,
+        maskCapturedNetworkRequestFn: (data) => {
+          const sensitiveHeaders = ["authorization", "cookie", "set-cookie"];
+          if (data.requestHeaders) {
+            for (const header of sensitiveHeaders) {
+              if (header in data.requestHeaders) {
+                data.requestHeaders[header] = "***REDACTED***";
+              }
+            }
+          }
+          if (data.responseHeaders) {
+            for (const header of sensitiveHeaders) {
+              if (header in data.responseHeaders) {
+                data.responseHeaders[header] = "***REDACTED***";
+              }
+            }
+          }
+          return data;
+        },
+      },
     } satisfies Partial<PostHogConfig>,
   },
   /**

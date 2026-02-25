@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { expect, test } from "../fixtures";
 
 // All compression tests must run serially because they modify shared organization settings
@@ -53,6 +54,44 @@ const openaiConfig: CompressionTestConfig = {
   // OpenAI format: tool results are sent as separate "tool" role messages
   buildRequestWithToolResult: () => ({
     model: "gpt-4",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
+const groqConfig: CompressionTestConfig = {
+  providerName: "Groq",
+
+  endpoint: (profileId) => `/v1/groq/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Groq uses OpenAI-compatible format: tool results are sent as separate "tool" role messages
+  buildRequestWithToolResult: () => ({
+    model: "llama-3.1-8b-instant",
     messages: [
       { role: "user", content: "What files are in the current directory?" },
       {
@@ -397,21 +436,74 @@ const zhipuaiConfig: CompressionTestConfig = {
   }),
 };
 
+const bedrockConfig: CompressionTestConfig = {
+  providerName: "Bedrock",
+
+  endpoint: (profileId) => `/v1/bedrock/${profileId}/converse`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Bedrock format: tool results are toolResult blocks in user message content
+  buildRequestWithToolResult: () => ({
+    modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+    messages: [
+      {
+        role: "user",
+        content: [{ text: "What files are in the current directory?" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            toolUse: {
+              toolUseId: "toolu_123",
+              name: "list_files",
+              input: { directory: "." },
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            toolResult: {
+              toolUseId: "toolu_123",
+              content: [{ text: JSON.stringify(TOOL_RESULT_DATA) }],
+            },
+          },
+        ],
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
 
-const testConfigs: CompressionTestConfig[] = [
-  openaiConfig,
-  anthropicConfig,
-  geminiConfig,
-  cohereConfig,
-  cerebrasConfig,
-  mistralConfig,
-  vllmConfig,
-  ollamaConfig,
-  zhipuaiConfig,
-];
+// Ensures every SupportedProvider has a test config (compile error when new provider added without config)
+const testConfigsMap = {
+  openai: openaiConfig,
+  anthropic: anthropicConfig,
+  gemini: geminiConfig,
+  cohere: cohereConfig,
+  cerebras: cerebrasConfig,
+  mistral: mistralConfig,
+  groq: groqConfig,
+  vllm: vllmConfig,
+  ollama: ollamaConfig,
+  zhipuai: zhipuaiConfig,
+  bedrock: bedrockConfig,
+  perplexity: null, // Perplexity does not support tool calling (has built-in web search instead)
+} satisfies Record<SupportedProvider, CompressionTestConfig | null>;
+
+const testConfigs = Object.values(testConfigsMap).filter(
+  (c): c is CompressionTestConfig => c !== null,
+);
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolResultCompression-${config.providerName}`, () => {

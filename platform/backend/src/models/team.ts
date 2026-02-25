@@ -79,6 +79,43 @@ class TeamModel {
   }
 
   /**
+   * Find a team by name within an organization
+   */
+  static async findByName(
+    name: string,
+    organizationId: string,
+  ): Promise<Team | null> {
+    logger.debug(
+      { name, organizationId },
+      "TeamModel.findByName: fetching team",
+    );
+    const [team] = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(
+        and(
+          eq(schema.teamsTable.name, name),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!team) {
+      logger.debug(
+        { name, organizationId },
+        "TeamModel.findByName: team not found",
+      );
+      return null;
+    }
+
+    logger.debug(
+      { name, organizationId, teamId: team.id },
+      "TeamModel.findByName: completed",
+    );
+    return { ...team, members: [] };
+  }
+
+  /**
    * Find a team by ID
    */
   static async findById(id: string): Promise<Team | null> {

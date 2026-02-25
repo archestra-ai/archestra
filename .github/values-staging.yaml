@@ -18,14 +18,21 @@ archestra:
   # Uses Application Default Credentials (ADC) via GKE Workload Identity
   # instead of API keys for authentication
   env:
+    ARCHESTRA_ANALYTICS: disabled
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+    ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
+    ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
 
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
+      networkPolicy:
+        # Enable SSRF protection for MCP server pods
+        create: true
+
       serviceAccount:
         # GKE Workload Identity binding to allow Vertex AI access via ADC
         # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)
@@ -40,12 +47,6 @@ archestra:
         additionalClusterRoleBindings:
           - clusterRoleName: archestra-cluster-reader
         additionalRoleBindings:
-          # Full access to ai-sre namespace (for AI SRE demo)
-          - roleName: archestra-ai-sre-admin
-            namespace: ai-sre
-          # Full access to argocd namespace (for GitOps operations)
-          - roleName: archestra-argocd-admin
-            namespace: argocd
           # Read-only access to archestra namespace
           - roleName: archestra-namespace-reader
             namespace: archestra

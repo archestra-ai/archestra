@@ -1,11 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
@@ -22,39 +18,46 @@ const {
   createChatApiKey,
   updateChatApiKey,
   deleteChatApiKey,
-  invalidateChatModelsCache,
+  syncChatModels,
+  getVirtualApiKeys,
+  getAllVirtualApiKeys,
+  createVirtualApiKey,
+  deleteVirtualApiKey,
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
       const { data, error } = await getChatApiKeys();
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch chat API keys",
-        );
+        handleApiError(error);
+        return [];
       }
       return data ?? [];
     },
   });
 }
 
-export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
+export function useAvailableChatApiKeys(params?: {
+  provider?: SupportedChatProvider;
+  includeKeyId?: string | null;
+}) {
+  const provider = params?.provider;
+  const includeKeyId = params?.includeKeyId;
   return useQuery({
-    queryKey: ["available-chat-api-keys", provider],
+    queryKey: ["available-chat-api-keys", provider, includeKeyId],
     queryFn: async () => {
+      const query: { provider?: SupportedChatProvider; includeKeyId?: string } =
+        {};
+      if (provider) query.provider = provider;
+      if (includeKeyId) query.includeKeyId = includeKeyId;
       const { data, error } = await getAvailableChatApiKeys({
-        query: provider ? { provider } : undefined,
+        query: Object.keys(query).length > 0 ? query : undefined,
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch available chat API keys",
-        );
+        handleApiError(error);
+        return [];
       }
       return data ?? [];
     },
@@ -71,22 +74,18 @@ export function useCreateChatApiKey() {
         body: data,
       });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to create API key";
-        throw new Error(msg);
+        handleApiError(error);
+        throw error;
       }
       return responseData;
     },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },
   });
 }
@@ -106,18 +105,13 @@ export function useUpdateChatApiKey() {
         body: data,
       });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to update API key";
-        throw new Error(msg);
+        handleApiError(error);
+        throw error;
       }
       return responseData;
     },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
@@ -133,40 +127,162 @@ export function useDeleteChatApiKey() {
         path: { id },
       });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to delete API key";
-        throw new Error(msg);
+        handleApiError(error);
+        throw error;
       }
       return responseData;
     },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("API key deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },
   });
 }
 
-export function useInvalidateChatModelsCache() {
-  return useMutation({
-    mutationFn: async () => {
-      const { data: responseData, error } = await invalidateChatModelsCache();
+export function useVirtualApiKeys(chatApiKeyId: string | null) {
+  return useQuery({
+    queryKey: ["virtual-api-keys", chatApiKeyId],
+    queryFn: async () => {
+      if (!chatApiKeyId) return [];
+      const { data, error } = await getVirtualApiKeys({
+        path: { chatApiKeyId },
+      });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to invalidate models cache";
-        toast.error(msg);
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled: !!chatApiKeyId,
+  });
+}
+
+export function useCreateVirtualApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      chatApiKeyId,
+      data,
+    }: {
+      chatApiKeyId: string;
+      data: archestraApiTypes.CreateVirtualApiKeyData["body"];
+    }) => {
+      const { data: responseData, error } = await createVirtualApiKey({
+        path: { chatApiKeyId },
+        body: data,
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
       }
       return responseData;
     },
-    onSuccess: () => {
-      toast.success("Models cache refreshed");
+    onSuccess: (_data, { chatApiKeyId }) => {
+      toast.success("Virtual API key created");
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys", chatApiKeyId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["all-virtual-api-keys"],
+      });
+    },
+  });
+}
+
+export function useDeleteVirtualApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      chatApiKeyId,
+      id,
+    }: {
+      chatApiKeyId: string;
+      id: string;
+    }) => {
+      const { data: responseData, error } = await deleteVirtualApiKey({
+        path: { chatApiKeyId, id },
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return responseData;
+    },
+    onSuccess: (_data, { chatApiKeyId }) => {
+      toast.success("Virtual API key deleted");
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys", chatApiKeyId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["all-virtual-api-keys"],
+      });
+    },
+  });
+}
+
+export function useAllVirtualApiKeys(params?: {
+  limit?: number;
+  offset?: number;
+}) {
+  const limit = params?.limit ?? 20;
+  const offset = params?.offset ?? 0;
+  return useQuery({
+    queryKey: ["all-virtual-api-keys", limit, offset],
+    queryFn: async () => {
+      const { data, error } = await getAllVirtualApiKeys({
+        query: { limit, offset },
+      });
+      if (error) {
+        handleApiError(error);
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        };
+      }
+      return (
+        data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
+    },
+  });
+}
+
+export function useSyncChatModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: responseData, error } = await syncChatModels();
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Models synced");
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },
   });
 }

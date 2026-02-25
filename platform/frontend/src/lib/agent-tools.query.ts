@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { handleApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -75,6 +76,9 @@ export function useAllProfileTools({
           skipPagination,
         },
       });
+      if (result.error) {
+        handleApiError(result.error);
+      }
       return (
         result.data ?? {
           data: [],
@@ -104,12 +108,14 @@ export function useAssignTool() {
       credentialSourceMcpServerId,
       executionSourceMcpServerId,
       useDynamicTeamCredential,
+      skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
       useDynamicTeamCredential?: boolean;
+      skipInvalidation?: boolean;
     }) => {
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
@@ -126,9 +132,12 @@ export function useAssignTool() {
               }
             : undefined,
       });
-      return data?.success ?? false;
+      return { success: data?.success ?? false, agentId, skipInvalidation };
     },
-    onSuccess: (_, { agentId }) => {
+    onSuccess: (result) => {
+      if (result.skipInvalidation) return;
+
+      const { agentId } = result;
       // Invalidate queries to refetch data
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -158,23 +167,27 @@ export function useBulkAssignTools() {
     mutationFn: async ({
       assignments,
       mcpServerId,
+      skipInvalidation,
     }: {
       assignments: Array<{
         agentId: string;
         toolId: string;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
       }>;
       mcpServerId?: string | null;
+      skipInvalidation?: boolean;
     }) => {
       const { data } = await bulkAssignTools({
         body: { assignments },
       });
       if (!data) return null;
-      return { ...data, mcpServerId };
+      return { ...data, mcpServerId, skipInvalidation };
     },
     onSuccess: (result) => {
       if (!result) return;
+      if (result.skipInvalidation) return;
 
       // Invalidate specific agent tools queries for agents that had successful assignments
       const agentIds = result.succeeded.map((a) => a.agentId);
@@ -221,16 +234,21 @@ export function useUnassignTool() {
     mutationFn: async ({
       agentId,
       toolId,
+      skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
+      skipInvalidation?: boolean;
     }) => {
       const { data } = await unassignToolFromAgent({
         path: { agentId, toolId },
       });
-      return data?.success ?? false;
+      return { success: data?.success ?? false, agentId, skipInvalidation };
     },
-    onSuccess: (_, { agentId }) => {
+    onSuccess: (result) => {
+      if (result.skipInvalidation) return;
+
+      const { agentId } = result;
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
@@ -258,15 +276,22 @@ export function useProfileToolPatchMutation() {
     mutationFn: async (
       updatedProfileTool: archestraApiTypes.UpdateAgentToolData["body"] & {
         id: string;
+        skipInvalidation?: boolean;
       },
     ) => {
+      const { skipInvalidation, ...body } = updatedProfileTool;
       const result = await updateAgentTool({
-        body: updatedProfileTool,
+        body,
         path: { id: updatedProfileTool.id },
       });
-      return result.data ?? null;
+      if (result.error) {
+        handleApiError(result.error);
+      }
+      return { data: result.data ?? null, skipInvalidation };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result.skipInvalidation) return;
+
       // Invalidate all agent-tools queries to refetch updated data
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
@@ -293,13 +318,9 @@ export function useAutoConfigurePolicies() {
         body: { toolIds },
       });
 
-      if (!result.data) {
-        const errorMessage =
-          typeof result.error?.error === "string"
-            ? result.error.error
-            : (result.error?.error as { message?: string })?.message ||
-              "Failed to auto-configure policies";
-        throw new Error(errorMessage);
+      if (result.error) {
+        handleApiError(result.error);
+        return null;
       }
 
       return result.data;
@@ -344,6 +365,9 @@ export function useAllDelegationConnections() {
     queryKey: agentDelegationsQueryKeys.connections,
     queryFn: async () => {
       const response = await getAllDelegationConnections();
+      if (response.error) {
+        handleApiError(response.error);
+      }
       return (
         response.data ?? {
           connections: [],
@@ -363,6 +387,9 @@ export function useAgentDelegations(agentId: string | undefined) {
     queryFn: async () => {
       if (!agentId) return [];
       const response = await getAgentDelegations({ path: { agentId } });
+      if (response.error) {
+        handleApiError(response.error);
+      }
       return response.data ?? [];
     },
     enabled: !!agentId,
@@ -388,10 +415,8 @@ export function useSyncAgentDelegations() {
         body: { targetAgentIds },
       });
       if (response.error) {
-        throw new Error(
-          (response.error as { error?: { message?: string } })?.error
-            ?.message || "Failed to sync delegations",
-        );
+        handleApiError(response.error);
+        return null;
       }
       return response.data;
     },
@@ -434,10 +459,8 @@ export function useRemoveAgentDelegation() {
         path: { agentId, targetAgentId },
       });
       if (response.error) {
-        throw new Error(
-          (response.error as { error?: { message?: string } })?.error
-            ?.message || "Failed to remove delegation",
-        );
+        handleApiError(response.error);
+        return null;
       }
       return response.data;
     },

@@ -60,8 +60,9 @@ export type ToolHeaderProps = {
   state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
   className?: string;
   icon?: React.ReactNode;
-  errorText?: ToolUIPart["errorText"];
   isCollapsible?: boolean;
+  /** Optional action button to display in the header (e.g., View Logs) */
+  actionButton?: React.ReactNode;
 };
 
 const getStatusBadge = (
@@ -104,9 +105,9 @@ export const ToolHeader = ({
   title,
   type,
   state,
-  errorText,
   icon,
   isCollapsible = true,
+  actionButton,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -117,7 +118,7 @@ export const ToolHeader = ({
     )}
     {...props}
   >
-    <div>
+    <div className="flex-1">
       <div className="flex items-center gap-2">
         {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
         <span className="font-medium text-sm">
@@ -125,25 +126,17 @@ export const ToolHeader = ({
         </span>
         {getStatusBadge(state)}
       </div>
-      {errorText && (
-        // biome-ignore lint/a11y/useSemanticElements: We need text selection within the button trigger
-        <div
-          className="text-destructive text-xs mt-2 text-left select-text"
-          style={{
-            userSelect: "text",
-            WebkitUserSelect: "text",
-            pointerEvents: "auto",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          role="button"
-          tabIndex={-1}
-        >
-          {errorText}
-        </div>
-      )}
     </div>
+    {actionButton && (
+      // biome-ignore lint/a11y/noStaticElementInteractions: Wrapper needs to stop event propagation
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {actionButton}
+      </div>
+    )}
     {isCollapsible && (
       <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     )}
@@ -183,6 +176,25 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
     </h4>
     <div className="rounded-md bg-muted/50">
       <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+    </div>
+  </div>
+);
+
+export type ToolErrorDetailsProps = ComponentProps<"div"> & {
+  errorText: string;
+};
+
+export const ToolErrorDetails = ({
+  className,
+  errorText,
+  ...props
+}: ToolErrorDetailsProps) => (
+  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
+    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+      Details
+    </h4>
+    <div className="rounded-md bg-destructive/10 p-3 text-destructive text-xs whitespace-pre-wrap break-words select-text">
+      {errorText}
     </div>
   </div>
 );

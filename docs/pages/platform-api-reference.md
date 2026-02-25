@@ -1,16 +1,16 @@
 ---
 title: "API Reference"
 category: Archestra Platform
-description: "Interactive API documentation for the Archestra Platform"
-order: 8
+description: "Interactive API documentation for Archestra"
+order: 9
 lastUpdated: 2025-01-10
 ---
 
-Explore the Archestra Platform API using the interactive documentation below. You can view all available endpoints, request/response schemas, and try out API calls directly.
+Explore the Archestra API using the interactive documentation below. You can view all available endpoints, request/response schemas, and try out API calls directly.
 
 ## Authentication
 
-To authenticate with the Archestra Platform API, you'll need an API key:
+To authenticate with the Archestra API, you'll need an API key:
 
 1. Log in to the Archestra Admin UI (default: <http://localhost:3000>)
 2. Navigate to **Settings** → **Account**
@@ -20,7 +20,7 @@ To authenticate with the Archestra Platform API, you'll need an API key:
 Include the API key in your requests using the `Authorization` header:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_API_KEY" \
+curl -H "Authorization: YOUR_API_KEY" \
   http://localhost:9000/api/agents
 ```
 

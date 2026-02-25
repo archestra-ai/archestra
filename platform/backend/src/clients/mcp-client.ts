@@ -6,11 +6,16 @@ import {
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import {
+  MCP_CATALOG_INSTALL_PATH,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+} from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   McpToolCallModel,
   TeamModel,
@@ -24,9 +29,22 @@ import type {
   CommonToolCall,
   CommonToolResult,
   InternalMcpCatalog,
+  MCPGatewayAuthMethod,
 } from "@/types";
+import { deriveAuthMethod } from "@/utils/auth-method";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+
+/**
+ * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
+ * Caught by executeToolCall to trigger a transparent retry with a fresh session.
+ */
+class StaleSessionError extends Error {
+  constructor(connectionKey: string) {
+    super(`Stale MCP HTTP session for connection ${connectionKey}`);
+    this.name = "StaleSessionError";
+  }
+}
 
 /**
  * Type for MCP tool with server metadata returned from database
@@ -34,10 +52,6 @@ import { K8sAttachTransport } from "./k8s-attach-transport";
 type McpToolWithServerMetadata = {
   toolName: string;
   responseModifierTemplate: string | null;
-  mcpServerSecretId: string | null;
-  mcpServerName: string | null;
-  mcpServerCatalogId: string | null;
-  mcpServerId: string | null;
   credentialSourceMcpServerId: string | null;
   executionSourceMcpServerId: string | null;
   useDynamicTeamCredential: boolean;
@@ -52,10 +66,16 @@ export type TokenAuthContext = {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  /** Organization ID the token belongs to (required for agent delegation tools) */
+  organizationId?: string;
   /** True if this is a personal user token */
   isUserToken?: boolean;
   /** Optional user ID for user-owned server priority (set when called from chat or from user token) */
   userId?: string;
+  /** True if authenticated via external IdP JWKS */
+  isExternalIdp?: boolean;
+  /** Raw JWT token for propagation to underlying MCP servers (set when isExternalIdp is true) */
+  rawToken?: string;
 };
 
 /**
@@ -125,6 +145,67 @@ class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
   private connectionLimiter = new ConnectionLimiter();
+  // Cache of actual tool names per connection key: lowercased name -> original cased name
+  private toolNameCache = new Map<string, Map<string, string>>();
+  // Per-connectionKey lock to prevent thundering-herd when multiple concurrent
+  // calls (e.g. browser stream ticks) detect a stale session simultaneously.
+  // Only the first caller performs cleanup + retry; others wait and reuse.
+  private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // Session affinity metadata discovered during transport creation.
+  // Used when persisting fresh session IDs after connect().
+  private pendingHttpSessionMetadata = new Map<
+    string,
+    { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
+  >();
+  // Short-lived cache for MCP server secrets to avoid N+1 queries when multiple
+  // tool calls hit the same MCP server within a batch or concurrent request window.
+  // Key: targetMcpServerId, Value: { result, expiresAt }
+  private secretsCache = new Map<
+    string,
+    {
+      result:
+        | { secrets: Record<string, unknown>; secretId?: string }
+        | { error: CommonToolResult };
+      expiresAt: number;
+    }
+  >();
+  private static readonly SECRETS_CACHE_TTL_MS = 30_000;
+
+  /**
+   * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
+   * Should be called when a subagent finishes to free the browser context.
+   */
+  closeSession(
+    catalogId: string,
+    targetMcpServerId: string,
+    agentId: string,
+    conversationId: string,
+  ): void {
+    const connectionKey = `${catalogId}:${targetMcpServerId}:${agentId}:${conversationId}`;
+    const client = this.activeConnections.get(connectionKey);
+    if (client) {
+      try {
+        client.close();
+      } catch (error) {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing MCP session (non-fatal)",
+        );
+      }
+      this.activeConnections.delete(connectionKey);
+      this.toolNameCache.delete(connectionKey);
+      this.pendingHttpSessionMetadata.delete(connectionKey);
+      logger.info({ connectionKey }, "Closed cached MCP session");
+    }
+
+    // Clean up the stored session ID so other pods don't try to reuse it
+    McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch((err) =>
+      logger.warn(
+        { connectionKey, err },
+        "Failed to delete stored MCP HTTP session (non-fatal)",
+      ),
+    );
+  }
 
   /**
    * Execute a single tool call against its assigned MCP server
@@ -133,7 +214,16 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
     tokenAuth?: TokenAuthContext,
+    options?: { conversationId?: string },
   ): Promise<CommonToolResult> {
+    // Derive auth info for logging
+    const authInfo = tokenAuth
+      ? {
+          userId: tokenAuth.userId,
+          authMethod: deriveAuthMethod(tokenAuth),
+        }
+      : undefined;
+
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(toolCall, agentId);
     if ("error" in validationResult) {
@@ -152,7 +242,7 @@ class McpClient {
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
     }
-    const { targetMcpServerId } = targetMcpServerIdResult;
+    const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
@@ -163,9 +253,20 @@ class McpClient {
     }
     const { secrets, secretId } = secretsResult;
 
-    // Build connection cache key using the resolved target server ID
-    // This ensures each user gets their own connection for dynamic credentials
-    const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+    // Build connection cache key using the resolved target server ID.
+    // When conversationId is provided, each (agent, conversation) gets its own connection
+    // to enable per-session browser context isolation with streamable-http transport.
+    // When authenticated via external IdP, each user gets their own connection
+    // since the JWT is propagated to the underlying MCP server per-user.
+    const externalIdpUserId = tokenAuth?.isExternalIdp
+      ? tokenAuth.userId
+      : undefined;
+    let connectionKey = options?.conversationId
+      ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
+      : `${catalogItem.id}:${targetMcpServerId}`;
+    if (externalIdpUserId) {
+      connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
+    }
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
@@ -181,19 +282,25 @@ class McpClient {
 
         // Determine the actual tool name by stripping the server/catalog prefix.
         // We prioritize the `catalogName` prefix, which is standard for local MCP servers.
-        // If the tool name doesn't match the catalog prefix, we fall back to the `mcpServerName` (typical for remote servers).
+        // If the tool name doesn't match the catalog prefix, we fall back to the resolved `mcpServerName`.
         let targetToolName = this.stripServerPrefix(
           toolCall.name,
           tool.catalogName || "",
         );
 
-        if (targetToolName === toolCall.name && tool.mcpServerName) {
+        if (targetToolName === toolCall.name) {
           // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-          targetToolName = this.stripServerPrefix(
-            toolCall.name,
-            tool.mcpServerName,
-          );
+          targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
         }
+
+        // Resolve the actual tool name from the server (preserving original casing).
+        // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
+        // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
+        targetToolName = await this.resolveActualToolName(
+          client,
+          connectionKey,
+          targetToolName,
+        );
 
         const result = await client.callTool({
           name: targetToolName,
@@ -204,12 +311,82 @@ class McpClient {
         return await this.createSuccessResult(
           toolCall,
           agentId,
-          tool.mcpServerName || "unknown",
+          mcpServerName,
           result.content,
           !!result.isError,
           tool.responseModifierTemplate,
+          authInfo,
         );
       } catch (error) {
+        // Handle stale HTTP session.  The MCP SDK skips the `initialize`
+        // handshake when `transport.sessionId` is already set (session
+        // resumption), so `client.connect()` succeeds without making any
+        // HTTP request.  The stale session only surfaces later as a
+        // StreamableHTTPError "Session not found" during the first real
+        // RPC call (listTools / callTool).  Detect this and retry with a
+        // fresh session.
+        const isStaleSession =
+          error instanceof StaleSessionError ||
+          (error instanceof StreamableHTTPError &&
+            String(error.message).includes("Session not found"));
+
+        if (isStaleSession && !isRetry) {
+          // Check if another concurrent call is already recovering this
+          // connection (e.g. multiple browser-stream ticks firing at once).
+          // If so, wait for it and reuse the fresh client it creates.
+          const existingRecovery = this.sessionRecoveryLocks.get(connectionKey);
+          if (existingRecovery) {
+            logger.info(
+              { connectionKey },
+              "Waiting for concurrent session recovery",
+            );
+            await existingRecovery;
+            return executeToolCall(getTransport, currentSecrets, true);
+          }
+
+          logger.info(
+            { connectionKey },
+            "Stale session detected, retrying with fresh session",
+          );
+
+          // Acquire recovery lock so concurrent callers wait for us.
+          let resolveRecovery!: () => void;
+          const recoveryPromise = new Promise<void>((resolve) => {
+            resolveRecovery = resolve;
+          });
+          this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
+
+          try {
+            try {
+              await McpHttpSessionModel.deleteStaleSession(connectionKey);
+            } catch (err) {
+              logger.warn(
+                { connectionKey, err },
+                "Failed to delete stale MCP HTTP session",
+              );
+            }
+            // Close the stale client so its AbortController is cleaned up
+            const staleClient = this.activeConnections.get(connectionKey);
+            if (staleClient) {
+              try {
+                await staleClient.close();
+              } catch {
+                logger.warn(
+                  { connectionKey },
+                  "Failed to close stale MCP client",
+                );
+              }
+            }
+            this.activeConnections.delete(connectionKey);
+            this.toolNameCache.delete(connectionKey);
+            this.pendingHttpSessionMetadata.delete(connectionKey);
+            return await executeToolCall(getTransport, currentSecrets, true);
+          } finally {
+            resolveRecovery();
+            this.sessionRecoveryLocks.delete(connectionKey);
+          }
+        }
+
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
@@ -255,7 +432,7 @@ class McpClient {
             connectionKey,
             toolCall,
             agentId,
-            mcpServerName: tool.mcpServerName || "unknown",
+            mcpServerName,
             catalogItem,
             targetMcpServerId,
             executeRetry: (getTransport, secrets) =>
@@ -272,14 +449,22 @@ class McpClient {
           toolCall,
           agentId,
           errorMessage,
-          tool.mcpServerName || "unknown",
+          mcpServerName,
+          authInfo,
         );
       }
     };
 
     if (!this.shouldLimitConcurrency()) {
       return executeToolCall(
-        () => this.getTransport(catalogItem, targetMcpServerId, secrets),
+        () =>
+          this.getTransport(
+            catalogItem,
+            targetMcpServerId,
+            secrets,
+            connectionKey,
+            tokenAuth,
+          ),
         secrets,
       );
     }
@@ -301,6 +486,8 @@ class McpClient {
               targetMcpServerId,
               secrets,
               transportKind,
+              connectionKey,
+              tokenAuth,
             ),
           secrets,
         ),
@@ -335,6 +522,18 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.activeConnections.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+        // If the transport carries a stored session ID the session is likely
+        // stale (e.g. Playwright pod restarted).  Delete it from the DB so
+        // the retry path creates a truly fresh connection instead of reading
+        // the same stale ID again.
+        if (
+          transport instanceof StreamableHTTPClientTransport &&
+          transport.sessionId
+        ) {
+          McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+        }
         // Fall through to create new client
       }
     }
@@ -351,10 +550,84 @@ class McpClient {
       },
     );
 
-    await client.connect(transport);
+    // Track whether we're using a stored session ID (for stale session cleanup)
+    const usedStoredSession =
+      transport instanceof StreamableHTTPClientTransport &&
+      !!transport.sessionId;
 
-    // Store the connection for reuse
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      // If we used a stored session ID and connection failed, the session is
+      // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
+      // StaleSessionError so executeToolCall can retry with a fresh session.
+      if (usedStoredSession) {
+        try {
+          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        } catch (err) {
+          logger.warn(
+            { connectionKey, err },
+            "Failed to delete stale MCP HTTP session",
+          );
+        }
+        throw new StaleSessionError(connectionKey);
+      }
+      throw error;
+    }
+
+    // When resuming a stored session the MCP SDK skips the `initialize`
+    // handshake, so `connect()` succeeds without any HTTP request.  Verify
+    // the session is actually alive with a ping *before* caching or
+    // re-persisting the (potentially stale) session ID.  Without this check
+    // concurrent calls would re-persist the stale ID into the DB, undoing
+    // another call's cleanup and creating a thundering-herd loop.
+    if (usedStoredSession) {
+      try {
+        await client.ping();
+      } catch {
+        try {
+          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        } catch (err) {
+          logger.warn(
+            { connectionKey, err },
+            "Failed to delete stale MCP HTTP session",
+          );
+        }
+        throw new StaleSessionError(connectionKey);
+      }
+    }
+
+    // Store the connection for reuse BEFORE persisting session ID.
+    // This prevents a race where a second request creates a duplicate connection
+    // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
+
+    // Persist the MCP session ID so other backend pods can reuse it.
+    // With --isolated, each Mcp-Session-Id maps to a separate browser context;
+    // storing the ID in the database lets every pod connect to the same context.
+    // Only persist *new* session IDs (obtained via fresh init), not stored ones
+    // we just verified — those are already in the DB with the correct value.
+    if (
+      !usedStoredSession &&
+      transport instanceof StreamableHTTPClientTransport &&
+      transport.sessionId
+    ) {
+      const pendingMetadata =
+        this.pendingHttpSessionMetadata.get(connectionKey);
+      try {
+        await McpHttpSessionModel.upsert({
+          connectionKey,
+          sessionId: transport.sessionId,
+          sessionEndpointUrl: pendingMetadata?.sessionEndpointUrl,
+          sessionEndpointPodName: pendingMetadata?.sessionEndpointPodName,
+        });
+      } catch (err) {
+        logger.warn(
+          { connectionKey, err },
+          "Failed to persist MCP HTTP session ID (non-fatal)",
+        );
+      }
+    }
 
     return client;
   }
@@ -369,7 +642,7 @@ class McpClient {
     | { tool: McpToolWithServerMetadata; catalogItem: InternalMcpCatalog }
     | { error: CommonToolResult }
   > {
-    // Get MCP tool
+    // Get MCP tool from agent-assigned tools
     const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       [toolCall.name],
       agentId,
@@ -393,7 +666,7 @@ class McpClient {
           toolCall,
           agentId,
           "Tool is missing catalogId",
-          tool.mcpServerName || "unknown",
+          tool.catalogName || "unknown",
         ),
       };
     }
@@ -406,7 +679,7 @@ class McpClient {
           toolCall,
           agentId,
           `No catalog item found for tool catalog ID ${tool.catalogId}`,
-          tool.mcpServerName || "unknown",
+          tool.catalogName || "unknown",
         ),
       };
     }
@@ -414,7 +687,8 @@ class McpClient {
     return { tool, catalogItem };
   }
 
-  // Gets secrets of a given MCP server
+  // Gets secrets of a given MCP server, with short-lived caching to prevent
+  // N+1 queries when multiple tool calls target the same server.
   private async getSecretsForMcpServer({
     targetMcpServerId,
     toolCall,
@@ -424,6 +698,37 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
+    | { secrets: Record<string, unknown>; secretId?: string }
+    | { error: CommonToolResult }
+  > {
+    const now = Date.now();
+    const cached = this.secretsCache.get(targetMcpServerId);
+    if (cached && cached.expiresAt > now) {
+      return cached.result;
+    }
+
+    const result = await this.fetchSecretsForMcpServer(
+      targetMcpServerId,
+      toolCall,
+      agentId,
+    );
+
+    // Only cache successful results (not errors) so transient failures can be retried
+    if (!("error" in result)) {
+      this.secretsCache.set(targetMcpServerId, {
+        result,
+        expiresAt: now + McpClient.SECRETS_CACHE_TTL_MS,
+      });
+    }
+
+    return result;
+  }
+
+  private async fetchSecretsForMcpServer(
+    targetMcpServerId: string,
+    toolCall: CommonToolCall,
+    agentId: string,
+  ): Promise<
     | { secrets: Record<string, unknown>; secretId?: string }
     | { error: CommonToolResult }
   > {
@@ -468,7 +773,11 @@ class McpClient {
     agentId: string;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-  }): Promise<{ targetMcpServerId: string } | { error: CommonToolResult }> {
+  }): Promise<
+    | { targetMcpServerId: string; mcpServerName: string }
+    | { error: CommonToolResult }
+  > {
+    const fallbackName = tool.catalogName || "unknown";
     logger.info(
       {
         toolName: toolCall.name,
@@ -488,7 +797,7 @@ class McpClient {
             toolCall,
             agentId,
             "Execution source is required for local MCP server tools when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
+            fallbackName,
           ),
         };
       }
@@ -501,33 +810,37 @@ class McpClient {
             toolCall,
             agentId,
             "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
+            fallbackName,
           ),
         };
       }
-      const result =
+      const targetMcpServerId =
         catalogItem.serverType === "local"
           ? tool.executionSourceMcpServerId
           : tool.credentialSourceMcpServerId;
-      if (!result) {
+      if (!targetMcpServerId) {
         return {
           error: await this.createErrorResult(
             toolCall,
             agentId,
             "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
+            fallbackName,
           ),
         };
       }
+      const mcpServer = await McpServerModel.findById(targetMcpServerId);
       logger.info(
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetMcpServerId: result,
+          targetMcpServerId,
         },
         "Determined target MCP server ID for catalog item",
       );
-      return { targetMcpServerId: result };
+      return {
+        targetMcpServerId,
+        mcpServerName: mcpServer?.name || fallbackName,
+      };
     }
 
     // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth
@@ -538,7 +851,7 @@ class McpClient {
           toolCall,
           agentId,
           "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
-          tool.mcpServerName || "unknown",
+          fallbackName,
         ),
       };
     }
@@ -548,7 +861,7 @@ class McpClient {
           toolCall,
           agentId,
           "Dynamic team credential is enabled but tool has no catalogId.",
-          tool.mcpServerName || "unknown",
+          fallbackName,
         ),
       };
     }
@@ -572,56 +885,59 @@ class McpClient {
           },
           `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
         );
-        return { targetMcpServerId: userServer.id };
+        return {
+          targetMcpServerId: userServer.id,
+          mcpServerName: userServer.name,
+        };
       }
     }
 
-    // Priority 2: Team token used - we check try to use token without teamId first to prioritize personal credential
+    // Priority 2 & 3: Team token used - batch-load team members once to avoid N+1 queries
     if (tokenAuth.teamId) {
+      const teamMembers = await TeamModel.getTeamMembers(tokenAuth.teamId);
+      const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
+
+      // Priority 2: Personal credential owned by a team member (no teamId on server)
       for (const server of allServers) {
-        if (server.ownerId && !server.teamId) {
-          const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.teamId,
-            server.ownerId,
+        if (
+          server.ownerId &&
+          !server.teamId &&
+          teamMemberIds.has(server.ownerId)
+        ) {
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              serverId: server.id,
+              ownerId: server.ownerId,
+              teamId: tokenAuth.teamId,
+            },
+            `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          if (ownerInTeam) {
-            logger.info(
-              {
-                toolName: toolCall.name,
-                catalogId: tool.catalogId,
-                serverId: server.id,
-                ownerId: server.ownerId,
-                teamId: tokenAuth.teamId,
-              },
-              `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-            );
-            return { targetMcpServerId: server.id };
-          }
+          return {
+            targetMcpServerId: server.id,
+            mcpServerName: server.name,
+          };
         }
       }
-    }
 
-    // Priority 3: Team token used - we try to find any token from team
-    if (tokenAuth.teamId) {
+      // Priority 3: Any server owned by a team member
       for (const server of allServers) {
-        if (server.ownerId) {
-          const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.teamId,
-            server.ownerId,
+        if (server.ownerId && teamMemberIds.has(server.ownerId)) {
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              serverId: server.id,
+              ownerId: server.ownerId,
+              teamId: tokenAuth.teamId,
+            },
+            `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          if (ownerInTeam) {
-            logger.info(
-              {
-                toolName: toolCall.name,
-                catalogId: tool.catalogId,
-                serverId: server.id,
-                ownerId: server.ownerId,
-                teamId: tokenAuth.teamId,
-              },
-              `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-            );
-            return { targetMcpServerId: server.id };
-          }
+          return {
+            targetMcpServerId: server.id,
+            mcpServerName: server.name,
+          };
         }
       }
     }
@@ -636,21 +952,42 @@ class McpClient {
         },
         `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
       );
-      return { targetMcpServerId: allServers[0].id };
+      return {
+        targetMcpServerId: allServers[0].id,
+        mcpServerName: allServers[0].name,
+      };
     }
 
-    // No server found, throw an error
+    // Priority 5: Fallback for external IdP users if earlier team-based resolution didn't match
+    if (tokenAuth.isExternalIdp && allServers.length > 0) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          serverId: allServers[0].id,
+        },
+        `Dynamic resolution: using first available server for external IdP user`,
+      );
+      return {
+        targetMcpServerId: allServers[0].id,
+        mcpServerName: allServers[0].name,
+      };
+    }
+
+    // No server found - return an actionable error with install link
     const context = tokenAuth.userId
       ? `user: ${tokenAuth.userId}`
       : tokenAuth.teamId
         ? `team: ${tokenAuth.teamId}`
         : "organization";
+    const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${tool.catalogId}`;
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        `No installation found for catalog ${tool.catalogName || tool.catalogId} with ${context}. Ensure an MCP server installation exists.`,
-        tool.mcpServerName || "unknown",
+        `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`,
+        fallbackName,
       ),
     };
   }
@@ -684,19 +1021,72 @@ class McpClient {
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
     transportKind: TransportKind,
+    connectionKey?: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
         const url =
-          McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
+          await McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",
           );
         }
 
-        return new StreamableHTTPClientTransport(new URL(url), {
-          requestInit: { headers: new Headers({}) },
+        // Look up stored session metadata for multi-replica support.
+        // In multi-replica MCP server deployments, we must resume sessions
+        // against the same pod endpoint where the session was created.
+        let sessionId: string | undefined;
+        let endpointUrl = url;
+        let sessionEndpointPodName: string | null = null;
+        if (connectionKey) {
+          const stored =
+            await McpHttpSessionModel.findRecordByConnectionKey(connectionKey);
+          if (stored) {
+            sessionId = stored.sessionId;
+            endpointUrl = stored.sessionEndpointUrl || endpointUrl;
+            sessionEndpointPodName = stored.sessionEndpointPodName;
+            logger.debug(
+              {
+                connectionKey,
+                sessionId,
+                endpointUrl,
+                sessionEndpointPodName,
+              },
+              "Using stored MCP HTTP session metadata",
+            );
+          } else if (
+            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
+          ) {
+            const runningPodEndpoint =
+              await McpServerRuntimeManager.getRunningPodHttpEndpoint(
+                targetMcpServerId,
+              );
+            if (runningPodEndpoint) {
+              endpointUrl = runningPodEndpoint.endpointUrl;
+              sessionEndpointPodName = runningPodEndpoint.podName;
+            }
+          }
+
+          this.pendingHttpSessionMetadata.set(connectionKey, {
+            sessionEndpointUrl: endpointUrl,
+            sessionEndpointPodName,
+          });
+        }
+
+        const localHeaders: Record<string, string> = {};
+        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+          localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        } else if (secrets.access_token) {
+          localHeaders.Authorization = `Bearer ${secrets.access_token}`;
+        } else if (secrets.raw_access_token) {
+          localHeaders.Authorization = String(secrets.raw_access_token);
+        }
+
+        return new StreamableHTTPClientTransport(new URL(endpointUrl), {
+          sessionId,
+          requestInit: { headers: new Headers(localHeaders) },
         });
       }
 
@@ -706,7 +1096,10 @@ class McpClient {
         }
 
         const headers: Record<string, string> = {};
-        if (secrets.access_token) {
+        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+          // Propagate external IdP JWT to the underlying MCP server
+          headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
+        } else if (secrets.access_token) {
           headers.Authorization = `Bearer ${secrets.access_token}`;
         } else if (secrets.raw_access_token) {
           headers.Authorization = String(secrets.raw_access_token);
@@ -755,6 +1148,8 @@ class McpClient {
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
+    connectionKey?: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
@@ -765,6 +1160,8 @@ class McpClient {
       targetMcpServerId,
       secrets,
       transportKind,
+      connectionKey,
+      tokenAuth,
     );
   }
 
@@ -780,6 +1177,37 @@ class McpClient {
       return toolName.substring(slugifiedPrefix.length);
     }
     return toolName;
+  }
+
+  /**
+   * Resolve the actual tool name from the remote MCP server.
+   * Tool names in our DB are lowercased by slugifyName(), but remote servers may use
+   * different casing (e.g., camelCase). This method queries the server's tool list
+   * and matches case-insensitively to find the correct name.
+   */
+  private async resolveActualToolName(
+    client: Client,
+    connectionKey: string,
+    strippedToolName: string,
+  ): Promise<string> {
+    let nameMap = this.toolNameCache.get(connectionKey);
+    if (!nameMap) {
+      try {
+        const toolsResult = await client.listTools();
+        nameMap = new Map<string, string>();
+        for (const tool of toolsResult.tools) {
+          nameMap.set(tool.name.toLowerCase(), tool.name);
+        }
+        this.toolNameCache.set(connectionKey, nameMap);
+      } catch (error) {
+        logger.warn(
+          { connectionKey, err: error },
+          "Failed to list tools for name resolution, using stripped name as-is",
+        );
+        return strippedToolName;
+      }
+    }
+    return nameMap.get(strippedToolName.toLowerCase()) ?? strippedToolName;
   }
 
   /**
@@ -813,16 +1241,26 @@ class McpClient {
     agentId: string,
     error: string,
     mcpServerName: string = "unknown",
+    authInfo?: {
+      userId?: string;
+      authMethod?: MCPGatewayAuthMethod;
+    },
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
-      content: null,
+      content: [{ type: "text", text: error }],
       isError: true,
       error,
     };
 
-    await this.persistToolCall(agentId, mcpServerName, toolCall, errorResult);
+    await this.persistToolCall(
+      agentId,
+      mcpServerName,
+      toolCall,
+      errorResult,
+      authInfo,
+    );
     return errorResult;
   }
 
@@ -836,6 +1274,10 @@ class McpClient {
     content: unknown,
     isError: boolean,
     template: string | null,
+    authInfo?: {
+      userId?: string;
+      authMethod?: MCPGatewayAuthMethod;
+    },
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -850,7 +1292,13 @@ class McpClient {
       isError,
     };
 
-    await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);
+    await this.persistToolCall(
+      agentId,
+      mcpServerName,
+      toolCall,
+      toolResult,
+      authInfo,
+    );
     return toolResult;
   }
 
@@ -900,6 +1348,7 @@ class McpClient {
         // Ignore close errors
       }
       this.activeConnections.delete(connectionKey);
+      this.pendingHttpSessionMetadata.delete(connectionKey);
     }
 
     // Attempt refresh
@@ -964,14 +1413,26 @@ class McpClient {
   }
 
   /**
-   * Persist tool call to database with error handling
+   * Persist tool call to database with error handling.
+   * Skips browser tools to prevent DB bloat from frequent screenshot calls.
+   * Truncates large tool results to prevent excessive storage.
    */
   private async persistToolCall(
     agentId: string,
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
+    authInfo?: {
+      userId?: string;
+      authMethod?: MCPGatewayAuthMethod;
+    },
   ): Promise<void> {
+    // Skip high-frequency browser tool logging to prevent DB bloat
+    // (screenshots every ~2s, tab list checks, viewport resizes)
+    if (isHighFrequencyBrowserTool(toolCall.name)) {
+      return;
+    }
+
     try {
       const savedToolCall = await McpToolCallModel.create({
         agentId,
@@ -979,6 +1440,8 @@ class McpClient {
         method: "tools/call",
         toolCall,
         toolResult,
+        userId: authInfo?.userId ?? null,
+        authMethod: authInfo?.authMethod ?? null,
       });
 
       const logData: {
@@ -1140,7 +1603,24 @@ class McpClient {
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
+    this.pendingHttpSessionMetadata.clear();
   }
+}
+
+/**
+ * Check if a browser tool is high-frequency and should skip logging.
+ * Screenshots (~2s interval), tab list checks, and viewport resizes
+ * generate too many log entries. Other browser actions (navigate, click,
+ * type, snapshot, etc.) are logged normally.
+ */
+function isHighFrequencyBrowserTool(toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  return (
+    name.includes("browser_take_screenshot") ||
+    name.includes("browser_screenshot") ||
+    name.includes("browser_tabs") ||
+    name.includes("browser_resize")
+  );
 }
 
 // Singleton instance

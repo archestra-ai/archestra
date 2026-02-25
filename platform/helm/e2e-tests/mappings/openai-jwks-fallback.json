@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/openai/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "openai-jwks-fallback-test"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-jwks-fallback-e2e",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "gpt-4",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Hello from JWKS fallback test!",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 8,
+        "total_tokens": 18
+      }
+    }
+  }
+}

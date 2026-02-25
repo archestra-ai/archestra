@@ -1,13 +1,23 @@
 import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
-  getAdditionalTrustedOrigins,
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
+import {
   getAdditionalTrustedSsoProviderIds,
+  getCorsOrigins,
   getDatabaseUrl,
   getOtelExporterOtlpEndpoint,
+  getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseContentMaxLength,
+  parseVirtualKeyDefaultExpiration,
 } from "./config";
 
 // Mock the logger
@@ -240,7 +250,7 @@ describe("getOtlpAuthHeaders", () => {
   });
 });
 
-describe("getAdditionalTrustedOrigins", () => {
+describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -252,66 +262,33 @@ describe("getAdditionalTrustedOrigins", () => {
     process.env = originalEnv;
   });
 
-  test("should return empty array when env var is not set", () => {
+  test("should accept all origins when no env vars are set", () => {
+    delete process.env.ARCHESTRA_FRONTEND_URL;
     delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-    const result = getAdditionalTrustedOrigins();
+    const cors = getCorsOrigins();
+    expect(cors).toHaveLength(1);
+    expect(cors[0]).toBeInstanceOf(RegExp);
 
-    expect(result).toEqual([]);
-  });
-
-  test("should return empty array when env var is empty", () => {
-    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS = "";
-
-    const result = getAdditionalTrustedOrigins();
-
-    expect(result).toEqual([]);
-  });
-
-  test("should return single origin", () => {
-    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
-      "http://keycloak:8080";
-
-    const result = getAdditionalTrustedOrigins();
-
-    expect(result).toEqual(["http://keycloak:8080"]);
-  });
-
-  test("should return multiple origins from comma-separated list", () => {
-    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
-      "http://keycloak:8080,https://auth.example.com,http://idp.local:9000";
-
-    const result = getAdditionalTrustedOrigins();
-
-    expect(result).toEqual([
-      "http://keycloak:8080",
-      "https://auth.example.com",
-      "http://idp.local:9000",
+    const trusted = getTrustedOrigins();
+    expect(trusted).toEqual([
+      "http://*:*",
+      "https://*:*",
+      "http://*",
+      "https://*",
     ]);
   });
 
-  test("should trim whitespace from origins", () => {
+  test("should parse ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS with trimming and filtering", () => {
     process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
-      "  http://keycloak:8080 , https://auth.example.com  ";
+      "  http://keycloak:8080 , , https://auth.example.com  ";
+    delete process.env.ARCHESTRA_FRONTEND_URL;
 
-    const result = getAdditionalTrustedOrigins();
+    const result = getTrustedOrigins();
 
-    expect(result).toEqual([
-      "http://keycloak:8080",
-      "https://auth.example.com",
-    ]);
-  });
-
-  test("should filter out empty entries", () => {
-    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
-      "http://keycloak:8080,,https://auth.example.com,";
-
-    const result = getAdditionalTrustedOrigins();
-
-    expect(result).toEqual([
-      "http://keycloak:8080",
-      "https://auth.example.com",
-    ]);
+    expect(result).toContain("http://keycloak:8080");
+    expect(result).toContain("https://auth.example.com");
+    expect(result).toHaveLength(2);
   });
 });
 
@@ -320,82 +297,71 @@ describe("getTrustedOrigins", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    vi.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
   });
 
-  describe("development mode (default localhost origins)", () => {
-    // Note: NODE_ENV is determined at module load time, so tests run in development mode
-    // since the test environment is not production
-
-    test("should return localhost wildcards in development", () => {
+  describe("no origin env vars (accept all)", () => {
+    test("should return catch-all wildcards when no env vars are set", () => {
+      delete process.env.ARCHESTRA_FRONTEND_URL;
       delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
       const result = getTrustedOrigins();
 
       expect(result).toEqual([
-        "http://localhost:*",
-        "https://localhost:*",
-        "http://127.0.0.1:*",
-        "https://127.0.0.1:*",
-      ]);
-    });
-
-    test("should include additional trusted origins in development", () => {
-      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
-        "http://keycloak:8080";
-
-      const result = getTrustedOrigins();
-
-      expect(result).toEqual([
-        "http://localhost:*",
-        "https://localhost:*",
-        "http://127.0.0.1:*",
-        "https://127.0.0.1:*",
-        "http://keycloak:8080",
+        "http://*:*",
+        "https://*:*",
+        "http://*",
+        "https://*",
       ]);
     });
   });
 
-  describe("production mode (specific frontend URL)", () => {
-    // Note: These tests use dynamic imports with vi.resetModules() to test production behavior
-    // because NODE_ENV is evaluated at module load time
-
-    beforeEach(() => {
-      vi.resetModules();
-    });
-
-    test("should return frontend URL in production", async () => {
-      process.env.NODE_ENV = "production";
+  describe("configured origins (enforce)", () => {
+    test("should return frontend URL when set", () => {
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
       delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
-        "./config"
-      );
-      const result = getTrustedOriginsProd();
-
-      expect(result).toEqual(["https://app.example.com"]);
+      expect(getTrustedOrigins()).toEqual(["https://app.example.com"]);
     });
 
-    test("should include additional trusted origins in production", async () => {
-      process.env.NODE_ENV = "production";
+    test("should combine frontend URL and additional origins", () => {
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
       process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
         "http://idp.example.com:8080";
 
-      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
-        "./config"
-      );
-      const result = getTrustedOriginsProd();
-
-      expect(result).toEqual([
+      expect(getTrustedOrigins()).toEqual([
         "https://app.example.com",
         "http://idp.example.com:8080",
       ]);
+    });
+
+    test("should add 127.0.0.1 equivalent for localhost origins", () => {
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const result = getTrustedOrigins();
+      expect(result).toContain("http://localhost:3000");
+      expect(result).toContain("http://127.0.0.1:3000");
+    });
+
+    test("should add localhost equivalent for 127.0.0.1 origins", () => {
+      process.env.ARCHESTRA_FRONTEND_URL = "http://127.0.0.1:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const result = getTrustedOrigins();
+      expect(result).toContain("http://127.0.0.1:3000");
+      expect(result).toContain("http://localhost:3000");
+    });
+
+    test("should enforce only additional origins when frontend URL is not set", () => {
+      delete process.env.ARCHESTRA_FRONTEND_URL;
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "https://auth.example.com";
+
+      expect(getTrustedOrigins()).toEqual(["https://auth.example.com"]);
     });
   });
 });
@@ -731,5 +697,265 @@ describe("getOtelExporterOtlpEndpoint", () => {
       );
       expect(result).toBe("http://otel-collector:4318/v1/traces");
     });
+  });
+});
+
+describe("getOtelExporterOtlpLogEndpoint", () => {
+  const savedEnv = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+
+  afterAll(() => {
+    if (savedEnv !== undefined) {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT = savedEnv;
+    } else {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+    }
+  });
+
+  describe("default value", () => {
+    test("should return default endpoint when no value provided", () => {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+      const result = getOtelExporterOtlpLogEndpoint(undefined);
+      expect(result).toBe("http://localhost:4318/v1/logs");
+    });
+
+    test("should return default endpoint when empty string provided", () => {
+      const result = getOtelExporterOtlpLogEndpoint("");
+      expect(result).toBe("http://localhost:4318/v1/logs");
+    });
+
+    test("should return default endpoint when only whitespace provided", () => {
+      const result = getOtelExporterOtlpLogEndpoint("   ");
+      expect(result).toBe("http://localhost:4318/v1/logs");
+    });
+  });
+
+  describe("URL already ends with /v1/logs", () => {
+    test("should return URL as-is when it ends with /v1/logs", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1/logs",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("should normalize trailing slashes and return URL with /v1/logs", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1/logs/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+  });
+
+  describe("URL ends with /v1", () => {
+    test("should append /logs when URL ends with /v1", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("should handle /v1 with trailing slash", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/v1/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+  });
+
+  describe("URL without /v1/logs suffix", () => {
+    test("should append /v1/logs to base URL", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("should append /v1/logs to URL with trailing slash", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "http://otel-collector:4318/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+  });
+
+  describe("HTTPS URLs", () => {
+    test("should work with HTTPS URLs", () => {
+      const result = getOtelExporterOtlpLogEndpoint("https://otel.example.com");
+      expect(result).toBe("https://otel.example.com/v1/logs");
+    });
+
+    test("should work with HTTPS URLs that already have /v1/logs", () => {
+      const result = getOtelExporterOtlpLogEndpoint(
+        "https://otel.example.com/v1/logs",
+      );
+      expect(result).toBe("https://otel.example.com/v1/logs");
+    });
+  });
+});
+
+describe("parseContentMaxLength", () => {
+  test("should return default 10000 when no value provided", () => {
+    expect(parseContentMaxLength(undefined)).toBe(10_000);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseContentMaxLength("")).toBe(10_000);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseContentMaxLength("   ")).toBe(10_000);
+  });
+
+  test("should parse valid integer value", () => {
+    expect(parseContentMaxLength("5000")).toBe(5000);
+  });
+
+  test("should parse large value", () => {
+    expect(parseContentMaxLength("100000")).toBe(100_000);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseContentMaxLength("  8000  ")).toBe(8000);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseContentMaxLength("abc")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "abc", using default 10000',
+    );
+  });
+
+  test("should return default and warn for zero", () => {
+    expect(parseContentMaxLength("0")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "0", using default 10000',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseContentMaxLength("-100")).toBe(10_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
+    );
+  });
+});
+
+describe("getCorsOrigins", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe("no origin env vars (accept all)", () => {
+    test("should return catch-all regex when no env vars are set", () => {
+      delete process.env.ARCHESTRA_FRONTEND_URL;
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const result = getCorsOrigins();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBeInstanceOf(RegExp);
+      expect((result[0] as RegExp).test("http://anything.example.com")).toBe(
+        true,
+      );
+    });
+  });
+
+  describe("configured origins (enforce)", () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    test("should return frontend URL when set", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getCorsOrigins: fn } = await import("./config");
+      expect(fn()).toEqual(["https://app.example.com"]);
+    });
+
+    test("should combine frontend URL and additional origins", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://idp.example.com:8080";
+
+      const { getCorsOrigins: fn } = await import("./config");
+      expect(fn()).toEqual([
+        "https://app.example.com",
+        "http://idp.example.com:8080",
+      ]);
+    });
+
+    test("should add loopback equivalents for localhost origins", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getCorsOrigins: fn } = await import("./config");
+      const result = fn();
+      expect(result).toContain("http://localhost:3000");
+      expect(result).toContain("http://127.0.0.1:3000");
+    });
+  });
+});
+
+describe("parseVirtualKeyDefaultExpiration", () => {
+  test("should return default 2592000 when undefined", () => {
+    expect(parseVirtualKeyDefaultExpiration(undefined)).toBe(2592000);
+  });
+
+  test("should return default when empty string", () => {
+    expect(parseVirtualKeyDefaultExpiration("")).toBe(2592000);
+  });
+
+  test("should return default when whitespace-only", () => {
+    expect(parseVirtualKeyDefaultExpiration("   ")).toBe(2592000);
+  });
+
+  test("should parse valid positive integer", () => {
+    expect(parseVirtualKeyDefaultExpiration("86400")).toBe(86400);
+  });
+
+  test("should return 0 for zero (never expires)", () => {
+    expect(parseVirtualKeyDefaultExpiration("0")).toBe(0);
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseVirtualKeyDefaultExpiration("-100")).toBe(2592000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "-100", using default 2592000',
+    );
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseVirtualKeyDefaultExpiration("abc")).toBe(2592000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "abc", using default 2592000',
+    );
+  });
+
+  test("should trim whitespace and parse", () => {
+    expect(parseVirtualKeyDefaultExpiration("  3600  ")).toBe(3600);
+  });
+
+  test("should cap values exceeding 1 year to 31536000", () => {
+    expect(parseVirtualKeyDefaultExpiration("100000000")).toBe(31_536_000);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS value "100000000" exceeds maximum (31536000s / 1 year), capping to 31536000',
+    );
+  });
+
+  test("should allow exactly 1 year (31536000)", () => {
+    expect(parseVirtualKeyDefaultExpiration("31536000")).toBe(31_536_000);
+  });
+
+  test("should cap value just over 1 year", () => {
+    expect(parseVirtualKeyDefaultExpiration("31536001")).toBe(31_536_000);
   });
 });

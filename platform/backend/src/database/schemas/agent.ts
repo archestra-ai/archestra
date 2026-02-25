@@ -4,40 +4,14 @@ import {
   index,
   integer,
   jsonb,
-  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ChatOpsProviderType } from "@/types/chatops";
-
-/**
- * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
- * Only used when agent_type is 'agent'.
- */
-export interface AgentHistoryEntry {
-  version: number;
-  userPrompt: string | null;
-  systemPrompt: string | null;
-  createdAt: string; // ISO timestamp
-}
-
-/**
- * Agent type enum:
- * - profile: External profiles for API gateway routing
- * - mcp_gateway: MCP gateway specific configuration
- * - llm_proxy: LLM proxy specific configuration
- * - agent: Internal agents with prompts for chat
- */
-export const agentTypeEnum = pgEnum("agent_type", [
-  "profile",
-  "mcp_gateway",
-  "llm_proxy",
-  "agent",
-]);
-
-export type AgentType = (typeof agentTypeEnum.enumValues)[number];
+import type { AgentHistoryEntry, AgentType } from "@/types/agent";
+import chatApiKeysTable from "./chat-api-key";
+import identityProvidersTable from "./identity-provider";
 
 /**
  * Unified agents table supporting both external profiles and internal agents.
@@ -70,10 +44,10 @@ const agentsTable = pgTable(
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
-
-    // Agent type: 'profile' (external profile), 'mcp_gateway', 'llm_proxy', or 'agent' (internal agent)
-    agentType: agentTypeEnum("agent_type").notNull().default("mcp_gateway"),
-
+    agentType: text("agent_type")
+      .$type<AgentType>()
+      .notNull()
+      .default("mcp_gateway"),
     // Prompt fields (only used when agentType = 'agent')
     systemPrompt: text("system_prompt"),
     userPrompt: text("user_prompt"),
@@ -81,10 +55,9 @@ const agentsTable = pgTable(
     promptHistory: jsonb("prompt_history")
       .$type<AgentHistoryEntry[]>()
       .default([]),
-    /** Which chatops providers can trigger this agent (empty = none, only for internal agents) */
-    allowedChatops: jsonb("allowed_chatops")
-      .$type<ChatOpsProviderType[]>()
-      .default([]),
+    // Description (only used when agentType = 'agent')
+    /** Human-readable description of the agent */
+    description: text("description"),
 
     // Incoming email settings (only used when agentType = 'agent')
     /** Whether incoming email invocation is enabled for this agent */
@@ -99,6 +72,20 @@ const agentsTable = pgTable(
     /** Allowed domain for 'internal' security mode (e.g., 'example.com') */
     incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
 
+    // LLM configuration (allows per-agent model selection)
+    /** API key ID for LLM calls */
+    llmApiKeyId: uuid("llm_api_key_id").references(() => chatApiKeysTable.id, {
+      onDelete: "set null",
+    }),
+    /** Model ID for LLM calls */
+    llmModel: text("llm_model"),
+
+    /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
+    identityProviderId: text("identity_provider_id").references(
+      () => identityProvidersTable.id,
+      { onDelete: "set null" },
+    ),
+
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -108,6 +95,7 @@ const agentsTable = pgTable(
   (table) => [
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
+    index("agents_identity_provider_id_idx").on(table.identityProviderId),
   ],
 );
 

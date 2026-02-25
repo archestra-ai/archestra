@@ -176,7 +176,7 @@ export function TeamsList() {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Users className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No teams yet. Create your first team to get started.
+                There are no teams you have access to
               </p>
             </div>
           ) : (
@@ -258,7 +258,7 @@ export function TeamsList() {
                             permissions={{ team: ["update"] }}
                             variant="outline"
                             size="sm"
-                            data-testid={`${E2eTestId.ConfigureSsoTeamSyncButton}-${team.id}`}
+                            data-testid={`${E2eTestId.ConfigureIdpTeamSyncButton}-${team.id}`}
                             onClick={() => {
                               setSelectedTeam(team);
                               setExternalGroupsDialogOpen(true);

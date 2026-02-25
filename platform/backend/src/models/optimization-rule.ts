@@ -1,11 +1,9 @@
 import type { SupportedProvider } from "@shared";
 import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import getDefaultModelPrice from "@/default-model-prices";
 import logger from "@/logging";
 import type {
   InsertOptimizationRule,
-  InsertTokenPrice,
   OptimizationRule,
   UpdateOptimizationRule,
 } from "@/types";
@@ -244,7 +242,7 @@ class OptimizationRuleModel {
   }
 
   /**
-   * Ensure default optimization rules and token prices exist for common cheaper models
+   * Ensure default optimization rules exist for common cheaper models
    * @param organizationId - The organization ID
    */
   static async ensureDefaultOptimizationRules(
@@ -254,30 +252,6 @@ class OptimizationRuleModel {
       { organizationId },
       "OptimizationRuleModel.ensureDefaultOptimizationRules: starting",
     );
-    const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
-      openai: [
-        {
-          provider: "openai",
-          model: "gpt-5-mini",
-          ...getDefaultModelPrice("gpt-5-mini"),
-        },
-      ],
-      anthropic: [
-        {
-          provider: "anthropic",
-          model: "claude-haiku-4-5",
-          ...getDefaultModelPrice("claude-haiku-4-5"),
-        },
-      ],
-      gemini: [],
-      cohere: [],
-      cerebras: [],
-      mistral: [],
-      vllm: [], // vLLM model pricing varies by deployment, so no defaults
-      ollama: [], // Ollama model pricing varies by deployment, so no defaults
-      zhipuai: [],
-    };
-
     // Define rules per provider
     const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
       {
@@ -306,9 +280,12 @@ class OptimizationRuleModel {
         cohere: [],
         cerebras: [],
         mistral: [],
+        perplexity: [], // Perplexity optimization rules - no defaults (no tool support)
+        groq: [], // Groq optimization rules - no defaults
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
+        bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
       };
 
     // Filter by provider if specified, otherwise get providers from interactions
@@ -320,22 +297,7 @@ class OptimizationRuleModel {
       providers = ["anthropic"];
     }
 
-    const defaultPrices = providers.flatMap((p) => pricesByProvider[p]);
     const defaultRules = providers.flatMap((p) => rulesByProvider[p]);
-
-    // Insert token prices
-    if (defaultPrices.length > 0) {
-      await db
-        .insert(schema.tokenPricesTable)
-        .values(defaultPrices)
-        .onConflictDoNothing({
-          target: schema.tokenPricesTable.model,
-        });
-      logger.debug(
-        { count: defaultPrices.length },
-        "OptimizationRuleModel.ensureDefaultOptimizationRules: inserted token prices",
-      );
-    }
 
     // Get existing rules for this organization
     const existingRules =

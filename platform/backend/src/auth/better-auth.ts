@@ -1,6 +1,12 @@
 import type { HookEndpointContext } from "@better-auth/core";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
-import { SSO_TRUSTED_PROVIDER_IDS } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  OAUTH_PAGES,
+  OAUTH_SCOPES,
+  SSO_TRUSTED_PROVIDER_IDS,
+} from "@shared";
 import {
   allAvailableActions,
   editorPermissions,
@@ -9,7 +15,13 @@ import {
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import {
+  admin,
+  apiKey,
+  jwt,
+  organization,
+  twoFactor,
+} from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -24,7 +36,7 @@ import SessionModel from "@/models/session";
 const { ssoConfig, syncSsoRole, syncSsoTeams } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-      await import("./sso.ee")
+      await import("./idp.ee")
     : {
         ssoConfig: undefined,
         syncSsoRole: () => {},
@@ -35,7 +47,6 @@ const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  production,
   auth: {
     secret,
     cookieDomain,
@@ -43,17 +54,6 @@ const {
     additionalTrustedSsoProviderIds,
   },
 } = config;
-
-const isHttps = () => {
-  // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production (process.env.NODE_ENV=production)
-  // to determine if we're using HTTPS
-  if (!frontendBaseUrl) {
-    return production;
-  }
-  // otherwise, use frontendBaseUrl to determine if we're using HTTPS
-  // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
-  return frontendBaseUrl.startsWith("https://");
-};
 
 const ac = createAccessControl(allAvailableActions);
 
@@ -66,6 +66,8 @@ export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
+  // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
+  disabledPaths: ["/token"],
   ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),
   plugins: [
     organization({
@@ -121,7 +123,7 @@ export const auth: any = betterAuth({
     apiKey({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],
-      defaultPrefix: "archestra_",
+      defaultPrefix: ARCHESTRA_TOKEN_PREFIX,
       rateLimit: {
         enabled: false,
       },
@@ -139,6 +141,25 @@ export const auth: any = betterAuth({
       issuer: APP_NAME,
     }),
     ...(ssoConfig ? [sso(ssoConfig)] : []),
+    jwt({
+      jwt: {
+        // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
+        // normalizes URLs by appending a trailing slash when the path is empty.
+        // The JWT iss claim must match the normalized issuer from the well-known
+        // metadata to pass authlib's claim validation.
+        issuer: `${frontendBaseUrl}/`,
+      },
+      jwks: {
+        keyPairConfig: { alg: "RS256", modulusLength: 2048 },
+      },
+    }),
+    oauthProvider({
+      loginPage: OAUTH_PAGES.login,
+      consentPage: OAUTH_PAGES.consent,
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
+      scopes: [...OAUTH_SCOPES],
+    }),
   ],
 
   user: {
@@ -164,7 +185,12 @@ export const auth: any = betterAuth({
       teamMember: schema.teamMembersTable,
       twoFactor: schema.twoFactorsTable,
       verification: schema.verificationsTable,
-      ssoProvider: schema.ssoProvidersTable,
+      ssoProvider: schema.identityProvidersTable,
+      jwks: schema.jwksTable,
+      oauthClient: schema.oauthClientsTable,
+      oauthAccessToken: schema.oauthAccessTokensTable,
+      oauthRefreshToken: schema.oauthRefreshTokensTable,
+      oauthConsent: schema.oauthConsentsTable,
     },
   }),
 
@@ -205,10 +231,9 @@ export const auth: any = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: isHttps(), // Use secure cookies when we're using HTTPS
       // "lax" is required for OAuth/SSO flows because the callback is a cross-site top-level navigation
       // "strict" would prevent the state cookie from being sent with the callback request
-      sameSite: isHttps() ? "none" : "lax",
+      sameSite: "lax",
     },
   },
 

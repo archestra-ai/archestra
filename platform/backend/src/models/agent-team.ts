@@ -1,10 +1,10 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
 class AgentTeamModel {
   /**
-   * Get all agent IDs that a user has access to (through team membership)
+   * Get all agent IDs that a user has access to.
    */
   static async getUserAccessibleAgentIds(
     userId: string,
@@ -27,6 +27,17 @@ class AgentTeamModel {
       return allAgents.map((agent) => agent.id);
     }
 
+    // Get teamless agents (agents with no team assignments) — visible to all org members
+    const teamlessAgents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
+      )
+      .where(isNull(schema.agentTeamsTable.agentId));
+    const teamlessAgentIds = teamlessAgents.map((a) => a.id);
+
     // Get all team IDs the user is a member of
     const userTeams = await db
       .select({ teamId: schema.teamMembersTable.teamId })
@@ -42,10 +53,10 @@ class AgentTeamModel {
 
     if (teamIds.length === 0) {
       logger.debug(
-        { userId },
-        "AgentTeamModel.getUserAccessibleAgentIds: user has no team memberships",
+        { userId, teamlessCount: teamlessAgentIds.length },
+        "AgentTeamModel.getUserAccessibleAgentIds: user has no team memberships, returning teamless agents only",
       );
-      return [];
+      return teamlessAgentIds;
     }
 
     // Get all agents assigned to these teams
@@ -54,7 +65,12 @@ class AgentTeamModel {
       .from(schema.agentTeamsTable)
       .where(inArray(schema.agentTeamsTable.teamId, teamIds));
 
-    const accessibleAgentIds = agentTeams.map((at) => at.agentId);
+    // Union team-scoped agents with teamless agents
+    const accessibleSet = new Set([
+      ...agentTeams.map((at) => at.agentId),
+      ...teamlessAgentIds,
+    ]);
+    const accessibleAgentIds = [...accessibleSet];
 
     logger.debug(
       { userId, agentCount: accessibleAgentIds.length },
@@ -80,6 +96,21 @@ class AgentTeamModel {
       logger.debug(
         { userId, agentId },
         "AgentTeamModel.userHasAgentAccess: admin has access",
+      );
+      return true;
+    }
+
+    // Check if the agent has ANY team assignments — teamless agents are visible to all
+    const agentTeamAssignments = await db
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1);
+
+    if (agentTeamAssignments.length === 0) {
+      logger.debug(
+        { userId, agentId },
+        "AgentTeamModel.userHasAgentAccess: agent has no teams (org-wide), granting access",
       );
       return true;
     }
@@ -270,6 +301,62 @@ class AgentTeamModel {
   }
 
   /**
+   * Check if a team token can access an agent.
+   * Returns true if the agent is teamless (org-wide) or assigned to the given team.
+   */
+  static async teamHasAgentAccess(
+    agentId: string,
+    teamId: string | null,
+  ): Promise<boolean> {
+    logger.debug(
+      { agentId, teamId },
+      "AgentTeamModel.teamHasAgentAccess: checking access",
+    );
+
+    // Check if the agent has ANY team assignments — teamless agents are visible to all
+    const agentTeamAssignments = await db
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1);
+
+    if (agentTeamAssignments.length === 0) {
+      logger.debug(
+        { agentId, teamId },
+        "AgentTeamModel.teamHasAgentAccess: agent has no teams (org-wide), granting access",
+      );
+      return true;
+    }
+
+    if (!teamId) {
+      logger.debug(
+        { agentId },
+        "AgentTeamModel.teamHasAgentAccess: no teamId provided, denying access",
+      );
+      return false;
+    }
+
+    // Check if the agent is assigned to this specific team
+    const match = await db
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
+      .where(
+        and(
+          eq(schema.agentTeamsTable.agentId, agentId),
+          eq(schema.agentTeamsTable.teamId, teamId),
+        ),
+      )
+      .limit(1);
+
+    const hasAccess = match.length > 0;
+    logger.debug(
+      { agentId, teamId, hasAccess },
+      "AgentTeamModel.teamHasAgentAccess: completed",
+    );
+    return hasAccess;
+  }
+
+  /**
    * Get team IDs for multiple agents in one query to avoid N+1
    */
   static async getTeamsForAgents(
@@ -362,41 +449,6 @@ class AgentTeamModel {
       "AgentTeamModel.getTeamDetailsForAgents: completed",
     );
     return teamsMap;
-  }
-
-  /**
-   * Check if an agent and MCP server share any teams
-   * Returns true if there's at least one team that both the agent and MCP server are assigned to
-   */
-  static async agentAndMcpServerShareTeam(
-    agentId: string,
-    mcpServerId: string,
-  ): Promise<boolean> {
-    logger.debug(
-      { agentId, mcpServerId },
-      "AgentTeamModel.agentAndMcpServerShareTeam: checking shared teams",
-    );
-    const result = await db
-      .select({ teamId: schema.agentTeamsTable.teamId })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.mcpServersTable,
-        eq(schema.agentTeamsTable.teamId, schema.mcpServersTable.teamId),
-      )
-      .where(
-        and(
-          eq(schema.agentTeamsTable.agentId, agentId),
-          eq(schema.mcpServersTable.id, mcpServerId),
-        ),
-      )
-      .limit(1);
-
-    const shareTeam = result.length > 0;
-    logger.debug(
-      { agentId, mcpServerId, shareTeam },
-      "AgentTeamModel.agentAndMcpServerShareTeam: completed",
-    );
-    return shareTeam;
   }
 }
 

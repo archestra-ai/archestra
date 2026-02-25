@@ -30,6 +30,39 @@ describe("stripEnvVarQuotes", () => {
       expect(stripEnvVarQuotes(input)).toBe(expected);
     });
   });
+
+  describe("edge cases", () => {
+    it("should return empty string for empty input", () => {
+      expect(stripEnvVarQuotes("")).toBe("");
+    });
+
+    it("should return single character as-is", () => {
+      expect(stripEnvVarQuotes("a")).toBe("a");
+      expect(stripEnvVarQuotes('"')).toBe('"');
+    });
+
+    it("should not strip mismatched quotes", () => {
+      expect(stripEnvVarQuotes("\"value'")).toBe("\"value'");
+      expect(stripEnvVarQuotes("'value\"")).toBe("'value\"");
+    });
+
+    it("should not strip quotes that are not at both ends", () => {
+      expect(stripEnvVarQuotes('value"')).toBe('value"');
+      expect(stripEnvVarQuotes('"value')).toBe('"value');
+    });
+
+    it("should handle values with internal quotes", () => {
+      expect(stripEnvVarQuotes('"value with "quotes" inside"')).toBe(
+        'value with "quotes" inside',
+      );
+    });
+
+    it("should handle escaped quotes inside", () => {
+      expect(stripEnvVarQuotes('"value\\"escaped\\""')).toBe(
+        'value\\"escaped\\"',
+      );
+    });
+  });
 });
 
 describe("formSchema", () => {

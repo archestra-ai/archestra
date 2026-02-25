@@ -1,4 +1,8 @@
-import { DEFAULT_LLM_PROXY_NAME, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
+import {
+  DEFAULT_LLM_PROXY_NAME,
+  DEFAULT_MCP_GATEWAY_NAME,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@shared";
 import {
   and,
   asc,
@@ -13,20 +17,19 @@ import {
 } from "drizzle-orm";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
-import type { AgentHistoryEntry } from "@/database/schemas/agent";
 import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type {
   Agent,
+  AgentHistoryEntry,
   AgentVersionsResponse,
   InsertAgent,
   PaginationQuery,
   SortingQuery,
   UpdateAgent,
 } from "@/types";
-import type { ChatOpsProviderType } from "@/types/chatops";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
@@ -325,25 +328,17 @@ class AgentModel {
   }
 
   /**
-   * Find all internal agents that allow a specific chatops provider.
+   * Find all internal agents.
    * Used to populate the agent selection dropdown in Teams/Slack/etc.
-   * Returns only internal agents where the provider is in the allowedChatops array.
    */
-  static async findByAllowedChatopsProvider(
-    provider: ChatOpsProviderType,
-  ): Promise<Pick<Agent, "id" | "name">[]> {
+  static async findAllInternalAgents(): Promise<Pick<Agent, "id" | "name">[]> {
     const agents = await db
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
       })
       .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.agentType, "agent"),
-          sql`${schema.agentsTable.allowedChatops} @> ${JSON.stringify([provider])}::jsonb`,
-        ),
-      )
+      .where(eq(schema.agentsTable.agentType, "agent"))
       .orderBy(asc(schema.agentsTable.name));
 
     return agents;
@@ -821,11 +816,15 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
-    // Fetch the tools for the updated agent
-    const tools = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.agentId, updatedAgent.id));
+    const toolRows = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.agentId, updatedAgent.id));
+    const tools = toolRows.map((row) => row.tool);
 
     // Fetch current teams and labels
     const currentTeams = await AgentTeamModel.getTeamDetailsForAgent(id);
@@ -868,7 +867,6 @@ class AgentModel {
         name: input.name ?? agent.name,
         systemPrompt: input.systemPrompt ?? agent.systemPrompt,
         userPrompt: input.userPrompt ?? agent.userPrompt,
-        allowedChatops: input.allowedChatops ?? agent.allowedChatops,
         promptVersion: (agent.promptVersion || 1) + 1,
         promptHistory: sql`${schema.agentsTable.promptHistory} || ${JSON.stringify([historyEntry])}::jsonb`,
       })
@@ -967,6 +965,25 @@ class AgentModel {
       .delete(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  /** Check if an agent has any Playwright tools assigned via agent_tools. */
+  static async hasPlaywrightToolsAssigned(agentId: string): Promise<boolean> {
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.toolsTable.catalogId, PLAYWRIGHT_MCP_CATALOG_ID),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 }
 

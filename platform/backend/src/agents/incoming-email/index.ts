@@ -5,9 +5,14 @@ import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import OrganizationModel from "@/models/organization";
 import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
+import {
+  RouteCategory,
+  startActiveChatSpan,
+} from "@/routes/proxy/utils/tracing";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -570,11 +575,11 @@ export async function processIncomingEmail(
         );
       }
 
-      // Check if user is a profile admin (can access all agents)
-      const isProfileAdmin = await userHasPermission(
+      // Check if user is an agent admin (can access all agents)
+      const isAgentAdmin = await userHasPermission(
         user.id,
         agent.organizationId,
-        "profile",
+        "agent",
         "admin",
       );
 
@@ -582,7 +587,7 @@ export async function processIncomingEmail(
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         user.id,
         agentId,
-        isProfileAdmin,
+        isAgentAdmin,
       );
 
       if (!hasAccess) {
@@ -592,7 +597,7 @@ export async function processIncomingEmail(
             agentId,
             userId: user.id,
             senderEmail,
-            isProfileAdmin,
+            isAgentAdmin,
           },
           "[IncomingEmail] Private mode: user does not have access to this agent",
         );
@@ -610,7 +615,7 @@ export async function processIncomingEmail(
           agentId,
           userId: user.id,
           senderEmail,
-          isProfileAdmin,
+          isAgentAdmin,
         },
         "[IncomingEmail] Private mode: sender authenticated via email",
       );
@@ -684,17 +689,22 @@ export async function processIncomingEmail(
     }
   }
 
-  // Get organization from agent's team
+  // Get organization from agent's team, or fall back to first org for teamless agents
   const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agent.id);
-  if (agentTeamIds.length === 0) {
-    throw new Error(`No teams found for agent ${agent.id}`);
+  let organization: string;
+  if (agentTeamIds.length > 0) {
+    const teams = await TeamModel.findByIds(agentTeamIds);
+    if (teams.length === 0 || !teams[0].organizationId) {
+      throw new Error(`No organization found for agent ${agent.id}`);
+    }
+    organization = teams[0].organizationId;
+  } else {
+    const firstOrg = await OrganizationModel.getFirst();
+    if (!firstOrg) {
+      throw new Error(`No organization found for teamless agent ${agent.id}`);
+    }
+    organization = firstOrg.id;
   }
-
-  const teams = await TeamModel.findByIds(agentTeamIds);
-  if (teams.length === 0 || !teams[0].organizationId) {
-    throw new Error(`No organization found for agent ${agent.id}`);
-  }
-  const organization = teams[0].organizationId;
 
   // Fetch conversation history if this is part of a thread
   let conversationContext = "";
@@ -785,15 +795,31 @@ ${formattedHistory}
     "[IncomingEmail] Invoking agent with email content",
   );
 
-  // Execute using the shared A2A service
+  // Resolve user for span attributes (skip when userId is "system")
+  const emailUser =
+    userId !== "system" ? await UserModel.getById(userId) : null;
+
+  // Execute using the shared A2A service, wrapped in a parent span so all
+  // LLM and MCP tool calls appear as children of a single unified trace.
   // userId is determined by security mode:
   // - private: actual user ID from email lookup
   // - internal/public: "system" (anonymous)
-  const result = await executeA2AMessage({
+  const result = await startActiveChatSpan({
+    agentName: agent.name,
     agentId,
-    message,
-    organizationId: organization,
-    userId,
+    routeCategory: RouteCategory.EMAIL,
+    triggerSource: "email",
+    user: emailUser
+      ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
+      : null,
+    callback: async () => {
+      return executeA2AMessage({
+        agentId,
+        message,
+        organizationId: organization,
+        userId,
+      });
+    },
   });
 
   logger.info(

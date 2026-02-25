@@ -34,10 +34,17 @@ export class Authnz {
     // Populate request.user and request.organizationId after successful authentication
     await this.populateUserInfo(request);
 
-    // Set Sentry user context after successful authentication
-    if (request.user) {
-      this.setSentryUserContext(request.user, request);
+    // Guard: if populateUserInfo silently failed, user info is missing
+    if (!request.user || !request.organizationId) {
+      logger.warn(
+        { requestId, url: request.url },
+        "[Authnz] Authentication succeeded but user info could not be populated",
+      );
+      throw new ApiError(401, "Unauthenticated");
     }
+
+    // Set Sentry user context after successful authentication
+    this.setSentryUserContext(request.user, request);
 
     logger.debug(
       {
@@ -93,14 +100,18 @@ export class Authnz {
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/ready" ||
-      url === "/api/features" ||
+      url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
+      // Skip OAuth well-known discovery endpoints (RFC 8414 / RFC 9728)
+      url.startsWith("/.well-known/oauth-") ||
+      // Skip OAuth consent page proxy (handled by frontend)
+      url.startsWith("/oauth/") ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
-      (method === "GET" && url === "/api/sso-providers/public") ||
+      (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === "/api/organization/appearance") ||
       // Incoming email webhooks - Microsoft Graph calls these directly

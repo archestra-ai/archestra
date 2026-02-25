@@ -21,7 +21,7 @@
             "parts": [
               {
                 "functionCall": {
-                  "name": "read_file",
+                  "name": "e2e_read_file_gemini",
                   "args": {
                     "file_path": "/etc/passwd"
                   }

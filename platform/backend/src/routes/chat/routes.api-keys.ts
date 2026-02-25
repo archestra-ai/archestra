@@ -1,18 +1,24 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { RouteId } from "@shared";
+import { PROVIDERS_WITH_OPTIONAL_API_KEY, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { ChatApiKeyModel, TeamModel } from "@/models";
+import logger from "@/logging";
+import {
+  ApiKeyModelModel,
+  ChatApiKeyModel,
+  TeamModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
 import {
   assertByosEnabled,
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
+import { modelSyncService } from "@/services/model-sync";
 import {
   ApiError,
   ChatApiKeyScopeSchema,
@@ -39,21 +45,21 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId, user, headers }, reply) => {
+    async ({ organizationId, user }, reply) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      // Check if user is a profile admin
-      const { success: isProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      // Check if user is an agent admin
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       const apiKeys = await ChatApiKeyModel.getVisibleKeys(
         organizationId,
         user.id,
         userTeamIds,
-        isProfileAdmin,
+        isAgentAdmin,
       );
       return reply.send(apiKeys);
     },
@@ -70,6 +76,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat API Keys"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),
+          /** Include a specific key by ID even if user doesn't have direct access (e.g. agent's configured key) */
+          includeKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(
           z.array(ChatApiKeyWithScopeInfoSchema),
@@ -85,7 +93,35 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         query.provider,
       );
-      return reply.send(apiKeys);
+
+      // If includeKeyId is provided and not already in results, fetch it separately
+      if (
+        query.includeKeyId &&
+        !apiKeys.some((k) => k.id === query.includeKeyId)
+      ) {
+        const agentKey = await ChatApiKeyModel.findById(query.includeKeyId);
+        if (agentKey && agentKey.organizationId === organizationId) {
+          apiKeys.push({
+            ...agentKey,
+            teamName: null,
+            userName: null,
+            isAgentKey: true,
+          });
+        }
+      }
+
+      // Compute bestModelId for each key
+      const apiKeysWithBestModel = await Promise.all(
+        apiKeys.map(async (key) => {
+          const bestModel = await ApiKeyModelModel.getBestModel(key.id);
+          return {
+            ...key,
+            bestModelId: bestModel?.modelId ?? null,
+          };
+        }),
+      );
+
+      return reply.send(apiKeysWithBestModel);
     },
   );
 
@@ -102,8 +138,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1, "Name is required"),
             provider: SupportedChatProviderSchema,
             apiKey: z.string().min(1).optional(),
+            baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
             teamId: z.string().optional(),
+            isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -111,7 +149,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (data) =>
               isByosEnabled()
                 ? data.vaultSecretPath && data.vaultSecretKey
-                : data.apiKey,
+                : PROVIDERS_WITH_OPTIONAL_API_KEY.has(data.provider) ||
+                  data.apiKey,
             {
               message:
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
@@ -129,10 +168,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: body.scope,
         teamId: body.teamId,
         userId: user.id,
+        organizationId,
         headers,
       });
 
       let secret: SelectSecret | null = null;
+      let actualApiKeyValue: string | null = null;
 
       // If readonly_vault is enabled
       if (isByosEnabled()) {
@@ -143,9 +184,9 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // first, get secret from vault path and key
         const manager = assertByosEnabled();
         const vaultData = await manager.getSecretFromPath(body.vaultSecretPath);
-        const apiKeyValue = vaultData[body.vaultSecretKey];
+        actualApiKeyValue = vaultData[body.vaultSecretKey];
 
-        if (!apiKeyValue) {
+        if (!actualApiKeyValue) {
           throw new ApiError(
             400,
             `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
@@ -153,7 +194,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         // then test the API key
         try {
-          await testProviderApiKey(body.provider, apiKeyValue);
+          await testProviderApiKey(body.provider, actualApiKeyValue);
         } catch (_error) {
           throw new ApiError(
             400,
@@ -171,9 +212,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       } else if (body.apiKey) {
         // When readonly_vault is disabled
+        actualApiKeyValue = body.apiKey;
         // Test the API key before saving
         try {
-          await testProviderApiKey(body.provider, body.apiKey);
+          await testProviderApiKey(body.provider, actualApiKeyValue);
         } catch (_error) {
           throw new ApiError(
             400,
@@ -182,7 +224,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         secret = await secretManager().createSecret(
-          { apiKey: body.apiKey },
+          { apiKey: actualApiKeyValue },
           getChatApiKeySecretName({
             scope: body.scope,
             teamId: body.teamId ?? null,
@@ -191,7 +233,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (!secret) {
+      if (!secret && !PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
         throw new ApiError(
           400,
           "Secret creation failed, cannot create API key",
@@ -203,14 +245,39 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         name: body.name,
         provider: body.provider,
-        secretId: secret.id,
+        secretId: secret?.id ?? null,
+        baseUrl: body.baseUrl ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
+        isPrimary: body.isPrimary ?? false,
       });
 
-      // Invalidate models cache so users see models from the new provider key
-      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
+      // Sync models for the new API key before returning so the frontend
+      // can immediately show available models after creation.
+      // For optional-key providers (Ollama, vLLM), sync even without an API key value.
+      const canSync =
+        actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
+      if (canSync && modelSyncService.hasFetcher(body.provider)) {
+        try {
+          await modelSyncService.syncModelsForApiKey(
+            createdApiKey.id,
+            body.provider,
+            actualApiKeyValue ?? "",
+          );
+        } catch (error) {
+          // Model sync failure shouldn't block API key creation
+          logger.error(
+            {
+              apiKeyId: createdApiKey.id,
+              provider: body.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to sync models for new API key",
+          );
+        }
+      }
 
       return reply.send(createdApiKey);
     },
@@ -230,7 +297,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ChatApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ params, organizationId, user, headers }, reply) => {
+    async ({ params, organizationId, user }, reply) => {
       const apiKey = await ChatApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
@@ -239,10 +306,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check visibility based on scope
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const { success: isProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
 
       // Personal keys: only visible to owner
       if (apiKey.scope === "personal" && apiKey.userId !== user.id) {
@@ -250,7 +317,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Team keys: visible to team members or admins
-      if (apiKey.scope === "team" && !isProfileAdmin) {
+      if (apiKey.scope === "team" && !isAgentAdmin) {
         if (!apiKey.teamId || !userTeamIds.includes(apiKey.teamId)) {
           throw new ApiError(404, "Chat API key not found");
         }
@@ -276,8 +343,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
+            baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
+            isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
           })
@@ -317,7 +386,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check authorization based on current scope
-      await authorizeApiKeyAccess(apiKeyFromDB, user.id, headers);
+      await authorizeApiKeyAccess({
+        apiKey: apiKeyFromDB,
+        userId: user.id,
+        organizationId,
+        headers,
+      });
 
       // If scope is changing, validate the new scope
       const newScope = body.scope ?? apiKeyFromDB.scope;
@@ -330,6 +404,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope: newScope,
           teamId: newTeamId,
           userId: user.id,
+          organizationId,
           headers,
         });
       }
@@ -394,14 +469,24 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Build update object
       const updateData: Partial<{
         name: string;
+        baseUrl: string | null;
         scope: "personal" | "team" | "org_wide";
         userId: string | null;
         teamId: string | null;
         secretId: string | null;
+        isPrimary: boolean;
       }> = {};
 
       if (body.name) {
         updateData.name = body.name;
+      }
+
+      if (body.baseUrl !== undefined) {
+        updateData.baseUrl = body.baseUrl;
+      }
+
+      if (body.isPrimary !== undefined) {
+        updateData.isPrimary = body.isPrimary;
       }
 
       if (newSecretId) {
@@ -452,17 +537,40 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check authorization based on scope
-      await authorizeApiKeyAccess(apiKey, user.id, headers);
+      await authorizeApiKeyAccess({
+        apiKey,
+        userId: user.id,
+        organizationId,
+        headers,
+      });
 
-      // Delete the associated secret
+      // Delete virtual key secrets before deleting the parent API key.
+      // The DB cascades the virtual key rows, but their secrets in the
+      // secret manager would be orphaned without explicit cleanup.
+      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId(
+        params.id,
+      );
+      for (const vk of virtualKeys) {
+        try {
+          await secretManager().deleteSecret(vk.secretId);
+        } catch (error) {
+          logger.warn(
+            {
+              virtualKeyId: vk.id,
+              secretId: vk.secretId,
+              error: String(error),
+            },
+            "Failed to delete virtual key secret during parent key deletion",
+          );
+        }
+      }
+
+      // Delete the parent key's associated secret
       if (apiKey.secretId) {
         await secretManager().deleteSecret(apiKey.secretId);
       }
 
       await ChatApiKeyModel.delete(params.id);
-
-      // Invalidate models cache so users no longer see models from the deleted key
-      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
 
       return reply.send({ success: true });
     },
@@ -477,9 +585,10 @@ async function validateScopeAndAuthorization(params: {
   scope: "personal" | "team" | "org_wide";
   teamId: string | null | undefined;
   userId: string;
+  organizationId: string;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { scope, teamId, userId, headers } = params;
+  const { scope, teamId, userId, organizationId, headers } = params;
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {
@@ -518,13 +627,13 @@ async function validateScopeAndAuthorization(params: {
     }
   }
 
-  // For org-wide keys, require profile admin permission
+  // For org-wide keys, require agent admin permission
   if (scope === "org_wide") {
-    const { success: isProfileAdmin } = await hasPermission(
-      { profile: ["admin"] },
-      headers,
-    );
-    if (!isProfileAdmin) {
+    const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      userId,
+      organizationId,
+    });
+    if (!isAgentAdmin) {
       throw new ApiError(403, "Only admins can use organization-wide scope");
     }
   }
@@ -533,11 +642,14 @@ async function validateScopeAndAuthorization(params: {
 /**
  * Helper to check if a user is authorized to modify an API key based on scope
  */
-async function authorizeApiKeyAccess(
-  apiKey: { scope: string; userId: string | null; teamId: string | null },
-  userId: string,
-  headers: IncomingHttpHeaders,
-): Promise<void> {
+async function authorizeApiKeyAccess(params: {
+  apiKey: { scope: string; userId: string | null; teamId: string | null };
+  userId: string;
+  organizationId: string;
+  headers: IncomingHttpHeaders;
+}): Promise<void> {
+  const { apiKey, userId, organizationId, headers } = params;
+
   // Personal keys: only owner can modify
   if (apiKey.scope === "personal") {
     if (apiKey.userId !== userId) {
@@ -565,13 +677,13 @@ async function authorizeApiKeyAccess(
     return;
   }
 
-  // Org-wide keys: require profile admin
+  // Org-wide keys: require agent admin
   if (apiKey.scope === "org_wide") {
-    const { success: isProfileAdmin } = await hasPermission(
-      { profile: ["admin"] },
-      headers,
-    );
-    if (!isProfileAdmin) {
+    const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      userId,
+      organizationId,
+    });
+    if (!isAgentAdmin) {
       throw new ApiError(
         403,
         "Only admins can modify organization-wide API keys",

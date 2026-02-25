@@ -4,12 +4,15 @@ import { z } from "zod";
 import { schema } from "@/database";
 import {
   Anthropic,
+  Bedrock,
   Cerebras,
   Cohere,
   Gemini,
+  Groq,
   Mistral,
   Ollama,
   OpenAi,
+  Perplexity,
   Vllm,
   Zhipuai,
 } from "./llm-providers";
@@ -28,8 +31,11 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ChatCompletionRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
   Anthropic.API.MessagesRequestSchema,
+  Bedrock.API.ConverseRequestSchema,
   Cerebras.API.ChatCompletionRequestSchema,
   Mistral.API.ChatCompletionRequestSchema,
+  Perplexity.API.ChatCompletionRequestSchema,
+  Groq.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Cohere.API.ChatRequestSchema,
@@ -40,8 +46,11 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
+  Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
+  Perplexity.API.ChatCompletionResponseSchema,
+  Groq.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Cohere.API.ChatResponseSchema,
@@ -98,6 +107,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
+    type: z.enum(["bedrock:converse"]),
+    request: Bedrock.API.ConverseRequestSchema,
+    processedRequest: Bedrock.API.ConverseRequestSchema.nullable().optional(),
+    response: Bedrock.API.ConverseResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
     type: z.enum(["cerebras:chatCompletions"]),
     request: Cerebras.API.ChatCompletionRequestSchema,
     processedRequest:
@@ -113,6 +131,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Mistral.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Mistral.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["perplexity:chatCompletions"]),
+    request: Perplexity.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Perplexity.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Perplexity.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["groq:chatCompletions"]),
+    request: Groq.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Groq.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Groq.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -161,7 +199,11 @@ export const InsertInteractionSchema = createInsertSchema(
     response: InteractionResponseSchema,
     toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   },
-);
+).extend({
+  // Override profileId to be required for creating interactions
+  // (it's nullable in the DB schema to preserve interactions when agents are deleted)
+  profileId: z.string().uuid(),
+});
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;
 

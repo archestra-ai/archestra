@@ -1,4 +1,44 @@
+import type { APIRequestContext } from "@playwright/test";
 import { expect, test } from "./fixtures";
+
+type MakeApiRequest = (args: {
+  request: APIRequestContext;
+  method: "get" | "post" | "put" | "patch" | "delete";
+  urlSuffix: string;
+  data?: unknown;
+  ignoreStatusCheck?: boolean;
+}) => Promise<{
+  json: () => Promise<unknown>;
+  ok: () => boolean;
+  status: () => number;
+  text: () => Promise<string>;
+}>;
+
+async function cleanupKeyByName(
+  makeApiRequest: MakeApiRequest,
+  request: APIRequestContext,
+  name: string,
+) {
+  const existingKeys = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/chat-api-keys",
+  });
+  const existingKeysData = (await existingKeys.json()) as {
+    id: string;
+    name: string;
+  }[];
+  for (const key of existingKeysData) {
+    if (key.name === name) {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat-api-keys/${key.id}`,
+        ignoreStatusCheck: true,
+      });
+    }
+  }
+}
 
 test.describe("Chat API Keys CRUD", () => {
   test.describe.configure({ mode: "serial" });
@@ -20,6 +60,9 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Test Anthropic Key");
+
     const response = await makeApiRequest({
       request,
       method: "post",
@@ -53,14 +96,22 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Org Wide Test Key");
+
+    // Use bedrock provider for this test. Note: bedrock IS seeded in CI via
+    // ARCHESTRA_CHAT_BEDROCK_API_KEY, but we can create a second non-primary
+    // org_wide key without conflict (unique constraint only applies to isPrimary=true).
+    // Do NOT delete the seeded org_wide bedrock key here — other parallel tests
+    // (e.g. token-cost-limits) depend on it being in configuredProviders.
     const response = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Org Wide Test Key",
-        provider: "anthropic",
-        apiKey: "sk-ant-org-wide-test-key",
+        provider: "bedrock",
+        apiKey: "bedrock-org-wide-test-key",
         scope: "org_wide",
       },
     });
@@ -82,6 +133,9 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Get By ID Test Key");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -120,6 +174,10 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Original Name");
+    await cleanupKeyByName(makeApiRequest, request, "Updated Name");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -157,6 +215,9 @@ test.describe("Chat API Keys CRUD", () => {
   });
 
   test("should delete a chat API key", async ({ request, makeApiRequest }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Delete Test Key");
+
     // Create a key first
     const createResponse = await makeApiRequest({
       request,
@@ -206,10 +267,14 @@ test.describe("Chat API Keys CRUD", () => {
     expect(response.status()).toBe(404);
   });
 
-  test("should enforce one personal key per user per provider", async ({
+  test("should allow multiple personal keys per user per provider", async ({
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover keys from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key 1");
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key 2");
+
     // Create first personal key for anthropic
     const key1Response = await makeApiRequest({
       request,
@@ -225,7 +290,7 @@ test.describe("Chat API Keys CRUD", () => {
     expect(key1Response.ok()).toBe(true);
     const key1 = await key1Response.json();
 
-    // Try to create second personal key for same provider - should fail with unique constraint violation
+    // Create second personal key for same provider - should now succeed
     const key2Response = await makeApiRequest({
       request,
       method: "post",
@@ -236,10 +301,9 @@ test.describe("Chat API Keys CRUD", () => {
         apiKey: "sk-ant-personal-test-2",
         scope: "personal",
       },
-      ignoreStatusCheck: true,
     });
-    // Backend returns 500 for unique constraint violations (database error)
-    expect(key2Response.ok()).toBe(false);
+    expect(key2Response.ok()).toBe(true);
+    const key2 = await key2Response.json();
 
     // Cleanup
     await makeApiRequest({
@@ -247,12 +311,21 @@ test.describe("Chat API Keys CRUD", () => {
       method: "delete",
       urlSuffix: `/api/chat-api-keys/${key1.id}`,
     });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${key2.id}`,
+    });
   });
 
   test("should allow personal keys for different providers", async ({
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover keys from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Personal Anthropic Key");
+    await cleanupKeyByName(makeApiRequest, request, "Personal OpenAI Key");
+
     // Create personal anthropic key
     const anthropicResponse = await makeApiRequest({
       request,
@@ -305,6 +378,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Available Test Key");
+
     // Create a personal key first
     const createResponse = await makeApiRequest({
       request,
@@ -345,6 +421,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Filter OpenAI Key");
+
     // Create an openai key
     const openaiResponse = await makeApiRequest({
       request,
@@ -390,6 +469,9 @@ test.describe("Chat API Keys Team Scope", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs
+    await cleanupKeyByName(makeApiRequest, request, "Team Test Key");
+
     // First get a team that the admin user belongs to
     const teamsResponse = await makeApiRequest({
       request,
@@ -462,16 +544,19 @@ test.describe("Chat API Keys Scope Update", () => {
     request,
     makeApiRequest,
   }) => {
+    // Clean up any leftover key from previous runs to avoid unique constraint violations
+    await cleanupKeyByName(makeApiRequest, request, "Scope Update Test Key");
+
     // Create a personal key first
-    // Use gemini provider to avoid conflicts with other tests using openai personal keys
+    // Use bedrock provider - the only one without env var in CI (all others are seeded with org_wide keys)
     const createResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Scope Update Test Key",
-        provider: "gemini",
-        apiKey: "gemini-scope-update-test",
+        provider: "bedrock",
+        apiKey: "bedrock-scope-update-test",
         scope: "personal",
       },
     });

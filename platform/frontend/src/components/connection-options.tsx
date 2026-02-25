@@ -4,11 +4,13 @@ import {
   Bot,
   DollarSign,
   Eye,
+  Info,
   Lock,
   Network,
+  Route,
   Server,
-  Shield,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
@@ -22,7 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useInternalAgents, useProfilesQuery } from "@/lib/agent.query";
+import { useInternalAgents, useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 
 interface ConnectionOptionsProps {
   mcpGatewayId?: string;
@@ -38,8 +41,20 @@ export function ConnectionOptions({
   onTabChange,
 }: ConnectionOptionsProps) {
   const { data: internalAgents } = useInternalAgents();
-  const { data: llmProxies } = useProfilesQuery({
+  const { data: llmProxies } = useProfiles({
     filters: { agentTypes: ["profile", "llm_proxy"] },
+  });
+  const { data: mcpGateways } = useProfiles({
+    filters: { agentTypes: ["profile", "mcp_gateway"] },
+  });
+  const { data: canCreateAgent } = useHasPermissions({
+    agent: ["create"],
+  });
+  const { data: canCreateMcpGateway } = useHasPermissions({
+    mcpGateway: ["create"],
+  });
+  const { data: canCreateLlmProxy } = useHasPermissions({
+    llmProxy: ["create"],
   });
   const [selectedA2aAgentId, setSelectedA2aAgentId] = useState<string | null>(
     null,
@@ -137,7 +152,7 @@ export function ConnectionOptions({
           }
         >
           <div className="flex items-center gap-2">
-            <Shield
+            <Route
               className="h-4 w-4"
               style={
                 activeTab === "mcp" ? { color: "var(--chart-2)" } : undefined
@@ -214,50 +229,70 @@ export function ConnectionOptions({
         {activeTab === "proxy" && (
           <div className="animate-in fade-in-0 slide-in-from-left-2 duration-300">
             <div className="p-4 rounded-lg border bg-card space-y-6">
-              {/* LLM Proxy Selector */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Select LLM Proxy</Label>
-                <Select
-                  value={effectiveLlmProxyId ?? ""}
-                  onValueChange={setSelectedLlmProxyId}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an LLM Proxy">
-                      {selectedLlmProxy && (
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Network className="h-4 w-4 shrink-0" />
-                          <span className="truncate">
-                            {selectedLlmProxy.name}
-                          </span>
-                        </div>
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {llmProxies?.map((proxy) => (
-                      <SelectItem key={proxy.id} value={proxy.id}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Network className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{proxy.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {llmProxies && llmProxies.length === 0 ? (
+                <NoAccessMessage
+                  canCreate={canCreateLlmProxy}
+                  createHref="/llm-proxies"
+                  createLabel="LLM Proxies"
+                />
+              ) : (
+                <>
+                  {/* LLM Proxy Selector */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Select LLM Proxy
+                    </Label>
+                    <Select
+                      value={effectiveLlmProxyId ?? ""}
+                      onValueChange={setSelectedLlmProxyId}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select an LLM Proxy">
+                          {selectedLlmProxy && (
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Network className="h-4 w-4 shrink-0" />
+                              <span className="truncate">
+                                {selectedLlmProxy.name}
+                              </span>
+                            </div>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {llmProxies?.map((proxy) => (
+                          <SelectItem key={proxy.id} value={proxy.id}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Network className="h-4 w-4 shrink-0" />
+                              <span className="truncate">{proxy.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {/* Connection Instructions */}
-              <ProxyConnectionInstructions
-                agentId={effectiveLlmProxyId ?? undefined}
-              />
+                  {/* Connection Instructions */}
+                  <ProxyConnectionInstructions
+                    agentId={effectiveLlmProxyId ?? undefined}
+                  />
+                </>
+              )}
             </div>
           </div>
         )}
         {activeTab === "mcp" && (
           <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
             <div className="p-4 rounded-lg border bg-card">
-              {mcpGatewayId && (
-                <McpConnectionInstructions agentId={mcpGatewayId} />
+              {mcpGateways && mcpGateways.length === 0 ? (
+                <NoAccessMessage
+                  canCreate={canCreateMcpGateway}
+                  createHref="/mcp-gateways"
+                  createLabel="MCP Gateways"
+                />
+              ) : (
+                <McpConnectionInstructions
+                  agentId={mcpGatewayId ?? mcpGateways?.[0]?.id ?? ""}
+                />
               )}
             </div>
           </div>
@@ -265,46 +300,85 @@ export function ConnectionOptions({
         {activeTab === "a2a" && (
           <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
             <div className="p-4 rounded-lg border bg-card space-y-6">
-              {/* Agent Selector */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Select Agent</Label>
-                <Select
-                  value={effectiveA2aAgentId ?? ""}
-                  onValueChange={setSelectedA2aAgentId}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an agent">
-                      {selectedA2aAgent && (
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Bot className="h-4 w-4 shrink-0" />
-                          <span className="truncate">
-                            {selectedA2aAgent.name}
-                          </span>
-                        </div>
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {internalAgents?.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Bot className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{agent.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {internalAgents && internalAgents.length === 0 ? (
+                <NoAccessMessage
+                  canCreate={canCreateAgent}
+                  createHref="/agents"
+                  createLabel="Agents"
+                />
+              ) : (
+                <>
+                  {/* Agent Selector */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Select Agent</Label>
+                    <Select
+                      value={effectiveA2aAgentId ?? ""}
+                      onValueChange={setSelectedA2aAgentId}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select an agent">
+                          {selectedA2aAgent && (
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Bot className="h-4 w-4 shrink-0" />
+                              <span className="truncate">
+                                {selectedA2aAgent.name}
+                              </span>
+                            </div>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {internalAgents?.map((agent) => (
+                          <SelectItem key={agent.id} value={agent.id}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Bot className="h-4 w-4 shrink-0" />
+                              <span className="truncate">{agent.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {/* Connection Instructions */}
-              {selectedA2aAgent && (
-                <A2AConnectionInstructions agent={selectedA2aAgent} />
+                  {/* Connection Instructions */}
+                  {selectedA2aAgent && (
+                    <A2AConnectionInstructions agent={selectedA2aAgent} />
+                  )}
+                </>
               )}
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function NoAccessMessage({
+  canCreate,
+  createHref,
+  createLabel,
+}: {
+  canCreate: boolean;
+  createHref: string;
+  createLabel: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+      <Info className="h-8 w-8 text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">
+        There are no {createLabel} you have access to yet.
+        {canCreate && (
+          <>
+            {" "}
+            Go to{" "}
+            <Link href={createHref} className="underline hover:text-foreground">
+              {createLabel}
+            </Link>{" "}
+            page to create one.
+          </>
+        )}
+      </p>
     </div>
   );
 }

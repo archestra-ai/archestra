@@ -1,7 +1,14 @@
+import { vi } from "vitest";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
+import * as knowledgeGraph from "@/knowledge-graph";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 import ToolModel from "./tool";
+
+// Mock knowledge graph as configured so all Archestra tools (including query_knowledge_graph) are available
+vi.spyOn(knowledgeGraph, "getKnowledgeGraphProviderType").mockReturnValue(
+  "lightrag",
+);
 
 describe("Archestra Tools Dynamic Assignment", () => {
   test("agents get Archestra tools after explicit assignment", async ({
@@ -72,7 +79,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       serverUrl: "https://test.com/mcp/",
     });
 
-    const mcpServer = await makeMcpServer({
+    await makeMcpServer({
       name: "test-server",
       catalogId: catalogItem.id,
       ownerId: user.id,
@@ -83,7 +90,6 @@ describe("Archestra Tools Dynamic Assignment", () => {
       description: "Test MCP tool",
       parameters: {},
       catalogId: catalogItem.id,
-      mcpServerId: mcpServer.id,
     });
 
     // Assign MCP tool to agent

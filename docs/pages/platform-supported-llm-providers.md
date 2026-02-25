@@ -1,9 +1,9 @@
 ---
 title: Supported LLM Providers
-category: Archestra Platform
+category: Agents
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-01-14
+lastUpdated: 2026-02-22
 ---
 
 <!--
@@ -169,6 +169,41 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
 
+## Groq
+
+[Groq](https://groq.com/) provides low-latency inference for popular open-source models through an OpenAI-compatible API.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                      | Required | Description                                                              |
+| ----------------------------- | -------- | ------------------------------------------------------------------------ |
+| `ARCHESTRA_GROQ_BASE_URL`     | No       | Groq API base URL (default: `https://api.groq.com/openai/v1`)            |
+| `ARCHESTRA_CHAT_GROQ_API_KEY` | No       | Default API key for Groq (can be overridden per conversation/team/org)   |
+
+### Getting an API Key
+
+You can generate an API key from the [Groq Console](https://console.groq.com/keys).
+
+### Popular Models
+
+- `llama-3.3-70b-versatile`
+- `llama-3.1-8b-instant`
+- `gemma2-9b-it`
+
+### Important Notes
+
+- **OpenAI-compatible API**: Groq uses the OpenAI Chat Completions request/response format, which makes it a good fit for existing OpenAI client libraries.
+- **Base URL includes `/openai/v1`**: When configuring a custom Groq endpoint, ensure the base URL points to the OpenAI-compatible API root (for example, `https://api.groq.com/openai/v1`).
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.
@@ -186,6 +221,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 You can get an API key from the [Mistral AI Console](https://console.mistral.ai/api-keys).
 
+## Perplexity AI
+
+[Perplexity AI](https://www.perplexity.ai/) provides AI-powered search and answer engines with real-time web search capabilities through an OpenAI-compatible API.
+
+### Supported Perplexity APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Perplexity Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/perplexity/{agent-id}`
+- **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                            | Required | Description                                                                    |
+| ----------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_PERPLEXITY_BASE_URL`     | No       | Perplexity API base URL (default: `https://api.perplexity.ai`)                 |
+| `ARCHESTRA_CHAT_PERPLEXITY_API_KEY` | No       | Default API key for Perplexity (can be overridden per conversation/team/org)   |
+
+### Getting an API Key
+
+You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/settings/api).
+
+### Important Notes
+
+- **No tool calling support**: Perplexity does NOT support external tool calling. It performs internal web searches and returns results in the response. Use Perplexity for search-augmented generation, not agentic workflows requiring custom tools.
+- **Search results**: Perplexity responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
+- **Models**: Popular models include `sonar-pro`, `sonar`, and `sonar-deep-research` for different use cases.
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.
@@ -197,7 +262,15 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 ### vLLM Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/vllm/{profile-id}`
-- **Authentication**: Pass your vLLM API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Many vLLM deployments don't require authentication.
+- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your vLLM deployment requires auth.
+
+### Setup
+
+1. Go to **Settings > LLM API Keys** and add a new key with provider **vLLM**
+2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
+3. API key can be left blank for most self-hosted deployments
+
+The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environment variable. Per-key base URLs in the UI take precedence.
 
 ### Environment Variables
 
@@ -208,8 +281,8 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Important Notes
 
-- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set. Without it, vLLM won't appear as an option in the platform.
-- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. The `ARCHESTRA_CHAT_VLLM_API_KEY` is only needed if your vLLM deployment has authentication enabled.
+- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set or a per-key base URL is configured in the UI. Without either, vLLM won't appear as an option.
+- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. When adding a vLLM key in the platform, the API key field is marked as optional.
 
 ## Ollama
 
@@ -222,20 +295,27 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 ### Ollama Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/ollama/{profile-id}`
-- **Authentication**: Pass your Ollama API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Ollama typically doesn't require authentication.
+- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
+
+### Setup
+
+1. Go to **Settings > LLM API Keys** and add a new key with provider **Ollama**
+2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
+3. API key can be left blank for self-hosted Ollama
+
+The default base URL is `http://localhost:11434/v1`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_BASE_URL`.
 
 ### Environment Variables
 
-| Variable                        | Required | Description                                                                      |
-| ------------------------------- | -------- | -------------------------------------------------------------------------------- |
-| `ARCHESTRA_OLLAMA_BASE_URL`     | Yes      | Ollama server base URL (e.g., `http://localhost:11434/v1` for default Ollama)    |
-| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, Ollama typically doesn't require auth)      |
+| Variable                        | Required | Description                                                                                  |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_OLLAMA_BASE_URL`     | No       | Ollama server base URL (default: `http://localhost:11434/v1`)                                |
+| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, should be used for the Ollama Cloud API)                |
 
 ### Important Notes
 
-- **Configure base URL to enable Ollama**: The Ollama provider is only available when `ARCHESTRA_OLLAMA_BASE_URL` is set. Without it, Ollama won't appear as an option in the platform.
-- **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
-- **No API key required**: Ollama typically doesn't require authentication for local deployments.
+- **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`.
+- **No API key required**: Self-hosted Ollama doesn't require authentication. When adding an Ollama key in the platform, the API key field is marked as optional.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
 
 ## Zhipu AI
@@ -272,3 +352,39 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## Amazon Bedrock
+
+### Supported Bedrock APIs
+
+- **Converse API** (`/converse`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
+- **Converse Stream API** (`/converse-stream`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
+- **InvokeModel API** (`/invoke`) -  ⚠️ Not yet supported  ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
+- **OpenAI-compatible API (Mantle)** -  ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
+
+### Bedrock Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
+- **Authentication**: Pass your [Amazon Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                                     | Required | Description                                                                                     |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`)          |
+| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference profiles (e.g., `us` or `eu`)                          |
+| `ARCHESTRA_CHAT_BEDROCK_API_KEY`             | No       | Default API key for Bedrock (can be overridden per conversation/team/org)                       |
+
+#### `ARCHESTRA_BEDROCK_BASE_URL`
+
+This variable is **required** to enable the Bedrock provider. It specifies the regional endpoint for the Bedrock Runtime API. The URL format follows AWS regional endpoints:
+
+```
+https://bedrock-runtime.{region}.amazonaws.com
+```
+
+#### `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX`
+
+Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
+
+For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).

@@ -45,12 +45,12 @@ Use this when you need to patch an already-released version without including un
 
 ### 1. Create a Release Branch
 
-Create a branch from the tag you want to patch:
+Create a branch from the tag you want to patch, so we can merge hotfix into it later and make a hotfix release:
 
 ```bash
-# Example: patching v1.0.22
+# Example: patching platform-v1.0.22
 git fetch --tags
-git checkout -b release/v1.0.22 v1.0.22
+git checkout -b release/v1.0.22 platform-v1.0.22
 git push origin release/v1.0.22
 ```
 
@@ -60,8 +60,17 @@ Create a PR targeting your `release/v1.0.22` branch:
 
 ```bash
 git checkout -b hotfix/fix-critical-bug release/v1.0.22
+```
+```
 # make your fix
 git commit -m "fix: resolve critical authentication issue"
+```
+```
+# Alternatively cherry-pick commits from main or from PR
+# NOTE: Make sure that the PR's branch is not deleted, copy commit SHA
+git cherry-pick <commit-sha>
+```
+```
 git push origin hotfix/fix-critical-bug
 # create PR targeting release/v1.0.22, get review, merge
 ```
@@ -71,8 +80,6 @@ git push origin hotfix/fix-critical-bug
 When you merge to `release/v1.0.22`:
 - Release Please creates a PR for `v1.0.23` targeting the release branch
 - Merge this PR to create the hotfix release
-
-**Important:** If there's already a release-please PR on `main` targeting the same version (v1.0.23), you'll need to resolve the version clash after releasing the hotfix. See [Version Clash](#version-clash-after-hotfix) in Troubleshooting.
 
 ### 4. Backport to Main
 
@@ -89,6 +96,19 @@ git cherry-pick <commit-sha>
 # Push to `main`
 git push origin main
 ```
+
+### 5. IMPORTANT! Bump the version on `main` using the `release-as` directive:
+
+```bash
+git checkout main
+git pull origin main
+git commit -m "chore(release): bump version" -m "release-as: X.Y.Z" --allow-empty
+git push origin main
+```
+(alternatively create PR with this empty commit and merge to `main`)
+Replace X.Y.Z with a version higher than the hotfix you just released (e.g., if hotfix was v1.0.23, use v1.0.24)
+
+Now the version of existing release-please PR for `main` will be bumped
 
 ## Quick Reference
 
@@ -136,22 +156,3 @@ Check the "On commits to main" workflow for errors. Common issues:
 - Docker build failures
 - Kubernetes deployment issues
 - Secret configuration problems
-
-### Version Clash After Hotfix
-
-**Scenario:** You released a hotfix (e.g., v1.0.23) from a `release/*` branch, but `main` already has a release-please PR targeting the same version.
-
-**Symptom:** The "Version Clash Check" CI job fails on the release-please PR for `main`.
-
-**Solution:** Bump the version on `main` using the `release-as` directive:
-
-```bash
-git checkout main
-git pull origin main
-git commit -m "chore(release): bump version" -m "release-as: 1.0.24" --allow-empty
-git push origin main
-```
-
-This creates an empty commit that tells Release Please to target v1.0.24 instead. The release-please PR will automatically update.
-
-**Prevention:** Before merging any release-please PR, check that the target version hasn't already been used. The CI check does this automatically, but if you're releasing a hotfix, be aware that you may need to bump the version on `main` afterwards.

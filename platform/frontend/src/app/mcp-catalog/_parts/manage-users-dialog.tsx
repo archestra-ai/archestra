@@ -3,6 +3,7 @@
 import { E2eTestId, formatSecretStorageType } from "@shared";
 import { format } from "date-fns";
 import { AlertTriangle, RefreshCw, Trash, User } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,8 +30,9 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
+import { useInitiateOAuth } from "@/lib/oauth.query";
 import { useTeams } from "@/lib/team.query";
 
 interface ManageUsersDialogProps {
@@ -47,8 +49,8 @@ export function ManageUsersDialog({
   catalogId,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
-  const { data: allServers } = useMcpServers({ catalogId });
-  const { data: catalogItems } = useInternalMcpCatalogSuspense({});
+  const { data: allServers = [] } = useMcpServers({ catalogId });
+  const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
 
@@ -101,16 +103,17 @@ export function ManageUsersDialog({
       return "You need MCP server create permission to re-authenticate";
     }
     if (!mcpServer.teamId) {
-      return "Only the credential owner can re-authenticate";
+      return "Only the connection owner can re-authenticate";
     }
     // WHY: Different messages for different failure reasons
     if (!hasMcpServerUpdatePermission) {
-      return "You don't have permission to re-authenticate team credentials";
+      return "You don't have permission to re-authenticate team connections";
     }
-    return "You can only re-authenticate credentials for teams you are a member of";
+    return "You can only re-authenticate connections for teams you are a member of";
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
+  const initiateOAuthMutation = useInitiateOAuth();
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
     await deleteMcpServerMutation.mutateAsync({
@@ -132,22 +135,10 @@ export function ManageUsersDialog({
       sessionStorage.setItem("oauth_mcp_server_id", mcpServer.id);
 
       // Call backend to initiate OAuth flow
-      const response = await fetch("/api/oauth/initiate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const { authorizationUrl, state } =
+        await initiateOAuthMutation.mutateAsync({
           catalogId: catalogItem.id,
-        }),
-      });
-
-      if (!response.ok) {
-        sessionStorage.removeItem("oauth_mcp_server_id");
-        throw new Error("Failed to initiate OAuth flow");
-      }
-
-      const { authorizationUrl, state } = await response.json();
+        });
 
       // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);
@@ -160,6 +151,13 @@ export function ManageUsersDialog({
       toast.error("Failed to initiate re-authentication");
     }
   };
+
+  // Close dialog when all credentials are revoked
+  useEffect(() => {
+    if (isOpen && !firstServer) {
+      onClose();
+    }
+  }, [isOpen, firstServer, onClose]);
 
   if (!firstServer) {
     return null;
@@ -181,20 +179,20 @@ export function ManageUsersDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage credentials
+            Manage connections
             <span className="text-muted-foreground font-normal">
               {label || firstServer.name}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage credentials for this MCP Registry item.
+            Manage connections for this MCP Registry item.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
           {allServers?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No credentials available for this server.
+              No connections available for this server.
             </div>
           ) : (
             <div className="rounded-md border">

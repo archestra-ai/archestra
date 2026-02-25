@@ -257,6 +257,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   getLastUserMessage(): string {
+    // Handle case where contents might be undefined or not an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return "";
+    }
+
     const reversedMessages = [...this.request.contents].reverse();
     for (const message of reversedMessages) {
       if (message.role !== "user") {
@@ -264,10 +269,28 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       }
 
       if (Array.isArray(message.parts)) {
-        // Find the first text part that's not a functionResponse
+        // First pass: look for text content
         for (const part of message.parts) {
           if (hasText(part) && part.text) {
             return part.text;
+          }
+        }
+
+        // Second pass: provide descriptive fallback for non-text content
+        for (const part of message.parts) {
+          if (hasFunctionResponse(part)) {
+            return `[Function response: ${part.functionResponse.name}]`;
+          }
+          if (hasFunctionCall(part)) {
+            return `[Function call: ${part.functionCall.name}]`;
+          }
+          if (hasInlineData(part)) {
+            return `[${part.inlineData.mimeType} data]`;
+          }
+          if (hasFileData(part)) {
+            const fileName =
+              part.fileData.fileUri.split("/").pop() || part.fileData.fileUri;
+            return `[File: ${fileName}]`;
           }
         }
       }

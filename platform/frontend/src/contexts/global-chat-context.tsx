@@ -5,9 +5,13 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { DefaultChatTransport } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
 import {
   createContext,
   type ReactNode,
@@ -33,6 +37,9 @@ interface ChatSession {
   error: Error | undefined;
   setMessages: (messages: UIMessage[]) => void;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
+  addToolApprovalResponse: ReturnType<
+    typeof useChat
+  >["addToolApprovalResponse"];
   pendingCustomServerToolCall: {
     toolCallId: string;
     toolName: string;
@@ -40,6 +47,8 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  /** Token usage for the current/last response */
+  tokenUsage: TokenUsage | null;
 }
 
 interface ChatContextValue {
@@ -214,6 +223,7 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
@@ -226,6 +236,7 @@ function ChatSessionHook({
     stop,
     error,
     addToolResult,
+    addToolApprovalResponse,
   } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
@@ -268,6 +279,14 @@ function ChatSessionHook({
         }, 500);
       }
     },
+    onData: (dataPart) => {
+      // Handle token usage data from the backend stream
+      if (dataPart.type === "data-token-usage") {
+        const usage = dataPart.data as TokenUsage;
+        setTokenUsage(usage);
+      }
+    },
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   } as Parameters<typeof useChat>[0]);
 
   // Auto-generate title after first assistant response
@@ -314,8 +333,10 @@ function ChatSessionHook({
       error,
       setMessages,
       addToolResult,
+      addToolApprovalResponse,
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
+      tokenUsage,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -330,7 +351,9 @@ function ChatSessionHook({
     error,
     setMessages,
     addToolResult,
+    addToolApprovalResponse,
     pendingCustomServerToolCall,
+    tokenUsage,
     sessionsRef,
     notifySessionUpdate,
   ]);

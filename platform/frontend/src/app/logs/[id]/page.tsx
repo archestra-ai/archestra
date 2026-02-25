@@ -1,6 +1,12 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ErrorExtended,
+} from "@shared";
 
+import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
+import { handleApiError } from "@/lib/utils";
 import { ChatPage } from "./page.client";
 
 export default async function ChatPageServer({
@@ -18,17 +24,25 @@ export default async function ChatPageServer({
   };
   try {
     const headers = await getServerApiHeaders();
+    const [interactionResponse, agentsResponse] = await Promise.all([
+      archestraApiSdk.getInteraction({
+        headers,
+        path: { interactionId: id },
+      }),
+      archestraApiSdk.getAllAgents({ headers }),
+    ]);
+    if (interactionResponse.error) {
+      handleApiError(interactionResponse.error);
+    }
+    if (agentsResponse.error) {
+      handleApiError(agentsResponse.error);
+    }
     initialData = {
-      interaction: (
-        await archestraApiSdk.getInteraction({
-          headers,
-          path: { interactionId: id },
-        })
-      ).data,
-      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
+      interaction: interactionResponse.data,
+      agents: agentsResponse.data || [],
     };
   } catch (error) {
-    console.error(error);
+    return <ServerErrorFallback error={error as ErrorExtended} />;
   }
 
   return <ChatPage initialData={initialData} id={id} />;

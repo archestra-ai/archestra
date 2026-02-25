@@ -16,7 +16,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
+import { metrics } from "@/observability";
 import type {
   CreateClientOptions,
   LLMProvider,
@@ -133,6 +133,9 @@ class MistralResponseAdapter implements LLMResponseAdapter<MistralResponse> {
   getUsage() {
     return this.delegate.getUsage();
   }
+  getFinishReasons() {
+    return this.delegate.getFinishReasons();
+  }
   getOriginalResponse() {
     return this.delegate.getOriginalResponse();
   }
@@ -219,9 +222,7 @@ export const mistralAdapterFactory: LLMProvider<
     return config.llm.mistral.baseUrl;
   },
 
-  getSpanName(): string {
-    return "mistral.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,
@@ -232,7 +233,11 @@ export const mistralAdapterFactory: LLMProvider<
     }
 
     const customFetch = options?.agent
-      ? getObservableFetch("mistral", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "mistral",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     return new OpenAIProvider({

@@ -4,6 +4,23 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "./consts";
 
+/**
+ * Parse a fully-qualified MCP tool name into server name and raw tool name.
+ * Splits on the LAST "__" to handle server names that contain "__"
+ * (e.g., "upstash__context7__resolve-library-id" → server: "upstash__context7", tool: "resolve-library-id").
+ */
+export function parseFullToolName(fullName: string): {
+  serverName: string | null;
+  toolName: string;
+} {
+  const index = fullName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  if (index <= 0) return { serverName: null, toolName: fullName };
+  return {
+    serverName: fullName.substring(0, index),
+    toolName: fullName.substring(index + MCP_SERVER_TOOL_NAME_SEPARATOR.length),
+  };
+}
+
 export function isArchestraMcpServerTool(toolName: string): boolean {
   return toolName.startsWith(
     `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,

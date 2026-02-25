@@ -5,24 +5,24 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
-import type { FastifyReply } from "fastify";
-import config from "@/config";
-import getDefaultPricing from "@/default-model-prices";
 import {
-  reportBlockedTools,
-  reportLLMCost,
-  reportLLMTokens,
-  reportTimeToFirstToken,
-  reportTokensPerSecond,
-} from "@/llm-metrics";
+  type Context,
+  context as otelContext,
+  propagation,
+} from "@opentelemetry/api";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import config from "@/config";
 import logger from "@/logging";
 import {
-  AgentModel,
   AgentTeamModel,
   InteractionModel,
   LimitValidationService,
-  TokenPriceModel,
+  ModelModel,
+  UserModel,
 } from "@/models";
+import { metrics } from "@/observability";
+import { SESSION_ID_KEY } from "@/observability/request-context";
 import {
   type Agent,
   ApiError,
@@ -33,16 +33,46 @@ import {
   type ToolCompressionStats,
   type ToonSkipReason,
 } from "@/types";
+import { isLoopbackAddress } from "@/utils/network";
+import {
+  assertAuthenticatedForKeylessProvider,
+  attemptJwksAuth,
+  resolveAgent,
+  validateVirtualApiKey,
+  virtualKeyRateLimiter,
+} from "./llm-proxy-auth";
 import * as utils from "./utils";
-import type { SessionSource } from "./utils/session-id";
+import type { SessionSource } from "./utils/headers/session-id";
 
-export interface Context {
-  organizationId: string;
-  agentId?: string;
+const {
+  observability: {
+    otel: { captureContent, contentMaxLength },
+  },
+} = config;
+
+/**
+ * Shared context passed to streaming and non-streaming handlers.
+ * Groups the 15+ parameters that both handlers need into a single object
+ * for maintainability and readability.
+ */
+interface LLMProxyContext<TRequest> {
+  agent: Agent;
+  originalRequest: TRequest;
+  baselineModel: string;
+  actualModel: string;
+  contextIsTrusted: boolean;
+  enabledToolNames: Set<string>;
+  globalToolPolicy: "permissive" | "restrictive";
+  toonStats: ToolCompressionStats;
+  toonSkipReason: ToonSkipReason | null;
   externalAgentId?: string;
   userId?: string;
+  resolvedUser?: { id: string; email: string; name: string } | null;
   sessionId?: string | null;
   sessionSource?: SessionSource;
+  executionId?: string;
+  parentContext?: Context;
+  teamIds?: string[];
 }
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -71,28 +101,46 @@ export async function handleLLMProxy<
   THeaders,
 >(
   body: TRequest,
-  headers: THeaders,
+  request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
-  context: Context,
 ): Promise<FastifyReply> {
-  const { agentId, externalAgentId } = context;
+  const headers = request.headers as unknown as THeaders;
+  const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
 
-  // Extract session info if not already provided in context
-  const sessionInfo =
-    context.sessionId !== undefined
-      ? { sessionId: context.sessionId, sessionSource: context.sessionSource }
-      : utils.sessionId.extractSessionInfo(
-          headers as Record<string, string | string[] | undefined>,
-          body as
-            | {
-                metadata?: { user_id?: string | null };
-                user?: string | null;
-              }
-            | undefined,
-        );
-  const { sessionId, sessionSource } = sessionInfo;
+  // Extract header-based context
+  const headersForExtraction = headers as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const externalAgentId =
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+  const executionId =
+    utils.headers.executionId.getExecutionId(headersForExtraction);
+  let userId = (await utils.headers.userId.getUser(headersForExtraction))
+    ?.userId;
+  let resolvedUser = userId ? await UserModel.getById(userId) : null;
+
+  const { sessionId, sessionSource } =
+    utils.headers.sessionId.extractSessionInfo(
+      headersForExtraction,
+      body as
+        | {
+            metadata?: { user_id?: string | null };
+            user?: string | null;
+          }
+        | undefined,
+    );
+
+  // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
+  // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
+  // headers so the LLM span becomes a child of the chat parent span.
+  // For external API calls (no traceparent header), this returns root context (unchanged behavior).
+  const parentContext = propagation.extract(
+    otelContext.active(),
+    request.headers,
+  );
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
@@ -111,41 +159,90 @@ export async function handleLLMProxy<
   );
 
   // Resolve agent
-  let resolvedAgent: Agent;
-  if (agentId) {
-    logger.debug(
-      { agentId },
-      `[${providerName}Proxy] Resolving explicit agent by ID`,
-    );
-    const agent = await AgentModel.findById(agentId);
-    if (!agent) {
-      logger.debug({ agentId }, `[${providerName}Proxy] Agent not found`);
-      return reply.status(404).send({
-        error: {
-          message: `Agent with ID ${agentId} not found`,
-          type: "not_found",
-        },
-      });
-    }
-    resolvedAgent = agent;
-  } else {
-    logger.debug(`[${providerName}Proxy] Resolving default profile`);
-    const defaultProfile = await AgentModel.getDefaultProfile();
-    if (!defaultProfile) {
-      logger.debug(`[${providerName}Proxy] No default profile found`);
-      throw new ApiError(400, "Please specify an LLMProxy ID in the URL path.");
-    }
-    resolvedAgent = defaultProfile;
-  }
-
+  const resolvedAgent = await resolveAgent(agentId);
   const resolvedAgentId = resolvedAgent.id;
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
   );
 
-  // Extract API key
-  const apiKey = provider.extractApiKey(headers);
+  if (executionId) {
+    const existsInDb = await InteractionModel.existsByExecutionId(executionId);
+    if (!existsInDb) {
+      logger.debug(
+        { executionId, agentId: resolvedAgentId, externalAgentId },
+        `[${providerName}Proxy] New execution detected, reporting metric`,
+      );
+      metrics.agentExecution.reportAgentExecution({
+        executionId,
+        profile: resolvedAgent,
+        externalAgentId,
+      });
+    } else {
+      logger.debug(
+        { executionId, agentId: resolvedAgentId },
+        `[${providerName}Proxy] Execution already exists in DB, skipping metric`,
+      );
+    }
+  }
+
+  // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
+  let apiKey: string | undefined;
+  let perKeyBaseUrl: string | undefined;
+  let wasJwksAuthenticated = false;
+  let wasVirtualKeyResolved = false;
+
+  // 1. Try JWKS auth if the agent has an external identity provider configured
+  const jwksResult = await attemptJwksAuth(
+    request,
+    resolvedAgent,
+    providerName,
+  );
+  if (jwksResult) {
+    wasJwksAuthenticated = true;
+    apiKey = jwksResult.apiKey;
+    perKeyBaseUrl = jwksResult.baseUrl;
+    if (jwksResult.userId) {
+      userId = jwksResult.userId;
+      resolvedUser = await UserModel.getById(userId);
+    }
+  }
+
+  // 2. Extract API key from headers if not already resolved via JWKS
+  if (!wasJwksAuthenticated) {
+    apiKey = provider.extractApiKey(headers);
+  }
+
+  // 3. Resolve virtual API key (archestra_ prefixed)
+  // Strip "Bearer " prefix if present — OpenAI's extractApiKey returns the full
+  // Authorization header value (e.g. "Bearer archestra_xxx"), while other providers
+  // return the raw key.
+  const rawApiKey = apiKey?.replace(/^Bearer\s+/i, "") ?? undefined;
+  if (!wasJwksAuthenticated && rawApiKey?.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+    await virtualKeyRateLimiter.check(request.ip);
+    try {
+      const virtualResult = await validateVirtualApiKey(
+        rawApiKey,
+        providerName,
+      );
+      apiKey = virtualResult.apiKey;
+      perKeyBaseUrl = virtualResult.baseUrl;
+      wasVirtualKeyResolved = true;
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        await virtualKeyRateLimiter.recordFailure(request.ip);
+      }
+      throw error;
+    }
+  }
+
+  // 4. Enforce authentication for keyless providers on external requests
+  assertAuthenticatedForKeylessProvider(
+    apiKey,
+    wasVirtualKeyResolved,
+    wasJwksAuthenticated,
+    request.ip,
+  );
 
   // Check usage limits
   try {
@@ -175,21 +272,23 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
-    // Persist tools declared by client
-    const tools = requestAdapter.getTools();
-    if (tools.length > 0) {
-      logger.debug(
-        { toolCount: tools.length },
-        `[${providerName}Proxy] Processing tools from request`,
-      );
-      await utils.tools.persistTools(
-        tools.map((t) => ({
-          toolName: t.name,
-          toolParameters: t.inputSchema,
-          toolDescription: t.description,
-        })),
-        resolvedAgentId,
-      );
+    // Persist tools declared by client (only for llm_proxy agents)
+    if (resolvedAgent.agentType === "llm_proxy") {
+      const tools = requestAdapter.getTools();
+      if (tools.length > 0) {
+        logger.debug(
+          { toolCount: tools.length },
+          `[${providerName}Proxy] Processing tools from request`,
+        );
+        await utils.tools.persistTools(
+          tools.map((t) => ({
+            toolName: t.name,
+            toolParameters: t.inputSchema,
+            toolDescription: t.description,
+          })),
+          resolvedAgentId,
+        );
+      }
     }
 
     // Cost optimization - potentially switch to cheaper model
@@ -223,31 +322,34 @@ export async function handleLLMProxy<
 
     const actualModel = requestAdapter.getModel();
 
-    // Ensure token prices exist
-    const baselinePricing = getDefaultPricing(baselineModel);
-    await TokenPriceModel.createIfNotExists(baselineModel, {
-      provider: providerName,
-      ...baselinePricing,
-    });
+    // Ensure model entries exist for cost tracking
+    await ModelModel.ensureModelExists(baselineModel, providerName);
 
     if (actualModel !== baselineModel) {
-      const optimizedPricing = getDefaultPricing(actualModel);
-      await TokenPriceModel.createIfNotExists(actualModel, {
-        provider: providerName,
-        ...optimizedPricing,
-      });
+      await ModelModel.ensureModelExists(actualModel, providerName);
     }
 
-    // Set SSE headers early if streaming
+    // Prepare SSE headers for lazy commitment if streaming.
+    // We defer writeHead(200) until the first actual write so that if the
+    // upstream provider call fails before any data is written, the proxy can
+    // return a proper HTTP error status code (e.g. 429) instead of being
+    // stuck with a 200. The AI SDK detects errors via HTTP status codes, so
+    // this is critical for error propagation to clients like the chat UI.
+    let sseHeaders: Record<string, string> | undefined;
     if (requestAdapter.isStreaming()) {
       logger.debug(
-        `[${providerName}Proxy] Setting up streaming response headers`,
+        `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
-      const sseHeaders = streamAdapter.getSSEHeaders();
-      for (const [key, value] of Object.entries(sseHeaders)) {
-        reply.header(key, value);
-      }
+      sseHeaders = streamAdapter.getSSEHeaders();
     }
+
+    // Helper to commit SSE headers before the first write.
+    // Safe to call multiple times — only writes headers once.
+    const ensureStreamHeaders = () => {
+      if (sseHeaders && !reply.raw.headersSent) {
+        reply.raw.writeHead(200, sseHeaders);
+      }
+    };
 
     // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
     const globalToolPolicy =
@@ -279,6 +381,7 @@ export async function handleLLMProxy<
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
+              ensureStreamHeaders();
               reply.raw.write(
                 streamAdapter.formatTextDeltaSSE(
                   "Analyzing with Dual LLM:\n\n",
@@ -295,6 +398,7 @@ export async function handleLLMProxy<
               const optionsText = progress.options
                 .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                 .join("\n");
+              ensureStreamHeaders();
               reply.raw.write(
                 streamAdapter.formatTextDeltaSSE(
                   `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
@@ -360,9 +464,20 @@ export async function handleLLMProxy<
       headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
     }
 
+    // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
+    // External clients must NOT be able to set this header — it would be an SSRF vector
+    // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
+    const providerBaseUrlHeader =
+      isLoopbackAddress(request.ip) &&
+      typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
+        ? headersForExtraction["x-archestra-provider-base-url"]
+        : undefined;
+    const effectiveBaseUrl =
+      perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
+
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
-      baseUrl: provider.getBaseUrl(),
+      baseUrl: effectiveBaseUrl,
       mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
@@ -374,7 +489,12 @@ export async function handleLLMProxy<
     const finalRequest = requestAdapter.toProviderRequest();
 
     // Extract enabled tool names for filtering in evaluatePolicies
-    const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
+    const enabledToolNames = new Set(
+      requestAdapter
+        .getTools()
+        .map((t) => t.name)
+        .filter(Boolean),
+    );
 
     // Convert headers to Record<string, string> for policy evaluation context
     const headersRecord: Record<string, string> = {};
@@ -385,6 +505,26 @@ export async function handleLLMProxy<
       }
     }
 
+    const ctx: LLMProxyContext<TRequest> = {
+      agent: resolvedAgent,
+      originalRequest: requestAdapter.getOriginalRequest(),
+      baselineModel,
+      actualModel,
+      contextIsTrusted,
+      enabledToolNames,
+      globalToolPolicy,
+      toonStats,
+      toonSkipReason,
+      externalAgentId,
+      userId,
+      resolvedUser,
+      sessionId,
+      sessionSource,
+      executionId,
+      parentContext,
+      teamIds,
+    };
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -392,42 +532,11 @@ export async function handleLLMProxy<
         reply,
         provider,
         streamAdapter,
-        resolvedAgent,
-        contextIsTrusted,
-        baselineModel,
-        actualModel,
-        requestAdapter.getOriginalRequest(),
-        toonStats,
-        toonSkipReason,
-        enabledToolNames,
-        globalToolPolicy,
-        externalAgentId,
-        context.userId,
-        sessionId,
-        sessionSource,
-        teamIds,
+        ctx,
+        ensureStreamHeaders,
       );
     } else {
-      return handleNonStreaming(
-        client,
-        finalRequest,
-        reply,
-        provider,
-        resolvedAgent,
-        contextIsTrusted,
-        baselineModel,
-        actualModel,
-        requestAdapter.getOriginalRequest(),
-        toonStats,
-        toonSkipReason,
-        enabledToolNames,
-        globalToolPolicy,
-        externalAgentId,
-        context.userId,
-        sessionId,
-        sessionSource,
-        teamIds,
-      );
+      return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
   } catch (error) {
     return handleError(
@@ -455,21 +564,29 @@ async function handleStreaming<
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
   streamAdapter: LLMStreamAdapter<TChunk, TResponse>,
-  agent: Agent,
-  contextIsTrusted: boolean,
-  baselineModel: string,
-  actualModel: string,
-  originalRequest: TRequest,
-  toonStats: ToolCompressionStats,
-  toonSkipReason: ToonSkipReason | null,
-  enabledToolNames: Set<string>,
-  globalToolPolicy: "permissive" | "restrictive",
-  externalAgentId?: string,
-  userId?: string,
-  sessionId?: string | null,
-  sessionSource?: SessionSource,
-  teamIds?: string[],
+  ctx: LLMProxyContext<TRequest>,
+  ensureStreamHeaders: () => void,
 ): Promise<FastifyReply> {
+  const {
+    agent,
+    originalRequest,
+    baselineModel,
+    actualModel,
+    contextIsTrusted,
+    enabledToolNames,
+    globalToolPolicy,
+    toonStats,
+    toonSkipReason,
+    externalAgentId,
+    userId,
+    resolvedUser,
+    sessionId,
+    sessionSource,
+    executionId,
+    parentContext,
+    teamIds,
+  } = ctx;
+
   const providerName = provider.provider;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
@@ -481,46 +598,105 @@ async function handleStreaming<
   );
 
   try {
-    // Execute streaming request with tracing
-    const stream = await utils.tracing.startActiveLlmSpan(
-      provider.getSpanName(true),
-      providerName,
-      actualModel,
-      true,
+    // Execute streaming request with tracing — the span covers the full streaming
+    // operation (request → all chunks consumed) so we can set response attributes
+    await utils.tracing.startActiveLlmSpan({
+      operationName: provider.spanName,
+      provider: providerName,
+      model: actualModel,
+      stream: true,
       agent,
-      async (llmSpan) => {
-        const result = await provider.executeStream(client, request);
-        llmSpan.end();
-        return result;
+      sessionId,
+      executionId,
+      externalAgentId,
+      serverAddress: provider.getBaseUrl(),
+      promptMessages: provider
+        .createRequestAdapter(originalRequest)
+        .getProviderMessages(),
+      parentContext,
+      user: resolvedUser
+        ? {
+            id: resolvedUser.id,
+            email: resolvedUser.email,
+            name: resolvedUser.name,
+          }
+        : null,
+      callback: async (llmSpan) => {
+        const stream = await provider.executeStream(client, request);
+
+        // Process chunks
+        for await (const chunk of stream) {
+          // Track first chunk time
+          if (!firstChunkTime) {
+            firstChunkTime = Date.now();
+            const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+            metrics.llm.reportTimeToFirstToken(
+              providerName,
+              agent,
+              actualModel,
+              ttftSeconds,
+              externalAgentId,
+            );
+          }
+
+          const result = streamAdapter.processChunk(chunk);
+
+          // Stream non-tool-call data immediately
+          if (result.sseData) {
+            ensureStreamHeaders();
+            reply.raw.write(result.sseData);
+          }
+
+          if (result.isFinal) {
+            break;
+          }
+        }
+
+        // Set response attributes on span per OTEL GenAI semconv
+        const { state } = streamAdapter;
+        if (state.model) {
+          llmSpan.setAttribute("gen_ai.response.model", state.model);
+        }
+        if (state.responseId) {
+          llmSpan.setAttribute("gen_ai.response.id", state.responseId);
+        }
+        if (state.usage) {
+          llmSpan.setAttribute(
+            "gen_ai.usage.input_tokens",
+            state.usage.inputTokens,
+          );
+          llmSpan.setAttribute(
+            "gen_ai.usage.output_tokens",
+            state.usage.outputTokens,
+          );
+          llmSpan.setAttribute(
+            "gen_ai.usage.total_tokens",
+            state.usage.inputTokens + state.usage.outputTokens,
+          );
+          const cost = await utils.costOptimization.calculateCost(
+            actualModel,
+            state.usage.inputTokens,
+            state.usage.outputTokens,
+            providerName,
+          );
+          if (cost !== undefined) {
+            llmSpan.setAttribute("archestra.cost", cost);
+          }
+        }
+        if (state.stopReason) {
+          llmSpan.setAttribute("gen_ai.response.finish_reasons", [
+            state.stopReason,
+          ]);
+        }
+
+        // Capture streamed completion content
+        if (captureContent && state.text) {
+          llmSpan.addEvent("gen_ai.content.completion", {
+            "gen_ai.completion": state.text.slice(0, contentMaxLength),
+          });
+        }
       },
-    );
-
-    // Process chunks
-    for await (const chunk of stream) {
-      // Track first chunk time
-      if (!firstChunkTime) {
-        firstChunkTime = Date.now();
-        const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
-        reportTimeToFirstToken(
-          providerName,
-          agent,
-          actualModel,
-          ttftSeconds,
-          externalAgentId,
-        );
-      }
-
-      const result = streamAdapter.processChunk(chunk);
-
-      // Stream non-tool-call data immediately
-      if (result.sseData) {
-        reply.raw.write(result.sseData);
-      }
-
-      if (result.isFinal) {
-        break;
-      }
-    }
+    });
 
     logger.info("Stream loop completed, processing final events");
 
@@ -575,17 +751,20 @@ async function handleStreaming<
       const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
       // Stream refusal
+      ensureStreamHeaders();
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         reply.raw.write(event);
       }
 
-      reportBlockedTools(
-        providerName,
-        agent,
-        toolCalls.length,
-        actualModel,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportBlockedTools(
+          providerName,
+          agent,
+          toolCalls.length,
+          actualModel,
+          externalAgentId,
+        ),
       );
     } else if (toolCalls.length > 0) {
       // Tool calls approved - stream raw events
@@ -594,6 +773,7 @@ async function handleStreaming<
         "Tool calls allowed, streaming them now",
       );
 
+      ensureStreamHeaders();
       const rawEvents = streamAdapter.getRawToolCallEvents();
       for (const event of rawEvents) {
         reply.raw.write(event);
@@ -601,6 +781,7 @@ async function handleStreaming<
     }
 
     // Stream end events
+    ensureStreamHeaders();
     reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
@@ -618,68 +799,82 @@ async function handleStreaming<
 
     const usage = streamAdapter.state.usage;
     if (usage) {
-      reportLLMTokens(
-        providerName,
-        agent,
-        { input: usage.inputTokens, output: usage.outputTokens },
-        actualModel,
-        externalAgentId,
-      );
-
-      if (usage.outputTokens && firstChunkTime) {
-        const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-        reportTokensPerSecond(
+      withSessionContext(sessionId, () => {
+        metrics.llm.reportLLMTokens(
           providerName,
           agent,
+          { input: usage.inputTokens, output: usage.outputTokens },
           actualModel,
-          usage.outputTokens,
-          totalDurationSeconds,
           externalAgentId,
         );
-      }
+
+        if (usage.outputTokens && firstChunkTime) {
+          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+          metrics.llm.reportTokensPerSecond(
+            providerName,
+            agent,
+            actualModel,
+            usage.outputTokens,
+            totalDurationSeconds,
+            externalAgentId,
+          );
+        }
+      });
 
       const baselineCost = await utils.costOptimization.calculateCost(
         baselineModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
       const actualCost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
-      );
-
-      reportLLMCost(
         providerName,
-        agent,
-        actualModel,
-        actualCost,
-        externalAgentId,
       );
 
-      await InteractionModel.create({
-        profileId: agent.id,
-        externalAgentId,
-        userId,
-        sessionId,
-        sessionSource,
-        type: provider.interactionType,
-        // Cast generic types to interaction types - valid at runtime
-        request: originalRequest as unknown as InteractionRequest,
-        processedRequest: request as unknown as InteractionRequest,
-        response:
-          streamAdapter.toProviderResponse() as unknown as InteractionResponse,
-        model: actualModel,
-        baselineModel,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cost: actualCost?.toFixed(10) ?? null,
-        baselineCost: baselineCost?.toFixed(10) ?? null,
-        toonTokensBefore: toonStats.tokensBefore,
-        toonTokensAfter: toonStats.tokensAfter,
-        toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-        toonSkipReason,
-      });
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportLLMCost(
+          providerName,
+          agent,
+          actualModel,
+          actualCost,
+          externalAgentId,
+        ),
+      );
+
+      try {
+        await InteractionModel.create({
+          profileId: agent.id,
+          externalAgentId,
+          executionId,
+          userId,
+          sessionId,
+          sessionSource,
+          type: provider.interactionType,
+          // Cast generic types to interaction types - valid at runtime
+          request: originalRequest as unknown as InteractionRequest,
+          processedRequest: request as unknown as InteractionRequest,
+          response:
+            streamAdapter.toProviderResponse() as unknown as InteractionResponse,
+          model: actualModel,
+          baselineModel,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cost: actualCost?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore: toonStats.tokensBefore,
+          toonTokensAfter: toonStats.tokensAfter,
+          toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+          toonSkipReason,
+        });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create interaction record (agent may have been deleted)",
+        );
+      }
     }
   }
 }
@@ -699,21 +894,28 @@ async function handleNonStreaming<
   request: TRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
-  agent: Agent,
-  contextIsTrusted: boolean,
-  baselineModel: string,
-  actualModel: string,
-  originalRequest: TRequest,
-  toonStats: ToolCompressionStats,
-  toonSkipReason: ToonSkipReason | null,
-  enabledToolNames: Set<string>,
-  globalToolPolicy: "permissive" | "restrictive",
-  externalAgentId?: string,
-  userId?: string,
-  sessionId?: string | null,
-  sessionSource?: SessionSource,
-  teamIds?: string[],
+  ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
+  const {
+    agent,
+    originalRequest,
+    baselineModel,
+    actualModel,
+    contextIsTrusted,
+    enabledToolNames,
+    globalToolPolicy,
+    toonStats,
+    toonSkipReason,
+    externalAgentId,
+    userId,
+    resolvedUser,
+    sessionId,
+    sessionSource,
+    executionId,
+    parentContext,
+    teamIds,
+  } = ctx;
+
   const providerName = provider.provider;
 
   logger.debug(
@@ -722,21 +924,68 @@ async function handleNonStreaming<
   );
 
   // Execute request with tracing
-  const response = await utils.tracing.startActiveLlmSpan(
-    provider.getSpanName(false),
-    providerName,
-    actualModel,
-    false,
+  const { responseAdapter } = await utils.tracing.startActiveLlmSpan({
+    operationName: provider.spanName,
+    provider: providerName,
+    model: actualModel,
+    stream: false,
     agent,
-    async (llmSpan: { end: () => void }) => {
+    sessionId,
+    executionId,
+    externalAgentId,
+    serverAddress: provider.getBaseUrl(),
+    promptMessages: provider
+      .createRequestAdapter(originalRequest)
+      .getProviderMessages(),
+    parentContext,
+    user: resolvedUser
+      ? {
+          id: resolvedUser.id,
+          email: resolvedUser.email,
+          name: resolvedUser.name,
+        }
+      : null,
+    callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
-      llmSpan.end();
-      return result;
-    },
-  );
+      const adapter = provider.createResponseAdapter(result);
 
-  // Create response adapter
-  const responseAdapter = provider.createResponseAdapter(response);
+      // Set response attributes on span per OTEL GenAI semconv
+      const usage = adapter.getUsage();
+      llmSpan.setAttribute("gen_ai.response.model", adapter.getModel());
+      llmSpan.setAttribute("gen_ai.response.id", adapter.getId());
+      llmSpan.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens);
+      llmSpan.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens);
+      llmSpan.setAttribute(
+        "gen_ai.usage.total_tokens",
+        usage.inputTokens + usage.outputTokens,
+      );
+      const cost = await utils.costOptimization.calculateCost(
+        actualModel,
+        usage.inputTokens,
+        usage.outputTokens,
+        providerName,
+      );
+      if (cost !== undefined) {
+        llmSpan.setAttribute("archestra.cost", cost);
+      }
+      llmSpan.setAttribute(
+        "gen_ai.response.finish_reasons",
+        adapter.getFinishReasons(),
+      );
+
+      // Capture completion content
+      if (captureContent) {
+        const text = adapter.getText?.();
+        if (text) {
+          llmSpan.addEvent("gen_ai.content.completion", {
+            "gen_ai.completion": text.slice(0, contentMaxLength),
+          });
+        }
+      }
+
+      return { response: result, responseAdapter: adapter };
+    },
+  });
 
   const toolCalls = responseAdapter.getToolCalls();
   logger.debug(
@@ -776,12 +1025,14 @@ async function handleNonStreaming<
         contentMessage,
       );
 
-      reportBlockedTools(
-        providerName,
-        agent,
-        toolCalls.length,
-        actualModel,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportBlockedTools(
+          providerName,
+          agent,
+          toolCalls.length,
+          actualModel,
+          externalAgentId,
+        ),
       );
 
       // Record interaction with refusal
@@ -790,24 +1041,29 @@ async function handleNonStreaming<
         baselineModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
       const actualCost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
+        providerName,
       );
 
-      reportLLMCost(
-        providerName,
-        agent,
-        actualModel,
-        actualCost,
-        externalAgentId,
+      withSessionContext(sessionId, () =>
+        metrics.llm.reportLLMCost(
+          providerName,
+          agent,
+          actualModel,
+          actualCost,
+          externalAgentId,
+        ),
       );
 
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        executionId,
         userId,
         sessionId,
         sessionSource,
@@ -839,7 +1095,7 @@ async function handleNonStreaming<
   // for non-streaming requests. We only report cost here to avoid double counting.
   // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
   // mocked API clients can't use an observable fetch.
-  // reportLLMTokens(
+  // metrics.llm.reportLLMTokens(
   //   providerName,
   //   agent,
   //   { input: usage.inputTokens, output: usage.outputTokens },
@@ -851,38 +1107,56 @@ async function handleNonStreaming<
     baselineModel,
     usage.inputTokens,
     usage.outputTokens,
+    providerName,
   );
   const actualCost = await utils.costOptimization.calculateCost(
     actualModel,
     usage.inputTokens,
     usage.outputTokens,
+    providerName,
   );
 
-  reportLLMCost(providerName, agent, actualModel, actualCost, externalAgentId);
+  withSessionContext(sessionId, () =>
+    metrics.llm.reportLLMCost(
+      providerName,
+      agent,
+      actualModel,
+      actualCost,
+      externalAgentId,
+    ),
+  );
 
-  await InteractionModel.create({
-    profileId: agent.id,
-    externalAgentId,
-    userId,
-    sessionId,
-    sessionSource,
-    type: provider.interactionType,
-    // Cast generic types to interaction types - valid at runtime
-    request: originalRequest as unknown as InteractionRequest,
-    processedRequest: request as unknown as InteractionRequest,
-    response:
-      responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
-    model: actualModel,
-    baselineModel,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cost: actualCost?.toFixed(10) ?? null,
-    baselineCost: baselineCost?.toFixed(10) ?? null,
-    toonTokensBefore: toonStats.tokensBefore,
-    toonTokensAfter: toonStats.tokensAfter,
-    toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-    toonSkipReason,
-  });
+  try {
+    await InteractionModel.create({
+      profileId: agent.id,
+      externalAgentId,
+      executionId,
+      userId,
+      sessionId,
+      sessionSource,
+      type: provider.interactionType,
+      // Cast generic types to interaction types - valid at runtime
+      request: originalRequest as unknown as InteractionRequest,
+      processedRequest: request as unknown as InteractionRequest,
+      response:
+        responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
+      model: actualModel,
+      baselineModel,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cost: actualCost?.toFixed(10) ?? null,
+      baselineCost: baselineCost?.toFixed(10) ?? null,
+      toonTokensBefore: toonStats.tokensBefore,
+      toonTokensAfter: toonStats.tokensAfter,
+      toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+      toonSkipReason,
+    });
+  } catch (interactionError) {
+    logger.error(
+      { err: interactionError, profileId: agent.id },
+      "Failed to create interaction record (agent may have been deleted)",
+    );
+  }
 
   return reply.send(responseAdapter.getOriginalResponse());
 }
@@ -890,6 +1164,20 @@ async function handleNonStreaming<
 // =============================================================================
 // HELPERS
 // =============================================================================
+
+/**
+ * Run a function within the OTEL context that has the session ID set.
+ * Used for metric calls that happen outside the span callback so that
+ * exemplar labels include the sessionID for Grafana correlation.
+ */
+function withSessionContext<T>(
+  sessionId: string | null | undefined,
+  fn: () => T,
+): T {
+  if (!sessionId) return fn();
+  const ctx = otelContext.active().setValue(SESSION_ID_KEY, sessionId);
+  return otelContext.with(ctx, fn);
+}
 
 function handleError(
   error: unknown,
@@ -919,7 +1207,9 @@ function handleError(
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
   // the status after headers are committed - so SSE error event is our only option.
-  if (isStreaming && reply.sent) {
+  // Check reply.raw.headersSent (set after writeHead) rather than reply.sent
+  // (which is only set after hijack or full send).
+  if (isStreaming && reply.raw.headersSent) {
     const errorEvent = {
       type: "error",
       error: {
@@ -927,8 +1217,16 @@ function handleError(
         message: errorMessage,
       },
     };
-    reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
-    reply.raw.end();
+    try {
+      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+      reply.raw.end();
+    } catch (writeError) {
+      // Connection already closed by the client — nothing more we can do.
+      logger.debug(
+        { err: writeError },
+        "Failed to write SSE error event (connection likely closed)",
+      );
+    }
     return reply;
   }
 

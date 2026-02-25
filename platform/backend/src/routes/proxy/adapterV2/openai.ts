@@ -6,9 +6,9 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -707,14 +707,20 @@ export class OpenAIResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.prompt_tokens ?? 0,
-      outputTokens: this.response.usage?.completion_tokens ?? 0,
-    };
+    if (!this.response.usage) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
   }
 
   getOriginalResponse(): OpenAiResponse {
     return this.response;
+  }
+
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
   }
 
   toRefusalResponse(
@@ -1088,12 +1094,11 @@ export async function convertToolResultsToToon(
   let toonCostSavings = 0;
   const tokensSaved = totalTokensBefore - totalTokensAfter;
   if (tokensSaved > 0) {
-    const tokenPrice = await TokenPriceModel.findByModel(model);
-    if (tokenPrice) {
-      const inputPricePerToken =
-        Number(tokenPrice.pricePerMillionInput) / 1000000;
-      toonCostSavings = tokensSaved * inputPricePerToken;
-    }
+    toonCostSavings = await ModelModel.calculateCostSavings(
+      model,
+      tokensSaved,
+      "openai",
+    );
   }
 
   return {
@@ -1111,6 +1116,17 @@ export async function convertToolResultsToToon(
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: OpenAi.Types.Usage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
+  };
+}
 
 export const openaiAdapterFactory: LLMProvider<
   OpenAiRequest,
@@ -1148,9 +1164,7 @@ export const openaiAdapterFactory: LLMProvider<
     return config.llm.openai.baseUrl;
   },
 
-  getSpanName(): string {
-    return "openai.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,
@@ -1162,7 +1176,11 @@ export const openaiAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("openai", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "openai",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     return new OpenAIProvider({

@@ -448,14 +448,14 @@ describe("processIncomingEmail", () => {
     expect(calledMessage).not.toContain("[Message truncated");
   });
 
-  test("throws error when agent has no teams", async ({
+  test("processes email for agent with no teams (org-wide agent)", async ({
     makeUser,
     makeOrganization,
   }) => {
     await makeUser(); // Need a user in the system
     const org = await makeOrganization();
 
-    // Create internal agent WITHOUT assigning to any team
+    // Create internal agent WITHOUT assigning to any team (org-wide)
     const internalAgent = await createTestInternalAgent(org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: "public",
@@ -485,9 +485,10 @@ describe("processIncomingEmail", () => {
       receivedAt: new Date(),
     };
 
-    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
-      `No teams found for agent ${agentId}`,
-    );
+    // Teamless agents now fall back to the first organization
+    await expect(
+      processIncomingEmail(email, mockProvider),
+    ).resolves.not.toThrow();
   });
 
   test("skips duplicate emails (deduplication)", async ({
@@ -1042,7 +1043,7 @@ describe("processIncomingEmail security modes", () => {
       text: "Agent security response",
       finishReason: "end_turn",
     });
-    // Default: user is not a profile admin
+    // Default: user is not an agent admin
     vi.mocked(userHasPermission).mockResolvedValue(false);
   });
 
@@ -1279,7 +1280,7 @@ describe("processIncomingEmail security modes", () => {
       .insert(schema.agentTeamsTable)
       .values({ agentId, teamId: team.id });
 
-    // Mock: adminUser IS a profile admin
+    // Mock: adminUser IS an agent admin
     vi.mocked(userHasPermission).mockResolvedValue(true);
 
     const mockProvider = {
@@ -1319,7 +1320,7 @@ describe("processIncomingEmail security modes", () => {
     expect(vi.mocked(userHasPermission)).toHaveBeenCalledWith(
       adminUser.id,
       org.id,
-      "profile",
+      "agent",
       "admin",
     );
   });

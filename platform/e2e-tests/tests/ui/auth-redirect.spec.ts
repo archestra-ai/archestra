@@ -1,5 +1,6 @@
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
+import { loginViaUi } from "../../utils";
 
 test.describe(
   "Authentication redirect flows",
@@ -44,14 +45,43 @@ test.describe(
         });
         expect(page.url()).toContain("redirectTo");
 
-        // Fill in sign-in form
-        await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
-        await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
-        await page.getByRole("button", { name: /login/i }).click();
+        // Sign in via UI form
+        await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
         // After sign-in, should be redirected back to the original URL
         await page.waitForURL(`**${targetPath}**`, { timeout: 15000 });
         expect(page.url()).toContain(targetPath);
+      } finally {
+        await context.close();
+      }
+    });
+
+    test("redirectTo parameter preserves OAuth consent URL with protocol in query params", async ({
+      browser,
+    }) => {
+      // This tests the specific bug where signing in with a redirectTo pointing to
+      // the OAuth consent page (which contains redirect_uri=cursor://...) would fail
+      // because the redirect validation rejected :// in query parameter values
+      const context = await browser.newContext({ storageState: undefined });
+      const page = await context.newPage();
+
+      try {
+        // Simulate the OAuth flow: consent URL with a custom protocol redirect_uri
+        const consentPath =
+          "/oauth/consent?response_type=code&client_id=testClient&redirect_uri=cursor%3A%2F%2Fapp%2Fcallback&scope=mcp&code_challenge=abc&code_challenge_method=S256";
+        const encodedRedirect = encodeURIComponent(consentPath);
+        await page.goto(
+          `${UI_BASE_URL}/auth/sign-in?redirectTo=${encodedRedirect}`,
+        );
+
+        // Sign in via UI form
+        await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+
+        // After sign-in, should be redirected to the OAuth consent page, NOT /chat
+        await page.waitForURL(/\/oauth\/consent/, { timeout: 15000 });
+        expect(page.url()).toContain("/oauth/consent");
+        expect(page.url()).toContain("response_type=code");
+        expect(page.url()).toContain("client_id=testClient");
       } finally {
         await context.close();
       }
@@ -73,10 +103,8 @@ test.describe(
           `${UI_BASE_URL}/auth/sign-in?redirectTo=${maliciousRedirect}`,
         );
 
-        // Fill in sign-in form
-        await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
-        await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
-        await page.getByRole("button", { name: /login/i }).click();
+        // Sign in via UI form
+        await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
         // Wait for navigation away from sign-in page (login success redirects)
         await page.waitForURL(

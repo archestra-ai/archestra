@@ -3,7 +3,6 @@
 import type { archestraApiTypes } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
 import { CopyButton } from "@/components/copy-button";
@@ -40,9 +39,7 @@ export function ChatPage({
   return (
     <div className="w-full h-full overflow-y-auto">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <LogDetail initialData={initialData} id={id} />
-        </Suspense>
+        <LogDetail initialData={initialData} id={id} />
       </ErrorBoundary>
     </div>
   );
@@ -58,7 +55,7 @@ function LogDetail({
   };
   id: string;
 }) {
-  const { data: dynamicInteraction } = useInteraction({
+  const { data: dynamicInteraction, isPending } = useInteraction({
     interactionId: id,
     initialData: initialData?.interaction,
   });
@@ -66,6 +63,10 @@ function LogDetail({
   const { data: allDualLlmResults = [] } = useDualLlmResultsByInteraction({
     interactionId: id,
   });
+
+  if (isPending) {
+    return <LoadingSpinner />;
+  }
 
   if (!dynamicInteraction) {
     return (
@@ -114,7 +115,12 @@ function LogDetail({
                 <div className="text-sm text-muted-foreground mb-2">
                   Profile Name
                 </div>
-                <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+                <div className="font-medium">
+                  {agent?.name ??
+                    (interaction.profileId === null
+                      ? "Deleted LLM Proxy"
+                      : "Unknown")}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">
@@ -122,6 +128,18 @@ function LogDetail({
                 </div>
                 <div className="font-medium font-mono">
                   {dynamicInteraction.externalAgentId || (
+                    <span className="text-muted-foreground font-normal">
+                      Not set
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Execution ID
+                </div>
+                <div className="font-medium font-mono">
+                  {dynamicInteraction.executionId || (
                     <span className="text-muted-foreground font-normal">
                       Not set
                     </span>

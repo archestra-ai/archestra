@@ -1,18 +1,22 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_SERVER_NAME,
   type PredefinedRoleName,
+  type SupportedProvider,
   testMcpServerCommand,
 } from "@shared";
-import { and, eq } from "drizzle-orm";
-import { auth } from "@/auth/better-auth";
+import { and, eq, inArray } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
-  AgentTeamModel,
+  ChatApiKeyModel,
   DualLlmConfigModel,
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
   TeamModel,
@@ -20,6 +24,8 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { secretManager } from "@/secrets-manager";
+import { modelSyncService } from "@/services/model-sync";
 import type { InsertDualLlmConfig } from "@/types";
 
 /**
@@ -155,12 +161,15 @@ async function seedChatAssistantAgent(): Promise<void> {
 
   const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
 
-  await db.insert(schema.agentsTable).values({
-    organizationId: org.id,
-    name: "Chat Assistant",
-    agentType: "agent",
-    systemPrompt,
-  });
+  const [_inserted] = await db
+    .insert(schema.agentsTable)
+    .values({
+      organizationId: org.id,
+      name: "Chat Assistant",
+      agentType: "agent",
+      systemPrompt,
+    })
+    .returning({ id: schema.agentsTable.id });
 
   logger.info("Seeded Chat Assistant internal agent");
 }
@@ -176,50 +185,103 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
 }
 
 /**
- * Seeds default team and assigns it to the default profile and user
+ * Seeds Playwright browser preview MCP catalog.
+ * This is a globally available catalog - tools are auto-included for all agents in chat.
+ * Each user gets their own personal Playwright server instance when they click the Browser button.
  */
-async function seedDefaultTeam(): Promise<void> {
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser(auth);
-  const defaultMcpGateway = await AgentModel.getMCPGatewayOrCreateDefault();
-  const defaultLlmProxy = await AgentModel.getLLMProxyOrCreateDefault();
+async function seedPlaywrightCatalog(): Promise<void> {
+  const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
+  const playwrightLocalConfig = {
+    // Pinned to v0.0.64 digest because v0.0.67 renamed --no-sandbox to --no-chromium-sandbox
+    // but the image entrypoint still uses --no-sandbox, causing immediate crashes.
+    dockerImage:
+      "mcr.microsoft.com/playwright/mcp@sha256:50fee3932984dbf40fe67be11fe22d0050eca40705cf108099d7a1e0fe6a181c",
+    transportType: "streamable-http" as const,
+    // Explicit command overrides the image ENTRYPOINT to avoid breakage from upstream image changes.
+    // v0.0.67 broke the entrypoint by renaming --no-sandbox to --no-chromium-sandbox without
+    // updating the Dockerfile. Using explicit command+args makes us resilient to such changes.
+    command: "node",
+    // Full arguments including cli.js entry point and all Chromium/server flags:
+    //   cli.js: the Playwright MCP server entry point
+    //   --headless: run Chromium in headless mode
+    //   --browser chromium: use Chromium browser
+    //   --no-sandbox: required when running as root in containers (renamed to --no-chromium-sandbox in v0.0.67)
+    //   --host 0.0.0.0: bind to all interfaces so K8s Service can route traffic to the pod
+    //   --port 8080: enable HTTP transport mode (without --port, it runs in stdio mode and exits)
+    //   --allowed-hosts *: allow connections from K8s Service DNS (default only allows localhost)
+    //   --isolated: each Mcp-Session-Id gets its own browser context for session isolation
+    //
+    // Multi-replica support: The Mcp-Session-Id is stored in the database after the first
+    // connection and reused by all backend pods so they share the same Playwright browser context.
+    // See mcp-client.ts for session ID persistence logic.
+    arguments: [
+      "cli.js",
+      "--headless",
+      "--browser",
+      "chromium",
+      "--no-sandbox",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "--allowed-hosts",
+      "*",
+      "--isolated",
+    ],
+    httpPort: 8080,
+  };
 
-  if (!user) {
-    logger.error(
-      "Failed to get or create default admin user, skipping default team seeding",
-    );
-    return;
+  // Read current catalog config before upsert to detect changes
+  let existingCatalog = await InternalMcpCatalogModel.findById(
+    PLAYWRIGHT_MCP_CATALOG_ID,
+  );
+  const legacyCatalogByName = await InternalMcpCatalogModel.findByName(
+    LEGACY_PLAYWRIGHT_MCP_SERVER_NAME,
+  );
+
+  // One-time migration: remove legacy playwright catalog installations/resources.
+  // This runs only when the old catalog name is present in the environment.
+  if (
+    existingCatalog?.name === LEGACY_PLAYWRIGHT_MCP_SERVER_NAME ||
+    legacyCatalogByName
+  ) {
+    const catalogIdsToDelete = new Set<string>();
+    if (existingCatalog?.name === LEGACY_PLAYWRIGHT_MCP_SERVER_NAME) {
+      catalogIdsToDelete.add(existingCatalog.id);
+    }
+    if (legacyCatalogByName) {
+      catalogIdsToDelete.add(legacyCatalogByName.id);
+    }
+
+    for (const catalogId of catalogIdsToDelete) {
+      const deleted = await InternalMcpCatalogModel.delete(catalogId);
+      if (deleted) {
+        logger.info(
+          { catalogId, legacyCatalogName: LEGACY_PLAYWRIGHT_MCP_SERVER_NAME },
+          "Removed legacy Playwright catalog and related installations/resources",
+        );
+      }
+    }
+
+    existingCatalog = null;
   }
 
-  // Check if default team already exists
-  const existingTeams = await TeamModel.findByOrganization(org.id);
-  let defaultTeam = existingTeams.find((t) => t.name === "Default Team");
+  // Only insert on first creation; never overwrite user edits on restart.
+  // Future config changes (e.g., docker image pin updates) should use database migrations.
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: PLAYWRIGHT_MCP_SERVER_NAME,
+      description:
+        "Browser automation for chat - each user gets their own isolated browser session",
+      serverType: "local",
+      requiresAuth: false,
+      localConfig: playwrightLocalConfig,
+    })
+    .onConflictDoNothing();
 
-  if (!defaultTeam) {
-    defaultTeam = await TeamModel.create({
-      name: "Default Team",
-      description: "Default team for all users",
-      organizationId: org.id,
-      createdBy: user.id,
-    });
-    logger.info("Seeded default team");
-  } else {
-    logger.info("Default team already exists, skipping creation");
-  }
-
-  // Add default user to team (if not already a member)
-  const isUserInTeam = await TeamModel.isUserInTeam(defaultTeam.id, user.id);
-  if (!isUserInTeam) {
-    await TeamModel.addMember(defaultTeam.id, user.id);
-    logger.info("Added default user to default team");
-  }
-
-  // Assign team to default agents (idempotent)
-  await AgentTeamModel.assignTeamsToAgent(defaultMcpGateway.id, [
-    defaultTeam.id,
-  ]);
-  await AgentTeamModel.assignTeamsToAgent(defaultLlmProxy.id, [defaultTeam.id]);
-  logger.info("Assigned default team to default agents");
+  logger.info("Seeded Playwright browser preview catalog");
 }
 
 /**
@@ -293,15 +355,180 @@ async function seedTeamTokens(): Promise<void> {
   }
 }
 
+/**
+ * Seeds chat API keys from environment variables.
+ * For each provider with ARCHESTRA_CHAT_<PROVIDER>_API_KEY set, creates an org-wide API key
+ * and syncs models from the provider.
+ *
+ * This enables:
+ * - E2E tests: WireMock mock keys are set via env vars, models sync automatically
+ * - Production: Admins can bootstrap org-wide keys via env vars
+ */
+async function seedChatApiKeysFromEnv(): Promise<void> {
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+
+  // Map of provider to environment variable
+  const providerEnvVars: Record<SupportedProvider, string> = {
+    anthropic: config.chat.anthropic.apiKey,
+    openai: config.chat.openai.apiKey,
+    gemini: config.chat.gemini.apiKey,
+    cerebras: config.chat.cerebras.apiKey,
+    cohere: config.chat.cohere.apiKey,
+    mistral: config.chat.mistral.apiKey,
+    perplexity: config.chat.perplexity.apiKey,
+    groq: config.chat.groq.apiKey,
+    ollama: config.chat.ollama.apiKey,
+    vllm: config.chat.vllm.apiKey,
+    zhipuai: config.chat.zhipuai.apiKey,
+    bedrock: config.chat.bedrock.apiKey,
+  };
+
+  for (const [provider, apiKeyValue] of Object.entries(providerEnvVars)) {
+    // Skip providers without API keys configured
+    if (!apiKeyValue || apiKeyValue.trim() === "") {
+      continue;
+    }
+
+    const typedProvider = provider as SupportedProvider;
+
+    // Check if API key already exists for this provider
+    const existing = await ChatApiKeyModel.findByScope(
+      org.id,
+      typedProvider,
+      "org_wide",
+    );
+
+    if (existing) {
+      // Sync models if not already synced
+      await syncModelsForApiKey(existing.id, typedProvider, apiKeyValue);
+      continue;
+    }
+
+    // Create a secret with the API key from env
+    const secret = await secretManager().createSecret(
+      { apiKey: apiKeyValue },
+      `chatapikey-env-${provider}`,
+    );
+
+    // Create the API key
+    const apiKey = await ChatApiKeyModel.create({
+      organizationId: org.id,
+      name: getProviderDisplayName(typedProvider),
+      provider: typedProvider,
+      secretId: secret.id,
+      scope: "org_wide",
+      userId: null,
+      teamId: null,
+    });
+
+    logger.info(
+      { provider, apiKeyId: apiKey.id },
+      "Created chat API key from environment variable",
+    );
+
+    // Sync models from provider
+    await syncModelsForApiKey(apiKey.id, typedProvider, apiKeyValue);
+  }
+}
+
+/**
+ * Sync models for an API key.
+ */
+async function syncModelsForApiKey(
+  apiKeyId: string,
+  provider: SupportedProvider,
+  apiKeyValue: string,
+): Promise<void> {
+  try {
+    await modelSyncService.syncModelsForApiKey(apiKeyId, provider, apiKeyValue);
+    logger.info({ provider, apiKeyId }, "Synced models for API key");
+  } catch (error) {
+    logger.error(
+      {
+        provider,
+        apiKeyId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+      "Failed to sync models for API key",
+    );
+  }
+}
+
+/**
+ * Get display name for a provider.
+ */
+function getProviderDisplayName(provider: SupportedProvider): string {
+  const displayNames: Record<SupportedProvider, string> = {
+    anthropic: "Anthropic",
+    openai: "OpenAI",
+    gemini: "Google",
+    cerebras: "Cerebras",
+    cohere: "Cohere",
+    mistral: "Mistral",
+    perplexity: "Perplexity AI",
+    groq: "Groq",
+    ollama: "Ollama",
+    vllm: "vLLM",
+    zhipuai: "ZhipuAI",
+    bedrock: "AWS Bedrock",
+  };
+  return displayNames[provider];
+}
+
+/**
+ * Migrates existing Playwright tool assignments to use dynamic credentials.
+ * Static credentials break user isolation since multiple users would share
+ * the same browser session. This ensures all Playwright assignments use
+ * useDynamicTeamCredential=true.
+ */
+async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
+  // Find all tool IDs belonging to the Playwright catalog
+  const playwrightTools = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(eq(schema.toolsTable.catalogId, PLAYWRIGHT_MCP_CATALOG_ID));
+
+  if (playwrightTools.length === 0) return;
+
+  const playwrightToolIds = playwrightTools.map((t) => t.id);
+
+  // Update all assignments that still use static credentials
+  const result = await db
+    .update(schema.agentToolsTable)
+    .set({
+      useDynamicTeamCredential: true,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+    })
+    .where(
+      and(
+        inArray(schema.agentToolsTable.toolId, playwrightToolIds),
+        eq(schema.agentToolsTable.useDynamicTeamCredential, false),
+      ),
+    );
+
+  const count = result.rowCount ?? 0;
+  if (count > 0) {
+    logger.info(
+      { updatedCount: count },
+      "Migrated Playwright tool assignments to dynamic credentials",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   // Create default agents before seeding internal agents
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
-  await seedDefaultTeam();
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
+  await seedPlaywrightCatalog();
+  await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
   await seedTeamTokens();
+  await seedChatApiKeysFromEnv();
+  // Clean up orphaned MCP HTTP sessions (older than 24h)
+  await McpHttpSessionModel.deleteExpired();
 }

@@ -1,8 +1,9 @@
 import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
+  fetchBedrockModels,
   fetchGeminiModels,
   fetchGeminiModelsViaVertexAi,
   mapOpenAiModelToModelInfo,
@@ -456,86 +457,303 @@ describe("chat-models", () => {
     });
   });
 
-  describe("fetchGeminiModelsViaVertexAi caching", () => {
-    test("caches results globally and returns cached data on subsequent calls", async () => {
-      const mockModels = [
-        {
-          name: "publishers/google/models/gemini-2.0-flash",
-          version: "default",
-          tunedModelInfo: {},
-        },
-      ];
+  describe("fetchBedrockModels", () => {
+    const originalBaseUrl = config.llm.bedrock.baseUrl;
+    const originalPrefix = config.llm.bedrock.inferenceProfilePrefix;
 
-      const mockPager = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const model of mockModels) {
-            yield model;
-          }
-        },
-      };
-
-      const mockList = vi.fn().mockResolvedValue(mockPager);
-      const mockClient = {
-        models: {
-          list: mockList,
-        },
-      } as unknown as GoogleGenAI;
-
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
-
-      // First call - should fetch from SDK
-      const models1 = await fetchGeminiModelsViaVertexAi();
-      expect(models1).toHaveLength(1);
-      expect(models1[0].id).toBe("gemini-2.0-flash");
-      expect(mockList).toHaveBeenCalledTimes(1);
-
-      // Second call - should return cached result
-      const models2 = await fetchGeminiModelsViaVertexAi();
-      expect(models2).toHaveLength(1);
-      expect(models2[0].id).toBe("gemini-2.0-flash");
-      // SDK should NOT be called again - data comes from cache
-      expect(mockList).toHaveBeenCalledTimes(1);
-
-      // Third call - still using cache
-      const models3 = await fetchGeminiModelsViaVertexAi();
-      expect(models3).toEqual(models1);
-      expect(mockList).toHaveBeenCalledTimes(1);
+    beforeEach(() => {
+      config.llm.bedrock.baseUrl =
+        "https://bedrock-runtime.us-east-1.amazonaws.com";
+      config.llm.bedrock.inferenceProfilePrefix = "";
     });
 
-    test("uses global cache key (not user-specific)", async () => {
-      const mockModels = [
-        {
-          name: "publishers/google/models/gemini-2.5-pro",
-          version: "default",
-          tunedModelInfo: {},
-        },
-      ];
+    afterEach(() => {
+      config.llm.bedrock.baseUrl = originalBaseUrl;
+      config.llm.bedrock.inferenceProfilePrefix = originalPrefix;
+    });
 
-      const mockPager = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const model of mockModels) {
-            yield model;
-          }
-        },
+    test("only includes models with TEXT input modality", async () => {
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT", "IMAGE"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+          {
+            modelId: "stability.stable-diffusion-xl",
+            modelName: "Stable Diffusion XL",
+            providerName: "Stability AI",
+            inputModalities: ["TEXT", "IMAGE"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+          {
+            modelId: "amazon.titan-image-generator",
+            modelName: "Titan Image Generator",
+            providerName: "Amazon",
+            inputModalities: ["IMAGE"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+        ],
       };
 
-      const mockList = vi.fn().mockResolvedValue(mockPager);
-      const mockClient = {
-        models: {
-          list: mockList,
-        },
-      } as unknown as GoogleGenAI;
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
 
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+      const models = await fetchBedrockModels("test-api-key");
 
-      // Call twice - simulating different users calling the same function
-      // Both should hit the same cache
-      const firstCall = await fetchGeminiModelsViaVertexAi();
-      const secondCall = await fetchGeminiModelsViaVertexAi();
+      expect(models).toHaveLength(2);
+      expect(models.map((m) => m.id)).toEqual([
+        "anthropic.claude-3-sonnet",
+        "stability.stable-diffusion-xl",
+      ]);
+    });
 
-      // Verify SDK was only called once (global cache hit)
-      expect(mockList).toHaveBeenCalledTimes(1);
-      expect(firstCall).toEqual(secondCall);
+    test("excludes models with no inputModalities", async () => {
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+          {
+            modelId: "unknown-model",
+            modelName: "Unknown Model",
+            providerName: "Unknown",
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe("anthropic.claude-3-sonnet");
+    });
+
+    test("without inferenceProfilePrefix, keeps only ON_DEMAND models", async () => {
+      config.llm.bedrock.inferenceProfilePrefix = "";
+
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+          {
+            modelId: "anthropic.claude-3-5-sonnet",
+            modelName: "Claude 3.5 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["INFERENCE_PROFILE"],
+          },
+          {
+            modelId: "meta.llama3-70b",
+            modelName: "Llama 3 70B",
+            providerName: "Meta",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND", "INFERENCE_PROFILE"],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      // Only ON_DEMAND supported models should be included
+      expect(models).toHaveLength(2);
+      expect(models.map((m) => m.id)).toEqual([
+        "anthropic.claude-3-sonnet",
+        "meta.llama3-70b",
+      ]);
+    });
+
+    test("with inferenceProfilePrefix, keeps ON_DEMAND and INFERENCE_PROFILE models", async () => {
+      config.llm.bedrock.inferenceProfilePrefix = "us";
+
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+          {
+            modelId: "anthropic.claude-3-5-sonnet",
+            modelName: "Claude 3.5 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["INFERENCE_PROFILE"],
+          },
+          {
+            modelId: "meta.llama3-70b",
+            modelName: "Llama 3 70B",
+            providerName: "Meta",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["PROVISIONED"],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      // ON_DEMAND + INFERENCE_PROFILE, but not PROVISIONED
+      expect(models).toHaveLength(2);
+      expect(models.map((m) => m.id)).toEqual([
+        "anthropic.claude-3-sonnet",
+        "us.anthropic.claude-3-5-sonnet",
+      ]);
+    });
+
+    test("prefixes INFERENCE_PROFILE model IDs with inferenceProfilePrefix", async () => {
+      config.llm.bedrock.inferenceProfilePrefix = "eu.";
+
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND", "INFERENCE_PROFILE"],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models).toHaveLength(1);
+      // Model supports INFERENCE_PROFILE and prefix is set, so ID is prefixed
+      expect(models[0].id).toBe("eu.anthropic.claude-3-sonnet");
+    });
+
+    test("appends dot to inferenceProfilePrefix if missing", async () => {
+      config.llm.bedrock.inferenceProfilePrefix = "us";
+
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["INFERENCE_PROFILE"],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models[0].id).toBe("us.anthropic.claude-3-sonnet");
+    });
+
+    test("constructs display name from providerName and modelName", async () => {
+      const mockResponse = {
+        modelSummaries: [
+          {
+            modelId: "anthropic.claude-3-sonnet",
+            modelName: "Claude 3 Sonnet",
+            providerName: "Anthropic",
+            inputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models[0].displayName).toBe("Anthropic Claude 3 Sonnet");
+      expect(models[0].provider).toBe("bedrock");
+    });
+
+    test("calls Bedrock API with correct URL and auth header", async () => {
+      const mockResponse = { modelSummaries: [] };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      await fetchBedrockModels("my-api-key");
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toBe(
+        "https://bedrock.us-east-1.amazonaws.com/foundation-models?byOutputModality=TEXT&byInputModality=TEXT",
+      );
+      expect(options.headers.Authorization).toBe("Bearer my-api-key");
+    });
+
+    test("returns empty array when baseUrl is not configured", async () => {
+      config.llm.bedrock.baseUrl = "";
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test("throws error on API failure", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve("Forbidden"),
+      });
+
+      await expect(fetchBedrockModels("bad-key")).rejects.toThrow(
+        "Failed to fetch Bedrock models: 403",
+      );
+    });
+
+    test("returns empty array when no modelSummaries in response", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+      expect(models).toEqual([]);
     });
   });
 });

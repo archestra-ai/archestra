@@ -145,6 +145,7 @@ describe("ArchestraPromptInput", () => {
     selectedModel: "gpt-4",
     onModelChange: vi.fn(),
     agentId: "test-agent-id",
+    isPlaywrightSetupVisible: false,
   };
 
   beforeEach(() => {
@@ -152,9 +153,13 @@ describe("ArchestraPromptInput", () => {
   });
 
   describe("File Upload Button", () => {
-    it("should render enabled file upload button when allowFileUploads is true", () => {
+    it("should render enabled file upload button when allowFileUploads is true and model supports files", () => {
       render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          inputModalities={["text", "image"]}
+        />,
       );
 
       // Should find the enabled file upload button
@@ -169,7 +174,11 @@ describe("ArchestraPromptInput", () => {
 
     it("should render disabled file upload button when allowFileUploads is false", () => {
       render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={false} />,
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={false}
+          inputModalities={["text", "image"]}
+        />,
       );
 
       // Should find the disabled file upload button wrapper
@@ -184,6 +193,28 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("should render disabled file upload button when model does not support files", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          inputModalities={["text"]}
+        />,
+      );
+
+      // Should find the disabled file upload button wrapper
+      const disabledButton = screen.getByTestId(
+        E2eTestId.ChatDisabledFileUploadButton,
+      );
+      expect(disabledButton).toBeInTheDocument();
+
+      // Tooltip should show message about model not supporting files
+      const tooltip = screen.getByTestId("tooltip-content");
+      expect(tooltip).toHaveTextContent(
+        "This model does not support file uploads",
+      );
+    });
+
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
       // Mock admin user with organization update permission
       mockUseHasPermissions.mockReturnValue({
@@ -193,7 +224,11 @@ describe("ArchestraPromptInput", () => {
       });
 
       render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={false} />,
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={false}
+          inputModalities={["text", "image"]}
+        />,
       );
 
       // Tooltip should show "Enable in settings" link for admins
@@ -219,7 +254,11 @@ describe("ArchestraPromptInput", () => {
       });
 
       render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={false} />,
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={false}
+          inputModalities={["text", "image"]}
+        />,
       );
 
       // Tooltip should show message about admin for non-admins

@@ -9,7 +9,7 @@ import type {
   UpdateLimit,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
-import TokenPriceModel from "./token-price";
+import ModelModel from "./model";
 
 class LimitModel {
   /**
@@ -110,27 +110,17 @@ class LimitModel {
     // Calculate cost for each model
     const breakdown = await Promise.all(
       modelUsages.map(async (usage) => {
-        const tokenPrice = await TokenPriceModel.findByModel(usage.model);
-
-        if (!tokenPrice) {
-          logger.warn(
-            `[LimitModel] No pricing found for model ${usage.model}, defaulting to $0`,
-          );
-          return {
-            model: usage.model,
-            tokensIn: usage.currentUsageTokensIn,
-            tokensOut: usage.currentUsageTokensOut,
-            cost: 0,
-          };
-        }
+        // Look up model by modelId only — limit usage records don't store provider
+        const modelEntry = await ModelModel.findByModelIdOnly(usage.model);
+        const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
 
         const inputCost =
           (usage.currentUsageTokensIn *
-            parseFloat(tokenPrice.pricePerMillionInput)) /
+            parseFloat(pricing.pricePerMillionInput)) /
           1_000_000;
         const outputCost =
           (usage.currentUsageTokensOut *
-            parseFloat(tokenPrice.pricePerMillionOutput)) /
+            parseFloat(pricing.pricePerMillionOutput)) /
           1_000_000;
 
         return {
@@ -725,24 +715,22 @@ export class LimitValidationService {
                 totalTokensIn += usage.currentUsageTokensIn;
                 totalTokensOut += usage.currentUsageTokensOut;
 
-                const tokenPrice = await TokenPriceModel.findByModel(
+                // Look up model by modelId only — limit usage records don't store provider
+                const modelEntry = await ModelModel.findByModelIdOnly(
+                  usage.model,
+                );
+                const pricing = ModelModel.getEffectivePricing(
+                  modelEntry,
                   usage.model,
                 );
 
-                if (!tokenPrice) {
-                  logger.warn(
-                    `[LimitValidation] No pricing found for model ${usage.model}`,
-                  );
-                  continue;
-                }
-
                 const inputCost =
                   (usage.currentUsageTokensIn *
-                    parseFloat(tokenPrice.pricePerMillionInput)) /
+                    parseFloat(pricing.pricePerMillionInput)) /
                   1000000;
                 const outputCost =
                   (usage.currentUsageTokensOut *
-                    parseFloat(tokenPrice.pricePerMillionOutput)) /
+                    parseFloat(pricing.pricePerMillionOutput)) /
                   1000000;
                 const modelCost = inputCost + outputCost;
 

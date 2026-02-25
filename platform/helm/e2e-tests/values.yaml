@@ -34,13 +34,14 @@ keycloak:
     port: 8080
     nodePort: 30081
   # Resource limits for CI environment
+  # Keycloak 26 (Java) needs ~1.5GB+ for JVM + realm import; 1024Mi causes OOMKill
   resources:
     requests:
       cpu: 250m
-      memory: 512Mi
+      memory: 1024Mi
     limits:
       cpu: 1000m
-      memory: 1024Mi
+      memory: 2048Mi
   # Liveness probe
   livenessProbe:
     initialDelaySeconds: 60
@@ -80,6 +81,29 @@ keycloak:
   realm:
     import: true
 
+# MCP Server with JWKS authentication for JWT propagation testing
+mcpServerJwks:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak
+    tag: "0.0.1"
+    pullPolicy: IfNotPresent
+  # JWT audience claim the server expects (must match Keycloak client's audience mapper)
+  jwtAudience: "archestra-oidc"
+  # Service configuration
+  service:
+    type: NodePort
+    port: 3456
+    nodePort: 30082
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
 # HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
 vault:
   enabled: true
@@ -111,13 +135,16 @@ vault:
   # Kubernetes auth configuration (auto-configures K8s auth on startup)
   k8sAuth:
     enabled: false
-    # KV secrets engine version: 1 or 2
-    # v1: paths like kv/archestra/*
-    # v2: paths like secret/data/archestra/*
-    kvVersion: 2
     # Service account for the vault pod itself
     serviceAccountName: default
     # Service account that will authenticate to Vault (e.g., archestra-platform)
     boundServiceAccountName: archestra-platform
     boundServiceAccountNamespace: archestra-dev
     ttl: "24h"
+  # Secrets to write into Vault on startup (used in post-start hook)
+  secrets:
+    - path: kv/archestra/config
+      data:
+        dburl: "postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev"
+        dummy_var: "hello-from-vault"
+

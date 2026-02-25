@@ -13,8 +13,31 @@ import { schema } from "@/database";
 import { AgentLabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 
-// Re-export types from schema
-export type { AgentHistoryEntry, AgentType } from "@/database/schemas/agent";
+/**
+ * Agent type:
+ * - profile: External profiles for API gateway routing
+ * - mcp_gateway: MCP gateway specific configuration
+ * - llm_proxy: LLM proxy specific configuration
+ * - agent: Internal agents with prompts for chat
+ */
+export const AgentTypeSchema = z.enum([
+  "profile",
+  "mcp_gateway",
+  "llm_proxy",
+  "agent",
+]);
+export type AgentType = z.infer<typeof AgentTypeSchema>;
+
+/**
+ * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
+ * Only used when agent_type is 'agent'.
+ */
+export interface AgentHistoryEntry {
+  version: number;
+  userPrompt: string | null;
+  systemPrompt: string | null;
+  createdAt: string; // ISO timestamp
+}
 
 // Team info schema for agent responses (just id and name)
 export const AgentTeamInfoSchema = z.object({
@@ -23,12 +46,16 @@ export const AgentTeamInfoSchema = z.object({
 });
 
 // Extended field schemas for drizzle-zod
+// agentType override is needed because the column uses text().$type<AgentType>()
+// which drizzle-zod infers as z.string() instead of the narrower enum schema
 const selectExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
+  agentType: AgentTypeSchema,
 };
 
 const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
+  agentType: AgentTypeSchema.optional(),
 };
 
 /**

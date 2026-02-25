@@ -5,10 +5,15 @@ import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import { AgentModel, UserModel } from "@/models";
+import { ProviderError } from "@/routes/chat/errors";
 import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
+import {
+  RouteCategory,
+  startActiveChatSpan,
+} from "@/routes/proxy/utils/tracing";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**
@@ -79,6 +84,7 @@ const A2AJsonRpcResponseSchema = z.object({
     .object({
       code: z.number(),
       message: z.string(),
+      data: z.unknown().optional(),
     })
     .optional(),
 });
@@ -137,9 +143,26 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const host = request.headers.host || "localhost:9000";
       const baseUrl = `${protocol}://${host}`;
 
+      // Build skills array with a single skill representing the agent
+      const skillId = agent.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+      const skills = [
+        {
+          id: skillId,
+          name: agent.name,
+          description: agent.description || agent.userPrompt || "",
+          tags: [],
+          inputModes: ["text"],
+          outputModes: ["text"],
+        },
+      ];
+
       return reply.send({
         name: agent.name,
-        description: agent.systemPrompt || agent.userPrompt || "",
+        description:
+          agent.description || agent.systemPrompt || agent.userPrompt || "",
         url: `${baseUrl}${endpoint}/${agent.id}`,
         version: String(agent.promptVersion || 1),
         capabilities: {
@@ -149,16 +172,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         defaultInputModes: ["text"],
         defaultOutputModes: ["text"],
-        skills: [
-          {
-            id: `${agent.id}-skill`,
-            name: agent.name,
-            description: agent.userPrompt || "",
-            tags: [],
-            inputModes: ["text"],
-            outputModes: ["text"],
-          },
-        ],
+        skills,
       });
     },
   );
@@ -291,15 +305,33 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const sessionId =
           headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
 
-        // Execute using shared A2A service
-        // Pass agentId as the initial delegation chain (will be extended by any delegated calls)
-        const result = await executeA2AMessage({
+        // Resolve user for span attributes (user is already fetched above for user tokens)
+        const a2aUser =
+          tokenAuth.userId && userId !== "system"
+            ? await UserModel.getById(tokenAuth.userId)
+            : null;
+
+        // Wrap A2A execution with a parent span so all LLM and MCP tool calls
+        // within this request appear as children of a single unified trace.
+        const result = await startActiveChatSpan({
+          agentName: agent.name,
           agentId,
-          message: userMessage,
-          organizationId,
-          userId,
+          agentType: agent.agentType ?? undefined,
           sessionId,
-          parentDelegationChain: undefined, // This is the root call, chain starts with agentId
+          routeCategory: RouteCategory.A2A,
+          user: a2aUser
+            ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
+            : null,
+          callback: async () => {
+            return executeA2AMessage({
+              agentId,
+              message: userMessage,
+              organizationId,
+              userId,
+              sessionId,
+              parentDelegationChain: undefined, // This is the root call, chain starts with agentId
+            });
+          },
         });
 
         return reply.send({
@@ -312,12 +344,15 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } catch (error) {
+        const chatError =
+          error instanceof ProviderError ? error.chatErrorResponse : undefined;
         return reply.send({
           jsonrpc: "2.0" as const,
           id,
           error: {
             code: -32603,
             message: error instanceof Error ? error.message : "Internal error",
+            data: chatError,
           },
         });
       }

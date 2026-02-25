@@ -73,11 +73,17 @@ class AgentToolModel {
 
   /**
    * Get all agents that this agent can delegate to.
+   * Optionally filters by user access when userId is provided.
    */
-  static async getDelegationTargets(agentId: string): Promise<
+  static async getDelegationTargets(
+    agentId: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<
     Array<{
       id: string;
       name: string;
+      description: string | null;
       systemPrompt: string | null;
     }>
   > {
@@ -85,6 +91,7 @@ class AgentToolModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
       })
       .from(schema.agentToolsTable)
@@ -102,6 +109,13 @@ class AgentToolModel {
           isNotNull(schema.toolsTable.delegateToAgentId),
         ),
       );
+
+    // Filter by user access if userId is provided
+    if (userId && !isAgentAdmin) {
+      const userAccessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      return results.filter((r) => userAccessibleAgentIds.includes(r.id));
+    }
 
     return results;
   }
@@ -413,12 +427,15 @@ class AgentToolModel {
     const newToolIds = toolIds.filter((toolId) => !existingToolIds.has(toolId));
 
     if (newToolIds.length > 0) {
-      await db.insert(schema.agentToolsTable).values(
-        newToolIds.map((toolId) => ({
-          agentId,
-          toolId,
-        })),
-      );
+      await db
+        .insert(schema.agentToolsTable)
+        .values(
+          newToolIds.map((toolId) => ({
+            agentId,
+            toolId,
+          })),
+        )
+        .onConflictDoNothing();
     }
   }
 
@@ -602,6 +619,41 @@ class AgentToolModel {
   }
 
   /**
+   * Find a single agent-tool relationship by ID, including joined agent and tool data.
+   */
+  static async findById(id: string): Promise<AgentTool | undefined> {
+    const [row] = await db
+      .select({
+        ...getTableColumns(schema.agentToolsTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        tool: {
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          description: schema.toolsTable.description,
+          parameters: schema.toolsTable.parameters,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
+        },
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.id, id))
+      .limit(1);
+    return row;
+  }
+
+  /**
    * Find all agent-tool relationships with pagination, sorting, and filtering support.
    * When skipPagination is true, returns all matching records without applying limit/offset.
    */
@@ -695,15 +747,9 @@ class AgentToolModel {
       whereConditions.push(eq(schema.agentToolsTable.agentId, filters.agentId));
     }
 
-    // Filter by origin (either "llm-proxy" or a catalogId)
+    // Filter by origin (catalogId)
     if (filters?.origin) {
-      if (filters.origin === "llm-proxy") {
-        // LLM Proxy tools have null catalogId
-        whereConditions.push(sql`${schema.toolsTable.catalogId} IS NULL`);
-      } else {
-        // MCP tools have a catalogId
-        whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
-      }
+      whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
     }
 
     // Filter by credential owner (check both credential source and execution source)
@@ -782,9 +828,6 @@ class AgentToolModel {
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
           catalogId: schema.toolsTable.catalogId,
-          mcpServerId: schema.toolsTable.mcpServerId,
-          mcpServerName: schema.mcpServersTable.name,
-          mcpServerCatalogId: schema.mcpServersTable.catalogId,
         },
       })
       .from(schema.agentToolsTable)
@@ -795,10 +838,6 @@ class AgentToolModel {
       .innerJoin(
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
       )
       .where(whereClause)
       .orderBy(orderByClause)
@@ -822,10 +861,6 @@ class AgentToolModel {
         .innerJoin(
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .leftJoin(
-          schema.mcpServersTable,
-          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
         )
         .where(whereClause),
     ]);

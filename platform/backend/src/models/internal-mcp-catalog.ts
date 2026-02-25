@@ -6,6 +6,7 @@ import type {
   InternalMcpCatalog,
   UpdateInternalMcpCatalog,
 } from "@/types";
+import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
 
@@ -155,12 +156,25 @@ class InternalMcpCatalogModel {
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
+    const { labels, ...dbValues } = catalogItem;
+
     const [createdItem] = await db
       .insert(schema.internalMcpCatalogTable)
-      .values(catalogItem)
+      .values(dbValues)
       .returning();
 
-    return createdItem;
+    if (labels && labels.length > 0) {
+      await McpCatalogLabelModel.syncCatalogLabels(
+        createdItem.id,
+        labels.map((l) => ({ key: l.key, value: l.value })),
+      );
+    }
+
+    const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(
+      createdItem.id,
+    );
+
+    return { ...createdItem, labels: itemLabels };
   }
 
   static async findAll(options?: {
@@ -168,10 +182,12 @@ class InternalMcpCatalogModel {
   }): Promise<InternalMcpCatalog[]> {
     const { expandSecrets = true } = options ?? {};
 
-    const catalogItems = await db
+    const dbItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+
+    const catalogItems = await InternalMcpCatalogModel.attachLabels(dbItems);
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
@@ -186,7 +202,7 @@ class InternalMcpCatalogModel {
   ): Promise<InternalMcpCatalog[]> {
     const { expandSecrets = true } = options ?? {};
 
-    const catalogItems = await db
+    const dbItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -195,6 +211,8 @@ class InternalMcpCatalogModel {
           ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
         ),
       );
+
+    const catalogItems = await InternalMcpCatalogModel.attachLabels(dbItems);
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
@@ -209,14 +227,17 @@ class InternalMcpCatalogModel {
   ): Promise<InternalMcpCatalog | null> {
     const { expandSecrets = true } = options ?? {};
 
-    const [catalogItem] = await db
+    const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
-    if (!catalogItem) {
+    if (!dbItem) {
       return null;
     }
+
+    const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
+    const catalogItem: InternalMcpCatalog = { ...dbItem, labels };
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
@@ -232,14 +253,17 @@ class InternalMcpCatalogModel {
   static async findByIdWithResolvedSecrets(
     id: string,
   ): Promise<InternalMcpCatalog | null> {
-    const [catalogItem] = await db
+    const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
-    if (!catalogItem) {
+    if (!dbItem) {
       return null;
     }
+
+    const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
+    const catalogItem: InternalMcpCatalog = { ...dbItem, labels };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
       catalogItem,
@@ -259,10 +283,12 @@ class InternalMcpCatalogModel {
       return new Map();
     }
 
-    const catalogItems = await db
+    const dbItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(inArray(schema.internalMcpCatalogTable.id, ids));
+
+    const catalogItems = await InternalMcpCatalogModel.attachLabels(dbItems);
 
     const result = new Map<string, InternalMcpCatalog>();
     for (const item of catalogItems) {
@@ -273,25 +299,75 @@ class InternalMcpCatalogModel {
   }
 
   static async findByName(name: string): Promise<InternalMcpCatalog | null> {
-    const [catalogItem] = await db
+    const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.name, name));
 
-    return catalogItem || null;
+    if (!dbItem) {
+      return null;
+    }
+
+    const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(
+      dbItem.id,
+    );
+    return { ...dbItem, labels };
   }
 
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
   ): Promise<InternalMcpCatalog | null> {
-    const [updatedItem] = await db
-      .update(schema.internalMcpCatalogTable)
-      .set(catalogItem)
-      .where(eq(schema.internalMcpCatalogTable.id, id))
-      .returning();
+    const { labels, ...dbValues } = catalogItem;
 
-    return updatedItem || null;
+    let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
+
+    if (Object.keys(dbValues).length > 0) {
+      [dbItem] = await db
+        .update(schema.internalMcpCatalogTable)
+        .set(dbValues)
+        .where(eq(schema.internalMcpCatalogTable.id, id))
+        .returning();
+    } else {
+      [dbItem] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+    }
+
+    if (!dbItem) {
+      return null;
+    }
+
+    if (labels !== undefined) {
+      await McpCatalogLabelModel.syncCatalogLabels(
+        id,
+        labels.map((l) => ({ key: l.key, value: l.value })),
+      );
+    }
+
+    const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
+    return { ...dbItem, labels: itemLabels };
+  }
+
+  /**
+   * Bulk-load labels for an array of DB rows and attach them.
+   */
+  private static async attachLabels(
+    dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>,
+  ): Promise<InternalMcpCatalog[]> {
+    if (dbItems.length === 0) {
+      return [];
+    }
+
+    const labelsMap = await McpCatalogLabelModel.getLabelsForCatalogItems(
+      dbItems.map((item) => item.id),
+    );
+
+    return dbItems.map((item) => ({
+      ...item,
+      labels: labelsMap.get(item.id) || [],
+    }));
   }
 
   static async delete(id: string): Promise<boolean> {

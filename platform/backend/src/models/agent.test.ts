@@ -1,4 +1,5 @@
 import {
+  PLAYWRIGHT_MCP_CATALOG_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
@@ -157,10 +158,10 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // user1 only has access to agent1 (via team1)
+      // user1 has access to agent1 (via team1) and agent3 (org-wide, no teams)
       const agents = await AgentModel.findAll(user1.id, false);
-      expect(agents).toHaveLength(1);
-      expect(agents[0].id).toBe(agent1.id);
+      expect(agents).toHaveLength(2);
+      expect(agents.map((a) => a.id)).toContain(agent1.id);
     });
 
     test("member with no team membership sees empty list", async ({
@@ -398,13 +399,13 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // Non-admin user should only see agent in their team
+      // Non-admin user sees agent in their team + org-wide agents (no teams)
       const agents = await AgentModel.findAll(user.id, false);
-      expect(agents).toHaveLength(1);
-      expect(agents[0].id).toBe(userTeamAgent.id);
+      expect(agents).toHaveLength(2);
+      expect(agents.map((a) => a.id)).toContain(userTeamAgent.id);
     });
 
-    test("non-admin user cannot see agents with no team", async ({
+    test("non-admin user can see org-wide agents (no team)", async ({
       makeUser,
       makeAdmin,
       makeOrganization,
@@ -417,16 +418,15 @@ describe("AgentModel", () => {
       const userTeam = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(userTeam.id, user.id);
 
-      // Create agent with no teams
-      await AgentModel.create({
+      // Create agent with no teams (org-wide)
+      const orgWideAgent = await AgentModel.create({
         name: "No Team Agent",
         teams: [],
       });
 
-      // Non-admin user should not see agent with no teams
+      // Non-admin user should see org-wide agents (teamless)
       const agents = await AgentModel.findAll(user.id, false);
-      // Only agents in user's team should be visible
-      expect(agents.every((a) => a.teams.length > 0)).toBe(true);
+      expect(agents.map((a) => a.id)).toContain(orgWideAgent.id);
     });
 
     test("user with no team membership sees empty list", async ({
@@ -451,9 +451,10 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // User with no team membership should see nothing
+      // User with no team membership should still see org-wide agents (no teams)
       const agents = await AgentModel.findAll(userWithNoTeam.id, false);
-      expect(agents).toHaveLength(0);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].name).toBe("Agent without Team");
     });
 
     test("getUserTeamIds returns correct teams for validation", async ({
@@ -626,10 +627,10 @@ describe("AgentModel", () => {
         false, // not admin
       );
 
-      // The bug: total count should match the actual number of accessible agents
-      expect(result.data).toHaveLength(1); // Only Agent 1 is accessible
-      expect(result.pagination.total).toBe(1); // Total should also be 1, not 5 (including default agent)
-      expect(result.data[0].name).toBe("Agent 1");
+      // User sees Agent 1 (via team) + 3 org-wide agents (no teams)
+      expect(result.data).toHaveLength(4);
+      expect(result.pagination.total).toBe(4);
+      expect(result.data.map((a) => a.name)).toContain("Agent 1");
     });
 
     test("pagination count includes all agents for admin", async ({
@@ -1476,6 +1477,119 @@ describe("AgentModel", () => {
 
       expect(hasArtifactWrite).toBe(true);
       expect(hasTodoWrite).toBe(true);
+    });
+  });
+
+  describe("Description", () => {
+    test("can create an agent with description", async () => {
+      const agent = await AgentModel.create({
+        name: "Described Agent",
+        agentType: "agent",
+        description: "An agent that helps with code review",
+        teams: [],
+      });
+
+      expect(agent.description).toBe("An agent that helps with code review");
+    });
+
+    test("description defaults to null", async () => {
+      const agent = await AgentModel.create({
+        name: "Basic Agent",
+        agentType: "agent",
+        teams: [],
+      });
+
+      expect(agent.description).toBeNull();
+    });
+
+    test("findById returns description", async () => {
+      const agent = await AgentModel.create({
+        name: "Find Me Agent",
+        agentType: "agent",
+        description: "Test description",
+        teams: [],
+      });
+
+      const found = await AgentModel.findById(agent.id);
+      expect(found).not.toBeNull();
+      expect(found?.description).toBe("Test description");
+    });
+
+    test("update can modify description", async () => {
+      const agent = await AgentModel.create({
+        name: "Updatable Agent",
+        agentType: "agent",
+        description: "Original description",
+        teams: [],
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        description: "Updated description",
+      });
+
+      expect(updated?.description).toBe("Updated description");
+    });
+
+    test("findAll returns description for all agents", async () => {
+      await AgentModel.create({
+        name: "Agent A",
+        agentType: "agent",
+        description: "Desc A",
+        teams: [],
+      });
+      await AgentModel.create({
+        name: "Agent B",
+        agentType: "agent",
+        teams: [],
+      });
+
+      const agents = await AgentModel.findAll();
+      const agentA = agents.find((a) => a.name === "Agent A");
+      const agentB = agents.find((a) => a.name === "Agent B");
+
+      expect(agentA?.description).toBe("Desc A");
+      expect(agentB?.description).toBeNull();
+    });
+  });
+
+  describe("hasPlaywrightToolsAssigned", () => {
+    test("returns false when no playwright tools are assigned", async () => {
+      const agent = await AgentModel.create({
+        name: "No Playwright Agent",
+        teams: [],
+      });
+
+      const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
+      expect(result).toBe(false);
+    });
+
+    test("returns true when playwright tools are assigned", async ({
+      makeTool,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent = await AgentModel.create({
+        name: "Playwright Agent",
+        teams: [],
+      });
+
+      const catalog = await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        name: "Playwright",
+        serverType: "builtin",
+      });
+
+      const tool = await makeTool({
+        name: "playwright__browser_snapshot",
+        description: "Take a snapshot",
+        parameters: {},
+        catalogId: catalog.id,
+      });
+
+      await makeAgentTool(agent.id, tool.id);
+
+      const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
+      expect(result).toBe(true);
     });
   });
 

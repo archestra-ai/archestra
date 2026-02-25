@@ -2,13 +2,13 @@
 
 import {
   type archestraApiTypes,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  isPlaywrightCatalogItem,
+  parseFullToolName,
 } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Search, X } from "lucide-react";
+import { Loader2, Pencil, Search, X } from "lucide-react";
 import {
   forwardRef,
-  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -16,6 +16,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  AssignmentCombobox,
+  type AssignmentComboboxItem,
+} from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -25,6 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useAssignTool,
@@ -51,6 +56,8 @@ interface PendingCatalogChanges {
   selectedToolIds: Set<string>;
   credentialSourceId: string | null;
   catalogItem: InternalMcpCatalogItem;
+  /** When true, all tools should be selected once they load */
+  selectAll?: boolean;
 }
 
 export interface AgentToolsEditorRef {
@@ -59,64 +66,35 @@ export interface AgentToolsEditorRef {
 
 interface AgentToolsEditorProps {
   agentId?: string;
-  searchQuery?: string;
-  showAll?: boolean;
-  onShowMore?: () => void;
   onSelectedCountChange?: (count: number) => void;
 }
 
 export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
->(function AgentToolsEditor(
-  {
-    agentId,
-    searchQuery = "",
-    showAll = false,
-    onShowMore,
-    onSelectedCountChange,
-  },
-  ref,
-) {
+>(function AgentToolsEditor({ agentId, onSelectedCountChange }, ref) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Loading tools...</span>
-        </div>
-      }
-    >
-      <AgentToolsEditorContent
-        agentId={agentId}
-        searchQuery={searchQuery}
-        showAll={showAll}
-        onShowMore={onShowMore}
-        onSelectedCountChange={onSelectedCountChange}
-        ref={ref}
-      />
-    </Suspense>
+    <AgentToolsEditorContent
+      agentId={agentId}
+      onSelectedCountChange={onSelectedCountChange}
+      ref={ref}
+    />
   );
 });
 
 const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
->(function AgentToolsEditorContent(
-  {
-    agentId,
-    searchQuery = "",
-    showAll = false,
-    onShowMore,
-    onSelectedCountChange,
-  },
-  ref,
-) {
+>(function AgentToolsEditorContent({ agentId, onSelectedCountChange }, ref) {
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
   // Fetch catalog items (MCP servers in registry)
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
+
+  // Fetch all credentials grouped by catalog (for default credential on toggle)
+  const allCredentials = useMcpServersGroupedByCatalog();
 
   // Fetch tool counts for all catalog items to enable sorting
   const toolCountQueries = useQueries({
@@ -151,7 +129,7 @@ const AgentToolsEditorContent = forwardRef<
   const assignedToolsByCatalog = useMemo(() => {
     const map = new Map<string, AgentTool[]>();
     for (const at of assignedToolsData?.data ?? []) {
-      const catalogId = at.tool.catalogId ?? at.tool.mcpServerCatalogId;
+      const catalogId = at.tool.catalogId;
       if (!catalogId) continue;
       if (!map.has(catalogId)) map.set(catalogId, []);
       map.get(catalogId)?.push(at);
@@ -181,14 +159,8 @@ const AgentToolsEditorContent = forwardRef<
     });
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
-  // Filter by search query
-  const filteredCatalogItems = useMemo(() => {
-    if (!searchQuery.trim()) return sortedCatalogItems;
-    const search = searchQuery.toLowerCase();
-    return sortedCatalogItems.filter((c) =>
-      c.name.toLowerCase().includes(search),
-    );
-  }, [sortedCatalogItems, searchQuery]);
+  // State counter to force re-renders when pendingChangesRef updates
+  const [pendingVersion, setPendingVersion] = useState(0);
 
   // Track pending changes for all catalogs
   const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
@@ -209,6 +181,7 @@ const AgentToolsEditorContent = forwardRef<
     (catalogId: string, changes: PendingCatalogChanges) => {
       pendingChangesRef.current.set(catalogId, changes);
       onSelectedCountChange?.(calculateTotalSelectedCount());
+      setPendingVersion((v) => v + 1);
     },
     [calculateTotalSelectedCount, onSelectedCountChange],
   );
@@ -218,6 +191,7 @@ const AgentToolsEditorContent = forwardRef<
     (catalogId: string) => {
       pendingChangesRef.current.delete(catalogId);
       onSelectedCountChange?.(calculateTotalSelectedCount());
+      setPendingVersion((v) => v + 1);
     },
     [calculateTotalSelectedCount, onSelectedCountChange],
   );
@@ -229,6 +203,7 @@ const AgentToolsEditorContent = forwardRef<
       if (!targetAgentId) return;
 
       const allChanges = Array.from(pendingChangesRef.current.entries());
+      let hasChanges = false;
 
       for (const [catalogId, changes] of allChanges) {
         const currentAssigned = assignedToolsByCatalog.get(catalogId) ?? [];
@@ -243,34 +218,166 @@ const AgentToolsEditorContent = forwardRef<
           (id) => !changes.selectedToolIds.has(id),
         );
 
-        const isLocal = changes.catalogItem.serverType === "local";
-
-        // Remove tools (only for existing agents)
-        for (const toolId of toRemove) {
-          await unassignTool.mutateAsync({ agentId: targetAgentId, toolId });
+        if (toAdd.length > 0 || toRemove.length > 0) {
+          hasChanges = true;
         }
 
-        // Add tools
+        const isLocal = changes.catalogItem.serverType === "local";
+
+        // Remove tools (skip invalidation, will do it once at the end)
+        for (const toolId of toRemove) {
+          await unassignTool.mutateAsync({
+            agentId: targetAgentId,
+            toolId,
+            skipInvalidation: true,
+          });
+        }
+
+        // Add tools (skip invalidation, will do it once at the end)
+        const useDynamicCredential =
+          isPlaywrightCatalogItem(changes.catalogItem.id) ||
+          changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
+
         for (const toolId of toAdd) {
           await assignTool.mutateAsync({
             agentId: targetAgentId,
             toolId,
-            credentialSourceMcpServerId: !isLocal
-              ? changes.credentialSourceId
-              : undefined,
-            executionSourceMcpServerId: isLocal
-              ? changes.credentialSourceId
-              : undefined,
-            useDynamicTeamCredential:
-              changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
+            // When using dynamic credentials, omit server IDs — they are mutually
+            // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
+            // field based on whether the server is local (execution) or remote (credential).
+            credentialSourceMcpServerId:
+              !isLocal && !useDynamicCredential
+                ? changes.credentialSourceId
+                : undefined,
+            executionSourceMcpServerId:
+              isLocal && !useDynamicCredential
+                ? changes.credentialSourceId
+                : undefined,
+            useDynamicTeamCredential: useDynamicCredential,
+            skipInvalidation: true,
           });
         }
+      }
+
+      // Invalidate all queries once at the end
+      if (hasChanges) {
+        invalidateAllQueries(targetAgentId);
       }
 
       // Clear all pending changes after save
       pendingChangesRef.current.clear();
     },
   }));
+
+  // Compute which catalog IDs are "selected" (have tools assigned or pending)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const selectedCatalogIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const catalog of sortedCatalogItems) {
+      const pending = pendingChangesRef.current.get(catalog.id);
+      if (pending) {
+        if (pending.selectAll || pending.selectedToolIds.size > 0)
+          ids.push(catalog.id);
+      } else {
+        const assigned = assignedToolsByCatalog.get(catalog.id);
+        if (assigned && assigned.length > 0) ids.push(catalog.id);
+      }
+    }
+    return ids;
+  }, [sortedCatalogItems, assignedToolsByCatalog, pendingVersion]);
+
+  // Handle toggling a catalog on/off from the combobox
+  const handleCatalogToggle = useCallback(
+    (catalogId: string) => {
+      const catalog = catalogItems.find((c) => c.id === catalogId);
+      if (!catalog) return;
+
+      const pending = pendingChangesRef.current.get(catalogId);
+      const assigned = assignedToolsByCatalog.get(catalogId) ?? [];
+      const currentlySelected = pending
+        ? pending.selectAll || pending.selectedToolIds.size > 0
+        : assigned.length > 0;
+
+      if (currentlySelected) {
+        // Toggle OFF: clear all tools
+        registerPendingChanges(catalogId, {
+          selectedToolIds: new Set(),
+          credentialSourceId: pending?.credentialSourceId ?? null,
+          catalogItem: catalog,
+          selectAll: false,
+        });
+      } else {
+        // Toggle ON: pre-select all tools using cached data
+        const toolIdx = catalogItems.findIndex((c) => c.id === catalogId);
+        const toolQuery = toolCountQueries[toolIdx];
+        const tools = (toolQuery?.data as CatalogTool[] | undefined) ?? [];
+        const allToolIds = new Set(tools.map((t) => t.id));
+
+        // Get default credential
+        const credentials = allCredentials?.[catalogId] ?? [];
+        const defaultCredential = credentials[0]?.id ?? null;
+
+        registerPendingChanges(catalogId, {
+          selectedToolIds: allToolIds,
+          credentialSourceId: pending?.credentialSourceId ?? defaultCredential,
+          catalogItem: catalog,
+          selectAll: true,
+        });
+      }
+    },
+    [
+      catalogItems,
+      assignedToolsByCatalog,
+      toolCountQueries,
+      allCredentials,
+      registerPendingChanges,
+    ],
+  );
+
+  // Build combobox items
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const comboboxItems: AssignmentComboboxItem[] = useMemo(() => {
+    return sortedCatalogItems.map((catalog) => {
+      const pending = pendingChangesRef.current.get(catalog.id);
+      const assignedCount = pending
+        ? pending.selectedToolIds.size
+        : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
+      const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
+      const hasNoTools = totalCount === 0;
+      return {
+        id: catalog.id,
+        name: catalog.name,
+        description: catalog.description || undefined,
+        badge: hasNoTools
+          ? undefined
+          : assignedCount > 0
+            ? `${assignedCount}/${totalCount}`
+            : `${totalCount} tools`,
+        disabled: hasNoTools,
+        disabledReason: hasNoTools ? "Not installed" : undefined,
+      };
+    });
+  }, [
+    sortedCatalogItems,
+    assignedToolsByCatalog,
+    toolCountByCatalog,
+    pendingVersion,
+  ]);
+
+  // Filter to only selected catalogs for pills
+  const selectedCatalogs = useMemo(() => {
+    const selectedSet = new Set(selectedCatalogIds);
+    return sortedCatalogItems.filter((c) => selectedSet.has(c.id));
+  }, [sortedCatalogItems, selectedCatalogIds]);
+
+  if (isPending) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        <span>Loading tools...</span>
+      </div>
+    );
+  }
 
   if (catalogItems.length === 0) {
     return (
@@ -280,53 +387,29 @@ const AgentToolsEditorContent = forwardRef<
     );
   }
 
-  if (filteredCatalogItems.length === 0) {
-    return <p className="text-sm text-muted-foreground">No matching tools.</p>;
-  }
-
-  // Apply show more limit (show all when searching)
-  const shouldShowAll = showAll || !!searchQuery.trim();
-  const visibleItems =
-    shouldShowAll || filteredCatalogItems.length <= 10
-      ? filteredCatalogItems
-      : filteredCatalogItems.slice(0, 10);
-  const hiddenCount = filteredCatalogItems.length - 10;
-
   return (
     <div className="flex flex-wrap gap-2">
-      {visibleItems.map((catalog) => (
+      {selectedCatalogs.map((catalog) => (
         <McpServerPill
           key={catalog.id}
           catalogItem={catalog}
           assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
+          initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
           onClearPendingChanges={clearPendingChanges}
         />
       ))}
-      {!shouldShowAll && hiddenCount > 0 && onShowMore && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-3 text-xs border-dashed"
-          onClick={onShowMore}
-        >
-          +{hiddenCount} more
-        </Button>
-      )}
-      {/* Show "Install New MCP Server" when there's no "+N more" button */}
-      {(shouldShowAll || hiddenCount <= 0) && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-3 gap-1.5 text-xs border-dashed"
-          asChild
-        >
-          <a href="/mcp-catalog/registry" target="_blank" rel="noopener">
-            <span className="font-medium">Install New MCP Server</span>
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </Button>
-      )}
+      <AssignmentCombobox
+        items={comboboxItems}
+        selectedIds={selectedCatalogIds}
+        onToggle={handleCatalogToggle}
+        placeholder="Search MCP servers..."
+        emptyMessage="No MCP servers found."
+        createAction={{
+          label: "Install New MCP Server",
+          href: "/mcp-catalog/registry",
+        }}
+      />
     </div>
   );
 });
@@ -334,6 +417,7 @@ const AgentToolsEditorContent = forwardRef<
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
   assignedTools: AgentTool[];
+  initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
   onClearPendingChanges: (catalogId: string) => void;
 }
@@ -341,10 +425,12 @@ interface McpServerPillProps {
 function McpServerPill({
   catalogItem,
   assignedTools,
+  initialPendingChanges,
   onPendingChanges,
   onClearPendingChanges,
 }: McpServerPillProps) {
   const [open, setOpen] = useState(false);
+  const [changedInSession, setChangedInSession] = useState(false);
 
   // Fetch tools for this catalog item
   const { data: allTools = [], isLoading: isLoadingTools } = useCatalogTools(
@@ -357,12 +443,15 @@ function McpServerPill({
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
 
-  // Get current credential source (from first assigned tool or first available credential)
-  const currentCredentialSource =
-    assignedTools[0]?.credentialSourceMcpServerId ??
-    assignedTools[0]?.executionSourceMcpServerId ??
-    mcpServers[0]?.id ??
-    null;
+  // Resolve which credential to show as selected in the dropdown. Dynamic credentials
+  // store no server ID, so we must check the flag first to avoid falling through to a
+  // static server and misrepresenting the saved state.
+  const currentCredentialSource = assignedTools[0]?.useDynamicTeamCredential
+    ? DYNAMIC_CREDENTIAL_VALUE
+    : (assignedTools[0]?.credentialSourceMcpServerId ??
+      assignedTools[0]?.executionSourceMcpServerId ??
+      mcpServers[0]?.id ??
+      null);
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -374,29 +463,41 @@ function McpServerPill({
     [currentAssignedToolIds],
   );
 
-  // Local state for pending changes
+  // Local state for pending changes — seed from parent's pending state if available
   const [selectedCredential, setSelectedCredential] = useState<string | null>(
-    currentCredentialSource,
+    initialPendingChanges?.credentialSourceId ?? currentCredentialSource,
   );
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
-    new Set(currentAssignedToolIds),
+    initialPendingChanges?.selectedToolIds ?? new Set(currentAssignedToolIds),
   );
 
-  // Reset local state when assigned tools actually change (e.g., after save)
+  // Track previous assigned tool IDs to detect actual changes (e.g., after save)
+  // This avoids resetting state when unrelated props change (like credentials loading)
+  const prevAssignedToolIdsKeyRef = useRef(currentAssignedToolIdsKey);
+
+  // Reset local state only when assigned tools actually change (e.g., after save)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only reset when assigned tools change, not when credentials or callbacks change
   useEffect(() => {
+    if (currentAssignedToolIdsKey === prevAssignedToolIdsKeyRef.current) return;
+    prevAssignedToolIdsKeyRef.current = currentAssignedToolIdsKey;
     setSelectedCredential(currentCredentialSource);
-    // Reconstruct set from the stable key to avoid stale closure
     const ids = currentAssignedToolIdsKey
       ? currentAssignedToolIdsKey.split(",")
       : [];
     setSelectedToolIds(new Set(ids));
     onClearPendingChanges(catalogItem.id);
-  }, [
-    currentCredentialSource,
-    currentAssignedToolIdsKey,
-    onClearPendingChanges,
-    catalogItem.id,
-  ]);
+  }, [currentAssignedToolIdsKey]);
+
+  // Auto-select all tools when selectAll flag is set and tools finish loading
+  useEffect(() => {
+    if (
+      initialPendingChanges?.selectAll &&
+      selectedToolIds.size === 0 &&
+      allTools.length > 0
+    ) {
+      setSelectedToolIds(new Set(allTools.map((t) => t.id)));
+    }
+  }, [initialPendingChanges?.selectAll, selectedToolIds.size, allTools]);
 
   // Report pending changes to parent whenever local state changes
   useEffect(() => {
@@ -404,6 +505,7 @@ function McpServerPill({
       selectedToolIds,
       credentialSourceId: selectedCredential,
       catalogItem,
+      selectAll: selectedToolIds.size > 0,
     });
   }, [selectedToolIds, selectedCredential, catalogItem, onPendingChanges]);
 
@@ -425,12 +527,22 @@ function McpServerPill({
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
 
-  // Show credential selector for non-builtin servers that have credentials available
+  // Show credential selector for non-builtin, non-Playwright servers that have credentials available
+  const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
   const showCredentialSelector =
-    catalogItem.serverType !== "builtin" && mcpServers.length > 0;
+    catalogItem.serverType !== "builtin" &&
+    !isPlaywright &&
+    mcpServers.length > 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen} modal>
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setChangedInSession(false);
+      }}
+      modal
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -447,10 +559,11 @@ function McpServerPill({
           <span className="text-muted-foreground">
             ({hasPendingChanges ? selectedToolIds.size : assignedCount})
           </span>
+          <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[420px] max-h-[min(500px,70vh)] p-0 flex flex-col overflow-hidden"
+        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={8}
@@ -479,7 +592,7 @@ function McpServerPill({
         {/* Credential Selector */}
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
-            <Label className="text-sm font-medium">Credential</Label>
+            <Label className="text-sm font-medium">Connect on behalf of</Label>
             <TokenSelect
               catalogId={catalogItem.id}
               value={selectedCredential}
@@ -504,8 +617,19 @@ function McpServerPill({
             <ToolChecklist
               tools={allTools}
               selectedToolIds={selectedToolIds}
-              setSelectedToolIds={setSelectedToolIds}
+              onSelectionChange={(ids) => {
+                setSelectedToolIds(ids);
+                setChangedInSession(true);
+              }}
             />
+          </div>
+        )}
+
+        {changedInSession && (
+          <div className="p-2 border-t shrink-0">
+            <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
+              OK
+            </Button>
           </div>
         )}
       </PopoverContent>
@@ -516,11 +640,11 @@ function McpServerPill({
 export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
-  setSelectedToolIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onSelectionChange: (selectedIds: Set<string>) => void;
 }
 
 function formatToolName(toolName: string) {
-  return toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? toolName;
+  return parseFullToolName(toolName).toolName || toolName;
 }
 
 function ExpandableDescription({ description }: { description: string }) {
@@ -579,7 +703,7 @@ function ExpandableDescription({ description }: { description: string }) {
 export function ToolChecklist({
   tools,
   selectedToolIds,
-  setSelectedToolIds,
+  onSelectionChange,
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -602,15 +726,13 @@ export function ToolChecklist({
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {
-    setSelectedToolIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(toolId)) {
-        newSet.delete(toolId);
-      } else {
-        newSet.add(toolId);
-      }
-      return newSet;
-    });
+    const newSet = new Set(selectedToolIds);
+    if (newSet.has(toolId)) {
+      newSet.delete(toolId);
+    } else {
+      newSet.add(toolId);
+    }
+    onSelectionChange(newSet);
   };
 
   const handleSelectAll = () => {
@@ -618,7 +740,7 @@ export function ToolChecklist({
     for (const tool of filteredTools) {
       newSet.add(tool.id);
     }
-    setSelectedToolIds(newSet);
+    onSelectionChange(newSet);
   };
 
   const handleDeselectAll = () => {
@@ -626,7 +748,7 @@ export function ToolChecklist({
     for (const tool of filteredTools) {
       newSet.delete(tool.id);
     }
-    setSelectedToolIds(newSet);
+    onSelectionChange(newSet);
   };
 
   return (

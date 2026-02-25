@@ -67,12 +67,12 @@ Configure authentication using one of the methods described in [Vault Authentica
 
 Each team in Archestra should be linked to a specific vault folder to use external secrets. Team members can then use secrets from that folder when installing MCP servers.
 
-**Example: Connecting the Default Team**
+**Example: Connecting a Team**
 
-To connect the default team to a Vault folder at `kv/platform/ee/archestra`:
+To connect a team to a Vault folder at `kv/platform/ee/archestra`:
 
 1. Navigate to **Settings** → **Teams**
-2. Find the **Default** team and click the **Configure Vault Folder** button
+2. Find your team and click the **Configure Vault Folder** button
 
 ![Teams page with Configure Vault Folder button](/docs/automated_screenshots/teams-configure-vault-folder-button.png)
 

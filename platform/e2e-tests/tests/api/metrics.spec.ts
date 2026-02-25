@@ -31,23 +31,40 @@ test.describe("Metrics API", () => {
   test("returns metrics when authentication is provided", async ({
     request,
   }) => {
-    // First, make an API call to generate metrics data
-    await request.get(`${API_BASE_URL}/openapi.json`);
+    // Make multiple API calls to ensure metrics are generated
+    // In CI the metrics endpoint may be on a different pod, so we make many requests
+    // to increase the chance the metrics pod has processed at least one
+    for (let i = 0; i < 3; i++) {
+      const apiCalls = Array.from({ length: 10 }, () =>
+        request.get(`${API_BASE_URL}/openapi.json`),
+      );
+      await Promise.all(apiCalls);
+    }
 
-    const response = await fetchMetrics(
-      request,
-      METRICS_BASE_URL,
-      METRICS_BEARER_TOKEN,
-    );
+    // Poll metrics until the route appears (handles race condition where metrics might not be immediately available)
+    // Use generous timeout since metrics collection and aggregation can be slow in CI
+    let metricsText = "";
+    await expect
+      .poll(
+        async () => {
+          // Make a few more requests each poll to ensure metrics are generated
+          await request.get(`${API_BASE_URL}/openapi.json`);
+          const response = await fetchMetrics(
+            request,
+            METRICS_BASE_URL,
+            METRICS_BEARER_TOKEN,
+          );
+          expect(response.ok()).toBeTruthy();
+          metricsText = await response.text();
+          return metricsText;
+        },
+        { timeout: 30_000, intervals: [1000, 2000, 3000, 5000] },
+      )
+      .toContain('route="/openapi.json"');
 
-    expect(response.ok()).toBeTruthy();
-
-    const metricsText = await response.text();
+    // Verify standard metrics format
     expect(metricsText).toContain("# HELP");
     expect(metricsText).toContain("http_request_duration_seconds");
-
-    // Check that we have route labels from our API call above
-    expect(metricsText).toContain('route="/openapi.json"');
 
     /**
      * Ensure /metrics route is NOT present (since it's not exposed on main port)

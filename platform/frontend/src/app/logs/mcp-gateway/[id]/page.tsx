@@ -1,6 +1,12 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ErrorExtended,
+} from "@shared";
 
+import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
+import { handleApiError } from "@/lib/utils";
 import { McpToolCallDetailPage } from "./page.client";
 
 export default async function McpToolCallDetailPageServer({
@@ -18,17 +24,25 @@ export default async function McpToolCallDetailPageServer({
   };
   try {
     const headers = await getServerApiHeaders();
+    const [mcpToolCallResponse, agentsResponse] = await Promise.all([
+      archestraApiSdk.getMcpToolCall({
+        headers,
+        path: { mcpToolCallId: id },
+      }),
+      archestraApiSdk.getAllAgents({ headers }),
+    ]);
+    if (mcpToolCallResponse.error) {
+      handleApiError(mcpToolCallResponse.error);
+    }
+    if (agentsResponse.error) {
+      handleApiError(agentsResponse.error);
+    }
     initialData = {
-      mcpToolCall: (
-        await archestraApiSdk.getMcpToolCall({
-          headers,
-          path: { mcpToolCallId: id },
-        })
-      ).data,
-      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
+      mcpToolCall: mcpToolCallResponse.data,
+      agents: agentsResponse.data || [],
     };
   } catch (error) {
-    console.error(error);
+    return <ServerErrorFallback error={error as ErrorExtended} />;
   }
 
   return <McpToolCallDetailPage initialData={initialData} id={id} />;

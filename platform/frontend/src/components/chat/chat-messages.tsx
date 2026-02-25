@@ -24,26 +24,33 @@ import { Response } from "@/components/ai-elements/response";
 import {
   Tool,
   ToolContent,
+  ToolErrorDetails,
   ToolHeader,
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { Button } from "@/components/ui/button";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
-import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import {
+  parseAuthRequired,
+  parsePolicyDenied,
+} from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
+import { ToolErrorLogsButton } from "./tool-error-logs-button";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
   agentId?: string;
   messages: UIMessage[];
-  hideToolCalls?: boolean;
   status: ChatStatus;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
@@ -57,6 +64,14 @@ interface ChatMessagesProps {
   agentName?: string;
   suggestedPrompt?: string | null;
   onSuggestedPromptClick?: () => void;
+  /** Hide the decorative arrow pointing to agent selector (e.g., when an overlay is shown) */
+  hideArrow?: boolean;
+  /** Callback for tool approval responses (approve/deny) */
+  onToolApprovalResponse?: (params: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }) => void;
 }
 
 // Type guards for tool parts
@@ -86,17 +101,21 @@ export function ChatMessages({
   suggestedPrompt,
   onSuggestedPromptClick,
   messages,
-  hideToolCalls = false,
   status,
   isLoadingConversation = false,
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
+  hideArrow = false,
+  onToolApprovalResponse,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const { data: userCanCreateAgent } = useHasPermissions({
+    agent: ["create"],
+  });
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
@@ -210,9 +229,13 @@ export function ChatMessages({
     const textX = textRect.left;
     const textY = textRect.top;
 
-    // Agent selector position (top left area)
-    const selectorX = 248;
-    const selectorY = 85;
+    // Agent selector position - dynamically find the actual button.
+    // The SVG path draws the arrowhead at internal coords (60, 5), so offset
+    // selectorX/Y so the arrowhead lands near the button's left edge, below the header.
+    const selectorEl = document.querySelector("[data-agent-selector]");
+    const selectorRect = selectorEl?.getBoundingClientRect();
+    const selectorX = selectorRect ? selectorRect.left - 8 : 248;
+    const selectorY = selectorRect ? selectorRect.bottom + 30 : 85;
 
     // Calculate SVG dimensions - arrow should end at text marker position
     const svgWidth = Math.max(textX - selectorX, 200); // Width from selector to text
@@ -313,7 +336,7 @@ export function ChatMessages({
       return (
         <div className="flex items-center justify-center h-full relative">
           {/* Custom bent arrow pointing to agent selector - hidden on mobile */}
-          {arrowDimensions.visible && (
+          {arrowDimensions.visible && !hideArrow && (
             <svg
               className="fixed pointer-events-none z-50"
               width={arrowDimensions.width}
@@ -367,13 +390,17 @@ export function ChatMessages({
               </span>{" "}
               agent,
               <br />
-              or{" "}
-              <a
-                href="/agents?create=true"
-                className="text-primary hover:underline"
-              >
-                create a new one
-              </a>
+              {userCanCreateAgent && (
+                <>
+                  or{" "}
+                  <a
+                    href="/agents?create=true"
+                    className="text-primary hover:underline"
+                  >
+                    create a new one
+                  </a>
+                </>
+              )}
             </p>
             {suggestedPrompt && onSuggestedPromptClick && (
               <button
@@ -433,7 +460,7 @@ export function ChatMessages({
       resize={instantResize ? "instant" : "smooth"}
     >
       <ConversationContent>
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
@@ -459,18 +486,15 @@ export function ChatMessages({
                     }
                   }
 
-                  // Hide tool calls if hideToolCalls is true
-                  if (
-                    hideToolCalls &&
-                    isToolPart(part) &&
-                    (part.type?.startsWith("tool-") ||
-                      part.type === "dynamic-tool")
-                  ) {
-                    return null;
-                  }
-
                   switch (part.type) {
                     case "text": {
+                      // Skip empty text parts from assistant messages.
+                      // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
+                      // alongside tool calls, which the AI SDK converts into an empty text part.
+                      if (!part.text && message.role === "assistant") {
+                        return null;
+                      }
+
                       const partKey = `${message.id}-${i}`;
 
                       // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
@@ -765,6 +789,7 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          onToolApprovalResponse={onToolApprovalResponse}
                         />
                       );
                     }
@@ -795,6 +820,7 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            onToolApprovalResponse={onToolApprovalResponse}
                           />
                         );
                       }
@@ -811,15 +837,17 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <Message from="assistant">
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-              />
-            </Message>
+            <div className="absolute bottom-[-10] left-0">
+              <Message from="assistant">
+                <Image
+                  src={"/logo.png"}
+                  alt="Loading logo"
+                  width={30}
+                  height={30}
+                  className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                />
+              </Message>
+            </div>
           )}
         </div>
       </ConversationContent>
@@ -872,11 +900,17 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  onToolApprovalResponse,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  onToolApprovalResponse?: (params: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }) => void;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -898,6 +932,17 @@ function MessageTool({
         />
       );
     }
+
+    const authRequired = parseAuthRequired(errorText);
+    if (authRequired) {
+      return (
+        <AuthRequiredTool
+          toolName={toolName}
+          catalogName={authRequired.catalogName}
+          installUrl={authRequired.installUrl}
+        />
+      );
+    }
   }
 
   // Check if this is the todo_write tool from Archestra
@@ -907,19 +952,31 @@ function MessageTool({
         part={part}
         toolResultPart={toolResultPart}
         errorText={errorText}
+        onToolApprovalResponse={onToolApprovalResponse}
       />
     );
   }
 
+  const isApprovalRequested = part.state === "approval-requested";
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
+      errorText ||
+      isApprovalRequested ||
       (toolResultPart && Boolean(toolResultPart.output)) ||
       (!toolResultPart && Boolean(part.output)),
   );
 
+  // Show logs button for failed tool calls
+  const logsButton = errorText ? (
+    <ToolErrorLogsButton toolName={toolName} />
+  ) : null;
+
   return (
-    <Tool className={hasContent ? "cursor-pointer" : ""}>
+    <Tool
+      className={hasContent ? "cursor-pointer" : ""}
+      defaultOpen={isApprovalRequested}
+    >
       <ToolHeader
         type={`tool-${toolName}`}
         state={getHeaderState({
@@ -927,11 +984,46 @@ function MessageTool({
           toolResultPart,
           errorText,
         })}
-        errorText={errorText}
         isCollapsible={hasContent}
+        actionButton={logsButton}
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
+        {isApprovalRequested &&
+          onToolApprovalResponse &&
+          "approval" in part &&
+          part.approval?.id && (
+            <div className="flex items-center gap-2 px-4 pb-4">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToolApprovalResponse({
+                    id: (part as { approval: { id: string } }).approval.id,
+                    approved: true,
+                  });
+                }}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToolApprovalResponse({
+                    id: (part as { approval: { id: string } }).approval.id,
+                    approved: false,
+                    reason: "User denied",
+                  });
+                }}
+              >
+                Deny
+              </Button>
+            </div>
+          )}
+        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}

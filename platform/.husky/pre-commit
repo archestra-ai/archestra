@@ -1,0 +1,7 @@
+cd platform
+if ! pnpm commit:check; then
+  echo ""
+  echo "💡 Tip: Run 'pnpm lint:fix' to auto-fix formatting issues."
+  echo ""
+  exit 1
+fi

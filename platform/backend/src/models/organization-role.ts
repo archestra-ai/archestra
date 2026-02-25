@@ -33,15 +33,15 @@ class OrganizationRoleModel {
    * Check if a role is a predefined role (not a custom one)
    */
   static isPredefinedRole(roleName: string): roleName is PredefinedRoleName {
-    logger.debug(
-      { roleName },
-      "OrganizationRoleModel.isPredefinedRole: checking",
-    );
+    // logger.debug(
+    //   { roleName },
+    //   "OrganizationRoleModel.isPredefinedRole: checking",
+    // );
     const result = PredefinedRoleNameSchema.safeParse(roleName).success;
-    logger.debug(
-      { roleName, isPredefined: result },
-      "OrganizationRoleModel.isPredefinedRole: completed",
-    );
+    // logger.debug(
+    //   { roleName, isPredefined: result },
+    //   "OrganizationRoleModel.isPredefinedRole: completed",
+    // );
     return result;
   }
 
@@ -51,10 +51,10 @@ class OrganizationRoleModel {
   static getPredefinedRolePermissions(
     roleName: PredefinedRoleName,
   ): Permissions {
-    logger.debug(
-      { roleName },
-      "OrganizationRoleModel.getPredefinedRolePermissions: fetching",
-    );
+    // logger.debug(
+    //   { roleName },
+    //   "OrganizationRoleModel.getPredefinedRolePermissions: fetching",
+    // );
     return predefinedPermissionsMap[roleName];
   }
 
@@ -302,10 +302,10 @@ class OrganizationRoleModel {
     identifier: string,
     organizationId: string,
   ): Promise<Permissions> {
-    logger.debug(
-      { identifier, organizationId },
-      "OrganizationRoleModel.getPermissions: fetching",
-    );
+    // logger.debug(
+    //   { identifier, organizationId },
+    //   "OrganizationRoleModel.getPermissions: fetching",
+    // );
     if (OrganizationRoleModel.isPredefinedRole(identifier)) {
       return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
     }
@@ -331,6 +331,17 @@ class OrganizationRoleModel {
   }
 
   /**
+   * List only predefined roles for an organization
+   */
+  static getPredefinedOnly(organizationId: string): Array<OrganizationRole> {
+    return [
+      generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
+      generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
+      generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
+    ];
+  }
+
+  /**
    * List all roles for an organization (including predefined)
    */
   static async getAll(
@@ -340,11 +351,8 @@ class OrganizationRoleModel {
       { organizationId },
       "OrganizationRoleModel.getAll: fetching roles",
     );
-    const predefinedRoles = [
-      generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
-      generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
-      generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
-    ];
+    const predefinedRoles =
+      OrganizationRoleModel.getPredefinedOnly(organizationId);
 
     try {
       const customRoles = await db

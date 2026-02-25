@@ -30,6 +30,13 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
+# Upgrade npm to 11.10.1 which bundles fixed versions of all previously vulnerable dependencies:
+# tar@7.5.9 (CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960)
+# glob@13.0.6 (CVE-2025-64756)
+# minimatch@10.2.2 (CVE-2026-26996)
+# brace-expansion@5.0.2 (GHSA-7h2j-956f-4vf2)
+RUN npm install -g npm@11.10.1
+
 WORKDIR /opt/node-deps
 
 # Copy package.json with dependencies and overrides to fix CVEs in transitive dependencies
@@ -37,17 +44,18 @@ WORKDIR /opt/node-deps
 # CVE-2025-64756: OS Command Injection in glob < 11.1.0
 # CVE-2026-23745: Path Traversal in tar <= 7.5.2
 # CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
-COPY package.json .
+# CVE-2026-24842: Path Traversal in tar <= 7.5.6
+# CVE-2026-26960: Path Traversal in tar <= 7.5.7
+COPY package.json package-lock.json ./
 
-RUN npm install
+RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
 FROM python:3.12-alpine
 
-# Install runtime dependencies only
+# Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
    nodejs \
-   npm \
    libstdc++ \
    libgcc \
    openssl \
@@ -69,14 +77,15 @@ RUN apk add --no-cache \
    go && \
    # CVE-2025-55130, CVE-2025-55131: Node.js vulnerabilities fixed in 24.13.0-r0
    # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
-   apk upgrade --no-cache nodejs bind
+   # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
+   # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
+   apk upgrade --no-cache nodejs bind openssl go
 
-# Upgrade npm to get patched bundled dependencies (tar, glob)
-# CVE-2026-23950, CVE-2026-23745: tar vulnerabilities fixed in npm 11.8.0
-# CVE-2025-64756: glob vulnerability fixed in npm 11.8.0
-# Remove old Alpine npm after upgrading to avoid duplicate vulnerable packages
-RUN npm install -g npm@11.8.0 && \
-    rm -rf /usr/lib/node_modules/npm
+# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
+# node:20-alpine has npm in /usr/local/lib/node_modules/npm
+COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Upgrade system pip to fix CVE-2025-8869 (Link Following vulnerability in pip <= 25.2)
 RUN pip install --upgrade pip>=25.3

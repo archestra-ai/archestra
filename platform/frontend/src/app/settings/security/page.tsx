@@ -9,6 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Card,
@@ -43,10 +44,8 @@ export default function SecuritySettingsPage() {
     "Failed to update setting",
   );
 
-  // Check for org-wide Anthropic API key (required for auto-policy subagent)
-  const hasAnthropicKey = chatApiKeys?.some(
-    (key) => key.provider === "anthropic" && key.scope === "org_wide",
-  );
+  // Check for any org-wide LLM API key (required for auto-policy subagent)
+  const hasAnyLlmKey = chatApiKeys?.some((key) => key.scope === "org_wide");
 
   const handleGlobalToolPolicyChange = async (
     value: "permissive" | "restrictive",
@@ -83,27 +82,47 @@ export default function SecuritySettingsPage() {
         </CardHeader>
         <CardContent>
           <div>
-            <Select
-              value={organization?.globalToolPolicy ?? "permissive"}
-              onValueChange={handleGlobalToolPolicyChange}
-              disabled={updateOrgMutation.isPending}
-            >
-              <SelectTrigger id="global-tool-policy" className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="permissive">Disabled</SelectItem>
-                <SelectItem value="restrictive">Enabled</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="w-fit">
+              <WithPermissions
+                permissions={{ organization: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <Select
+                    value={organization?.globalToolPolicy ?? "permissive"}
+                    onValueChange={handleGlobalToolPolicyChange}
+                    disabled={updateOrgMutation.isPending || !hasPermission}
+                  >
+                    <SelectTrigger
+                      id="global-tool-policy"
+                      className="w-[140px]"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="permissive">Disabled</SelectItem>
+                      <SelectItem value="restrictive">Enabled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </WithPermissions>
+            </div>
             <p className="text-sm mt-2">
               {organization?.globalToolPolicy === "restrictive" ? (
                 <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
                   <ShieldCheck className="h-4 w-4" />
                   Policies apply to agents' tools.
-                  <Link href="/tools" className="text-primary hover:underline">
-                    Click here to configure policies
-                  </Link>
+                  <WithPermissions
+                    permissions={{ organization: ["update"] }}
+                    noPermissionHandle="hide"
+                  >
+                    <Link
+                      href="/tool-policies"
+                      className="text-primary hover:underline"
+                    >
+                      Click here to configure policies
+                    </Link>
+                  </WithPermissions>
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400">
@@ -123,12 +142,19 @@ export default function SecuritySettingsPage() {
               <FileImage className="h-5 w-5 text-blue-500" />
               <CardTitle>Chat File Uploads</CardTitle>
             </div>
-            <Switch
-              id="allow-chat-file-uploads"
-              checked={organization?.allowChatFileUploads ?? true}
-              onCheckedChange={handleToggleAllowChatFileUploads}
-              disabled={updateOrgMutation.isPending}
-            />
+            <WithPermissions
+              permissions={{ organization: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Switch
+                  id="allow-chat-file-uploads"
+                  checked={organization?.allowChatFileUploads ?? true}
+                  onCheckedChange={handleToggleAllowChatFileUploads}
+                  disabled={updateOrgMutation.isPending || !hasPermission}
+                />
+              )}
+            </WithPermissions>
           </div>
           <CardDescription>
             Allow users to upload files in the Archestra chat UI
@@ -159,19 +185,19 @@ export default function SecuritySettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!hasAnthropicKey && !isLoadingApiKeys && (
+          {!hasAnyLlmKey && !isLoadingApiKeys && (
             <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
               <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
                 <XCircle className="h-4 w-4" />
-                <span>Requires an org-wide Anthropic API key</span>
+                <span>Requires an LLM API key</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Configure in{" "}
                 <Link
-                  href="/settings/llm-api-keys"
+                  href="/llm-proxies/provider-settings"
                   className="text-primary hover:underline"
                 >
-                  LLM API Keys settings
+                  Provider Settings
                 </Link>
               </p>
             </div>
@@ -194,12 +220,23 @@ export default function SecuritySettingsPage() {
                 are assigned
               </p>
             </div>
-            <Switch
-              id="auto-configure-new-tools"
-              checked={organization?.autoConfigureNewTools ?? false}
-              onCheckedChange={handleToggleAutoConfigureNewTools}
-              disabled={!hasAnthropicKey || updateOrgMutation.isPending}
-            />
+            <WithPermissions
+              permissions={{ organization: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Switch
+                  id="auto-configure-new-tools"
+                  checked={organization?.autoConfigureNewTools ?? false}
+                  onCheckedChange={handleToggleAutoConfigureNewTools}
+                  disabled={
+                    !hasAnyLlmKey ||
+                    updateOrgMutation.isPending ||
+                    !hasPermission
+                  }
+                />
+              )}
+            </WithPermissions>
           </div>
 
           <div className="flex items-center justify-between">
@@ -207,7 +244,10 @@ export default function SecuritySettingsPage() {
               <Label>Manual trigger</Label>
               <p className="text-sm text-muted-foreground">
                 Select tools on the{" "}
-                <Link href="/tools" className="text-primary hover:underline">
+                <Link
+                  href="/tool-policies"
+                  className="text-primary hover:underline"
+                >
                   Tools page
                 </Link>{" "}
                 and click "Configure with Subagent"

@@ -13,7 +13,7 @@ const isMainModule =
  */
 if (isMainModule) {
   await import("./sentry");
-  await import("./tracing");
+  await import("./observability/tracing");
 }
 
 import fastifyCors from "@fastify/cors";
@@ -24,6 +24,7 @@ import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   hasZodFastifySchemaValidationErrors,
+  isResponseSerializationError,
   jsonSchemaTransform,
   jsonSchemaTransformObject,
   serializerCompiler,
@@ -43,28 +44,31 @@ import {
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
-import { isDatabaseHealthy } from "@/database";
+import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import {
   cleanupKnowledgeGraphProvider,
   initializeKnowledgeGraphProvider,
 } from "@/knowledge-graph";
-import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
+import OrganizationModel from "@/models/organization";
+import { metrics } from "@/observability";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   Anthropic,
   ApiError,
   Cerebras,
   Cohere,
   Gemini,
+  Groq,
   Mistral,
   Ollama,
   OpenAi,
+  Perplexity,
   Vllm,
-  WebSocketMessageSchema,
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -134,6 +138,18 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Mistral.API.ChatCompletionResponseSchema, {
     id: "MistralChatCompletionResponse",
   });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionRequestSchema, {
+    id: "PerplexityChatCompletionRequest",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionResponseSchema, {
+    id: "PerplexityChatCompletionResponse",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
+  });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
   });
@@ -151,9 +167,6 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
-  });
-  z.globalRegistry.add(WebSocketMessageSchema, {
-    id: "WebSocketMessage",
   });
 }
 
@@ -283,6 +296,31 @@ export const createFastifyInstance = () =>
     .setSerializerCompiler(serializerCompiler)
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, _request, reply) {
+      // Handle response serialization errors (when response doesn't match schema)
+      if (isResponseSerializationError(error)) {
+        const issues = error.cause?.issues ?? [];
+        this.log.error(
+          {
+            statusCode: 500,
+            method: error.method,
+            url: error.url,
+            validationErrors: issues.map((issue) => ({
+              path: issue.path?.join("."),
+              code: issue.code,
+              message: issue.message,
+            })),
+          },
+          "Response serialization error: response doesn't match schema",
+        );
+
+        return reply.status(500).send({
+          error: {
+            message: "Response doesn't match the schema",
+            type: "api_internal_server_error",
+          },
+        });
+      }
+
       // Handle Zod validation errors (from fastify-type-provider-zod)
       if (hasZodFastifySchemaValidationErrors(error)) {
         const message = error.message || "Validation error";
@@ -528,14 +566,37 @@ const start = async () => {
   fastify.register(enterpriseLicenseMiddleware);
 
   try {
+    // Initialize database connection first
+    await initializeDatabase();
+
     await seedRequiredStartingData();
+
+    // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
+    const defaultOrg = await OrganizationModel.getFirst();
+    if (defaultOrg) {
+      systemKeyManager.syncSystemKeys(defaultOrg.id).catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to sync system API keys on startup",
+        );
+      });
+    }
 
     // Start cache manager's background cleanup interval
     cacheManager.start();
 
     // Initialize metrics with keys of custom agent labels
+    // Set OpenMetrics content type to enable exemplar support on histograms
+    const promClient = await import("prom-client");
+    // eslint-disable-next-line -- default register is typed as Registry<PrometheusContentType> but setContentType accepts both at runtime
+    (promClient.default.register.setContentType as (ct: string) => void)(
+      promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
+    );
+
     const labelKeys = await AgentLabelModel.getAllKeys();
-    initializeMetrics(labelKeys);
+    metrics.llm.initializeMetrics(labelKeys);
+    metrics.mcp.initializeMcpMetrics(labelKeys);
+    metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
 
     // Start metrics server
     await startMetricsServer();
@@ -551,6 +612,7 @@ const start = async () => {
     await initializeEmailProvider();
 
     // Initialize chatops providers (MS Teams, Slack, etc.)
+    // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
     // Initialize knowledge graph provider (if configured)
@@ -598,6 +660,16 @@ const start = async () => {
       credentials: true,
     });
 
+    logger.info(
+      {
+        corsOrigins: corsOrigins.map((o) =>
+          o instanceof RegExp ? o.toString() : o,
+        ),
+        trustedOrigins: config.auth.trustedOrigins,
+      },
+      "CORS and trusted origins configured",
+    );
+
     // Register formbody plugin to parse application/x-www-form-urlencoded bodies
     // This is required for SAML callbacks which use form POST binding
     await fastify.register(fastifyFormbody);
@@ -615,6 +687,12 @@ const start = async () => {
     fastify.get("/openapi.json", async () => fastify.swagger());
     registerHealthEndpoint(fastify);
     registerReadinessEndpoint(fastify);
+
+    if (process.env.ENABLE_E2E_TEST_ENDPOINTS === "true") {
+      fastify.get("/test", async () => ({
+        value: process.env.TEST_VALUE ?? null,
+      }));
+    }
 
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);

@@ -2,7 +2,9 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
+  isAgentTool,
+  parseFullToolName,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +25,7 @@ import {
   addPendingAction,
   applyPendingActions,
   getPendingActions,
+  PENDING_TOOL_STATE_CHANGE_EVENT,
   type PendingToolAction,
 } from "@/lib/pending-tool-state";
 import { Button } from "../ui/button";
@@ -72,6 +75,17 @@ export function ChatToolsDisplay({
     }
   }, [agentId, conversationId]);
 
+  // Re-sync when pending actions change externally (e.g. Playwright dialog disable button)
+  useEffect(() => {
+    if (conversationId) return;
+    const handler = () => {
+      setLocalPendingActions(getPendingActions(agentId));
+    };
+    window.addEventListener(PENDING_TOOL_STATE_CHANGE_EVENT, handler);
+    return () =>
+      window.removeEventListener(PENDING_TOOL_STATE_CHANGE_EVENT, handler);
+  }, [agentId, conversationId]);
+
   // Handle click outside to close tooltips
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -113,19 +127,16 @@ export function ChatToolsDisplay({
   // Default enabled tools logic (matches backend ConversationModel.create):
   // - Disable all Archestra tools (archestra__*) by default
   // - Except archestra__todo_write and archestra__artifact_write which stay enabled
-  // - All other tools (non-Archestra, agent delegation) remain enabled
-  const defaultEnabledToolIds = useMemo(
-    () =>
-      profileTools
-        .filter(
-          (tool) =>
-            !tool.name.startsWith("archestra__") ||
-            tool.name === "archestra__todo_write" ||
-            tool.name === "archestra__artifact_write",
-        )
-        .map((t) => t.id),
-    [profileTools],
-  );
+  // - All other tools (non-Archestra, agent delegation, global) remain enabled
+  const defaultEnabledToolIds = useMemo(() => {
+    return profileTools
+      .filter(
+        (tool) =>
+          !tool.name.startsWith("archestra__") ||
+          DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
+      )
+      .map((t) => t.id);
+  }, [profileTools]);
 
   // Compute current enabled tools:
   // - If conversation exists with custom selection, use that
@@ -156,22 +167,22 @@ export function ChatToolsDisplay({
   // Create enabled tool IDs set for quick lookup
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
-  // Use only profile tools (agent tools are displayed separately in the header)
+  // Agent tools are displayed separately in AgentToolsDisplay
   type ToolItem = {
     id: string;
     name: string;
     description: string | null;
   };
-  const allTools: ToolItem[] = profileTools;
+
+  // Use useMemo to prevent recalculating on every render
+  const allTools: ToolItem[] = useMemo(() => {
+    return profileTools.filter((tool) => !isAgentTool(tool.name));
+  }, [profileTools]);
 
   // Group ALL tools by MCP server name (don't filter by enabled status)
   const groupedTools: Record<string, ToolItem[]> = {};
   for (const tool of allTools) {
-    const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    const serverName =
-      parts.length > 1
-        ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-        : "default";
+    const serverName = parseFullToolName(tool.name).serverName ?? "default";
     if (!groupedTools[serverName]) {
       groupedTools[serverName] = [];
     }
@@ -265,8 +276,8 @@ export function ChatToolsDisplay({
     isDisabled: boolean,
     _currentServerName: string,
   ) => {
-    const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    const toolName = parts.length > 1 ? parts[parts.length - 1] : tool.name;
+    const { toolName: parsedToolName } = parseFullToolName(tool.name);
+    const toolName = parsedToolName || tool.name;
     const borderColor = isDisabled ? "border-red-500" : "border-green-500";
 
     return (
@@ -319,11 +330,8 @@ export function ChatToolsDisplay({
   const toolButtons = sortedServerEntries.map(([serverName]) => {
     // Get all tools for this server from allTools (profile tools + agent tools)
     const allServerTools = allTools.filter((tool) => {
-      const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
       const toolServerName =
-        parts.length > 1
-          ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-          : "default";
+        parseFullToolName(tool.name).serverName ?? "default";
       return toolServerName === serverName;
     });
 

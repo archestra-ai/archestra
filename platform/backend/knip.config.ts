@@ -7,16 +7,15 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@shared",
-    // Used in logging.ts
-    "pino-pretty",
-    // Used as binaries in scripts
+    // Used as a binary in scripts and Sentry source maps upload
     "@sentry/cli",
+    // Used as a binary in scripts
     "tsx",
   ],
   ignoreBinaries: [
     // biome is in root package.json
     "biome",
-    // These are provided by devDependencies and used in scripts
+    // Provided by devDependencies but knip doesn't resolve in pnpm monorepo
     "tsdown",
     "vitest",
     "knip",

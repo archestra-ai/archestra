@@ -2,6 +2,8 @@
  * ChatOps constants and configuration
  */
 
+import { TimeInMs } from "@shared";
+
 /**
  * Rate limit configuration for chatops webhooks
  */
@@ -33,7 +35,7 @@ export const CHATOPS_THREAD_HISTORY = {
 };
 
 /**
- * Team ID cache configuration for MS Teams
+ * Channel-to-team mapping cache configuration
  */
 export const CHATOPS_TEAM_CACHE = {
   /** Maximum number of channel-to-team mappings to cache */
@@ -45,8 +47,35 @@ export const CHATOPS_TEAM_CACHE = {
 /**
  * Bot commands recognized by the chatops system
  */
+/**
+ * Channel discovery configuration for auto-populating channel bindings
+ */
+export const CHATOPS_CHANNEL_DISCOVERY = {
+  /** Minimum interval between channel discovery per workspace (5 minutes) */
+  TTL_MS: TimeInMs.Minute * 5,
+};
+
+/**
+ * Bot commands recognized by the chatops system
+ */
 export const CHATOPS_COMMANDS = {
   SELECT_AGENT: "/select-agent",
   STATUS: "/status",
   HELP: "/help",
+} as const;
+
+/**
+ * Native Slack slash commands.
+ * These are registered in the Slack app manifest and handled by a dedicated endpoint.
+ * All three share one backend endpoint — the `command` field distinguishes them.
+ */
+/**
+ * Default connection mode for Slack when not explicitly configured.
+ */
+export const SLACK_DEFAULT_CONNECTION_MODE = "socket" as const;
+
+export const SLACK_SLASH_COMMANDS = {
+  SELECT_AGENT: "/archestra-select-agent",
+  STATUS: "/archestra-status",
+  HELP: "/archestra-help",
 } as const;

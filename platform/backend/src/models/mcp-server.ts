@@ -8,25 +8,42 @@ import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
+import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
 
 class McpServerModel {
+  /**
+   * Construct the full server name from a base name + unique suffix.
+   * Local servers get a userId or teamId suffix for unique K8s deployment names.
+   * Remote/other servers use the base name as-is.
+   */
+  static constructServerName(params: {
+    baseName: string;
+    serverType: string;
+    ownerId: string | null;
+    teamId: string | null;
+  }): string {
+    if (params.serverType === "local") {
+      if (params.teamId) {
+        return `${params.baseName}-${params.teamId}`;
+      }
+      if (params.ownerId) {
+        return `${params.baseName}-${params.ownerId}`;
+      }
+    }
+    return params.baseName;
+  }
+
   static async create(server: InsertMcpServer): Promise<McpServer> {
     const { userId, ...serverData } = server;
 
-    // For local servers, add a unique identifier to the name to avoid conflicts
-    // Use teamId for team installations, userId for personal installations
-    let mcpServerName = serverData.name;
-    if (serverData.serverType === "local") {
-      if (serverData.teamId) {
-        // Team installation: use teamId for unique deployment name
-        mcpServerName = `${serverData.name}-${serverData.teamId}`;
-      } else if (userId) {
-        // Personal installation: use userId for unique deployment name
-        mcpServerName = `${serverData.name}-${userId}`;
-      }
-    }
+    const mcpServerName = McpServerModel.constructServerName({
+      baseName: serverData.name,
+      serverType: serverData.serverType,
+      ownerId: userId ?? null,
+      teamId: serverData.teamId ?? null,
+    });
 
     // ownerId is part of serverData and will be inserted
     const [createdServer] = await db
@@ -337,6 +354,18 @@ class McpServerModel {
       return false;
     }
 
+    // Clean up any persisted HTTP session IDs tied to this server.
+    // Without this, stale rows can linger until TTL cleanup after uninstall/delete.
+    try {
+      await McpHttpSessionModel.deleteByMcpServerId(id);
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
+      );
+      // Continue with deletion even if session cleanup fails
+    }
+
     // Clean up agent_tools that reference this server
     // Must be done before deletion to ensure agents do not retain unusable tool assignments
     // FK constraint would only null out the reference, not remove the assignment
@@ -525,6 +554,62 @@ class McpServerModel {
       ...result.server,
       teamDetails,
     };
+  }
+
+  /**
+   * Get a user's personal server for a specific catalog.
+   * Personal servers have no teamId and are owned by the user.
+   */
+  static async getUserPersonalServerForCatalog(
+    userId: string,
+    catalogId: string,
+  ): Promise<McpServer | null> {
+    const [result] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          eq(schema.mcpServersTable.ownerId, userId),
+          isNull(schema.mcpServersTable.teamId), // Personal = no team
+        ),
+      )
+      .limit(1);
+
+    return result || null;
+  }
+
+  /**
+   * Get a user's personal servers for multiple catalogs in a single query.
+   * Returns a Map of catalogId -> McpServer for catalogs where the user has a personal server.
+   */
+  static async getUserPersonalServersForCatalogs(
+    userId: string,
+    catalogIds: string[],
+  ): Promise<Map<string, McpServer>> {
+    if (catalogIds.length === 0) {
+      return new Map();
+    }
+
+    const results = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          eq(schema.mcpServersTable.ownerId, userId),
+          isNull(schema.mcpServersTable.teamId), // Personal = no team
+        ),
+      );
+
+    const serversByCatalog = new Map<string, McpServer>();
+    for (const server of results) {
+      if (server.catalogId) {
+        serversByCatalog.set(server.catalogId, server);
+      }
+    }
+
+    return serversByCatalog;
   }
 
   /**

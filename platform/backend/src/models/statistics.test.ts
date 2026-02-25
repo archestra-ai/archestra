@@ -518,6 +518,7 @@ describe("StatisticsModel", () => {
           timeBucket: sameTimestamp,
           agentId: "agent-1",
           agentName: "Chatbot",
+          agentType: "llm_proxy",
           teamName: null,
           requests: 100,
           inputTokens: 10000,
@@ -528,6 +529,7 @@ describe("StatisticsModel", () => {
           timeBucket: sameTimestamp,
           agentId: "agent-2",
           agentName: "Assistant",
+          agentType: "llm_proxy",
           teamName: null,
           requests: 50,
           inputTokens: 5000,
@@ -576,6 +578,45 @@ describe("StatisticsModel", () => {
       const result = StatisticsModel.groupTimeSeries(data, "24h", "model");
 
       expect(result).toEqual(data);
+    });
+
+    test("should coerce string numeric values to numbers in early return path", () => {
+      // Simulate what PostgreSQL returns: DOUBLE PRECISION / DECIMAL as strings
+      // through node-postgres, which causes Zod z.number() validation failures
+      const data = [
+        {
+          timeBucket: "2024-01-15T10:00:00.000Z",
+          model: "gpt-4",
+          requests: "10" as unknown as number,
+          inputTokens: "1000" as unknown as number,
+          outputTokens: "500" as unknown as number,
+          cost: "0.05" as unknown as number,
+        },
+        {
+          timeBucket: "2024-01-15T11:00:00.000Z",
+          model: "claude-3",
+          requests: "5" as unknown as number,
+          inputTokens: "800" as unknown as number,
+          outputTokens: "400" as unknown as number,
+          cost: "0.12345" as unknown as number,
+        },
+      ];
+
+      // 24h uses standard intervals (early return path, no custom grouping)
+      const result = StatisticsModel.groupTimeSeries(data, "24h", "model");
+
+      // All numeric fields should be actual numbers, not strings
+      for (const row of result) {
+        expect(typeof row.requests).toBe("number");
+        expect(typeof row.inputTokens).toBe("number");
+        expect(typeof row.outputTokens).toBe("number");
+        expect(typeof row.cost).toBe("number");
+      }
+
+      expect(result[0].requests).toBe(10);
+      expect(result[0].cost).toBe(0.05);
+      expect(result[1].requests).toBe(5);
+      expect(result[1].cost).toBe(0.12345);
     });
 
     test("should sort results by time bucket", () => {

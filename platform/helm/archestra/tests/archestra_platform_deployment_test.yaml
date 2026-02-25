@@ -237,6 +237,35 @@ tests:
           path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
           value: database-url
 
+  # Vault sentinel value tests
+  - it: should not fail validation when external_database_url is "from_vault" with postgresql.enabled true
+    set:
+      postgresql.external_database_url: "from_vault"
+      postgresql.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+    documentIndex: 1
+
+  - it: should not set PGPASSWORD or ARCHESTRA_DATABASE_URL when external_database_url is "from_vault"
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: "from_vault"
+      postgresql.enabled: true
+      archestra.env: {}
+      archestra.orchestrator.kubernetes.mcpServerRbac.create: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGPASSWORD
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+          any: true
+
   - it: should have init container to wait for PostgreSQL
     documentIndex: 1
     asserts:
@@ -247,34 +276,46 @@ tests:
           path: spec.template.spec.initContainers[0].image
           value: busybox:1.36
 
-  - it: should configure init container to wait for internal postgres
+  - it: should configure init container with env vars and parse ARCHESTRA_DATABASE_URL
     documentIndex: 1
-    set:
-      postgresql.external_database_url: null
     asserts:
+      # Init container should have ARCHESTRA_DATABASE_URL env var
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+          any: true
+      # Command should parse host/port from ARCHESTRA_DATABASE_URL at runtime
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: ".*-archestra-platform-postgresql.*5432.*"
+          pattern: ".*ARCHESTRA_DATABASE_URL.*"
 
-  - it: should configure init container to wait for external postgres
+  - it: should wait for PostgreSQL in init container when waitForPostgres is enabled
     documentIndex: 1
     set:
-      postgresql.enabled: false
-      postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
+      archestra.initContainers.waitForPostgres.enabled: true
     asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: ".*external-db.example.com.*5432.*"
+          pattern: ".*nc -z.*"
 
-  - it: should configure init container to wait for external postgres with postgres:// scheme
+  - it: should skip PostgreSQL wait in init container when waitForPostgres is disabled
     documentIndex: 1
     set:
-      postgresql.enabled: false
-      postgresql.external_database_url: postgres://user:pass@external-db.example.com:5433/mydb
+      archestra.initContainers.waitForPostgres.enabled: false
     asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: ".*external-db.example.com.*5433.*"
+          pattern: ".*Skipping PostgreSQL readiness check.*"
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*nc -z.*"
 
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1
@@ -1694,6 +1735,78 @@ tests:
           path: spec.template.spec.nodeSelector["environment"]
           value: production
 
+  # Tolerations tests
+  - it: should not have tolerations when archestra.tolerations is empty
+    documentIndex: 1
+    set:
+      archestra.tolerations: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.tolerations
+
+  - it: should apply single toleration when provided
+    documentIndex: 1
+    set:
+      archestra.tolerations:
+        - key: "foo.bar.com/role"
+          operator: "Equal"
+          value: "master"
+          effect: "NoSchedule"
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "foo.bar.com/role"
+            operator: "Equal"
+            value: "master"
+            effect: "NoSchedule"
+
+  - it: should apply multiple tolerations
+    documentIndex: 1
+    set:
+      archestra.tolerations:
+        - key: "foo.bar.com/role"
+          operator: "Equal"
+          value: "master"
+          effect: "NoSchedule"
+        - key: "node.kubernetes.io/not-ready"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 300
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.tolerations
+          count: 2
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "foo.bar.com/role"
+            operator: "Equal"
+            value: "master"
+            effect: "NoSchedule"
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "node.kubernetes.io/not-ready"
+            operator: "Exists"
+            effect: "NoExecute"
+            tolerationSeconds: 300
+
+  - it: should support toleration with Exists operator (no value)
+    documentIndex: 1
+    set:
+      archestra.tolerations:
+        - key: "dedicated"
+          operator: "Exists"
+          effect: "NoSchedule"
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "dedicated"
+            operator: "Exists"
+            effect: "NoSchedule"
+
   # Kubernetes environment variable expansion tests
   # These tests ensure that $(VAR_NAME) syntax is preserved for K8s env var expansion
   - it: should preserve K8s env var expansion syntax $(VAR_NAME) in env values
@@ -1911,3 +2024,264 @@ tests:
               secretKeyRef:
                 name: my-secret
                 key: api-key
+
+  # Vault secrets init container tests
+  - it: should not have vault-secrets init container when disabled (default)
+    documentIndex: 1
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+
+  - it: should have vault-secrets init container when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: vault-secrets
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+
+  - it: should use the main archestra platform image for vault-secrets init container
+    documentIndex: 1
+    set:
+      archestra.image: archestra/platform
+      archestra.imageTag: "1.0.37"
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: archestra/platform:1.0.37
+
+  - it: should pass existing env vars to vault-secrets init container
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.env:
+        ARCHESTRA_HASHICORP_VAULT_ADDR: "https://vault.example.com:8200"
+        ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "K8S"
+        ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: "archestra-app"
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_ADDR
+            value: "https://vault.example.com:8200"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD
+            value: "K8S"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
+            value: "archestra-app"
+
+  - it: should pass secrets config as VAULT_INJECTOR_SECRETS env var
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+        - envVar: MS_TEAMS_SECRET
+          path: secret/data/team/ms_teams_secret
+          key: value
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: VAULT_INJECTOR_SECRETS
+          any: true
+
+  - it: should run vault-env-injector Node.js script
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: "node"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "vault-env-injector"
+
+  - it: should mount vault-secrets volume in init container
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[0].name
+          value: vault-secrets
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[0].mountPath
+          value: /vault/secrets
+
+  - it: should mount vault-secrets volume as read-only in wait-for-postgres when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true
+
+  - it: should source vault secrets in wait-for-postgres command when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "/vault/secrets/env"
+
+  - it: should create vault-secrets emptyDir volume with Memory medium when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: vault-secrets
+            emptyDir:
+              medium: Memory
+
+  - it: should mount vault-secrets volume as read-only in main container when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true
+
+  - it: should wrap main container command to source vault secrets
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/sh", "-c"]
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "/vault/secrets/env"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "exec /docker-entrypoint.sh"
+
+  - it: should not wrap main container command when vault secrets is disabled
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
+      - isNull:
+          path: spec.template.spec.containers[0].args
+
+  - it: should not have vault-secrets volume when disabled
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes
+
+  - it: should support both kubeconfig and vault-secrets volumes together
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kubeconfig
+            secret:
+              secretName: "my-kubeconfig"
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: vault-secrets
+            emptyDir:
+              medium: Memory
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kubeconfig
+            mountPath: "/etc/kubeconfig"
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true

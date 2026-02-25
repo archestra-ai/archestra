@@ -26,9 +26,6 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
       createdAt: z.date(),
       updatedAt: z.date(),
       catalogId: z.string().nullable(),
-      mcpServerId: z.string().nullable(),
-      mcpServerName: z.string().nullable(),
-      mcpServerCatalogId: z.string().nullable(),
     }),
   });
 
@@ -38,7 +35,7 @@ export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
   agentId: UuidIdSchema.optional(),
-  origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
+  origin: z.string().optional().describe("A catalogId to filter by"),
   mcpServerOwnerId: z
     .string()
     .optional()

@@ -90,7 +90,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [
           { toolCallName: "archestra__whoami", toolInput: {} },
-          { toolCallName: "archestra__get_profile", toolInput: { id: "123" } },
+          { toolCallName: "archestra__get_agent", toolInput: { id: "123" } },
         ],
         mockContext,
         false, // untrusted context
@@ -1177,7 +1177,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("Team restricted");
       });
 
-      test("allows when context.teamIds does not match any teamIds", async ({
+      test("allows when context.teamIds does not match with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -1211,6 +1211,444 @@ describe("ToolInvocationPolicyModel", () => {
 
         expect(result.isAllowed).toBe(true);
       });
+    });
+
+    describe("tools with __ in server name", () => {
+      test("evaluates policies for tools whose server name contains __", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        // Tool name like upstash__context7__resolve-library-id (server name contains __)
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "upstash__context7__resolve-library-id",
+        });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "libraryId", operator: "equal", value: "blocked-lib" },
+          ],
+          action: "block_always",
+          reason: "Library is blocked",
+        });
+
+        const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "upstash__context7__resolve-library-id",
+              toolInput: { libraryId: "blocked-lib" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+        expect(blockedResult.isAllowed).toBe(false);
+        expect(blockedResult.reason).toContain("Library is blocked");
+
+        const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "upstash__context7__resolve-library-id",
+              toolInput: { libraryId: "safe-lib" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+        expect(allowedResult.isAllowed).toBe(true);
+      });
+
+      test("blocks tool with __ in server name when context is untrusted and default policy applies", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "huggingface__remote-mcp__generate_text",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to test global policy fallback
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "huggingface__remote-mcp__generate_text",
+              toolInput: { prompt: "test" },
+            },
+          ],
+          mockContext,
+          false, // untrusted context
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain(
+          "forbidden in untrusted context by default",
+        );
+      });
+
+      test("allows tool with __ in server name when context is untrusted and explicit allow policy exists", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "upstash__context7__query-docs",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to set up our own
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [],
+          action: "allow_when_context_is_untrusted",
+          reason: "Read-only tool allowed in untrusted context",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "upstash__context7__query-docs",
+              toolInput: { query: "test" },
+            },
+          ],
+          mockContext,
+          false, // untrusted context
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("evaluates batch with mix of standard and __ server name tools", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+
+        // Standard tool (no __ in server name)
+        const standardTool = await makeTool({
+          agentId: agent.id,
+          name: "github__create-pull-request",
+        });
+        await makeAgentTool(agent.id, standardTool.id);
+
+        // Tool with __ in server name
+        const doubleUnderscoreTool = await makeTool({
+          agentId: agent.id,
+          name: "upstash__context7__resolve-library-id",
+        });
+        await makeAgentTool(agent.id, doubleUnderscoreTool.id);
+
+        // Block the double-underscore tool
+        await makeToolPolicy(doubleUnderscoreTool.id, {
+          conditions: [
+            { key: "libraryId", operator: "equal", value: "dangerous" },
+          ],
+          action: "block_always",
+          reason: "Dangerous library blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "github__create-pull-request",
+              toolInput: { title: "test PR" },
+            },
+            {
+              toolCallName: "upstash__context7__resolve-library-id",
+              toolInput: { libraryId: "dangerous" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.toolCallName).toBe(
+          "upstash__context7__resolve-library-id",
+        );
+        expect(result.reason).toContain("Dangerous library blocked");
+      });
+    });
+
+    describe("require_approval action in evaluateBatch", () => {
+      test("treats require_approval like allow_when_context_is_untrusted in proxy context", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "approval-tool",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        // Default policy: require_approval (should be treated as allow in proxy)
+        await makeToolPolicy(tool.id, {
+          conditions: [],
+          action: "require_approval",
+          reason: "Requires chat approval",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "approval-tool", toolInput: { arg: "value" } }],
+          mockContext,
+          false, // untrusted context
+          "restrictive",
+        );
+
+        // require_approval should NOT block in proxy (evaluateBatch)
+        expect(result.isAllowed).toBe(true);
+        expect(result.reason).toBe("");
+      });
+
+      test("treats specific require_approval policy like allow in proxy context", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "specific-approval-tool",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "action", operator: "equal", value: "dangerous" },
+          ],
+          action: "require_approval",
+          reason: "Requires approval for dangerous actions",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "specific-approval-tool",
+              toolInput: { action: "dangerous" },
+            },
+          ],
+          mockContext,
+          false,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+        expect(result.reason).toBe("");
+      });
+    });
+  });
+
+  describe("checkApprovalRequired", () => {
+    test("returns true when default policy has require_approval action", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "chat-approval-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Chat approval required",
+      });
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "chat-approval-tool",
+        { arg: "value" },
+        mockContext,
+      );
+
+      expect(result).toBe(true);
+    });
+
+    test("returns false when default policy is allow_when_context_is_untrusted", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "allowed-chat-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+        reason: "Allowed always",
+      });
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "allowed-chat-tool",
+        { arg: "value" },
+        mockContext,
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("returns false when tool has no policies", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "no-policy-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "no-policy-tool",
+        {},
+        mockContext,
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("returns false for archestra tools regardless of policies", async () => {
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "archestra__todo_write",
+        { todos: [] },
+        mockContext,
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("returns false when tool does not exist", async () => {
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "nonexistent-tool",
+        {},
+        mockContext,
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("returns true when specific policy matches with require_approval", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "conditional-approval-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "action", operator: "equal", value: "dangerous" }],
+        action: "require_approval",
+        reason: "Dangerous actions need approval",
+      });
+
+      // Matching input - should require approval
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "conditional-approval-tool",
+        { action: "dangerous" },
+        mockContext,
+      );
+      expect(result).toBe(true);
+
+      // Non-matching input - should not require approval
+      const safeResult = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "conditional-approval-tool",
+        { action: "safe" },
+        mockContext,
+      );
+      expect(safeResult).toBe(false);
+    });
+
+    test("specific non-approval policy takes precedence over default approval policy", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "precedence-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      // Default: require approval
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Default approval",
+      });
+
+      // Specific: allow safe paths without approval
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "path", operator: "startsWith", value: "/safe/" }],
+        action: "allow_when_context_is_untrusted",
+        reason: "Safe paths allowed",
+      });
+
+      // Safe path matches specific policy - should NOT require approval
+      const safeResult = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "precedence-tool",
+        { path: "/safe/file.txt" },
+        mockContext,
+      );
+      expect(safeResult).toBe(false);
+
+      // Non-matching path falls through to default - should require approval
+      const otherResult = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "precedence-tool",
+        { path: "/other/file.txt" },
+        mockContext,
+      );
+      expect(otherResult).toBe(true);
     });
   });
 });

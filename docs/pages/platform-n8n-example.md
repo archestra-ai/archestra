@@ -4,7 +4,7 @@ category: Examples
 order: 3
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -144,3 +144,27 @@ N8N is not able to execute the second call once the untrusted content got inject
 ![N8N](/docs/platfrom/n8n-3.png)
 
 Here, Archestra's "Dynamic Tools" feature is reducing the context trustworthiness and preventing the following tool calls. Read about it [here](/docs/platform-dynamic-tools).
+
+### 5. Tracking N8N Executions (Optional)
+
+It's also possible to track the number of N8N agent executions flowing through Archestra.
+
+N8N assigns a unique execution ID to every workflow run. To make Archestra aware of it, pass it via a custom header:
+
+▶️ Configure the custom header in N8N:
+
+1. Go to credentials: <http://127.0.0.1:5678/home/credentials/>
+2. Open the same OpenAI credentials that your Chat Model node uses (the ones where you set the Archestra Base URL in step 3)
+3. Add a custom header `X-Archestra-Meta` with the following expression:
+
+```
+n8n-support-agent/{{ $execution.id }}/
+```
+
+The [`X-Archestra-Meta`](/docs/platform-llm-proxy#custom-headers) header format is `<agent-id>/<execution-id>/<session-id>`. Here, `{{ $execution.id }}` is an N8N expression that resolves to the current workflow execution ID.
+
+Archestra will then export the `agent_executions_total` Prometheus metric — a counter of unique executions grouped by `agent_id`.
+
+This is also useful for attributing costs. Archestra already exports `llm_cost_total`, which tracks LLM inference spending per agent. Combined with `agent_executions_total`, you can calculate the full operating cost of each agent (inference + per-execution fees). The built-in [Grafana dashboard](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/platform.json) includes this under the **Agent Executions** row. See [Observability](/docs/platform-observability) for setup.
+
+![Inference Cost per Agent](/docs/automated_screenshots/platform_n8n_inference_costs.png)

@@ -1,5 +1,6 @@
 import {
   AnthropicErrorTypes,
+  BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
   GeminiErrorCodes,
@@ -7,7 +8,7 @@ import {
   OpenAIErrorTypes,
 } from "@shared";
 import { describe, expect, it } from "@/test";
-import { mapProviderError } from "./errors";
+import { mapProviderError, ProviderError } from "./errors";
 
 // =============================================================================
 // OpenAI Error Tests
@@ -857,6 +858,200 @@ describe("mapProviderError - Gemini ErrorInfo reasons", () => {
 });
 
 // =============================================================================
+// Bedrock Error Tests (AWS Converse API)
+// =============================================================================
+
+describe("mapProviderError - Bedrock", () => {
+  /**
+   * Helper to create an error-like object for Bedrock AWS Converse API
+   * Bedrock errors have structure: { message: "...", __type: "ThrottlingException" }
+   */
+  function createBedrockError(
+    statusCode: number,
+    awsType: string,
+    message: string,
+  ) {
+    return {
+      name: "Error",
+      statusCode,
+      responseBody: JSON.stringify({
+        message,
+        __type: awsType,
+      }),
+    };
+  }
+
+  describe("400 - ValidationException", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "Malformed input request",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.isRetryable).toBe(false);
+      expect(result.originalError?.provider).toBe("bedrock");
+      expect(result.originalError?.status).toBe(400);
+    });
+  });
+
+  describe("403 - AccessDeniedException", () => {
+    it("should map to PermissionDenied", () => {
+      const error = createBedrockError(
+        403,
+        BedrockErrorTypes.ACCESS_DENIED,
+        "User is not authorized to perform this action",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.PermissionDenied);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("404 - ResourceNotFoundException", () => {
+    it("should map to NotFound", () => {
+      const error = createBedrockError(
+        404,
+        BedrockErrorTypes.RESOURCE_NOT_FOUND,
+        "The specified model does not exist",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.NotFound);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("408 - ModelTimeoutException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        408,
+        BedrockErrorTypes.MODEL_TIMEOUT,
+        "Model invocation timed out",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("424 - ModelErrorException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        424,
+        BedrockErrorTypes.MODEL_ERROR,
+        "The model returned an error",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("429 - ThrottlingException", () => {
+    it("should map to RateLimit", () => {
+      const error = createBedrockError(
+        429,
+        BedrockErrorTypes.THROTTLING,
+        "Too many requests, please wait before trying again",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("429 - ModelNotReadyException", () => {
+    it("should map to RateLimit", () => {
+      const error = createBedrockError(
+        429,
+        BedrockErrorTypes.MODEL_NOT_READY,
+        "Model is not ready for inference",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("500 - InternalServerException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        500,
+        BedrockErrorTypes.INTERNAL_SERVER,
+        "An internal server error occurred",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("503 - ServiceUnavailableException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        503,
+        BedrockErrorTypes.SERVICE_UNAVAILABLE,
+        "Service is temporarily unavailable",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("context window exceeded", () => {
+    it("should map to ContextTooLong when message contains model_context_window_exceeded", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "model_context_window_exceeded: The input is too long for the model",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("fallback to HTTP status code", () => {
+    it("should fall back to status code when __type is missing", () => {
+      const error = {
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          message: "Rate limited",
+        }),
+      };
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+    });
+  });
+
+  describe("provider preservation", () => {
+    it("should preserve bedrock provider", () => {
+      const error = createBedrockError(
+        500,
+        BedrockErrorTypes.INTERNAL_SERVER,
+        "Error",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.originalError?.provider).toBe("bedrock");
+    });
+  });
+});
+
+// =============================================================================
 // Nested JSON Parsing Tests (Real-world Gemini errors)
 // =============================================================================
 
@@ -1013,5 +1208,111 @@ describe("mapProviderError - Provider preservation", () => {
     const result = mapProviderError(error, "gemini");
 
     expect(result.originalError?.provider).toBe("gemini");
+  });
+});
+
+// =============================================================================
+// ProviderError Tests
+// =============================================================================
+
+describe("ProviderError", () => {
+  it("should construct with a ChatErrorResponse and expose it", () => {
+    const chatError = mapProviderError(
+      {
+        statusCode: 401,
+        responseBody: JSON.stringify({
+          error: { type: "authentication_error", message: "Invalid API key" },
+        }),
+      },
+      "anthropic",
+    );
+
+    const providerError = new ProviderError(chatError);
+
+    expect(providerError).toBeInstanceOf(Error);
+    expect(providerError).toBeInstanceOf(ProviderError);
+    expect(providerError.name).toBe("ProviderError");
+    expect(providerError.message).toBe("Invalid API key");
+    expect(providerError.chatErrorResponse).toBe(chatError);
+    expect(providerError.chatErrorResponse.code).toBe(
+      ChatErrorCode.Authentication,
+    );
+    expect(providerError.chatErrorResponse.originalError?.provider).toBe(
+      "anthropic",
+    );
+  });
+
+  it("should use ChatErrorResponse.message when originalError is missing", () => {
+    const chatError = {
+      code: ChatErrorCode.Unknown,
+      message: ChatErrorMessages[ChatErrorCode.Unknown],
+      isRetryable: false,
+    };
+
+    const providerError = new ProviderError(chatError);
+
+    expect(providerError.message).toBe(
+      ChatErrorMessages[ChatErrorCode.Unknown],
+    );
+  });
+
+  it("should preserve correct provider through mapProviderError round-trip", () => {
+    // Simulate an Anthropic billing error
+    const anthropicError = {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          type: AnthropicErrorTypes.INVALID_REQUEST,
+          message: "Your credit balance is too low",
+        },
+      }),
+    };
+
+    // Map with correct provider (anthropic) — as the A2A executor would
+    const mapped = mapProviderError(anthropicError, "anthropic");
+    const providerError = new ProviderError(mapped);
+
+    // The ProviderError preserves the correct provider
+    expect(providerError.chatErrorResponse.originalError?.provider).toBe(
+      "anthropic",
+    );
+    expect(providerError.chatErrorResponse.code).toBe(
+      ChatErrorCode.InvalidRequest,
+    );
+    expect(providerError.chatErrorResponse.originalError?.message).toContain(
+      "credit balance",
+    );
+  });
+
+  it("should preserve anthropic provider even when parent would use gemini", () => {
+    // This is the key scenario: subagent uses anthropic, parent uses gemini
+    // The A2A executor creates the ProviderError with "anthropic"
+    const subagentError = {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          type: AnthropicErrorTypes.INVALID_REQUEST,
+          message: "Your credit balance is too low to access the Anthropic API",
+        },
+      }),
+    };
+
+    // A2A executor maps with correct provider
+    const mappedWithCorrectProvider = mapProviderError(
+      subagentError,
+      "anthropic",
+    );
+    const providerError = new ProviderError(mappedWithCorrectProvider);
+
+    // Parent chat route receives ProviderError and uses it directly
+    // instead of re-mapping with "gemini"
+    const errorForFrontend = providerError.chatErrorResponse;
+
+    expect(errorForFrontend.originalError?.provider).toBe("anthropic");
+    expect(errorForFrontend.originalError?.message).toContain("Anthropic API");
+
+    // Compare: if we had incorrectly re-mapped with gemini
+    const wrongMapping = mapProviderError(subagentError, "gemini");
+    expect(wrongMapping.originalError?.provider).toBe("gemini"); // Wrong provider!
   });
 });

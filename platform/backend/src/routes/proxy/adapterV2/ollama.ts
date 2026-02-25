@@ -12,9 +12,9 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -711,6 +711,11 @@ class OllamaResponseAdapter implements LLMResponseAdapter<OllamaResponse> {
     };
   }
 
+  getFinishReasons(): string[] {
+    const reason = this.response.choices[0]?.finish_reason;
+    return reason ? [reason] : [];
+  }
+
   getOriginalResponse(): OllamaResponse {
     return this.response;
   }
@@ -1080,12 +1085,11 @@ async function convertToolResultsToToon(
   let toonCostSavings = 0;
   const tokensSaved = totalTokensBefore - totalTokensAfter;
   if (tokensSaved > 0) {
-    const tokenPrice = await TokenPriceModel.findByModel(model);
-    if (tokenPrice) {
-      const inputPricePerToken =
-        Number(tokenPrice.pricePerMillionInput) / 1000000;
-      toonCostSavings = tokensSaved * inputPricePerToken;
-    }
+    toonCostSavings = await ModelModel.calculateCostSavings(
+      model,
+      tokensSaved,
+      "ollama",
+    );
   }
 
   return {
@@ -1140,9 +1144,7 @@ export const ollamaAdapterFactory: LLMProvider<
     return config.llm.ollama.baseUrl;
   },
 
-  getSpanName(): string {
-    return "ollama.chat.completions";
-  },
+  spanName: "chat",
 
   createClient(
     apiKey: string | undefined,
@@ -1154,7 +1156,11 @@ export const ollamaAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("ollama", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "ollama",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     // Ollama uses OpenAI SDK since it's OpenAI-compatible
@@ -1190,6 +1196,7 @@ export const ollamaAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
+
     const stream = await ollamaClient.chat.completions.create(ollamaRequest);
 
     return {

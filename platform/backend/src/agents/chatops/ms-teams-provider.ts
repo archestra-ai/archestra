@@ -18,21 +18,24 @@ import {
   CloudAdapter,
   ConfigurationBotFrameworkAuthentication,
   type ConversationReference,
+  TeamsInfo,
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
 import { LRUCacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
+import { ChatOpsChannelBindingModel, type MsTeamsConfig } from "@/models";
 import type {
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
 import { CHATOPS_TEAM_CACHE, CHATOPS_THREAD_HISTORY } from "./constants";
+import { errorMessage } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -47,10 +50,18 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   private adapter: CloudAdapter | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private config: MsTeamsConfig;
+
+  constructor(msTeamsConfig: MsTeamsConfig) {
+    this.config = msTeamsConfig;
+  }
 
   isConfigured(): boolean {
-    const { enabled, appId, appSecret } = config.chatops.msTeams;
-    return enabled && Boolean(appId) && Boolean(appSecret);
+    return (
+      this.config.enabled &&
+      Boolean(this.config.appId) &&
+      Boolean(this.config.appSecret)
+    );
   }
 
   async initialize(): Promise<void> {
@@ -59,7 +70,12 @@ class MSTeamsProvider implements ChatOpsProvider {
       return;
     }
 
-    const { appId, appSecret, tenantId, graph } = config.chatops.msTeams;
+    const { appId, appSecret, tenantId } = this.config;
+    const graph = {
+      tenantId: this.config.graphTenantId,
+      clientId: this.config.graphClientId,
+      clientSecret: this.config.graphClientSecret,
+    };
 
     // Initialize Bot Framework adapter
     const credentialsFactory = tenantId
@@ -155,6 +171,10 @@ class MSTeamsProvider implements ChatOpsProvider {
         channel?: { id?: string };
         tenant?: { id?: string };
       };
+      entities?: Array<{
+        type?: string;
+        mentioned?: { id?: string; name?: string };
+      }>;
     };
 
     logger.debug(
@@ -191,6 +211,24 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
     if (!cleanedText) {
       return null;
+    }
+
+    // In team channels, only respond when the bot is @mentioned.
+    // Normalizes IDs before comparing (strips "28:" prefix, case-insensitive)
+    // since Teams may format recipient.id and mentioned.id differently.
+    if (activity.conversation?.conversationType === "channel") {
+      const botId = activity.recipient?.id;
+      const isBotMentioned =
+        botId &&
+        activity.entities?.some(
+          (e) =>
+            e.type === "mention" &&
+            e.mentioned?.id != null &&
+            normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
+        );
+      if (!isBotMentioned) {
+        return null;
+      }
     }
 
     const conversationId = activity.conversation?.id;
@@ -232,6 +270,33 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
+    let replyText = options.text;
+    if (options.footer) {
+      replyText += `\n\n---\n_${options.footer}_`;
+    }
+
+    // If a placeholder "Thinking..." message was sent (Teams channels),
+    // update it with the actual response instead of sending a new message.
+    const placeholderActivityId = options.originalMessage.metadata
+      ?.placeholderActivityId as string | undefined;
+    const turnContext = options.originalMessage.metadata?.turnContext;
+    if (placeholderActivityId && turnContext instanceof TurnContext) {
+      try {
+        await turnContext.updateActivity({
+          id: placeholderActivityId,
+          type: ActivityTypes.Message,
+          text: replyText,
+        });
+        return placeholderActivityId;
+      } catch (error) {
+        logger.debug(
+          { error: errorMessage(error) },
+          "[MSTeamsProvider] Failed to update placeholder, sending new message",
+        );
+        // Fall through to send a new message
+      }
+    }
+
     const ref =
       (options.conversationReference as ConversationReference | undefined) ||
       (options.originalMessage.metadata?.conversationReference as
@@ -242,15 +307,10 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("No conversation reference available for reply");
     }
 
-    let replyText = options.text;
-    if (options.footer) {
-      replyText += `\n\n---\n_${options.footer}_`;
-    }
-
     let messageId = "";
     try {
       await this.adapter.continueConversationAsync(
-        config.chatops.msTeams.appId,
+        this.config.appId,
         ref,
         async (context) => {
           const response = await context.sendActivity(replyText);
@@ -288,21 +348,18 @@ class MSTeamsProvider implements ChatOpsProvider {
       // - Group chats: no workspaceId, or workspaceId starts with "19:" (thread ID format)
       // - Team channels: workspaceId is a UUID (the team's aadGroupId), channelId contains @thread.tacv2
       let workspaceId = params.workspaceId;
-      const isValidTeamId =
-        workspaceId &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          workspaceId,
-        );
+      const isValidTeamId = workspaceId && UUID_REGEX.test(workspaceId);
 
       // If workspaceId isn't a valid UUID but channel looks like a team channel,
       // try to look up the actual team ID
       const looksLikeTeamChannel = params.channelId.includes("@thread.tacv2");
       if (!isValidTeamId && looksLikeTeamChannel) {
-        logger.debug(
-          { channelId: params.channelId, teamChannelHint: workspaceId },
-          "[MSTeamsProvider] workspaceId not valid UUID, looking up team from channel",
+        // workspaceId should already be resolved by the route handler via TeamsInfo.
+        // Falling back to lookupTeamIdFromChannel (requires Azure AD app permissions).
+        logger.warn(
+          { channelId: params.channelId, workspaceId },
+          "[MSTeamsProvider] workspaceId not resolved to UUID — falling back to Graph API lookup",
         );
-        // Pass the original workspaceId as a hint - it's often the team's General channel ID
         const resolvedTeamId = await this.lookupTeamIdFromChannel(
           params.channelId,
           workspaceId || undefined,
@@ -312,11 +369,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
       }
 
-      const isTeamIdValid =
-        workspaceId &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          workspaceId,
-        );
+      const isTeamIdValid = workspaceId && UUID_REGEX.test(workspaceId);
       const isTeamChannel = isTeamIdValid && looksLikeTeamChannel;
       const isGroupChat = !isTeamChannel;
 
@@ -342,7 +395,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
       return converted;
     } catch (error) {
-      logger.error(
+      logger.warn(
         { error: errorMessage(error), channelId: params.channelId },
         "[MSTeamsProvider] Failed to fetch thread history",
       );
@@ -439,9 +492,10 @@ class MSTeamsProvider implements ChatOpsProvider {
       this.teamIdCache.set(cacheKey, null);
       return null;
     } catch (error) {
-      logger.error(
+      logger.warn(
         { error: errorMessage(error), channelId },
         "[MSTeamsProvider] Failed to lookup team from channel. " +
+          "This is only needed with Azure AD application permissions (not RSC). " +
           "Team.ReadBasic.All and Channel.ReadBasic.All permissions are required.",
       );
       this.teamIdCache.set(cacheKey, null);
@@ -451,7 +505,8 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * Get user's email from their AAD Object ID using Microsoft Graph API.
-   * Requires User.ReadBasic.All application permission.
+   * Fallback method when TeamsInfo.getMember() is unavailable.
+   * Requires User.Read.All application permission.
    */
   async getUserEmail(aadObjectId: string): Promise<string | null> {
     if (!this.graphClient) {
@@ -467,9 +522,105 @@ class MSTeamsProvider implements ChatOpsProvider {
     } catch (error) {
       logger.error(
         { error: errorMessage(error), aadObjectId },
-        "[MSTeamsProvider] Failed to fetch user email. User.ReadBasic.All permission may be missing.",
+        "[MSTeamsProvider] Failed to fetch user email via Graph API fallback. User.Read.All permission may be missing.",
       );
       return null;
+    }
+  }
+
+  async getChannelName(_channelId: string): Promise<string | null> {
+    // MS Teams channel names are resolved during discoverChannels via TurnContext
+    return null;
+  }
+
+  getWorkspaceId(): string | null {
+    // MS Teams requires a TurnContext to determine the team — no eager discovery
+    return null;
+  }
+
+  getWorkspaceName(): string | null {
+    // MS Teams workspace name is per-team — resolved from TurnContext at message time
+    return null;
+  }
+
+  async discoverChannels(
+    context: unknown,
+  ): Promise<DiscoveredChannel[] | null> {
+    if (!(context instanceof TurnContext)) return null;
+
+    const teamData = context.activity.channelData?.team as
+      | { id?: string; aadGroupId?: string }
+      | undefined;
+    if (!teamData?.id) return null;
+
+    const [channels, teamDetails] = await Promise.all([
+      TeamsInfo.getTeamChannels(context),
+      TeamsInfo.getTeamDetails(context).catch(() => null),
+    ]);
+
+    if (!channels?.length) return null;
+
+    // Prefer aadGroupId (stable UUID) over thread-format team.id.
+    // channelData.team.aadGroupId is often absent, so fall back to
+    // the value returned by TeamsInfo.getTeamDetails().
+    const workspaceId =
+      teamData.aadGroupId || teamDetails?.aadGroupId || teamData.id;
+
+    return channels
+      .filter((ch): ch is typeof ch & { id: string } => !!ch.id)
+      .map((ch) => ({
+        channelId: ch.id,
+        channelName: ch.name ?? "General",
+        workspaceId,
+        workspaceName: teamDetails?.name ?? null,
+      }));
+  }
+
+  async setTypingStatus(
+    _channelId: string,
+    _threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const turnContext = metadata?.turnContext;
+      if (turnContext instanceof TurnContext) {
+        const isChannel =
+          turnContext.activity.conversation?.conversationType === "channel";
+
+        if (isChannel) {
+          // Teams channels don't render typing indicators from bots.
+          // Send a placeholder message that will be updated with the real response.
+          const response = await turnContext.sendActivity("Thinking...");
+          if (response?.id && metadata) {
+            metadata.placeholderActivityId = response.id;
+          }
+        } else {
+          // DMs and group chats support native typing indicators
+          await turnContext.sendActivity({ type: ActivityTypes.Typing });
+        }
+        return;
+      }
+
+      // Fallback: proactive messaging via continueConversationAsync.
+      // Works for DMs/group chats but not for channel typing indicators.
+      if (!this.adapter) return;
+      const ref = metadata?.conversationReference as
+        | ConversationReference
+        | undefined;
+      if (!ref) return;
+
+      await this.adapter.continueConversationAsync(
+        this.config.appId,
+        ref,
+        async (context) => {
+          await context.sendActivity({ type: ActivityTypes.Typing });
+        },
+      );
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] setTypingStatus failed (non-fatal)",
+      );
     }
   }
 
@@ -488,21 +639,187 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    await this.adapter.process(
-      {
-        body: req.body as Record<string, unknown>,
-        headers: req.headers,
-        method: "POST",
-      },
-      {
-        socket: null,
-        end: () => {},
-        header: () => {},
-        send: res.send,
-        status: res.status,
-      },
-      handler,
-    );
+    // The Bot Framework SDK has a hardcoded `console.error(err)` in CloudAdapter.process()
+    // for auth failures. MS Teams sends duplicate webhooks per message — one always fails
+    // JWT validation with a different AppId. Suppress these expected 401s to avoid noisy logs.
+    const origConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      const err = args[0];
+      if (
+        err &&
+        typeof err === "object" &&
+        "statusCode" in err &&
+        (err as { statusCode: number }).statusCode === 401
+      ) {
+        return;
+      }
+      origConsoleError.apply(console, args);
+    };
+
+    try {
+      await this.adapter.process(
+        {
+          body: req.body as Record<string, unknown>,
+          headers: req.headers,
+          method: "POST",
+        },
+        {
+          socket: null,
+          end: () => {},
+          header: () => {},
+          send: res.send,
+          status: res.status,
+        },
+        handler,
+      );
+    } finally {
+      console.error = origConsoleError;
+    }
+  }
+
+  parseInteractivePayload(_payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null {
+    // MS Teams handles interactive selections inline via Adaptive Card submissions
+    // in the route handler (TurnContext.activity.value), not through this method.
+    return null;
+  }
+
+  async sendAgentSelectionCard(params: {
+    message: IncomingChatMessage;
+    agents: { id: string; name: string }[];
+    isWelcome: boolean;
+    providerContext?: unknown;
+  }): Promise<void> {
+    const context = params.providerContext;
+    if (!(context instanceof TurnContext)) {
+      throw new Error(
+        "MSTeamsProvider.sendAgentSelectionCard requires a TurnContext",
+      );
+    }
+
+    const choices = params.agents.map((agent) => ({
+      title: agent.name,
+      value: agent.id,
+    }));
+
+    // Check for existing binding to pre-select
+    const existingBinding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: "ms-teams",
+      channelId: params.message.channelId,
+      workspaceId: params.message.workspaceId,
+    });
+
+    const cardBody = existingBinding?.agentId
+      ? [
+          {
+            type: "TextBlock",
+            size: "Medium",
+            weight: "Bolder",
+            text: "Change Default Agent",
+          },
+          {
+            type: "TextBlock",
+            text: "Select a different agent to handle messages in this channel:",
+            wrap: true,
+          },
+          {
+            type: "Input.ChoiceSet",
+            id: "agentId",
+            style: "compact",
+            value: existingBinding.agentId,
+            choices,
+          },
+        ]
+      : [
+          {
+            type: "TextBlock",
+            weight: "Bolder",
+            text: "Welcome to Archestra!",
+          },
+          {
+            type: "TextBlock",
+            text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "TextBlock",
+            text: "**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "TextBlock",
+            text: "**Available commands:**",
+            wrap: true,
+            spacing: "Medium",
+          },
+          {
+            type: "FactSet",
+            spacing: "Small",
+            facts: [
+              {
+                title: "/select-agent",
+                value:
+                  "Change the default agent handling requests in the channel",
+              },
+              {
+                title: "/status",
+                value:
+                  "Check the current agent handling requests in the channel",
+              },
+              { title: "/help", value: "Show available commands" },
+            ],
+          },
+          {
+            type: "TextBlock",
+            text: "**Let's set the default agent for this channel:**",
+            wrap: true,
+            spacing: "Medium",
+          },
+          {
+            type: "Input.ChoiceSet",
+            id: "agentId",
+            style: "compact",
+            value: choices[0]?.value || "",
+            choices,
+          },
+        ];
+
+    const card = {
+      type: "AdaptiveCard",
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.4",
+      body: cardBody,
+      actions: [
+        {
+          type: "Action.Submit",
+          title: "Confirm Selection",
+          data: {
+            action: "selectAgent",
+            channelId: params.message.channelId,
+            workspaceId: params.message.workspaceId,
+            originalMessageText: params.message.text || undefined,
+          },
+        },
+      ],
+    };
+
+    await context.sendActivity({
+      attachments: [
+        {
+          contentType: "application/vnd.microsoft.card.adaptive",
+          content: card,
+        },
+      ],
+    });
   }
 
   // ===========================================================================
@@ -596,7 +913,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     messages: ChatMessage[],
     excludeMessageId?: string,
   ): ChatThreadMessage[] {
-    const botAppId = config.chatops.msTeams.appId;
+    const botAppId = this.config.appId;
 
     return messages
       .filter((msg) => msg.id && msg.id !== excludeMessageId)
@@ -632,23 +949,6 @@ export default MSTeamsProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  // Handle objects that may not convert to string properly (e.g., MS Graph SDK errors)
-  try {
-    return String(error);
-  } catch {
-    // If String() fails, try JSON.stringify or return a generic message
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error (could not serialize)";
-    }
-  }
-}
 
 function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();
@@ -753,6 +1053,13 @@ function extractAdaptiveCardText(element: unknown): string {
   }
 
   return parts.join("\n");
+}
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeTeamsId(id: string): string {
+  return id.replace(/^28:/, "").toLowerCase();
 }
 
 function stripHtmlTags(html: string): string {

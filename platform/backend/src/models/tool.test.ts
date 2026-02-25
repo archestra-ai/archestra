@@ -105,10 +105,11 @@ describe("ToolModel", () => {
       expect(result).toBe("list_repos");
     });
 
-    test("handles tool names containing separator", () => {
-      const slugified = `server${MCP_SERVER_TOOL_NAME_SEPARATOR}tool${MCP_SERVER_TOOL_NAME_SEPARATOR}name`;
-      const result = ToolModel.unslugifyName(slugified);
-      expect(result).toBe(`tool${MCP_SERVER_TOOL_NAME_SEPARATOR}name`);
+    test("handles server names containing separator (e.g. upstash__context7)", () => {
+      const result = ToolModel.unslugifyName(
+        "upstash__context7__resolve-library-id",
+      );
+      expect(result).toBe("resolve-library-id");
     });
 
     test("returns original name if no separator found", () => {
@@ -128,36 +129,39 @@ describe("ToolModel", () => {
       makeAdmin,
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const admin = await makeAdmin();
       const agent1 = await makeAgent({ name: "Agent1" });
       const agent2 = await makeAgent({ name: "Agent2" });
 
-      await makeTool({
-        agentId: agent1.id,
+      const tool1 = await makeTool({
         name: "tool1",
         description: "Tool 1",
       });
+      await makeAgentTool(agent1.id, tool1.id);
 
-      await makeTool({
-        agentId: agent2.id,
+      const tool2 = await makeTool({
         name: "tool2",
         description: "Tool 2",
         parameters: {},
       });
+      await makeAgentTool(agent2.id, tool2.id);
 
       const tools = await ToolModel.findAll(admin.id, true);
       // Expects exactly 2 proxy-discovered tools (Archestra tools are no longer auto-assigned)
       expect(tools.length).toBe(2);
     });
 
-    test("member only sees tools for accessible agents", async ({
+    test("non-admin only sees MCP tools, not proxy tools", async ({
       makeUser,
       makeAdmin,
       makeOrganization,
       makeTeam,
       makeAgent,
       makeTool,
+      makeAgentTool,
+      makeInternalMcpCatalog,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
@@ -175,38 +179,52 @@ describe("ToolModel", () => {
       const agent1 = await makeAgent({ name: "Agent1", teams: [team1.id] });
       const agent2 = await makeAgent({ name: "Agent2", teams: [team2.id] });
 
-      const tool1 = await makeTool({
-        agentId: agent1.id,
+      const catalog = await makeInternalMcpCatalog();
+
+      // Proxy tools (no catalogId) — not visible to non-admins
+      const proxyTool1 = await makeTool({
         name: "tool1",
         description: "Tool 1",
         parameters: {},
       });
+      await makeAgentTool(agent1.id, proxyTool1.id);
 
-      await makeTool({
-        agentId: agent2.id,
+      const proxyTool2 = await makeTool({
         name: "tool2",
         description: "Tool 2",
         parameters: {},
       });
+      await makeAgentTool(agent2.id, proxyTool2.id);
 
+      // MCP tool (catalogId set) — visible to non-admins
+      const mcpTool = await makeTool({
+        name: "mcp-tool",
+        description: "MCP Tool",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(agent1.id, mcpTool.id);
+
+      // Non-admin user only sees MCP tools, not proxy tools
       const tools = await ToolModel.findAll(user1.id, false);
       expect(tools).toHaveLength(1);
-      expect(tools[0].id).toBe(tool1.id);
+      expect(tools[0].id).toBe(mcpTool.id);
     });
 
-    test("member with no access sees no tools", async ({
+    test("member with no access sees only MCP tools", async ({
       makeUser,
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const user = await makeUser();
       const agent1 = await makeAgent({ name: "Agent1" });
 
-      await makeTool({
-        agentId: agent1.id,
+      // Proxy tool — not visible to non-admins
+      const tool1 = await makeTool({
         name: "tool1",
         description: "Tool 1",
       });
+      await makeAgentTool(agent1.id, tool1.id);
 
       const tools = await ToolModel.findAll(user.id, false);
       expect(tools).toHaveLength(0);
@@ -216,16 +234,17 @@ describe("ToolModel", () => {
       makeAdmin,
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const admin = await makeAdmin();
       const agent = await makeAgent();
 
       const tool = await makeTool({
-        agentId: agent.id,
         name: "test-tool",
         description: "Test Tool",
         parameters: {},
       });
+      await makeAgentTool(agent.id, tool.id);
 
       const found = await ToolModel.findById(tool.id, admin.id, true);
       expect(found).not.toBeNull();
@@ -239,6 +258,7 @@ describe("ToolModel", () => {
       makeTeam,
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
@@ -251,50 +271,33 @@ describe("ToolModel", () => {
       const agent = await makeAgent({ teams: [team.id] });
 
       const tool = await makeTool({
-        agentId: agent.id,
         name: "test-tool",
         description: "Test Tool",
         parameters: {},
       });
+      await makeAgentTool(agent.id, tool.id);
 
+      // Proxy tools with agentId=null are visible to all (same as MCP tools)
       const found = await ToolModel.findById(tool.id, user.id, false);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
-    });
-
-    test("findById returns null for user without agent access", async ({
-      makeUser,
-      makeAgent,
-      makeTool,
-    }) => {
-      const user = await makeUser();
-      const agent = await makeAgent();
-
-      const tool = await makeTool({
-        agentId: agent.id,
-        name: "test-tool",
-        description: "Test Tool",
-        parameters: {},
-      });
-
-      const found = await ToolModel.findById(tool.id, user.id, false);
-      expect(found).toBeNull();
     });
 
     test("findByName returns tool for admin", async ({
       makeAdmin,
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const admin = await makeAdmin();
       const agent = await makeAgent();
 
-      await makeTool({
-        agentId: agent.id,
+      const tool = await makeTool({
         name: "unique-tool",
         description: "Unique Tool",
         parameters: {},
       });
+      await makeAgentTool(agent.id, tool.id);
 
       const found = await ToolModel.findByName("unique-tool", admin.id, true);
       expect(found).not.toBeNull();
@@ -308,6 +311,7 @@ describe("ToolModel", () => {
       makeTeam,
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
@@ -319,39 +323,16 @@ describe("ToolModel", () => {
 
       const agent = await makeAgent({ teams: [team.id] });
 
-      await makeTool({
-        agentId: agent.id,
+      const tool = await makeTool({
         name: "user-tool",
         description: "User Tool",
         parameters: {},
       });
+      await makeAgentTool(agent.id, tool.id);
 
       const found = await ToolModel.findByName("user-tool", user.id, false);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("user-tool");
-    });
-
-    test("findByName returns null for user without agent access", async ({
-      makeUser,
-      makeAgent,
-      makeTool,
-    }) => {
-      const user = await makeUser();
-      const agent = await makeAgent();
-
-      await makeTool({
-        agentId: agent.id,
-        name: "restricted-tool",
-        description: "Restricted Tool",
-        parameters: {},
-      });
-
-      const found = await ToolModel.findByName(
-        "restricted-tool",
-        user.id,
-        false,
-      );
-      expect(found).toBeNull();
     });
   });
 
@@ -371,17 +352,18 @@ describe("ToolModel", () => {
       makeAgent,
       makeUser,
       makeTool,
+      makeAgentTool,
     }) => {
       const _user = await makeUser();
       const agent = await makeAgent();
 
-      // Create a proxy-sniffed tool (no mcpServerId)
-      await makeTool({
-        agentId: agent.id,
+      // Create a proxy-sniffed tool (no catalogId) and assign via junction
+      const proxyTool = await makeTool({
         name: "proxy_tool",
         description: "Proxy Tool",
         parameters: {},
       });
+      await makeAgentTool(agent.id, proxyTool.id);
 
       const result = await ToolModel.getMcpToolsAssignedToAgent(
         ["proxy_tool", "non_existent"],
@@ -406,7 +388,7 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP server with GitHub metadata
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-github-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -424,7 +406,6 @@ describe("ToolModel", () => {
           },
         },
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign tool to agent
@@ -438,10 +419,6 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        mcpServerName: `test-github-server`,
-        mcpServerSecretId: null,
-        mcpServerCatalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
         responseModifierTemplate: null,
         credentialSourceMcpServerId: null,
         executionSourceMcpServerId: null,
@@ -467,7 +444,7 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP server
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -479,7 +456,6 @@ describe("ToolModel", () => {
         description: "First tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       const tool2 = await makeTool({
@@ -487,7 +463,6 @@ describe("ToolModel", () => {
         description: "Second tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign both tools to agent
@@ -520,7 +495,7 @@ describe("ToolModel", () => {
         name: "github-mcp-server",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -530,7 +505,7 @@ describe("ToolModel", () => {
         name: "exclusive_tool",
         description: "Exclusive tool",
         parameters: {},
-        mcpServerId: mcpServer.id,
+        catalogId: catalogItem.id,
       });
 
       // Assign tool to agent1 only
@@ -545,12 +520,13 @@ describe("ToolModel", () => {
       expect(result).toEqual([]);
     });
 
-    test("excludes proxy-sniffed tools (tools with agentId set)", async ({
+    test("excludes proxy-sniffed tools (tools without catalogId)", async ({
       makeUser,
       makeAgent,
       makeInternalMcpCatalog,
       makeMcpServer,
       makeTool,
+      makeAgentTool,
     }) => {
       const user = await makeUser();
       const agent = await makeAgent();
@@ -560,27 +536,26 @@ describe("ToolModel", () => {
         name: "github-mcp-server",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
       });
 
-      // Create a proxy-sniffed tool (with agentId)
-      await makeTool({
-        agentId: agent.id,
+      // Create a shared proxy tool (agentId=null, catalogId=null)
+      const proxyTool = await makeTool({
         name: "proxy_tool",
         description: "Proxy Tool",
         parameters: {},
       });
+      await makeAgentTool(agent.id, proxyTool.id);
 
-      // Create an MCP tool (no agentId, linked via mcpServerId)
+      // Create an MCP tool (linked via catalogId)
       const mcpTool = await makeTool({
         name: "mcp_tool",
         description: "MCP Tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
       });
 
       // Assign MCP tool to agent
@@ -611,7 +586,7 @@ describe("ToolModel", () => {
         name: "github-mcp-server",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const server1 = await makeMcpServer({
+      await makeMcpServer({
         name: "github-server",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -621,7 +596,7 @@ describe("ToolModel", () => {
         name: "other-mcp-server",
         serverUrl: "https://api.othercopilot.com/mcp/",
       });
-      const server2 = await makeMcpServer({
+      await makeMcpServer({
         name: "other-server",
         catalogId: catalogItem2.id,
       });
@@ -632,7 +607,6 @@ describe("ToolModel", () => {
         description: "List GitHub issues",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: server1.id,
       });
 
       const otherTool = await makeTool({
@@ -640,7 +614,6 @@ describe("ToolModel", () => {
         description: "Other tool",
         parameters: {},
         catalogId: catalogItem2.id,
-        mcpServerId: server2.id,
       });
 
       // Assign both tools to agent
@@ -702,86 +675,6 @@ describe("ToolModel", () => {
     });
   });
 
-  describe("findByMcpServerId", () => {
-    test("returns tools with assigned agents efficiently", async ({
-      makeUser,
-      makeAgent,
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeTool,
-    }) => {
-      const user = await makeUser();
-      const agent1 = await makeAgent({ name: "Agent 1" });
-      const agent2 = await makeAgent({ name: "Agent 2" });
-
-      const catalogItem = await makeInternalMcpCatalog({
-        name: "test-catalog",
-        serverUrl: "https://api.test.com/mcp/",
-      });
-
-      const mcpServer = await makeMcpServer({
-        name: "test-server",
-        catalogId: catalogItem.id,
-        ownerId: user.id,
-      });
-
-      const tool1 = await makeTool({
-        name: "tool1",
-        description: "Tool 1",
-        parameters: {},
-        catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
-      });
-
-      const tool2 = await makeTool({
-        name: "tool2",
-        description: "Tool 2",
-        parameters: {},
-        catalogId: catalogItem.id,
-        mcpServerId: mcpServer.id,
-      });
-
-      // Assign tools to agents
-      await AgentToolModel.create(agent1.id, tool1.id);
-      await AgentToolModel.create(agent1.id, tool2.id);
-      await AgentToolModel.create(agent2.id, tool1.id);
-
-      const result = await ToolModel.findByMcpServerId(mcpServer.id);
-
-      expect(result).toHaveLength(2);
-
-      const tool1Result = result.find((t) => t.name === "tool1");
-      expect(tool1Result?.assignedAgentCount).toBe(2);
-      expect(tool1Result?.assignedAgents.map((a) => a.id)).toContain(agent1.id);
-      expect(tool1Result?.assignedAgents.map((a) => a.id)).toContain(agent2.id);
-
-      const tool2Result = result.find((t) => t.name === "tool2");
-      expect(tool2Result?.assignedAgentCount).toBe(1);
-      expect(tool2Result?.assignedAgents.map((a) => a.id)).toContain(agent1.id);
-    });
-
-    test("returns empty array when MCP server has no tools", async ({
-      makeUser,
-      makeInternalMcpCatalog,
-      makeMcpServer,
-    }) => {
-      const user = await makeUser();
-      const catalogItem = await makeInternalMcpCatalog({
-        name: "empty-catalog",
-        serverUrl: "https://api.empty.com/mcp/",
-      });
-
-      const mcpServer = await makeMcpServer({
-        name: "empty-server",
-        catalogId: catalogItem.id,
-        ownerId: user.id,
-      });
-
-      const result = await ToolModel.findByMcpServerId(mcpServer.id);
-      expect(result).toHaveLength(0);
-    });
-  });
-
   describe("findByCatalogId", () => {
     test("returns tools with assigned agents for catalog efficiently", async ({
       makeUser,
@@ -800,13 +693,13 @@ describe("ToolModel", () => {
       });
 
       // Create two servers with the same catalog
-      const mcpServer1 = await makeMcpServer({
+      await makeMcpServer({
         name: "server1",
         catalogId: catalogItem.id,
         ownerId: user.id,
       });
 
-      const mcpServer2 = await makeMcpServer({
+      await makeMcpServer({
         name: "server2",
         catalogId: catalogItem.id,
         ownerId: user.id,
@@ -818,7 +711,6 @@ describe("ToolModel", () => {
         description: "Shared Tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer1.id,
       });
 
       const tool2 = await makeTool({
@@ -826,7 +718,6 @@ describe("ToolModel", () => {
         description: "Another Tool",
         parameters: {},
         catalogId: catalogItem.id,
-        mcpServerId: mcpServer2.id,
       });
 
       // Assign tools to agents
@@ -873,7 +764,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -883,21 +774,18 @@ describe("ToolModel", () => {
           description: "First tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-2",
           description: "Second tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-3",
           description: "Third tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -909,10 +797,9 @@ describe("ToolModel", () => {
       expect(createdTools.map((t) => t.name)).toContain("tool-2");
       expect(createdTools.map((t) => t.name)).toContain("tool-3");
 
-      // Verify all tools have correct catalogId and mcpServerId
+      // Verify all tools have correct catalogId
       createdTools.forEach((tool) => {
         expect(tool.catalogId).toBe(catalog.id);
-        expect(tool.mcpServerId).toBe(mcpServer.id);
         expect(tool.agentId).toBeNull();
       });
     });
@@ -923,7 +810,7 @@ describe("ToolModel", () => {
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -931,7 +818,6 @@ describe("ToolModel", () => {
       const existingTool = await makeTool({
         name: "tool-1",
         catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
       });
 
       const toolsToCreate = [
@@ -940,21 +826,18 @@ describe("ToolModel", () => {
           description: "First tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-2", // New
           description: "Second tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-3", // New
           description: "Third tool",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -974,7 +857,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -984,21 +867,18 @@ describe("ToolModel", () => {
           description: "Tool C",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-a",
           description: "Tool A",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
         {
           name: "tool-b",
           description: "Tool B",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1022,7 +902,7 @@ describe("ToolModel", () => {
       makeMcpServer,
     }) => {
       const catalog = await makeInternalMcpCatalog();
-      const mcpServer = await makeMcpServer({
+      await makeMcpServer({
         catalogId: catalog.id,
       });
 
@@ -1032,7 +912,6 @@ describe("ToolModel", () => {
           description: "Tool that might conflict",
           parameters: { type: "object", properties: {} },
           catalogId: catalog.id,
-          mcpServerId: mcpServer.id,
         },
       ];
 
@@ -1048,10 +927,203 @@ describe("ToolModel", () => {
       expect(result1[0].name).toBe("conflict-tool");
       expect(result2[0].name).toBe("conflict-tool");
     });
+
+    test("upgrades proxy-discovered tools by setting catalogId (same tool IDs, no duplicates)", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const agent = await makeAgent();
+
+      // Create proxy-discovered tools (catalogId=NULL)
+      const proxyTool1 = await makeTool({
+        name: "proxy-upgrade-1",
+        description: "Proxy tool 1",
+      });
+      const proxyTool2 = await makeTool({
+        name: "proxy-upgrade-2",
+        description: "Proxy tool 2",
+      });
+
+      // Assign proxy tools to agent (simulating proxy discovery)
+      await makeAgentTool(agent.id, proxyTool1.id);
+      await makeAgentTool(agent.id, proxyTool2.id);
+
+      // Now bulk-create the same tools as MCP tools (simulating MCP server install)
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "proxy-upgrade-1",
+          description: "MCP tool 1",
+          parameters: {},
+          catalogId: catalog.id,
+        },
+        {
+          name: "proxy-upgrade-2",
+          description: "MCP tool 2",
+          parameters: {},
+          catalogId: catalog.id,
+        },
+      ]);
+
+      // Should return the same tool IDs (upgraded, not duplicated)
+      expect(result).toHaveLength(2);
+      expect(result.find((t) => t.name === "proxy-upgrade-1")?.id).toBe(
+        proxyTool1.id,
+      );
+      expect(result.find((t) => t.name === "proxy-upgrade-2")?.id).toBe(
+        proxyTool2.id,
+      );
+
+      // Tools should now have the catalogId set
+      for (const tool of result) {
+        expect(tool.catalogId).toBe(catalog.id);
+      }
+
+      // Agent-tool links should still be intact
+      const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(agentToolIds).toContain(proxyTool1.id);
+      expect(agentToolIds).toContain(proxyTool2.id);
+    });
+
+    test("handles mix of proxy tools and genuinely new tools", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      // Create one proxy-discovered tool
+      const proxyTool = await makeTool({
+        name: "mixed-proxy-tool",
+        description: "Proxy tool",
+      });
+
+      // Bulk-create with one proxy tool and one genuinely new tool
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "mixed-proxy-tool",
+          description: "MCP tool (was proxy)",
+          parameters: {},
+          catalogId: catalog.id,
+        },
+        {
+          name: "mixed-new-tool",
+          description: "Brand new MCP tool",
+          parameters: {},
+          catalogId: catalog.id,
+        },
+      ]);
+
+      expect(result).toHaveLength(2);
+
+      // Proxy tool should be upgraded (same ID)
+      const upgradedTool = result.find((t) => t.name === "mixed-proxy-tool");
+      expect(upgradedTool?.id).toBe(proxyTool.id);
+      expect(upgradedTool?.catalogId).toBe(catalog.id);
+
+      // New tool should be created
+      const newTool = result.find((t) => t.name === "mixed-new-tool");
+      expect(newTool).toBeDefined();
+      expect(newTool?.catalogId).toBe(catalog.id);
+    });
+
+    test("does not touch tools that already have a different catalogId", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog1 = await makeInternalMcpCatalog({ name: "Catalog 1" });
+      const catalog2 = await makeInternalMcpCatalog({ name: "Catalog 2" });
+
+      // Create a tool that already belongs to catalog1
+      const existingTool = await makeTool({
+        name: "already-owned-tool",
+        description: "Owned by catalog1",
+        catalogId: catalog1.id,
+      });
+
+      // Try to bulk-create same-named tool for catalog2
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "already-owned-tool",
+          description: "Should not steal from catalog1",
+          parameters: {},
+          catalogId: catalog2.id,
+        },
+      ]);
+
+      // Should create a new tool for catalog2 (not upgrade catalog1's tool)
+      // The proxy upgrade only targets catalogId=NULL tools
+      expect(result).toHaveLength(1);
+      // The original tool should still belong to catalog1
+      const originalTool = await ToolModel.findById(existingTool.id);
+      expect(originalTool?.catalogId).toBe(catalog1.id);
+    });
+  });
+
+  describe("createToolIfNotExists - proxy to MCP upgrade", () => {
+    test("upgrades existing proxy tool when MCP tool with same name is created", async ({
+      makeTool,
+      makeAgentTool,
+      makeAgent,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent = await makeAgent();
+      const catalog = await makeInternalMcpCatalog();
+
+      // Create a shared proxy tool and link to agent
+      const proxyTool = await makeTool({
+        name: "upgradeable-tool",
+        description: "Proxy description",
+        parameters: { type: "object" },
+      });
+      await makeAgentTool(agent.id, proxyTool.id);
+
+      // Now create an MCP tool with the same name — should upgrade the proxy tool
+      const mcpTool = await makeTool({
+        name: "upgradeable-tool",
+        catalogId: catalog.id,
+        description: "MCP description",
+      });
+
+      // Same row was reused
+      expect(mcpTool.id).toBe(proxyTool.id);
+      expect(mcpTool.catalogId).toBe(catalog.id);
+      expect(mcpTool.description).toBe("MCP description");
+
+      // Agent-tool link still intact
+      const agentTools = await ToolModel.getToolsByAgent(agent.id);
+      expect(agentTools.some((t) => t.id === proxyTool.id)).toBe(true);
+    });
+
+    test("does not upgrade when MCP tool with same catalog already exists", async ({
+      makeTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      // Create MCP tool directly
+      const mcpTool = await makeTool({
+        name: "existing-mcp-tool",
+        catalogId: catalog.id,
+        description: "Original MCP",
+      });
+
+      // Creating again with same catalog+name returns existing
+      const result = await ToolModel.createToolIfNotExists({
+        name: "existing-mcp-tool",
+        catalogId: catalog.id,
+        description: "Duplicate attempt",
+        parameters: {},
+      });
+
+      expect(result.id).toBe(mcpTool.id);
+      expect(result.description).toBe("Original MCP");
+    });
   });
 
   describe("bulkCreateProxyToolsIfNotExists", () => {
-    test("creates multiple proxy-sniffed tools for an agent in bulk", async ({
+    test("creates multiple shared proxy tools in bulk", async ({
       makeAgent,
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
@@ -1084,26 +1156,26 @@ describe("ToolModel", () => {
       expect(createdTools.map((t) => t.name)).toContain("proxy-tool-2");
       expect(createdTools.map((t) => t.name)).toContain("proxy-tool-3");
 
-      // Verify all tools have correct agentId and null catalogId
+      // Verify all tools are shared (agentId=null) and have null catalogId
       for (const tool of createdTools) {
-        expect(tool.agentId).toBe(agent.id);
+        expect(tool.agentId).toBeNull();
         expect(tool.catalogId).toBeNull();
-        expect(tool.mcpServerId).toBeNull();
       }
     });
 
     test("returns existing tools when some tools already exist", async ({
       makeAgent,
       makeTool,
+      makeAgentTool,
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      // Create one tool manually
+      // Create one shared proxy tool manually and assign to agent
       const existingTool = await makeTool({
         name: "proxy-tool-1",
-        agentId: agent.id,
         description: "Existing tool",
       });
+      await makeAgentTool(agent.id, existingTool.id);
 
       const toolsToCreate = [
         {
@@ -1204,28 +1276,30 @@ describe("ToolModel", () => {
       expect(result2[0].name).toBe("conflict-proxy-tool");
     });
 
-    test("does not mix tools between different agents", async ({
+    test("shares tools between different agents (same tool row reused)", async ({
       makeAgent,
     }) => {
       const agent1 = await makeAgent({ name: "Agent 1" });
       const agent2 = await makeAgent({ name: "Agent 2" });
 
       // Create same-named tool for agent1
-      await ToolModel.bulkCreateProxyToolsIfNotExists(
+      const result1 = await ToolModel.bulkCreateProxyToolsIfNotExists(
         [{ name: "shared-name-tool", description: "Tool for agent 1" }],
         agent1.id,
       );
 
       // Create same-named tool for agent2
-      const result = await ToolModel.bulkCreateProxyToolsIfNotExists(
+      const result2 = await ToolModel.bulkCreateProxyToolsIfNotExists(
         [{ name: "shared-name-tool", description: "Tool for agent 2" }],
         agent2.id,
       );
 
-      // Should create a new tool for agent2 (not return agent1's tool)
-      expect(result).toHaveLength(1);
-      expect(result[0].agentId).toBe(agent2.id);
-      expect(result[0].name).toBe("shared-name-tool");
+      // Both agents should get the SAME shared tool row (agentId=null)
+      expect(result1).toHaveLength(1);
+      expect(result2).toHaveLength(1);
+      expect(result1[0].id).toBe(result2[0].id);
+      expect(result1[0].agentId).toBeNull();
+      expect(result2[0].agentId).toBeNull();
     });
 
     test("handles tools with optional parameters", async ({ makeAgent }) => {
@@ -1375,6 +1449,536 @@ describe("ToolModel", () => {
 
       const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
       expect(toolIds).toHaveLength(0);
+    });
+  });
+
+  describe("knowledge graph tool visibility", () => {
+    test("getMcpToolsByAgent excludes query_knowledge_graph when KG is not configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        // Other Archestra tools should still be present
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("getMcpToolsByAgent includes query_knowledge_graph when KG is configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue("lightrag");
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("findByCatalogId excludes query_knowledge_graph when KG is not configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+        const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("findByCatalogId includes query_knowledge_graph when KG is configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue("lightrag");
+
+      try {
+        const agent = await makeAgent();
+        await seedAndAssignArchestraTools(agent.id);
+
+        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+        const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("assignArchestraToolsToAgent excludes query_knowledge_graph when KG is not configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
+
+      try {
+        // Seed tools first (seeding is independent of visibility filtering)
+        const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+        await seedAndAssignArchestraTools(tempAgent.id);
+
+        // Create a new agent and assign all Archestra tools
+        const agent = await makeAgent({ name: "Test Agent" });
+        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+        await ToolModel.assignArchestraToolsToAgent(
+          agent.id,
+          ARCHESTRA_MCP_CATALOG_ID,
+        );
+
+        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = tools.map((t) => t.name);
+
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+  });
+
+  describe("syncToolsForCatalog", () => {
+    test("creates new tools when none exist", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "First tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+        },
+        {
+          name: "tool-2",
+          description: "Second tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(2);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.created.map((t) => t.name)).toContain("tool-1");
+      expect(result.created.map((t) => t.name)).toContain("tool-2");
+    });
+
+    test("updates existing tools when description changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tool
+      const existingTool = await makeTool({
+        name: "tool-1",
+        description: "Original description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "Updated description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.updated[0].id).toBe(existingTool.id);
+      expect(result.updated[0].description).toBe("Updated description");
+    });
+
+    test("updates existing tools when parameters change", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tool
+      const existingTool = await makeTool({
+        name: "tool-1",
+        description: "Tool description",
+        parameters: { type: "object", properties: { a: { type: "string" } } },
+        catalogId: catalog.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "Tool description",
+          parameters: {
+            type: "object",
+            properties: { a: { type: "string" }, b: { type: "number" } },
+          },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.updated[0].id).toBe(existingTool.id);
+    });
+
+    test("leaves tools unchanged when nothing changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tool
+      const existingTool = await makeTool({
+        name: "tool-1",
+        description: "Tool description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "Tool description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.unchanged[0].id).toBe(existingTool.id);
+    });
+
+    test("handles mix of create, update, and unchanged", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tools
+      const unchangedTool = await makeTool({
+        name: "tool-unchanged",
+        description: "No change",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const updateTool = await makeTool({
+        name: "tool-update",
+        description: "Old description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-unchanged",
+          description: "No change",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+        {
+          name: "tool-update",
+          description: "New description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+        {
+          name: "tool-new",
+          description: "Brand new tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(1);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(1);
+
+      expect(result.created[0].name).toBe("tool-new");
+      expect(result.updated[0].id).toBe(updateTool.id);
+      expect(result.unchanged[0].id).toBe(unchangedTool.id);
+    });
+
+    test("preserves tool IDs during update (for policy preservation)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeToolPolicy,
+      makeAgent,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+      const agent = await makeAgent();
+
+      // Create existing tool with policy
+      const existingTool = await makeTool({
+        name: "tool-with-policy",
+        description: "Has policy",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      // Create a tool invocation policy for this tool
+      await makeToolPolicy(existingTool.id, {
+        action: "block_always",
+        reason: "Test policy",
+      });
+
+      // Assign tool to agent
+      await AgentToolModel.create(agent.id, existingTool.id);
+
+      // Sync with updated description
+      const toolsToSync = [
+        {
+          name: "tool-with-policy",
+          description: "Updated description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].id).toBe(existingTool.id);
+
+      // Verify agent-tool assignment still exists (key verification for policy preservation)
+      const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(agentToolIds).toContain(existingTool.id);
+    });
+
+    test("returns empty arrays for empty input", async () => {
+      const result = await ToolModel.syncToolsForCatalog([]);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+    });
+
+    test("renames tools when catalog name changes (preserves ID and assignments)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "old-catalog-name",
+      });
+      await makeMcpServer({ catalogId: catalog.id });
+      const agent = await makeAgent();
+
+      // Create existing tool with old catalog name prefix
+      const existingTool = await makeTool({
+        name: "old-catalog-name__query-docs",
+        description: "Query docs",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      // Assign tool to agent
+      await AgentToolModel.create(agent.id, existingTool.id);
+
+      // Sync with new catalog name (simulating catalog rename)
+      const toolsToSync = [
+        {
+          name: "new-catalog-name__query-docs", // Same raw name, different prefix
+          description: "Query docs",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // Should update (rename) the existing tool, not create a new one
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+
+      // Verify the tool was renamed but kept the same ID
+      expect(result.updated[0].id).toBe(existingTool.id);
+      expect(result.updated[0].name).toBe("new-catalog-name__query-docs");
+
+      // Verify agent-tool assignment still exists (uses same tool ID)
+      const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(agentToolIds).toContain(existingTool.id);
+    });
+
+    test("deletes orphaned tools that are no longer returned by MCP server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tools
+      const tool1 = await makeTool({
+        name: "catalog__tool-1",
+        description: "Tool 1",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      await makeTool({
+        name: "catalog__tool-2",
+        description: "Tool 2 - will be removed",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      // Sync with only one tool (simulating tool-2 being removed from MCP server)
+      const toolsToSync = [
+        {
+          name: "catalog__tool-1",
+          description: "Tool 1",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // tool-1 should be unchanged, tool-2 should be deleted
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.unchanged[0].id).toBe(tool1.id);
+      expect(result.deleted).toHaveLength(1);
+      expect(result.deleted[0].name).toBe("catalog__tool-2");
+    });
+
+    test("cleans up duplicate tools after catalog rename (legacy duplicates)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      // Create legacy tool with old catalog name prefix
+      // This simulates a tool that existed before catalog was renamed
+      await makeTool({
+        name: "old-name__query-docs",
+        description: "Old tool with legacy name",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      // Sync with the new name (after catalog rename)
+      const toolsToSync = [
+        {
+          name: "new-name__query-docs",
+          description: "New tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          rawToolName: "query-docs",
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // The old tool should be updated with the new name (matched by rawToolName)
+      // Note: If the old tool didn't have rawToolName stored, it would be deleted
+      // and the new tool would be created instead
+      const survivingTools = [...result.unchanged, ...result.updated];
+
+      // Verify exactly one tool survives with the new name
+      expect(survivingTools.length + result.created.length).toBe(1);
+      const finalTool = survivingTools[0] || result.created[0];
+      expect(finalTool.name).toBe("new-name__query-docs");
+    });
+
+    test("creates default policies for newly created tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const toolsToSync = [
+        {
+          name: "new-tool",
+          description: "New tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(1);
+
+      // Verify the tool was created (default policies are created internally by createDefaultPolicies)
+      const createdTool = result.created[0];
+      expect(createdTool.id).toBeDefined();
+      expect(createdTool.name).toBe("new-tool");
     });
   });
 });

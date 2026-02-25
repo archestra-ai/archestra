@@ -211,6 +211,77 @@ describe("strip-images-from-messages", () => {
       expect(result).toEqual(messages);
     });
 
+    test("preserves model-generated image parts in assistant messages", () => {
+      const messages: UiMessage[] = [
+        {
+          id: "msg1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Here is the generated image:" },
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: "data:image/png;base64,iVBORw0KGgo...",
+              },
+            },
+          ],
+        },
+      ];
+
+      const result = stripImagesFromMessages(messages);
+
+      // Image part should be preserved for assistant messages (model-generated)
+      // This is required for multi-turn image editing with Gemini 3
+      const imagePart = result[0].parts?.[1];
+      expect(imagePart?.type).toBe("image");
+      expect(imagePart?.source).toBeDefined();
+    });
+
+    test("strips image parts from user messages but preserves in assistant messages", () => {
+      const messages: UiMessage[] = [
+        {
+          id: "msg1",
+          role: "user",
+          parts: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: "data:image/png;base64,userImage...",
+              },
+            },
+          ],
+        },
+        {
+          id: "msg2",
+          role: "assistant",
+          parts: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: "data:image/png;base64,modelImage...",
+              },
+            },
+          ],
+        },
+      ];
+
+      const result = stripImagesFromMessages(messages);
+
+      // User image should be stripped
+      expect(result[0].parts?.[0]?.type).toBe("text");
+      expect(result[0].parts?.[0]?.text).toBe(IMAGE_STRIPPED_PLACEHOLDER);
+
+      // Assistant image should be preserved
+      expect(result[1].parts?.[0]?.type).toBe("image");
+      expect(result[1].parts?.[0]?.source).toBeDefined();
+    });
+
     test("handles mixed content", () => {
       const messages: UiMessage[] = [
         {

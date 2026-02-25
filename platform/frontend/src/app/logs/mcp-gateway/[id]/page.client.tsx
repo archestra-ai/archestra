@@ -1,13 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import {
   Accordion,
   AccordionContent,
@@ -17,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { useMcpToolCall } from "@/lib/mcp-tool-call.query";
+import { formatAuthMethod, useMcpToolCall } from "@/lib/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
 
 export function McpToolCallDetailPage({
@@ -33,9 +32,7 @@ export function McpToolCallDetailPage({
   return (
     <div className="w-full h-full overflow-y-auto">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <McpToolCallDetail initialData={initialData} id={id} />
-        </Suspense>
+        <McpToolCallDetail initialData={initialData} id={id} />
       </ErrorBoundary>
     </div>
   );
@@ -51,7 +48,7 @@ function McpToolCallDetail({
   };
   id: string;
 }) {
-  const { data: mcpToolCall } = useMcpToolCall({
+  const { data: mcpToolCall, isPending } = useMcpToolCall({
     mcpToolCallId: id,
     initialData: initialData?.mcpToolCall,
   });
@@ -59,6 +56,10 @@ function McpToolCallDetail({
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
+
+  if (isPending) {
+    return <LoadingSpinner />;
+  }
 
   if (!mcpToolCall) {
     return (
@@ -86,7 +87,7 @@ function McpToolCallDetail({
     toolResult.isError;
 
   return (
-    <>
+    <LoadingWrapper isPending={isPending}>
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-2">
           <Button variant="ghost" size="icon" asChild>
@@ -112,7 +113,12 @@ function McpToolCallDetail({
                 <div className="text-sm text-muted-foreground mb-2">
                   MCP Gateway
                 </div>
-                <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+                <div className="font-medium">
+                  {agent?.name ??
+                    (mcpToolCall.agentId === null
+                      ? "Deleted MCP Gateway"
+                      : "Unknown")}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">Method</div>
@@ -147,7 +153,9 @@ function McpToolCallDetail({
                   <div className="text-sm text-muted-foreground mb-2">
                     Tool Name
                   </div>
-                  <div className="font-medium font-mono">{toolCall.name}</div>
+                  <div className="font-medium font-mono">
+                    {parseFullToolName(toolCall.name).toolName || toolCall.name}
+                  </div>
                 </div>
               )}
               <div>
@@ -158,6 +166,22 @@ function McpToolCallDetail({
                   {formatDate({ date: mcpToolCall.createdAt })}
                 </div>
               </div>
+              {mcpToolCall.userName && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">User</div>
+                  <div className="font-medium">{mcpToolCall.userName}</div>
+                </div>
+              )}
+              {mcpToolCall.authMethod && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Auth Method
+                  </div>
+                  <Badge variant="secondary">
+                    {formatAuthMethod(mcpToolCall.authMethod)}
+                  </Badge>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -205,6 +229,6 @@ function McpToolCallDetail({
           </AccordionItem>
         </Accordion>
       </div>
-    </>
+    </LoadingWrapper>
   );
 }

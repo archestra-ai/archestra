@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 const {
   getTeamVaultFolder,
@@ -28,11 +29,8 @@ export function useTeamVaultFolder(teamId: string | null) {
         path: { teamId },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch team Vault folder",
-        );
+        handleApiError(error);
+        return null;
       }
       return data;
     },
@@ -59,22 +57,17 @@ export function useSetTeamVaultFolder() {
         body: { vaultPath },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to set Vault folder",
-        );
+        handleApiError(error);
+        return null;
       }
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      if (!data) return;
       toast.success("Vault folder configured successfully");
       queryClient.invalidateQueries({
         queryKey: ["team-vault-folder", variables.teamId],
       });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to configure Vault folder");
     },
   });
 }
@@ -90,22 +83,17 @@ export function useDeleteTeamVaultFolder() {
         path: { teamId },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to delete Vault folder",
-        );
+        handleApiError(error);
+        return null;
       }
       return data;
     },
-    onSuccess: (_, teamId) => {
+    onSuccess: (data, teamId) => {
+      if (!data) return;
       toast.success("Vault folder removed successfully");
       queryClient.invalidateQueries({
         queryKey: ["team-vault-folder", teamId],
       });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to remove Vault folder");
     },
   });
 }
@@ -127,11 +115,8 @@ export function useCheckTeamVaultFolderConnectivity() {
         body: { vaultPath },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to check Vault connectivity",
-        );
+        handleApiError(error);
+        return null;
       }
       return data;
     },
@@ -150,11 +135,8 @@ export function useTeamVaultFolderSecrets(teamId: string | null) {
         path: { teamId },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to list Vault secrets",
-        );
+        handleApiError(error);
+        return null;
       }
       return data ?? [];
     },
@@ -179,13 +161,8 @@ export function useTeamVaultSecretKeys(
         body: { secretPath },
       });
       if (error) {
-        const errorMessage =
-          (error as { error?: { message?: string } })?.error?.message ||
-          (typeof error === "object" && "message" in error
-            ? (error as { message: string }).message
-            : null) ||
-          "Failed to get secret keys";
-        throw new Error(errorMessage);
+        handleApiError(error);
+        return { keys: [] };
       }
       return data ?? { keys: [] };
     },

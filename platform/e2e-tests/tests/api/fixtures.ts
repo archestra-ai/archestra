@@ -7,6 +7,7 @@ import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
   editorAuthFile,
+  KEYCLOAK_OIDC,
   memberAuthFile,
   UI_BASE_URL,
   WIREMOCK_BASE_URL,
@@ -19,9 +20,12 @@ import {
 export interface TestFixtures {
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
+  createLlmProxy: typeof createLlmProxy;
   deleteAgent: typeof deleteAgent;
   createApiKey: typeof createApiKey;
   deleteApiKey: typeof deleteApiKey;
+  createIdentityProvider: typeof createIdentityProvider;
+  deleteIdentityProvider: typeof deleteIdentityProvider;
   createToolInvocationPolicy: typeof createToolInvocationPolicy;
   deleteToolInvocationPolicy: typeof deleteToolInvocationPolicy;
   createTrustedDataPolicy: typeof createTrustedDataPolicy;
@@ -30,10 +34,12 @@ export interface TestFixtures {
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
-  restartMcpServer: typeof restartMcpServer;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
+  createTeam: typeof createTeam;
+  deleteTeam: typeof deleteTeam;
   waitForAgentTool: typeof waitForAgentTool;
+  waitForProxyTool: typeof waitForProxyTool;
   getTeamByName: typeof getTeamByName;
   addTeamMember: typeof addTeamMember;
   removeTeamMember: typeof removeTeamMember;
@@ -44,9 +50,9 @@ export interface TestFixtures {
   createLimit: typeof createLimit;
   deleteLimit: typeof deleteLimit;
   getLimits: typeof getLimits;
-  createTokenPrice: typeof createTokenPrice;
-  deleteTokenPrice: typeof deleteTokenPrice;
-  getTokenPrices: typeof getTokenPrices;
+  getModels: typeof getModels;
+  syncModels: typeof syncModels;
+  updateModelPricing: typeof updateModelPricing;
   getOrganization: typeof getOrganization;
   updateOrganization: typeof updateOrganization;
   getInteractions: typeof getInteractions;
@@ -110,6 +116,22 @@ const createAgent = async (request: APIRequestContext, name: string) =>
   });
 
 /**
+ * Create an LLM Proxy
+ * (authnz is handled by the authenticated session)
+ */
+const createLlmProxy = async (request: APIRequestContext, name: string) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/agents",
+    data: {
+      name,
+      teams: [],
+      agentType: "llm_proxy",
+    },
+  });
+
+/**
  * Delete an agent
  * (authnz is handled by the authenticated session)
  */
@@ -151,6 +173,52 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
       keyId,
     },
   });
+
+/**
+ * Create an identity provider (SSO provider) via the API with OIDC config pointing to Keycloak.
+ * Returns the created provider's ID.
+ */
+const createIdentityProvider = async (
+  request: APIRequestContext,
+  providerId: string,
+): Promise<string> => {
+  const response = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/identity-providers",
+    data: {
+      providerId,
+      issuer: KEYCLOAK_OIDC.issuer,
+      domain: "jwks-test.example.com",
+      oidcConfig: {
+        issuer: KEYCLOAK_OIDC.issuer,
+        pkce: true,
+        clientId: KEYCLOAK_OIDC.clientId,
+        clientSecret: KEYCLOAK_OIDC.clientSecret,
+        discoveryEndpoint: KEYCLOAK_OIDC.discoveryEndpoint,
+        jwksEndpoint: KEYCLOAK_OIDC.jwksEndpoint,
+      },
+    },
+  });
+
+  const provider = await response.json();
+  return provider.id;
+};
+
+/**
+ * Delete an identity provider (SSO provider) via the API.
+ */
+const deleteIdentityProvider = async (
+  request: APIRequestContext,
+  id: string,
+): Promise<void> => {
+  await makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/identity-providers/${id}`,
+    ignoreStatusCheck: true,
+  });
+};
 
 /**
  * Create a tool invocation policy
@@ -250,6 +318,7 @@ const createMcpCatalogItem = async (
     localConfig?: unknown;
     serverUrl?: string;
     authFields?: unknown;
+    labels?: Array<{ key: string; value: string }>;
   },
 ) =>
   makeApiRequest({
@@ -286,6 +355,7 @@ const installMcpServer = async (
     userConfigValues?: Record<string, string>;
     environmentValues?: Record<string, string>;
     accessToken?: string;
+    agentIds?: string[];
   },
 ) =>
   makeApiRequest({
@@ -307,17 +377,6 @@ const uninstallMcpServer = async (
     request,
     method: "delete",
     urlSuffix: `/api/mcp_server/${serverId}`,
-  });
-
-/**
- * Restart an MCP server (local servers only)
- * (authnz is handled by the authenticated session)
- */
-const restartMcpServer = async (request: APIRequestContext, serverId: string) =>
-  makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: `/api/mcp_server/${serverId}/restart`,
   });
 
 /**
@@ -347,6 +406,33 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
     request,
     method: "delete",
     urlSuffix: `/api/roles/${roleId}`,
+  });
+
+/**
+ * Create a team
+ * (authnz is handled by the authenticated session)
+ */
+const createTeam = async (
+  request: APIRequestContext,
+  name: string,
+  description?: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/teams",
+    data: { name, ...(description != null && { description }) },
+  });
+
+/**
+ * Delete a team by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteTeam = async (request: APIRequestContext, teamId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/teams/${teamId}`,
   });
 
 /**
@@ -405,6 +491,52 @@ const waitForAgentTool = async (
 
   throw new Error(
     `Agent-tool '${toolName}' for agent '${agentId}' not found after ${maxAttempts} attempts`,
+  );
+};
+
+/**
+ * Wait for a proxy-discovered tool to appear in the tools list.
+ * Queries GET /api/tools/with-assignments filtered by name and llm-proxy origin.
+ */
+const waitForProxyTool = async (
+  request: APIRequestContext,
+  toolName: string,
+  options?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  },
+): Promise<{
+  id: string;
+  name: string;
+  description: string | null;
+  catalogId: string | null;
+}> => {
+  const maxAttempts = options?.maxAttempts ?? 20;
+  const delayMs = options?.delayMs ?? 1000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/tools/with-assignments?search=${encodeURIComponent(toolName)}&origin=llm-proxy`,
+      ignoreStatusCheck: true,
+    });
+
+    if (response.ok()) {
+      const result = await response.json();
+      const found = result.data.find(
+        (t: { name: string }) => t.name === toolName,
+      );
+      if (found) return found;
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error(
+    `Proxy tool '${toolName}' not found after ${maxAttempts} attempts`,
   );
 };
 
@@ -609,50 +741,47 @@ const getLimits = async (
 };
 
 /**
- * Create a token price for a model
+ * Get all models with their API keys and capabilities
  * (authnz is handled by the authenticated session)
  */
-const createTokenPrice = async (
+const getModels = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/models",
+  });
+
+/**
+ * Trigger a model sync from all providers.
+ * Useful in tests to ensure models are synced when WireMock may not have been
+ * ready during backend startup seed.
+ * (authnz is handled by the authenticated session)
+ */
+const syncModels = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/chat/models/sync",
+  });
+
+/**
+ * Update custom pricing for a model by its internal UUID.
+ * Set prices to null to reset to default pricing.
+ * (authnz is handled by the authenticated session)
+ */
+const updateModelPricing = async (
   request: APIRequestContext,
-  tokenPrice: {
-    provider: SupportedProvider;
-    model: string;
-    pricePerMillionInput: string;
-    pricePerMillionOutput: string;
+  modelId: string,
+  pricing: {
+    customPricePerMillionInput: string | null;
+    customPricePerMillionOutput: string | null;
   },
 ) =>
   makeApiRequest({
     request,
-    method: "post",
-    urlSuffix: "/api/token-prices",
-    data: tokenPrice,
-    ignoreStatusCheck: true, // May return 409 if already exists
-  });
-
-/**
- * Delete a token price by ID
- * (authnz is handled by the authenticated session)
- */
-const deleteTokenPrice = async (
-  request: APIRequestContext,
-  tokenPriceId: string,
-) =>
-  makeApiRequest({
-    request,
-    method: "delete",
-    urlSuffix: `/api/token-prices/${tokenPriceId}`,
-    ignoreStatusCheck: true, // May already be deleted
-  });
-
-/**
- * Get all token prices
- * (authnz is handled by the authenticated session)
- */
-const getTokenPrices = async (request: APIRequestContext) =>
-  makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/token-prices",
+    method: "patch",
+    urlSuffix: `/api/models/${modelId}/pricing`,
+    data: pricing,
   });
 
 /**
@@ -788,6 +917,9 @@ export const test = base.extend<TestFixtures>({
   createAgent: async ({}, use) => {
     await use(createAgent);
   },
+  createLlmProxy: async ({}, use) => {
+    await use(createLlmProxy);
+  },
   deleteAgent: async ({}, use) => {
     await use(deleteAgent);
   },
@@ -796,6 +928,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteApiKey: async ({}, use) => {
     await use(deleteApiKey);
+  },
+  createIdentityProvider: async ({}, use) => {
+    await use(createIdentityProvider);
+  },
+  deleteIdentityProvider: async ({}, use) => {
+    await use(deleteIdentityProvider);
   },
   createToolInvocationPolicy: async ({}, use) => {
     await use(createToolInvocationPolicy);
@@ -821,17 +959,23 @@ export const test = base.extend<TestFixtures>({
   uninstallMcpServer: async ({}, use) => {
     await use(uninstallMcpServer);
   },
-  restartMcpServer: async ({}, use) => {
-    await use(restartMcpServer);
-  },
   createRole: async ({}, use) => {
     await use(createRole);
   },
   deleteRole: async ({}, use) => {
     await use(deleteRole);
   },
+  createTeam: async ({}, use) => {
+    await use(createTeam);
+  },
+  deleteTeam: async ({}, use) => {
+    await use(deleteTeam);
+  },
   waitForAgentTool: async ({}, use) => {
     await use(waitForAgentTool);
+  },
+  waitForProxyTool: async ({}, use) => {
+    await use(waitForProxyTool);
   },
   getTeamByName: async ({}, use) => {
     await use(getTeamByName);
@@ -863,14 +1007,14 @@ export const test = base.extend<TestFixtures>({
   getLimits: async ({}, use) => {
     await use(getLimits);
   },
-  createTokenPrice: async ({}, use) => {
-    await use(createTokenPrice);
+  getModels: async ({}, use) => {
+    await use(getModels);
   },
-  deleteTokenPrice: async ({}, use) => {
-    await use(deleteTokenPrice);
+  syncModels: async ({}, use) => {
+    await use(syncModels);
   },
-  getTokenPrices: async ({}, use) => {
-    await use(getTokenPrices);
+  updateModelPricing: async ({}, use) => {
+    await use(updateModelPricing);
   },
   getOrganization: async ({}, use) => {
     await use(getOrganization);

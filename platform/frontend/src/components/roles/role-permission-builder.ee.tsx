@@ -1,6 +1,11 @@
 "use client";
 
-import type { Action, Permissions, Resource } from "@shared";
+import {
+  type Action,
+  type Permissions,
+  type Resource,
+  resourceLabels,
+} from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,12 +23,13 @@ interface RolePermissionBuilderProps {
 // Group resources by category for better organization
 const resourceCategories: Record<string, Resource[]> = {
   "Core Resources": [
-    "profile",
+    "agent",
+    "mcpGateway",
+    "llmProxy",
     "tool",
     "policy",
     "interaction",
     "conversation",
-    "prompt",
   ],
   "MCP & Integrations": [
     "mcpServer",
@@ -39,35 +45,10 @@ const resourceCategories: Record<string, Resource[]> = {
     "team",
     "invitation",
     "limit",
-    "tokenPrice",
+    "llmModels",
     "chatSettings",
-    "ssoProvider",
+    "identityProvider",
   ],
-};
-
-// Human-readable labels for resources
-const resourceLabels: Record<Resource, string> = {
-  profile: "Profiles",
-  tool: "Tools",
-  policy: "Policies",
-  interaction: "Interactions",
-  dualLlmConfig: "Dual LLM Configs",
-  dualLlmResult: "Dual LLM Results",
-  organization: "Organization",
-  ssoProvider: "SSO Providers",
-  member: "Members",
-  invitation: "Invitations",
-  internalMcpCatalog: "Internal MCP Catalog",
-  mcpServer: "MCP Servers",
-  mcpServerInstallationRequest: "MCP Server Installation Requests",
-  mcpToolCall: "MCP Tool Calls",
-  team: "Teams",
-  ac: "Access Control",
-  conversation: "Conversations",
-  limit: "Limits",
-  tokenPrice: "Token Prices",
-  chatSettings: "Chat Settings",
-  prompt: "Prompts",
 };
 
 // Human-readable labels for actions

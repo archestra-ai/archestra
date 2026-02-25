@@ -16,23 +16,23 @@ const config: KnipConfig = {
     "postcss",
     // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
     "elkjs",
-    // React DOM is used implicitly by Next.js for rendering
+    // Core React/Next.js deps - required at runtime
     "react-dom",
-    // Testing library DOM is a peer dependency of @testing-library/react
+    // Testing peer dependency
     "@testing-library/dom",
     // Type definitions for react-dom
     "@types/react-dom",
-    // Tailwind CSS is used via @tailwindcss/postcss in postcss.config.mjs
+    // Used by @tailwindcss/postcss at build time
     "tailwindcss",
   ],
   ignoreBinaries: [
     // biome is in root package.json
     "biome",
-    // These are provided by devDependencies and used in scripts
-    "vitest",
-    "knip",
+    // Provided by devDependencies but knip doesn't resolve in pnpm monorepo
     "next",
     "tsc",
+    "vitest",
+    "knip",
   ],
   rules: {
     // shadcn/ui components export all variants for completeness - intentional pattern

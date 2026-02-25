@@ -1,12 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { archestraApiSdk } from "@shared";
-import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
+import { Check, Copy, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { CopyableCode } from "@/components/copyable-code";
+import { CurlExampleSection } from "@/components/curl-example-section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,10 +20,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/features.query";
+import { useFeatures } from "@/lib/config.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
-import { useTokens } from "@/lib/team-token.query";
-import { useUserToken } from "@/lib/user-token.query";
+import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
+import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { EmailNotConfiguredMessage } from "./email-not-configured-message";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -42,26 +43,21 @@ export function A2AConnectionInstructions({
   // Filter tokens by the agent's teams (internal agents are profiles)
   const { data: tokensData } = useTokens({ profileId: agent.id });
   const { data: userToken } = useUserToken();
-  const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ["admin"],
+  const { data: hasAdminPermission } = useHasPermissions({
+    agent: ["admin"],
   });
   const { data: features } = useFeatures();
 
   const tokens = tokensData?.tokens;
-  const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedChatLink, setCopiedChatLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
-  const [showExposedToken, setShowExposedToken] = useState(false);
-  const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
-    null,
-  );
-  const [isLoadingToken, setIsLoadingToken] = useState(false);
-  const [isCopyingCode, setIsCopyingCode] = useState(false);
+
+  // Mutations for fetching token values
+  const fetchUserTokenMutation = useFetchUserTokenValue();
+  const fetchTeamTokenMutation = useFetchTeamTokenValue();
 
   // Email invocation - check both global feature AND agent-level setting
   const globalEmailEnabled = features?.incomingEmail?.enabled ?? false;
@@ -73,14 +69,6 @@ export function A2AConnectionInstructions({
     emailEnabled ? agent.id : null,
   );
   const agentEmailAddress = emailAddressData?.emailAddress ?? null;
-
-  const handleCopyEmail = useCallback(async () => {
-    if (!agentEmailAddress) return;
-    await navigator.clipboard.writeText(agentEmailAddress);
-    setCopiedEmail(true);
-    toast.success("Email address copied");
-    setTimeout(() => setCopiedEmail(false), 2000);
-  }, [agentEmailAddress]);
 
   // A2A endpoint
   const a2aEndpoint = `${connectionUrl}/a2a/${agent.id}`;
@@ -117,68 +105,14 @@ export function A2AConnectionInstructions({
     return "Select token";
   };
 
-  // Determine display token based on selection
-  const tokenForDisplay =
-    showExposedToken && exposedTokenValue
-      ? exposedTokenValue
-      : isPersonalTokenSelected
-        ? userToken
-          ? `${userToken.tokenStart}***`
-          : "ask-admin-for-access-token"
-        : hasProfileAdminPermission && selectedTeamToken
-          ? `${selectedTeamToken.tokenStart}***`
-          : "ask-admin-for-access-token";
-
-  const handleExposeToken = useCallback(async () => {
-    if (showExposedToken) {
-      // Hide token
-      setShowExposedToken(false);
-      setExposedTokenValue(null);
-      return;
-    }
-
-    setIsLoadingToken(true);
-    try {
-      let tokenValue: string;
-
-      if (isPersonalTokenSelected) {
-        // Fetch personal token value
-        const response = await archestraApiSdk.getUserTokenValue();
-        if (response.error || !response.data) {
-          throw new Error("Failed to fetch personal token value");
-        }
-        tokenValue = (response.data as { value: string }).value;
-      } else {
-        // Fetch team token value
-        if (!selectedTeamToken) {
-          setIsLoadingToken(false);
-          return;
-        }
-        const response = await archestraApiSdk.getTokenValue({
-          path: { tokenId: selectedTeamToken.id },
-        });
-        if (response.error || !response.data) {
-          throw new Error("Failed to fetch token value");
-        }
-        tokenValue = (response.data as { value: string }).value;
-      }
-
-      setExposedTokenValue(tokenValue);
-      setShowExposedToken(true);
-    } catch (error) {
-      toast.error("Failed to fetch token");
-      console.error(error);
-    } finally {
-      setIsLoadingToken(false);
-    }
-  }, [isPersonalTokenSelected, selectedTeamToken, showExposedToken]);
-
-  const handleCopyUrl = useCallback(async () => {
-    await navigator.clipboard.writeText(a2aEndpoint);
-    setCopiedUrl(true);
-    toast.success("A2A endpoint URL copied");
-    setTimeout(() => setCopiedUrl(false), 2000);
-  }, [a2aEndpoint]);
+  // Determine display token based on selection (masked)
+  const tokenForDisplay = isPersonalTokenSelected
+    ? userToken
+      ? `${userToken.tokenStart}***`
+      : "ask-admin-for-access-token"
+    : hasAdminPermission && selectedTeamToken
+      ? `${selectedTeamToken.tokenStart}***`
+      : "ask-admin-for-access-token";
 
   const handleCopyChatLink = useCallback(async () => {
     const exampleMessage =
@@ -220,50 +154,6 @@ curl -X GET "${agentCardUrl}" \\
     [agentCardUrl, tokenForDisplay],
   );
 
-  const handleCopyCode = useCallback(
-    async (code: string) => {
-      setIsCopyingCode(true);
-      try {
-        // Fetch real token if available
-        let tokenValue = tokenForDisplay;
-
-        if (isPersonalTokenSelected || hasProfileAdminPermission) {
-          try {
-            if (isPersonalTokenSelected) {
-              const response = await archestraApiSdk.getUserTokenValue();
-              if (response.data) {
-                tokenValue = (response.data as { value: string }).value;
-              }
-            } else if (selectedTeamToken) {
-              const response = await archestraApiSdk.getTokenValue({
-                path: { tokenId: selectedTeamToken.id },
-              });
-              if (response.data) {
-                tokenValue = (response.data as { value: string }).value;
-              }
-            }
-          } catch {
-            // Keep the display token if fetch fails
-          }
-        }
-
-        const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
-        await navigator.clipboard.writeText(codeWithRealToken);
-        setCopiedCode(true);
-        toast.success("Code copied with token");
-        setTimeout(() => setCopiedCode(false), 2000);
-      } finally {
-        setIsCopyingCode(false);
-      }
-    },
-    [
-      tokenForDisplay,
-      isPersonalTokenSelected,
-      hasProfileAdminPermission,
-      selectedTeamToken,
-    ],
-  );
-
   return (
     <div className="space-y-6">
       <ConnectionBaseUrlSelect
@@ -274,25 +164,15 @@ curl -X GET "${agentCardUrl}" \\
       {/* A2A Endpoint URL */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">A2A Endpoint URL</Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-            <CodeText className="text-xs text-primary break-all flex-1">
-              {a2aEndpoint}
-            </CodeText>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 flex-shrink-0"
-              onClick={handleCopyUrl}
-            >
-              {copiedUrl ? (
-                <Check className="h-3 w-3 text-green-500" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </Button>
-          </div>
-        </div>
+        <CopyableCode
+          value={a2aEndpoint}
+          toastMessage="A2A endpoint URL copied"
+          variant="primary"
+        >
+          <CodeText className="text-xs text-primary break-all">
+            {a2aEndpoint}
+          </CodeText>
+        </CopyableCode>
       </div>
 
       {/* Chat Deep Link */}
@@ -338,9 +218,6 @@ curl -X GET "${agentCardUrl}" \\
           value={effectiveTokenId}
           onValueChange={(value) => {
             setSelectedTokenId(value);
-            // Reset exposed token state when changing token selection
-            setShowExposedToken(false);
-            setExposedTokenValue(null);
           }}
         >
           <SelectTrigger className="w-full min-h-[60px] py-2.5">
@@ -409,124 +286,28 @@ curl -X GET "${agentCardUrl}" \\
         <Label className="text-sm font-medium">cURL Examples</Label>
 
         {/* Send message example */}
-        <div className="bg-muted rounded-md p-3 pt-12 relative">
-          <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
-            <code>{curlCode}</code>
-          </pre>
-          <div className="absolute top-2 right-2 flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={handleExposeToken}
-              disabled={
-                isLoadingToken ||
-                (!isPersonalTokenSelected && !hasProfileAdminPermission)
-              }
-            >
-              {isLoadingToken ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading...</span>
-                </>
-              ) : showExposedToken ? (
-                <>
-                  <EyeOff className="h-4 w-4" />
-                  <span>Hide token</span>
-                </>
-              ) : (
-                <>
-                  <Eye className="h-4 w-4" />
-                  <span>Expose token</span>
-                </>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={() => handleCopyCode(curlCode)}
-              disabled={isCopyingCode}
-            >
-              {isCopyingCode ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Copying...</span>
-                </>
-              ) : copiedCode ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy with exposed token</span>
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+        <CurlExampleSection
+          key={`send-${effectiveTokenId}`}
+          code={curlCode}
+          tokenForDisplay={tokenForDisplay}
+          isPersonalTokenSelected={isPersonalTokenSelected}
+          hasAdminPermission={hasAdminPermission ?? false}
+          selectedTeamToken={selectedTeamToken ?? null}
+          fetchUserTokenMutation={fetchUserTokenMutation}
+          fetchTeamTokenMutation={fetchTeamTokenMutation}
+        />
 
         {/* Agent Card discovery example */}
-        <div className="bg-muted rounded-md p-3 pt-12 relative">
-          <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
-            <code>{agentCardCurlCode}</code>
-          </pre>
-          <div className="absolute top-2 right-2 flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={handleExposeToken}
-              disabled={
-                isLoadingToken ||
-                (!isPersonalTokenSelected && !hasProfileAdminPermission)
-              }
-            >
-              {isLoadingToken ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading...</span>
-                </>
-              ) : showExposedToken ? (
-                <>
-                  <EyeOff className="h-4 w-4" />
-                  <span>Hide token</span>
-                </>
-              ) : (
-                <>
-                  <Eye className="h-4 w-4" />
-                  <span>Expose token</span>
-                </>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={() => handleCopyCode(agentCardCurlCode)}
-              disabled={isCopyingCode}
-            >
-              {isCopyingCode ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Copying...</span>
-                </>
-              ) : copiedCode ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy with exposed token</span>
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+        <CurlExampleSection
+          key={`card-${effectiveTokenId}`}
+          code={agentCardCurlCode}
+          tokenForDisplay={tokenForDisplay}
+          isPersonalTokenSelected={isPersonalTokenSelected}
+          hasAdminPermission={hasAdminPermission ?? false}
+          selectedTeamToken={selectedTeamToken ?? null}
+          fetchUserTokenMutation={fetchUserTokenMutation}
+          fetchTeamTokenMutation={fetchTeamTokenMutation}
+        />
       </div>
 
       {/* Email Invocation Section - always show, with configuration guidance when not enabled */}
@@ -575,26 +356,18 @@ curl -X GET "${agentCardUrl}" \\
                   Send an email to invoke this agent. The email body will be
                   used as the first message.
                 </Label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-                    <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <CodeText className="text-xs text-primary break-all flex-1">
+                <CopyableCode
+                  value={agentEmailAddress}
+                  toastMessage="Email address copied"
+                  variant="primary"
+                >
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <CodeText className="text-xs text-primary break-all">
                       {agentEmailAddress}
                     </CodeText>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={handleCopyEmail}
-                    >
-                      {copiedEmail ? (
-                        <Check className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                    </Button>
                   </div>
-                </div>
+                </CopyableCode>
               </div>
             )}
           </>

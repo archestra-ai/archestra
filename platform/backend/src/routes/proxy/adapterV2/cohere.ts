@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -322,6 +322,11 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
       outputTokens:
         usage?.tokens?.output_tokens ?? usage?.billed_units?.output_tokens ?? 0,
     };
+  }
+
+  getFinishReasons(): string[] {
+    const reason = this.response?.finish_reason;
+    return reason ? [reason] : [];
   }
 
   getOriginalResponse(): CohereResponse {
@@ -781,15 +786,12 @@ export async function convertToolResultsToToon(
   // Calculate cost savings
   let costSavings = 0;
   if (totalTokensBefore > 0) {
-    const tokenPrice = await TokenPriceModel.findByModel(model);
-    if (tokenPrice) {
-      const savedTokens = totalTokensBefore - totalTokensAfter;
-      const inputPricePerToken =
-        parseFloat(tokenPrice.pricePerMillionInput) / 1_000_000;
-      costSavings =
-        savedTokens *
-        (Number.isFinite(inputPricePerToken) ? inputPricePerToken : 0);
-    }
+    const savedTokens = totalTokensBefore - totalTokensAfter;
+    costSavings = await ModelModel.calculateCostSavings(
+      model,
+      savedTokens,
+      "cohere",
+    );
   }
 
   return {
@@ -822,7 +824,11 @@ function createCohereClient(
   const baseUrl = options.baseUrl || config.llm.cohere.baseUrl;
   // Only wrap fetch with metrics when agent context is available
   const observableFetch = options.agent
-    ? getObservableFetch("cohere", options.agent, options.externalAgentId)
+    ? metrics.llm.getObservableFetch(
+        "cohere",
+        options.agent,
+        options.externalAgentId,
+      )
     : fetch;
 
   return {
@@ -917,6 +923,15 @@ function extractErrorMessage(error: unknown): string {
   return String(error);
 }
 
+export function getUsageTokens(usage: Cohere.Types.Usage) {
+  return {
+    input:
+      usage?.tokens?.input_tokens ?? usage?.billed_units?.input_tokens ?? 0,
+    output:
+      usage?.tokens?.output_tokens ?? usage?.billed_units?.output_tokens ?? 0,
+  };
+}
+
 export const cohereAdapterFactory: LLMProvider<
   CohereRequest,
   CohereResponse,
@@ -976,7 +991,5 @@ export const cohereAdapterFactory: LLMProvider<
     return config.llm.cohere.baseUrl;
   },
 
-  getSpanName(): string {
-    return "cohere.chat";
-  },
+  spanName: "chat",
 };

@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/cimd/mismatched-client-id.json"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"client_id\": \"https://wrong-host.example.com/cimd/mismatched-client-id.json\", \"client_name\": \"Mismatched Client\", \"redirect_uris\": [\"http://127.0.0.1:34567/callback\"]}"
+  }
+}

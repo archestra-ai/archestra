@@ -24,6 +24,8 @@ Docker deployment provides the fastest way to get started with Archestra Platfor
 
 Run the platform with a single command:
 
+**Linux / macOS:**
+
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
@@ -31,6 +33,18 @@ docker run -p 9000:9000 -p 3000:3000 \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker pull archestra/platform:latest;
+docker run -p 9000:9000 -p 3000:3000 `
+   -e ARCHESTRA_QUICKSTART=true `
+   -v /var/run/docker.sock:/var/run/docker.sock `
+   -v archestra-postgres-data:/var/lib/postgresql/data `
+   -v archestra-app-data:/app/data `
    archestra/platform;
 ```
 
@@ -42,6 +56,8 @@ This will start the platform with:
 - **MCP Kubernetes Orchestrator** via KinD
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
+
+> **Accessing from another device on your network?** In quickstart mode, private network IPs (e.g., `192.168.x.x`, `10.x.x.x`) are automatically trusted, so authentication works without extra configuration.
 
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
@@ -155,6 +171,9 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
+- `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: false). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
+- `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
+- `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked
 - `archestra.orchestrator.kubernetes.mcpServerRbac.create` - Create MCP server RBAC resources (ServiceAccount, Role, RoleBinding) for Kubernetes MCP server (default: true)
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalClusterRoleBindings` - Additional ClusterRoleBindings to attach to the MCP K8s operator service account for cluster-wide permissions
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalRoleBindings` - Additional RoleBindings to attach to the MCP K8s operator service account for namespace-scoped permissions
@@ -164,7 +183,8 @@ openssl rand -base64 32
 **Deployment Settings**:
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
-- `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types)
+- `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
+- `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
@@ -407,6 +427,87 @@ helm upgrade archestra-platform \
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
 
+#### SSRF Protection for MCP Server Pods
+
+The Helm chart includes an optional Kubernetes `NetworkPolicy` that prevents MCP server pods from performing Server-Side Request Forgery (SSRF) attacks. When enabled, it blocks outbound connections to private/internal IP ranges while allowing DNS resolution and public internet access.
+
+This policy is **disabled by default** to avoid breaking MCP servers that connect to internal Kubernetes services (e.g., `grafana.monitoring.svc.cluster.local`). If your MCP servers only need public internet access, enabling this policy is recommended.
+
+To enable the policy:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        create: true
+```
+
+**Blocked IPv4 ranges** (when enabled):
+
+- `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
+- `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
+- `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
+- `127.0.0.0/8` - Loopback
+- `0.0.0.0/32` - Treated as localhost by some HTTP libraries
+
+**Blocked IPv6 ranges** (for dual-stack clusters):
+
+- `::1/128` - IPv6 loopback
+- `fc00::/7` - Unique local addresses (equivalent to RFC 1918)
+- `fe80::/10` - Link-local
+
+**Prerequisite**: Your cluster must use a CNI plugin that enforces `NetworkPolicies` (e.g., Calico, Cilium). The default GKE CNI (kubenet) does **not** enforce `NetworkPolicies` unless Dataplane V2 or Calico is enabled.
+
+MCP servers that need to connect to internal Kubernetes services will be blocked when this policy is enabled because ClusterIPs fall within the denied private ranges. Use `additionalEgressRules` to whitelist specific internal services.
+
+By pod/namespace labels (recommended — survives IP changes):
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        additionalEgressRules:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: monitoring
+                podSelector:
+                  matchLabels:
+                    app: grafana
+            ports:
+              - protocol: TCP
+                port: 3000
+```
+
+By IP CIDR:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        additionalEgressRules:
+          - to:
+              - ipBlock:
+                  cidr: 10.0.50.0/24
+            ports:
+              - protocol: TCP
+                port: 443
+```
+
+To block additional CIDR ranges beyond the defaults:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      networkPolicy:
+        additionalDeniedCidrs:
+          - 198.51.100.0/24
+```
+
 ### Accessing the Platform
 
 After installation, access the platform using port forwarding:
@@ -434,6 +535,10 @@ For production deployments, we strongly recommend using a cloud-hosted PostgreSQ
 - **Monitoring** and alerting out of the box
 
 To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
+
+#### SSRF Protection
+
+Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from accessing private/internal networks. This is especially important when MCP servers execute untrusted code or connect to external services. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods) for configuration details.
 
 ## Infrastructure as Code
 
@@ -497,10 +602,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
   - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
 
-- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
+- **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
 
   - Example: `https://frontend.example.com`
-  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
+  - Highly recommended for production.
+  - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
 
@@ -548,7 +654,7 @@ The following environment variables can be used to configure Archestra Platform.
 
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
-  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/docs/platform-single-sign-on) for SSO configuration.
+  - Note: Configure at least one Identity Provider before enabling this option. See [Identity Providers](/docs/platform-identity-providers) for SSO configuration.
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
 
@@ -557,12 +663,12 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
-- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
 
-  - Default: None
+  - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
-  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
-  - Required when configuring SSO with external identity providers hosted on different domains
+  - Use this to trust external identity providers (IdPs) for SSO, or to allow access from multiple URLs (e.g., both a LAN IP and a domain name)
+  - Example for LAN access alongside localhost: `http://192.168.1.5:3000,http://192.168.1.5:9000`
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
 
@@ -581,7 +687,16 @@ The following environment variables can be used to configure Archestra Platform.
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
+- **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Read the database connection string from Vault instead of environment variables.
+
+  - Optional: Only used when `ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`
+  - Format: `path:key` where `path` is the Vault secret path and `key` is the field containing the database URL
+  - KV v2 example: `secret/data/archestra/database:connection_string`
+  - KV v1 example: `secret/archestra/database:connection_string`
+
 ### LLM Provider Configuration
+
+These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
@@ -599,6 +714,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Use this to point to your own proxy or other custom endpoints
   - Note: This is only used when Vertex AI mode is disabled
 
+- **`ARCHESTRA_GROQ_BASE_URL`** - Override the Groq API base URL.
+
+  - Default: `https://api.groq.com/openai/v1`
+  - Use this to point to your own proxy, a Groq-compatible API, or other custom endpoints
+
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your vLLM server.
 
   - Required to enable vLLM provider support
@@ -607,9 +727,21 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
 
-  - Required to enable Ollama provider support
-  - Example: `http://localhost:11434/v1` (default Ollama)
+  - Default: `http://localhost:11434/v1` (Ollama is enabled by default)
+  - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
+- **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
+
+  - Default: `10`
+  - Virtual keys are `archestra_`-prefixed tokens used by external LLM Proxy clients
+  - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
+
+- **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
+
+  - Default: `2592000` (30 days)
+  - Set to `0` to create virtual keys that never expire by default
+  - Users can override this per-key when creating virtual keys via the UI
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
@@ -691,6 +823,23 @@ The following environment variables can be used to configure Archestra Platform.
 
   - Optional: Takes precedence over basic authentication if provided
   - Example: `your-bearer-token`
+
+- **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
+
+  - Default: `true` (enabled)
+  - Set to `false` to disable content capture for privacy or to reduce span sizes
+
+- **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
+
+  - Default: `10000` (10,000 characters)
+  - Content exceeding this limit is truncated with a `...[truncated]` suffix
+  - Only applies when `ARCHESTRA_OTEL_CAPTURE_CONTENT` is enabled
+
+- **`ARCHESTRA_OTEL_VERBOSE_TRACING`** - Enable verbose infrastructure spans (HTTP routes, outgoing HTTP calls, Node.js fetch, etc).
+
+  - Default: `false` (disabled)
+  - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
+  - Set to `true` to include infrastructure spans for debugging request flows
 
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
 
@@ -783,6 +932,44 @@ These environment variables configure the ChatOps feature, which allows users to
 
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
+
+#### Slack
+
+See [Slack](/docs/platform-slack) for setup instructions.
+
+- **`ARCHESTRA_CHATOPS_SLACK_ENABLED`** - Enable Slack integration.
+
+  - Default: `false`
+  - Set to `true` to enable the Slack chatops provider
+
+- **`ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN`** - Slack Bot User OAuth Token.
+
+  - Required when: `ARCHESTRA_CHATOPS_SLACK_ENABLED=true`
+  - Starts with `xoxb-`
+  - Found in: OAuth & Permissions page → Bot User OAuth Token
+
+- **`ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET`** - Slack app signing secret for webhook signature verification.
+
+  - Required when: using webhook mode (default)
+  - Found in: Basic Information page → App Credentials → Signing Secret
+
+- **`ARCHESTRA_CHATOPS_SLACK_APP_ID`** - Slack App ID.
+
+  - Optional but recommended for DM deep links
+  - Found in: Basic Information page → App ID
+
+- **`ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE`** - Connection mode for Slack integration.
+
+  - Default: `socket`
+  - Options: `socket`, `webhook`
+  - `socket`: Archestra connects to Slack via an outbound WebSocket (no public URL required)
+  - `webhook`: Slack sends events to your public webhook URLs (requires a publicly accessible Archestra instance)
+
+- **`ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN`** - Slack App-Level Token for socket mode.
+
+  - Required for the default socket mode
+  - Starts with `xapp-`
+  - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
 ### Knowledge Graph Configuration
 

@@ -2,8 +2,8 @@
 
 import { RefreshCw, Server } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useCheckSecretsConnectivity,
   useSecretsType,
@@ -49,7 +49,8 @@ export default function SecretsSettingsPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button
+            <PermissionButton
+              permissions={{ organization: ["update"] }}
               onClick={handleCheckConnectivity}
               disabled={checkConnectivityMutation.isPending}
             >
@@ -57,7 +58,7 @@ export default function SecretsSettingsPage() {
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
               )}
               Check Vault Connectivity
-            </Button>
+            </PermissionButton>
           </div>
 
           {checkConnectivityMutation.isError && (
@@ -70,15 +71,16 @@ export default function SecretsSettingsPage() {
             </Alert>
           )}
 
-          {checkConnectivityMutation.isSuccess && (
-            <Alert>
-              <AlertTitle>Connection Successful</AlertTitle>
-              <AlertDescription>
-                Found {checkConnectivityMutation.data.secretCount} secret
-                {checkConnectivityMutation.data.secretCount === 1 ? "" : "s"}.
-              </AlertDescription>
-            </Alert>
-          )}
+          {checkConnectivityMutation.isSuccess &&
+            checkConnectivityMutation.data && (
+              <Alert>
+                <AlertTitle>Connection Successful</AlertTitle>
+                <AlertDescription>
+                  Found {checkConnectivityMutation.data.secretCount} secret
+                  {checkConnectivityMutation.data.secretCount === 1 ? "" : "s"}.
+                </AlertDescription>
+              </Alert>
+            )}
         </CardContent>
       </Card>
     </div>

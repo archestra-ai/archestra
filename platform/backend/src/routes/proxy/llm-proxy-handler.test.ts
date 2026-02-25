@@ -14,7 +14,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import config from "@/config";
-import { TokenPriceModel } from "@/models";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
@@ -41,7 +41,7 @@ vi.mock("prom-client", () => ({
 }));
 
 // Import after mock to ensure mock is applied
-import { initializeMetrics } from "@/llm-metrics";
+import { metrics } from "@/observability";
 import anthropicProxyRoutesV2 from "./routesv2/anthropic";
 import geminiProxyRoutesV2 from "./routesv2/gemini";
 import openAiProxyRoutesV2 from "./routesv2/openai";
@@ -65,7 +65,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
     testAgent = await makeAgent({ name: "Test Metrics Agent" });
 
     // Initialize metrics
-    initializeMetrics([]);
+    metrics.llm.initializeMetrics([]);
   });
 
   afterEach(async () => {
@@ -78,11 +78,15 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       await app.register(openAiProxyRoutesV2);
 
       // Create token pricing for mock model
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4o",
         provider: "openai",
-        model: "gpt-4o",
-        pricePerMillionInput: "2.50",
-        pricePerMillionOutput: "10.00",
+        modelId: "gpt-4o",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "2.50",
+        customPricePerMillionOutput: "10.00",
+        lastSyncedAt: new Date(),
       });
     });
 
@@ -110,35 +114,41 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify token metrics (input: 12, output: 10 from MockOpenAIClient)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "openai",
-          type: "input",
-          model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "openai",
+            type: "input",
+            model: "gpt-4o",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 12,
         }),
-        12,
       );
 
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "openai",
-          type: "output",
-          model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "openai",
+            type: "output",
+            model: "gpt-4o",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 10,
         }),
-        10,
       );
 
       // Verify cost metric was called with provider and model
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "openai",
-          model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "openai",
+            model: "gpt-4o",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
         }),
-        expect.any(Number),
       );
 
       // Note: TTFT and tokens/sec histograms may be skipped in mock mode
@@ -172,12 +182,14 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify cost metric was called
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "openai",
-          model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "openai",
+            model: "gpt-4o",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
         }),
-        expect.any(Number),
       );
     });
 
@@ -210,24 +222,28 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify token metrics (input: 82, output: 17 from MockOpenAIClient non-streaming)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "openai",
-          type: "input",
-          model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "openai",
+            type: "input",
+            model: "gpt-4o",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 82,
         }),
-        82,
       );
 
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "openai",
-          type: "output",
-          model: "gpt-4o",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "openai",
+            type: "output",
+            model: "gpt-4o",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 17,
         }),
-        17,
       );
     });
   });
@@ -237,11 +253,15 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       await app.register(anthropicProxyRoutesV2);
 
       // Create token pricing for mock model
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-3-5-sonnet-20241022",
         provider: "anthropic",
-        model: "claude-3-5-sonnet-20241022",
-        pricePerMillionInput: "3.00",
-        pricePerMillionOutput: "15.00",
+        modelId: "claude-3-5-sonnet-20241022",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "3.00",
+        customPricePerMillionOutput: "15.00",
+        lastSyncedAt: new Date(),
       });
     });
 
@@ -270,35 +290,41 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify token metrics (input: 12, output: 10 from MockAnthropicClient)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
-          type: "input",
-          model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            type: "input",
+            model: "claude-3-5-sonnet-20241022",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 12,
         }),
-        12,
       );
 
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
-          type: "output",
-          model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            type: "output",
+            model: "claude-3-5-sonnet-20241022",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 10,
         }),
-        10,
       );
 
       // Verify cost metric was called with provider and model
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
-          model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            model: "claude-3-5-sonnet-20241022",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
         }),
-        expect.any(Number),
       );
 
       // Note: TTFT and tokens/sec histograms may be skipped in mock mode
@@ -333,12 +359,14 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify cost metric was called
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
-          model: "claude-3-5-sonnet-20241022",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            model: "claude-3-5-sonnet-20241022",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
         }),
-        expect.any(Number),
       );
     });
   });
@@ -348,11 +376,15 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       await app.register(geminiProxyRoutesV2);
 
       // Create token pricing for mock model
-      await TokenPriceModel.create({
+      await ModelModel.upsert({
+        externalId: "gemini/gemini-2.5-pro",
         provider: "gemini",
-        model: "gemini-2.5-pro",
-        pricePerMillionInput: "1.25",
-        pricePerMillionOutput: "5.00",
+        modelId: "gemini-2.5-pro",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "1.25",
+        customPricePerMillionOutput: "5.00",
+        lastSyncedAt: new Date(),
       });
     });
 
@@ -382,35 +414,41 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify token metrics (input: 12, output: 10 from MockGeminiClient streaming)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "gemini",
-          type: "input",
-          model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "gemini",
+            type: "input",
+            model: "gemini-2.5-pro",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 12,
         }),
-        12,
       );
 
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "gemini",
-          type: "output",
-          model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "gemini",
+            type: "output",
+            model: "gemini-2.5-pro",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: 10,
         }),
-        10,
       );
 
       // Verify cost metric was called with provider and model
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "gemini",
-          model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "gemini",
+            model: "gemini-2.5-pro",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
         }),
-        expect.any(Number),
       );
 
       // Note: TTFT and tokens/sec histograms may be skipped in mock mode
@@ -446,12 +484,14 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Verify cost metric was called
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "gemini",
-          model: "gemini-2.5-pro",
-          profile_id: testAgent.id,
-          profile_name: testAgent.name,
+          labels: expect.objectContaining({
+            provider: "gemini",
+            model: "gemini-2.5-pro",
+            agent_id: testAgent.id,
+            agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
         }),
-        expect.any(Number),
       );
     });
   });

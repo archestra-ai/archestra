@@ -24,10 +24,36 @@ export type PolicyEvaluationContext = {
   externalAgentId?: string;
 };
 
+const BLOCK_ALWAYS_REASON =
+  "Tool invocation blocked: policy is configured to always block tool call";
+const UNTRUSTED_CONTEXT_REASON =
+  "Tool invocation blocked: context contains untrusted data";
+const NO_POLICY_UNTRUSTED_REASON =
+  "Tool invocation blocked: forbidden in untrusted context by default";
+
 class ToolInvocationPolicyModel {
   static async create(
     policy: ToolInvocation.InsertToolInvocationPolicy,
   ): Promise<ToolInvocation.ToolInvocationPolicy> {
+    // If this is a default policy (empty conditions), upsert to prevent duplicates
+    if (policy.conditions.length === 0) {
+      const [existingDefault] = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, policy.toolId))
+        .then((rows) => rows.filter((r) => r.conditions.length === 0));
+
+      if (existingDefault) {
+        const [updatedPolicy] = await db
+          .update(schema.toolInvocationPoliciesTable)
+          .set({ action: policy.action, reason: policy.reason ?? null })
+          .where(eq(schema.toolInvocationPoliciesTable.id, existingDefault.id))
+          .returning();
+
+        return updatedPolicy;
+      }
+    }
+
     const [createdPolicy] = await db
       .insert(schema.toolInvocationPoliciesTable)
       .values(policy)
@@ -134,7 +160,8 @@ class ToolInvocationPolicyModel {
     action:
       | "allow_when_context_is_untrusted"
       | "block_when_context_is_untrusted"
-      | "block_always",
+      | "block_always"
+      | "require_approval",
   ): Promise<{ updated: number; created: number }> {
     if (toolIds.length === 0) {
       return { updated: 0, created: 0 };
@@ -186,6 +213,111 @@ class ToolInvocationPolicyModel {
     }
 
     return { updated, created };
+  }
+
+  /**
+   * Check if a tool requires user approval before execution in chat.
+   * Used by the AI SDK's `needsApproval` hook to pause tool execution.
+   *
+   * Returns true if any matching policy has action === "require_approval".
+   */
+  static async checkApprovalRequired(
+    toolName: string,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    toolInput: Record<string, any>,
+    context: PolicyEvaluationContext,
+  ): Promise<boolean> {
+    // Archestra tools always bypass policies (consistent with evaluateBatch)
+    if (isArchestraMcpServerTool(toolName)) {
+      return false;
+    }
+
+    // Find tool by name
+    const [tool] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, toolName));
+
+    if (!tool) {
+      logger.debug({ toolName }, "checkApprovalRequired: tool not found in DB");
+      return false;
+    }
+
+    // Fetch policies for this tool
+    const policies = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+
+    logger.debug(
+      {
+        toolName,
+        toolId: tool.id,
+        policyCount: policies.length,
+        actions: policies.map((p) => p.action),
+      },
+      "checkApprovalRequired: policy lookup result",
+    );
+
+    if (policies.length === 0) {
+      return false;
+    }
+
+    // Separate into specific (has conditions) and default (empty conditions)
+    const specificPolicies = policies.filter((p) => p.conditions.length > 0);
+    const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
+
+    // Check specific policies first
+    for (const policy of specificPolicies) {
+      const conditionsMatch = policy.conditions.every((condition) => {
+        const { key, value, operator } = condition;
+        if (key.startsWith("context.")) {
+          return ToolInvocationPolicyModel.evaluateContextCondition(
+            key,
+            value,
+            operator,
+            context,
+          );
+        }
+        return ToolInvocationPolicyModel.evaluateInputCondition(
+          key,
+          value,
+          operator,
+          toolInput,
+        );
+      });
+
+      if (conditionsMatch && policy.action === "require_approval") {
+        logger.info(
+          { toolName },
+          "checkApprovalRequired: specific policy requires approval",
+        );
+        return true;
+      }
+
+      // If a specific policy matched but is not require_approval, it takes precedence
+      if (conditionsMatch) {
+        logger.debug(
+          { toolName, action: policy.action },
+          "checkApprovalRequired: specific policy matched, no approval needed",
+        );
+        return false;
+      }
+    }
+
+    // Fall back to default policy
+    for (const policy of defaultPolicies) {
+      if (policy.action === "require_approval") {
+        logger.info(
+          { toolName },
+          "checkApprovalRequired: default policy requires approval",
+        );
+        return true;
+      }
+    }
+
+    logger.debug({ toolName }, "checkApprovalRequired: no approval required");
+    return false;
   }
 
   private static evaluateContextCondition(
@@ -386,7 +518,7 @@ class ToolInvocationPolicyModel {
         if (policy.action === "block_always") {
           return {
             isAllowed: false,
-            reason: policy.reason || "Policy violation",
+            reason: policy.reason || BLOCK_ALWAYS_REASON,
             toolCallName,
           };
         }
@@ -396,8 +528,7 @@ class ToolInvocationPolicyModel {
           if (!isContextTrusted) {
             return {
               isAllowed: false,
-              reason:
-                "Tool invocation blocked: context contains untrusted data",
+              reason: UNTRUSTED_CONTEXT_REASON,
               toolCallName,
             };
           }
@@ -405,7 +536,10 @@ class ToolInvocationPolicyModel {
           continue;
         }
 
-        if (policy.action === "allow_when_context_is_untrusted") {
+        if (
+          policy.action === "allow_when_context_is_untrusted" ||
+          policy.action === "require_approval"
+        ) {
           specificAllowsUntrusted = true;
         }
       }
@@ -415,7 +549,7 @@ class ToolInvocationPolicyModel {
         if (!isContextTrusted && !specificAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason: "Tool invocation blocked: context contains untrusted data",
+            reason: UNTRUSTED_CONTEXT_REASON,
             toolCallName,
           };
         }
@@ -430,9 +564,7 @@ class ToolInvocationPolicyModel {
           if (policy.action === "block_always") {
             return {
               isAllowed: false,
-              reason:
-                policy.reason ||
-                "Tool invocation blocked: context contains untrusted data",
+              reason: policy.reason || BLOCK_ALWAYS_REASON,
               toolCallName,
             };
           }
@@ -442,8 +574,7 @@ class ToolInvocationPolicyModel {
             if (!isContextTrusted) {
               return {
                 isAllowed: false,
-                reason:
-                  "Tool invocation blocked: context contains untrusted data",
+                reason: UNTRUSTED_CONTEXT_REASON,
                 toolCallName,
               };
             }
@@ -451,7 +582,10 @@ class ToolInvocationPolicyModel {
             continue;
           }
 
-          if (policy.action === "allow_when_context_is_untrusted") {
+          if (
+            policy.action === "allow_when_context_is_untrusted" ||
+            policy.action === "require_approval"
+          ) {
             defaultAllowsUntrusted = true;
           }
         }
@@ -459,7 +593,7 @@ class ToolInvocationPolicyModel {
         if (!isContextTrusted && !defaultAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason: "Tool invocation blocked: context contains untrusted data",
+            reason: UNTRUSTED_CONTEXT_REASON,
             toolCallName,
           };
         }
@@ -470,8 +604,7 @@ class ToolInvocationPolicyModel {
       if (!isContextTrusted) {
         return {
           isAllowed: false,
-          reason:
-            "Tool invocation blocked: forbidden in untrusted context by default",
+          reason: NO_POLICY_UNTRUSTED_REASON,
           toolCallName,
         };
       }

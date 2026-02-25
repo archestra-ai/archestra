@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   gte,
   ilike,
   inArray,
@@ -116,8 +117,15 @@ class McpToolCallModel {
 
     const [data, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.mcpToolCallsTable),
+          userName: schema.usersTable.name,
+        })
         .from(schema.mcpToolCallsTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+        )
         .where(whereClause)
         .orderBy(orderByClause)
         .limit(pagination.limit)
@@ -162,8 +170,15 @@ class McpToolCallModel {
     isMcpServerAdmin?: boolean,
   ): Promise<McpToolCall | null> {
     const [mcpToolCall] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.mcpToolCallsTable),
+        userName: schema.usersTable.name,
+      })
       .from(schema.mcpToolCallsTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+      )
       .where(eq(schema.mcpToolCallsTable.id, id));
 
     if (!mcpToolCall) {
@@ -172,6 +187,10 @@ class McpToolCallModel {
 
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
+      // If agentId is null (agent was deleted), only admins can see the tool call
+      if (!mcpToolCall.agentId) {
+        return null;
+      }
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         mcpToolCall.agentId,
@@ -248,8 +267,15 @@ class McpToolCallModel {
 
     const [data, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.mcpToolCallsTable),
+          userName: schema.usersTable.name,
+        })
         .from(schema.mcpToolCallsTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+        )
         .where(whereCondition)
         .orderBy(orderByClause)
         .limit(pagination.limit)

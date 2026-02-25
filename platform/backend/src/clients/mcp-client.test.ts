@@ -1,9 +1,11 @@
+import { MCP_CATALOG_INSTALL_PATH } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
 import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   ToolModel,
 } from "@/models";
@@ -15,6 +17,8 @@ import mcpClient from "./mcp-client";
 const mockCallTool = vi.fn();
 const mockConnect = vi.fn();
 const mockClose = vi.fn();
+const mockListTools = vi.fn();
+const mockPing = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
@@ -22,6 +26,8 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.connect = mockConnect;
     this.callTool = mockCallTool;
     this.close = mockClose;
+    this.listTools = mockListTools;
+    this.ping = mockPing;
   }),
 }));
 
@@ -43,10 +49,12 @@ vi.mock(
 const {
   mockUsesStreamableHttp,
   mockGetHttpEndpointUrl,
+  mockGetRunningPodHttpEndpoint,
   mockGetOrLoadDeployment,
 } = vi.hoisted(() => ({
   mockUsesStreamableHttp: vi.fn(),
   mockGetHttpEndpointUrl: vi.fn(),
+  mockGetRunningPodHttpEndpoint: vi.fn(),
   mockGetOrLoadDeployment: vi.fn(),
 }));
 
@@ -54,6 +62,7 @@ vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
+    getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
     getOrLoadDeployment: mockGetOrLoadDeployment,
   },
 }));
@@ -96,9 +105,30 @@ describe("McpClient", () => {
     mockCallTool.mockReset();
     mockConnect.mockReset();
     mockClose.mockReset();
+    mockListTools.mockReset();
+    mockPing.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
+    mockGetRunningPodHttpEndpoint.mockReset();
     mockGetOrLoadDeployment.mockReset();
+
+    // Spy on McpHttpSessionModel to prevent real DB writes during mcp-client tests
+    // and to avoid errors from session persistence in the background
+    vi.spyOn(
+      McpHttpSessionModel,
+      "findRecordByConnectionKey",
+    ).mockResolvedValue(null);
+    vi.spyOn(McpHttpSessionModel, "upsert").mockResolvedValue(undefined);
+    vi.spyOn(McpHttpSessionModel, "deleteByConnectionKey").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpHttpSessionModel, "deleteStaleSession").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpHttpSessionModel, "deleteExpired").mockResolvedValue(0);
+
+    // Default: listTools returns empty list (fallback to stripped name)
+    mockListTools.mockResolvedValue({ tools: [] });
   });
 
   describe("executeToolCall", () => {
@@ -125,7 +155,6 @@ describe("McpClient", () => {
           description: "Test MCP tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         // Assign tool to agent with response modifier
@@ -174,7 +203,6 @@ describe("McpClient", () => {
           description: "Test MCP tool with JSON",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -210,7 +238,6 @@ describe("McpClient", () => {
           description: "GitHub issues tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -260,7 +287,6 @@ describe("McpClient", () => {
           description: "Test tool accessing full content",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -296,7 +322,6 @@ describe("McpClient", () => {
           description: "Test tool with bad template",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         // Invalid Handlebars template
@@ -335,7 +360,6 @@ describe("McpClient", () => {
           description: "Test tool with image content",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -369,7 +393,6 @@ describe("McpClient", () => {
           description: "Test tool without template",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         // Assign tool without response modifier template
@@ -407,7 +430,6 @@ describe("McpClient", () => {
           description: "First tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         const tool2 = await ToolModel.createToolIfNotExists({
@@ -415,7 +437,6 @@ describe("McpClient", () => {
           description: "Second tool",
           parameters: {},
           catalogId,
-          mcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
@@ -470,6 +491,61 @@ describe("McpClient", () => {
       });
     });
 
+    describe("Secrets caching (N+1 prevention)", () => {
+      test("caches secret lookups across consecutive tool calls to same server", async () => {
+        // Create two tools assigned to the same MCP server (same catalog)
+        const tool1 = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__tool_a",
+          description: "Tool A",
+          parameters: {},
+          catalogId,
+        });
+        const tool2 = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__tool_b",
+          description: "Tool B",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool1.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+        await AgentToolModel.create(agentId, tool2.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockCallTool
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Result A" }],
+            isError: false,
+          })
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Result B" }],
+            isError: false,
+          });
+
+        // Spy on secretManager to count calls
+        const getSecretSpy = vi.spyOn(secretManager(), "getSecret");
+
+        const resultA = await mcpClient.executeToolCall(
+          { id: "call_a", name: "github-mcp-server__tool_a", arguments: {} },
+          agentId,
+        );
+        const resultB = await mcpClient.executeToolCall(
+          { id: "call_b", name: "github-mcp-server__tool_b", arguments: {} },
+          agentId,
+        );
+
+        expect(resultA.isError).toBe(false);
+        expect(resultB.isError).toBe(false);
+
+        // Secret should only be fetched once due to caching
+        expect(getSecretSpy).toHaveBeenCalledTimes(1);
+
+        getSecretSpy.mockRestore();
+      });
+    });
+
     describe("Concurrency limiter", () => {
       test("bypasses limiter when browser streaming is disabled", async () => {
         const originalBrowserStreaming =
@@ -509,7 +585,6 @@ describe("McpClient", () => {
             description: "Limiter disabled tool",
             parameters: {},
             catalogId,
-            mcpServerId,
           });
 
           await AgentToolModel.create(agentId, tool.id, {
@@ -587,7 +662,6 @@ describe("McpClient", () => {
             description: "Limiter http tool",
             parameters: {},
             catalogId,
-            mcpServerId,
           });
 
           await AgentToolModel.create(agentId, tool.id, {
@@ -677,7 +751,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -729,7 +802,6 @@ describe("McpClient", () => {
           description: "Test tool",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -752,7 +824,12 @@ describe("McpClient", () => {
 
         expect(result).toEqual({
           id: "call_1",
-          content: null,
+          content: [
+            {
+              type: "text",
+              text: expect.stringContaining("No HTTP endpoint URL found"),
+            },
+          ],
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
           name: "local-streamable-http-server__test_tool",
@@ -766,7 +843,6 @@ describe("McpClient", () => {
           description: "Tool with template",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -810,7 +886,6 @@ describe("McpClient", () => {
           description: "Tool using K8s attach",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -889,7 +964,6 @@ describe("McpClient", () => {
             description: "Limiter stdio tool",
             parameters: {},
             catalogId: localCatalogId,
-            mcpServerId: localMcpServerId,
           });
 
           await AgentToolModel.create(agentId, tool.id, {
@@ -940,7 +1014,6 @@ describe("McpClient", () => {
           description: "Tool for testing prefix stripping fallback",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -990,7 +1063,6 @@ describe("McpClient", () => {
           description: "Tool using server name prefix",
           parameters: {},
           catalogId: otherCatalog.id,
-          mcpServerId: localMcpServerId,
         });
 
         // Ensure mcpServerName is 'custom-server-name' for this test
@@ -1038,7 +1110,6 @@ describe("McpClient", () => {
           description: "Tool without standard prefix",
           parameters: {},
           catalogId: localCatalogId,
-          mcpServerId: localMcpServerId,
         });
 
         await AgentToolModel.create(agentId, tool.id, {
@@ -1071,6 +1142,690 @@ describe("McpClient", () => {
           id: "call_identity_test",
           content: [{ type: "text", text: "Identity works!" }],
           isError: false,
+        });
+      });
+    });
+
+    describe("createErrorResult includes error in content", () => {
+      test("error results include error message in content array", async () => {
+        const toolCall = {
+          id: "call_error_content",
+          name: "non_existent_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result).toMatchObject({
+          id: "call_error_content",
+          isError: true,
+          error: expect.any(String),
+        });
+        // content should be an array with the error text, not null
+        expect(result?.content).toEqual([
+          { type: "text", text: expect.any(String) },
+        ]);
+      });
+    });
+
+    describe("Dynamic credential auth link", () => {
+      test("returns install URL when no server found for user with dynamic credential", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({ email: "dynauth@example.com" });
+
+        // Create a separate catalog + tool for dynamic credential testing
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-mcp-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.com/v1/mcp",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-mcp-server__search_issues",
+          description: "Search Jira issues",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        // Assign tool to agent with dynamic team credential enabled
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null, // no credentialSourceMcpServerId
+          null, // no executionSourceMcpServerId
+          true, // useDynamicTeamCredential
+        );
+
+        const toolCall = {
+          id: "call_dynauth",
+          name: "jira-mcp-server__search_issues",
+          arguments: { query: "test" },
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        // Should return an error with the install URL
+        expect(result).toMatchObject({
+          isError: true,
+        });
+        expect(result?.error).toContain(
+          `Authentication required for "jira-mcp-server"`,
+        );
+        expect(result?.error).toContain(`user: ${testUser.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+        );
+        expect(result?.error).toContain(
+          "Once you have completed authentication, retry this tool call.",
+        );
+
+        // Content should also contain the error message
+        expect(result?.content).toEqual([
+          { type: "text", text: result?.error },
+        ]);
+      });
+
+      test("returns install URL with team context when team token has no server", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const testUser = await makeUser({ email: "teamauth@example.com" });
+        const team = await makeTeam(org.id, testUser.id, {
+          name: "Test Team",
+        });
+
+        // Create catalog + tool
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-team-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.com/v1/mcp",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-team-server__get_issue",
+          description: "Get Jira issue",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          null,
+          true,
+        );
+
+        const toolCall = {
+          id: "call_team_dynauth",
+          name: "jira-team-server__get_issue",
+          arguments: { key: "PROJ-1" },
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "team-token",
+          teamId: team.id,
+          isOrganizationToken: false,
+        });
+
+        expect(result).toMatchObject({
+          isError: true,
+        });
+        expect(result?.error).toContain(`team: ${team.id}`);
+        expect(result?.error).toContain(
+          `${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+        );
+      });
+
+      test("returns auth-required error with team context when servers exist but no owner is in team", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        // Two users: one owns the server, the other is in the team
+        const serverOwner = await makeUser({
+          email: "server-owner@example.com",
+        });
+        const teamMember = await makeUser({
+          email: "team-member@example.com",
+        });
+        const team = await makeTeam(org.id, teamMember.id, {
+          name: "Marketing Team",
+        });
+        // serverOwner is NOT added to the team
+
+        // Create catalog + server owned by serverOwner
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "slack-mcp-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.slack.com/v1/mcp",
+        });
+
+        const ownerSecret = await secretManager().createSecret(
+          { access_token: "owner-slack-token" },
+          "slack-owner-secret",
+        );
+
+        await McpServerModel.create({
+          name: "slack-mcp-server",
+          catalogId: dynCatalog.id,
+          secretId: ownerSecret.id,
+          serverType: "remote",
+          ownerId: serverOwner.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "slack-mcp-server__send_message",
+          description: "Send a Slack message",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          null,
+          true,
+        );
+
+        const toolCall = {
+          id: "call_team_no_member_cred",
+          name: "slack-mcp-server__send_message",
+          arguments: { channel: "#general", text: "hello" },
+        };
+
+        // Call with teamMember's team token - serverOwner is NOT in this team
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "team-token-no-cred",
+          teamId: team.id,
+          isOrganizationToken: false,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Authentication required for "slack-mcp-server"`,
+        );
+        expect(result?.error).toContain(`team: ${team.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+        );
+        expect(result?.error).toContain(
+          "Once you have completed authentication, retry this tool call.",
+        );
+        expect(result?.content).toEqual([
+          { type: "text", text: result?.error },
+        ]);
+      });
+    });
+
+    describe("Stale session retry", () => {
+      let localMcpServerId: string;
+      let localCatalogId: string;
+
+      beforeEach(async ({ makeUser }) => {
+        const testUser = await makeUser({
+          email: "test-stale-session@example.com",
+        });
+
+        const localCatalog = await InternalMcpCatalogModel.create({
+          name: "stale-session-server",
+          serverType: "local",
+          localConfig: {
+            dockerImage: "mcr.microsoft.com/playwright/mcp",
+            transportType: "streamable-http",
+            httpPort: 8080,
+          },
+        });
+        localCatalogId = localCatalog.id;
+
+        const localMcpServer = await McpServerModel.create({
+          name: "stale-session-server",
+          catalogId: localCatalogId,
+          serverType: "local",
+          userId: testUser.id,
+        });
+        localMcpServerId = localMcpServer.id;
+
+        mockUsesStreamableHttp.mockReset();
+        mockGetHttpEndpointUrl.mockReset();
+        mockCallTool.mockReset();
+        mockConnect.mockReset();
+        mockPing.mockReset();
+
+        // Make StreamableHTTPClientTransport mock store sessionId from options
+        // so getOrCreateClient can detect stored sessions via `transport.sessionId`
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+          this: { sessionId?: string },
+          _url: URL,
+          options?: { sessionId?: string },
+        ) {
+          this.sessionId = options?.sessionId;
+        } as
+          // biome-ignore lint/suspicious/noExplicitAny: cast required for mock constructor
+          any);
+      });
+
+      test("uses stored endpoint URL when resuming HTTP session", async () => {
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__stored_endpoint",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://service-url:8080/mcp");
+        vi.spyOn(
+          McpHttpSessionModel,
+          "findRecordByConnectionKey",
+        ).mockResolvedValueOnce({
+          sessionId: "stored-session-id",
+          sessionEndpointUrl: "http://10.42.1.88:8080/mcp",
+          sessionEndpointPodName: "mcp-stale-session-server-abc123",
+        });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_stored_endpoint",
+            name: "stale-session-server__stored_endpoint",
+            arguments: {},
+          },
+          agentId,
+          undefined,
+          { conversationId: "conv-1" },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(vi.mocked(StreamableHTTPClientTransport)).toHaveBeenCalledWith(
+          new URL("http://10.42.1.88:8080/mcp"),
+          expect.objectContaining({ sessionId: "stored-session-id" }),
+        );
+      });
+
+      test("retries with fresh session when stale session is detected", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // First call: findRecordByConnectionKey returns a stored session
+        // Second call (retry): findRecordByConnectionKey returns null (session was deleted)
+        vi.spyOn(McpHttpSessionModel, "findRecordByConnectionKey")
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-id",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          })
+          .mockResolvedValueOnce(null);
+
+        // First connect fails (stale session), second connect succeeds
+        mockConnect
+          .mockRejectedValueOnce(new Error("Session not found"))
+          .mockResolvedValueOnce(undefined);
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Success after retry" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_stale_retry",
+          name: "stale-session-server__test_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Should succeed after retry
+        expect(result).toMatchObject({
+          id: "call_stale_retry",
+          content: [{ type: "text", text: "Success after retry" }],
+          isError: false,
+        });
+
+        // deleteStaleSession should have been called
+        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+
+        // connect should have been called twice (first stale, then fresh)
+        expect(mockConnect).toHaveBeenCalledTimes(2);
+      });
+
+      test("does not retry more than once for stale sessions", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__no_double_retry",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Both calls return stored session IDs
+        vi.spyOn(McpHttpSessionModel, "findRecordByConnectionKey")
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-1",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          })
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-2",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          });
+
+        // Both connect attempts fail
+        mockConnect
+          .mockRejectedValueOnce(new Error("Session not found"))
+          .mockRejectedValueOnce(new Error("Session not found again"));
+
+        const toolCall = {
+          id: "call_no_double_retry",
+          name: "stale-session-server__no_double_retry",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Should return error (no infinite retry loop)
+        expect(result).toMatchObject({
+          id: "call_no_double_retry",
+          isError: true,
+        });
+      });
+
+      test("retries when callTool throws StreamableHTTPError with 'Session not found'", async () => {
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__http_error_retry",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // First call: findRecordByConnectionKey returns a stored session
+        // Second call (retry): findRecordByConnectionKey returns null (session was deleted)
+        vi.spyOn(McpHttpSessionModel, "findRecordByConnectionKey")
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-id",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          })
+          .mockResolvedValueOnce(null);
+
+        // connect() succeeds both times (SDK skips initialization for resumed sessions)
+        mockConnect.mockResolvedValue(undefined);
+
+        // First callTool throws StreamableHTTPError "Session not found",
+        // second callTool succeeds (after retry with fresh session)
+        mockCallTool
+          .mockRejectedValueOnce(
+            new StreamableHTTPError(
+              404,
+              "Error POSTing to endpoint: Session not found",
+            ),
+          )
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Success after retry" }],
+            isError: false,
+          });
+
+        const toolCall = {
+          id: "call_http_error_retry",
+          name: "stale-session-server__http_error_retry",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Should succeed after retry
+        expect(result).toMatchObject({
+          id: "call_http_error_retry",
+          content: [{ type: "text", text: "Success after retry" }],
+          isError: false,
+        });
+
+        // deleteStaleSession should have been called
+        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+
+        // callTool should have been called twice (first stale, then fresh)
+        expect(mockCallTool).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("Tool name casing resolution", () => {
+      test("resolves camelCase tool name from remote server", async () => {
+        // Create tool with lowercased name (as slugifyName produces)
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__getuserinfo",
+          description: "Get user info",
+          parameters: { type: "object", properties: {} },
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        // Remote server reports tool with camelCase name
+        mockListTools.mockResolvedValueOnce({
+          tools: [
+            { name: "getUserInfo", inputSchema: { type: "object" } },
+            { name: "searchIssues", inputSchema: { type: "object" } },
+          ],
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "success" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_casing_1",
+          name: "github-mcp-server__getuserinfo",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Verify callTool was called with the original camelCase name
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "getUserInfo",
+          arguments: {},
+        });
+      });
+
+      test("resolves PascalCase tool name from remote server", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__getrepository",
+          description: "Get repository",
+          parameters: { type: "object", properties: {} },
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        // Remote server reports tool with PascalCase name
+        mockListTools.mockResolvedValueOnce({
+          tools: [{ name: "GetRepository", inputSchema: { type: "object" } }],
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "success" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_casing_2",
+          name: "github-mcp-server__getrepository",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "GetRepository",
+          arguments: {},
+        });
+      });
+
+      test("falls back to stripped name when listTools fails", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__sometool",
+          description: "Some tool",
+          parameters: { type: "object", properties: {} },
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        // listTools throws an error
+        mockListTools.mockRejectedValueOnce(new Error("Connection timeout"));
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "success" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_casing_3",
+          name: "github-mcp-server__sometool",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Falls back to the lowercased stripped name
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "sometool",
+          arguments: {},
+        });
+      });
+
+      test("falls back to stripped name when tool not in server list", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__missingtool",
+          description: "Missing tool",
+          parameters: { type: "object", properties: {} },
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        // Server returns tools, but not the one we're looking for
+        mockListTools.mockResolvedValueOnce({
+          tools: [{ name: "otherTool", inputSchema: { type: "object" } }],
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "success" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_casing_4",
+          name: "github-mcp-server__missingtool",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Falls back to stripped name since no match found
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "missingtool",
+          arguments: {},
+        });
+      });
+
+      test("preserves already-correct lowercase tool name", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__search_issues",
+          description: "Search issues",
+          parameters: { type: "object", properties: {} },
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        // Server also uses lowercase (snake_case)
+        mockListTools.mockResolvedValueOnce({
+          tools: [{ name: "search_issues", inputSchema: { type: "object" } }],
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "success" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_casing_5",
+          name: "github-mcp-server__search_issues",
+          arguments: {},
+        };
+
+        await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "search_issues",
+          arguments: {},
         });
       });
     });

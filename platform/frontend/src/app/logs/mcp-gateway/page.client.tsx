@@ -1,10 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,14 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
-import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
+import { formatAuthMethod, useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -168,6 +174,21 @@ function McpToolCallsTable({
     initialData: initialData?.agents,
   });
 
+  const { data: mcpServers } = useMcpServers();
+
+  // Map deployment names (e.g. "outlook-2w7avkls6j") to human-readable catalog names (e.g. "Outlook")
+  const serverNameToCatalogName = useMemo(() => {
+    const map = new Map<string, string>();
+    if (mcpServers) {
+      for (const server of mcpServers) {
+        if (server.catalogName) {
+          map.set(server.name, server.catalogName);
+        }
+      }
+    }
+    return map;
+  }, [mcpServers]);
+
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
   const paginationMeta = mcpToolCallsResponse?.pagination;
 
@@ -216,13 +237,49 @@ function McpToolCallsTable({
       id: "agent",
       accessorFn: (row) => {
         const agent = agents?.find((a) => a.id === row.agentId);
-        return agent?.name ?? "Unknown";
+        return (
+          agent?.name ??
+          (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
+        );
       },
       header: "MCP Gateway",
       cell: ({ row }) => {
         const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
-          <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
+          <TruncatedText
+            message={
+              agent?.name ??
+              (row.original.agentId === null
+                ? "Deleted MCP Gateway"
+                : "Unknown")
+            }
+            maxLength={30}
+          />
+        );
+      },
+    },
+    {
+      id: "user",
+      header: "User",
+      cell: ({ row }) => {
+        const { userName, authMethod } = row.original;
+        if (!userName && !authMethod) {
+          return <div className="text-xs text-muted-foreground">—</div>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {userName && (
+              <Badge variant="outline" className="text-xs max-w-[150px]">
+                <User className="h-3 w-3 mr-1 shrink-0" />
+                <span className="truncate">{userName}</span>
+              </Badge>
+            )}
+            {authMethod && (
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                {formatAuthMethod(authMethod)}
+              </Badge>
+            )}
+          </div>
         );
       },
     },
@@ -230,13 +287,25 @@ function McpToolCallsTable({
       id: "mcpServerName",
       header: "MCP Server",
       cell: ({ row }) => {
+        const rawName = row.original.mcpServerName;
+        if (!rawName) {
+          return <div className="text-xs text-muted-foreground">—</div>;
+        }
+        const displayName = serverNameToCatalogName.get(rawName) ?? rawName;
         return (
-          <Badge variant="secondary" className="text-xs whitespace-normal">
-            <TruncatedText
-              message={row.original.mcpServerName}
-              maxLength={15}
-            />
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="max-w-[160px]">
+                <Badge
+                  variant="secondary"
+                  className="text-xs max-w-full inline-flex"
+                >
+                  <span className="truncate">{displayName}</span>
+                </Badge>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>{rawName}</TooltipContent>
+          </Tooltip>
         );
       },
     },
@@ -244,15 +313,12 @@ function McpToolCallsTable({
       id: "toolName",
       header: "Tool Name",
       cell: ({ row }) => {
-        const toolName = row.original.toolCall?.name;
-        if (!toolName) {
+        const fullName = row.original.toolCall?.name;
+        if (!fullName) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }
-        return (
-          <div className="text-xs">
-            <TruncatedText message={toolName} maxLength={40} />
-          </div>
-        );
+        const { toolName } = parseFullToolName(fullName);
+        return <code className="text-xs">{toolName || fullName}</code>;
       },
     },
     {
@@ -413,6 +479,7 @@ function McpToolCallsTable({
       <DataTable
         columns={columns}
         data={mcpToolCalls}
+        hideSelectedCount
         pagination={
           paginationMeta
             ? {

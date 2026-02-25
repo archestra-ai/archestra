@@ -1,6 +1,56 @@
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 
+describe("AgentToolModel.findById", () => {
+  test("returns agent-tool with joined agent and tool data", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+    const tool = await makeTool({ name: "test-tool" });
+    const agentTool = await makeAgentTool(agent.id, tool.id);
+
+    const result = await AgentToolModel.findById(agentTool.id);
+
+    expect(result).toBeDefined();
+    expect(result?.id).toBe(agentTool.id);
+    expect(result?.agent.id).toBe(agent.id);
+    expect(result?.agent.name).toBe("Test Agent");
+    expect(result?.tool.id).toBe(tool.id);
+    expect(result?.tool.name).toBe("test-tool");
+  });
+
+  test("returns undefined for non-existent ID", async () => {
+    const result = await AgentToolModel.findById(
+      "00000000-0000-0000-0000-000000000000",
+    );
+    expect(result).toBeUndefined();
+  });
+
+  test("includes credential and execution source fields", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeMcpServer,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool();
+    const credServer = await makeMcpServer({ name: "Cred Server" });
+    const execServer = await makeMcpServer({ name: "Exec Server" });
+    const agentTool = await makeAgentTool(agent.id, tool.id, {
+      credentialSourceMcpServerId: credServer.id,
+      executionSourceMcpServerId: execServer.id,
+    });
+
+    const result = await AgentToolModel.findById(agentTool.id);
+
+    expect(result).toBeDefined();
+    expect(result?.credentialSourceMcpServerId).toBe(credServer.id);
+    expect(result?.executionSourceMcpServerId).toBe(execServer.id);
+  });
+});
+
 describe("AgentToolModel.findAll", () => {
   describe("Pagination", () => {
     test("returns paginated results with correct metadata", async ({
@@ -410,33 +460,6 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data[0].agent.id).toBe(agent1.id);
     });
 
-    test("filters by origin (llm-proxy)", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-    }) => {
-      const agent = await makeAgent();
-      const catalog = await makeInternalMcpCatalog();
-
-      const llmProxyTool = await makeTool({ name: "llm-proxy-tool" });
-      const mcpTool = await makeTool({
-        name: "mcp-tool",
-        catalogId: catalog.id,
-      });
-
-      await makeAgentTool(agent.id, llmProxyTool.id);
-      await makeAgentTool(agent.id, mcpTool.id);
-
-      const result = await AgentToolModel.findAll({
-        pagination: { limit: 10, offset: 0 },
-        filters: { origin: "llm-proxy", excludeArchestraTools: true },
-      });
-
-      expect(result.data).toHaveLength(1);
-      expect(result.data[0].tool.catalogId).toBeNull();
-    });
-
     test("filters by origin (catalogId)", async ({
       makeAgent,
       makeTool,
@@ -712,14 +735,14 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data[0].agent.id).toBe(agent1.id);
     });
 
-    test("member with no team access sees empty results", async ({
+    test("member with no team access sees org-wide agent tools", async ({
       makeUser,
       makeAgent,
       makeTool,
       makeAgentTool,
     }) => {
       const user = await makeUser();
-      const agent = await makeAgent();
+      const agent = await makeAgent(); // agent with no teams is org-wide
       const tool = await makeTool();
 
       await makeAgentTool(agent.id, tool.id);
@@ -730,8 +753,9 @@ describe("AgentToolModel.findAll", () => {
         isAgentAdmin: false,
       });
 
-      expect(result.data).toHaveLength(0);
-      expect(result.pagination.total).toBe(0);
+      // Teamless agents are org-wide, so their tools are visible to all members
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination.total).toBe(1);
     });
   });
 

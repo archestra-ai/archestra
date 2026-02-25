@@ -1,4 +1,8 @@
 import { z } from "zod";
+import type { SupportedProvider } from "./model-constants";
+
+/** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
+export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
 
 export const E2eTestId = {
   AgentsTable: "agents-table",
@@ -23,11 +27,11 @@ export const E2eTestId = {
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ManageToolsButton: "manage-tools-button",
-  ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
-  SsoRoleMappingDefaultRole: "sso-role-mapping-default-role",
-  SsoRoleMappingRuleRole: "sso-role-mapping-rule-role",
-  SsoRoleMappingRuleTemplate: "sso-role-mapping-rule-template",
-  SsoRoleMappingAddRule: "sso-role-mapping-add-rule",
+  ConfigureIdpTeamSyncButton: "configure-idp-team-sync-button",
+  IdpRoleMappingDefaultRole: "idp-role-mapping-default-role",
+  IdpRoleMappingRuleRole: "idp-role-mapping-rule-role",
+  IdpRoleMappingRuleTemplate: "idp-role-mapping-rule-template",
+  IdpRoleMappingAddRule: "idp-role-mapping-add-rule",
   McpServerError: "mcp-server-error",
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
@@ -36,7 +40,6 @@ export const E2eTestId = {
   ConnectAgentButton: "connect-agent-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
-  SelectCredentialTypeTeam: "select-credential-type-team",
   CredentialsCount: "credentials-count",
   StaticCredentialToUse: "static-credential-to-use",
   SelectCredentialTypeTeamDropdown: "select-credential-type-team-dropdown",
@@ -74,6 +77,15 @@ export const E2eTestId = {
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
+  // Chat Model Selector
+  ChatModelSelectorTrigger: "chat-model-selector-trigger",
+  ChatPromptTextarea: "chat-prompt-textarea",
+  // MCP Logs
+  McpLogsDialog: "mcp-logs-dialog",
+  McpLogsContent: "mcp-logs-content",
+  McpLogsError: "mcp-logs-error",
+  McpLogsViewButton: "mcp-logs-view-button",
+  McpLogsEditConfigButton: "mcp-logs-edit-config-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
@@ -87,9 +99,10 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
 export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
-export const DEFAULT_PROFILE_NAME = "Default Profile";
 export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
+/** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
+export const DEFAULT_TEAM_NAME = "Default Team";
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -149,6 +162,28 @@ export const USER_ID_HEADER = "X-Archestra-User-Id";
  * This enables session-based grouping in the LLM proxy logs UI.
  */
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
+
+/**
+ * Header name for execution ID.
+ * Clients can pass this header to associate interactions with a specific execution run.
+ */
+export const EXECUTION_ID_HEADER = "X-Archestra-Execution-Id";
+
+/**
+ * Composite meta header with format: external-agent-id/execution-id/session-id.
+ * Provides a convenience way to set all three values at once.
+ * Individual headers take precedence over meta header values.
+ * Any segment can be empty (e.g., "/exec-123/" sets only execution-id).
+ *
+ * Values must not contain "/" since it is used as the segment delimiter.
+ */
+export const META_HEADER = "X-Archestra-Meta";
+
+/**
+ * Header used to pass a per-key provider base URL from chat → LLM proxy.
+ * When present, the proxy uses this value instead of the env-var-based config default.
+ */
+export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
 
 /**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
@@ -230,3 +265,122 @@ export const DOMAIN_VALIDATION_REGEX =
  * Maximum domain length per DNS specification (RFC 1035).
  */
 export const MAX_DOMAIN_LENGTH = 253;
+
+// =============================================================================
+// Browser Preview Feature
+// =============================================================================
+
+/**
+ * Fixed UUID for the Playwright browser preview MCP catalog entry.
+ * This ID is constant to ensure consistent catalog lookup across server restarts.
+ * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
+ */
+export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
+export const PLAYWRIGHT_MCP_SERVER_NAME = "microsoft__playwright-mcp";
+
+/**
+ * Set of all built-in MCP catalog item IDs that are system-managed
+ * and should not be modified or deleted by users.
+ */
+export const BUILT_IN_CATALOG_IDS = new Set([
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+]);
+
+export function isBuiltInCatalogId(id: string): boolean {
+  return BUILT_IN_CATALOG_IDS.has(id);
+}
+
+export function isPlaywrightCatalogItem(id: string): boolean {
+  return id === PLAYWRIGHT_MCP_CATALOG_ID;
+}
+
+/**
+ * Default browser viewport dimensions used by Playwright MCP in browser preview feature.
+ */
+export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH = 800;
+export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT = 800;
+
+/**
+ * Approximate height of the browser preview header (title bar + URL bar).
+ * Used when calculating popup window dimensions.
+ */
+export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
+
+/**
+ * Default URL to show when browser preview is opened for a new conversation.
+ * Using about:blank ensures no automatic navigation happens until user requests it.
+ */
+export const DEFAULT_BROWSER_PREVIEW_URL = "about:blank";
+
+// =============================================================================
+// OAuth 2.1 Authorization Server
+// =============================================================================
+
+/**
+ * Scopes supported by the OAuth 2.1 authorization server.
+ * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
+ */
+export const OAUTH_SCOPES = [
+  "mcp",
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+] as const;
+export type OAuthScope = (typeof OAUTH_SCOPES)[number];
+
+/**
+ * Human-readable descriptions for each OAuth scope.
+ * Used by the consent page to explain what each scope grants.
+ */
+export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
+  mcp: "Access MCP tools and resources",
+  openid: "Verify your identity",
+  profile: "Access your profile information",
+  email: "Access your email address",
+  offline_access: "Maintain access when you're not present",
+};
+
+/**
+ * OAuth 2.1 endpoint paths (relative to base URL).
+ * These are served by better-auth and proxied through the frontend catch-all.
+ */
+export const OAUTH_ENDPOINTS = {
+  authorize: "/api/auth/oauth2/authorize",
+  token: "/api/auth/oauth2/token",
+  register: "/api/auth/oauth2/register",
+  jwks: "/api/auth/jwks",
+  consent: "/api/auth/oauth2/consent",
+} as const;
+
+/**
+ * OAuth 2.1 page paths (frontend routes).
+ */
+export const OAUTH_PAGES = {
+  login: "/auth/sign-in",
+  consent: "/oauth/consent",
+} as const;
+
+/**
+ * Prefix for OAuth-derived token IDs in TokenAuthResult.
+ * Used when constructing tokenId from OAuth access tokens (e.g. `oauth-${accessToken.id}`)
+ * and when detecting OAuth auth method from tokenId.
+ */
+export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
+
+/**
+ * Path for deep-linking to MCP catalog install dialogs.
+ * Used by backend error messages and frontend routing.
+ * Append `?install={catalogId}` to auto-open the install dialog.
+ */
+export const MCP_CATALOG_INSTALL_PATH = "/mcp-catalog/registry";
+export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
+
+/**
+ * Providers where an API key is optional (self-hosted providers that typically don't require auth).
+ */
+export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "vllm",
+]);

@@ -9,6 +9,7 @@ import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/cost/optimization-rules/_parts/condition";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -131,7 +132,7 @@ function ModelSelect({
           No pricing configured for {providerDisplayNames[provider]} models.
         </span>{" "}
         <Link
-          href="/cost/token-price"
+          href="/llm-proxies/provider-settings?tab=models"
           className="hover:text-foreground hover:underline"
         >
           Add pricing
@@ -182,7 +183,7 @@ function ModelSelect({
                 <p className="text-sm">
                   No pricing configured for this model.{" "}
                   <Link
-                    href="/cost/token-price"
+                    href="/llm-proxies/provider-settings?tab=models"
                     className="underline hover:text-foreground"
                   >
                     Add pricing
@@ -456,12 +457,19 @@ export function Rule({
 
   return (
     <div className={cn(className, "flex flex-row gap-2 items-center text-sm")}>
-      <Switch
-        checked={enabled}
-        onCheckedChange={onToggle}
-        disabled={switchDisabled}
-        className="mr-4"
-      />
+      <WithPermissions
+        permissions={{ limit: ["update"] }}
+        noPermissionHandle="tooltip"
+      >
+        {({ hasPermission }) => (
+          <Switch
+            checked={enabled}
+            onCheckedChange={onToggle}
+            disabled={switchDisabled || !hasPermission}
+            className="mr-4"
+          />
+        )}
+      </WithPermissions>
       In{" "}
       <EntitySelect
         entityType={formData.entityType}

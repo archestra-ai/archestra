@@ -1,43 +1,51 @@
-import {
-  archestraApiSdk,
-  DEFAULT_VAULT_TOKEN,
-  E2eTestId,
-  SecretsManagerType,
-} from "@shared";
+import type { Page } from "@playwright/test";
+import { archestraApiSdk, DEFAULT_VAULT_TOKEN, E2eTestId } from "@shared";
 import { DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   clickButton,
+  expandTablePagination,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
-const vaultAddr = "http://localhost:8200";
+/**
+ * Navigate to the LLM API Keys page and expand pagination to show all rows.
+ */
+async function goToApiKeysPage(page: Page) {
+  await goToPage(page, "/llm-proxies/provider-settings");
+  await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
+}
+
+const vaultAddr =
+  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:8200";
 const teamFolderPath = "secret/data/teams";
 const secretName = "default-team";
 const secretKey = "api_key";
 const secretValue = "Admin-personal-credential";
+let byosEnabled = true;
 
 test.describe.configure({ mode: "serial" });
 
-test("At the beginning of tests, we change secrets manager to BYOS_VAULT", async ({
+// Check if BYOS Vault is enabled via the features API.
+// In CI, the Vault job deploys with ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT so all
+// replicas start in BYOS mode. Locally, this may not be configured, so tests skip gracefully.
+test("Check if BYOS Vault is enabled", async ({
   adminPage,
   extractCookieHeaders,
 }) => {
   await goToPage(adminPage, "/mcp-catalog/registry");
-  await adminPage.waitForLoadState("networkidle");
+  await adminPage.waitForLoadState("domcontentloaded");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  const { data } = await archestraApiSdk.initializeSecretsManager({
-    body: {
-      type: SecretsManagerType.BYOS_VAULT,
-    },
+  const { data: config } = await archestraApiSdk.getConfig({
     headers: { Cookie: cookieHeaders },
   });
-  expect(data?.type).toBe(SecretsManagerType.BYOS_VAULT);
+  byosEnabled = !!config?.features?.byosEnabled;
 });
 
 test("Then we create folder in Vault for Default Team and exemplary secret", async () => {
+  test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
   // Define the path for Default Team secrets
   // Using the format: secret/data/teams/default-team
   const fullSecretPath = `${teamFolderPath}/${secretName}`;
@@ -78,10 +86,15 @@ test("Then we create folder in Vault for Default Team and exemplary secret", asy
 });
 
 test("Then we configure vault for Default Team", async ({ adminPage }) => {
+  test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
   await goToPage(adminPage, "/settings/teams");
-  await adminPage
-    .getByTestId(`${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`)
-    .click();
+  // Wait for the configure button to appear - page may take time to render
+  // team list and vault configuration UI in CI
+  const configureButton = adminPage.getByTestId(
+    `${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`,
+  );
+  await expect(configureButton).toBeVisible({ timeout: 30_000 });
+  await configureButton.click();
   await adminPage
     .getByRole("textbox", { name: "Vault Path" })
     .fill(teamFolderPath);
@@ -106,10 +119,11 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       adminPage,
       makeRandomString,
     }) => {
+      test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
       const keyName = makeRandomString(8, "Test Key");
 
       // Open Create personal chat API key form and fill in the form
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByRole("textbox", { name: "Name" }).fill(keyName);
 
@@ -124,7 +138,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
           .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
           .click();
         await adminPage.getByText(secretName).click();
-        await adminPage.waitForLoadState("networkidle");
+        await adminPage.waitForLoadState("domcontentloaded");
         await adminPage
           .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
           .click();
@@ -133,7 +147,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
         await adminPage.getByRole("combobox", { name: "Scope" }).click();
         await adminPage.getByRole("option", { name: "Team" }).click();
         await adminPage.getByRole("combobox", { name: "Team" }).click();
-        await adminPage.waitForLoadState("networkidle");
+        await adminPage.waitForLoadState("domcontentloaded");
         await adminPage
           .getByRole("option", { name: DEFAULT_TEAM_NAME })
           .click();
@@ -141,7 +155,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
           .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
           .click();
         await adminPage.getByText(secretName).click();
-        await adminPage.waitForLoadState("networkidle");
+        await adminPage.waitForLoadState("domcontentloaded");
         await adminPage
           .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
           .click();
@@ -165,7 +179,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       ).toBeVisible();
 
       // Cleanup
-      await goToPage(adminPage, "/settings/llm-api-keys");
+      await goToApiKeysPage(adminPage);
       await adminPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
         .click();
@@ -180,6 +194,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     extractCookieHeaders,
     makeRandomString,
   }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
     test.setTimeout(90_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
@@ -196,7 +211,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // Go to MCP Registry page
     await goToPage(adminPage, "/mcp-catalog/registry");
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Click connect button for the catalog item
     await adminPage
@@ -211,7 +226,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
       .click();
     await adminPage.getByText(secretName).click();
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
     await adminPage
       .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
       .click();
@@ -220,7 +235,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     // install server
     await clickButton({ page: adminPage, options: { name: "Install" } });
 
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Assign tool to profiles using default team credential
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
@@ -234,7 +249,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage.waitForTimeout(200);
     // Click Save button at the bottom of the McpAssignmentsDialog
     await clickButton({ page: adminPage, options: { name: "Save" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({
@@ -265,6 +280,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     extractCookieHeaders,
     makeRandomString,
   }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
 
@@ -287,7 +303,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // Go to MCP Registry page
     await goToPage(adminPage, "/mcp-catalog/registry");
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Click connect button for the catalog item
     await adminPage
@@ -298,7 +314,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // install server
     await clickButton({ page: adminPage, options: { name: "Install" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Assign tool to profiles using default team credential
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
@@ -312,7 +328,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage.waitForTimeout(200);
     // Click Save button at the bottom of the McpAssignmentsDialog
     await clickButton({ page: adminPage, options: { name: "Save" } });
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForLoadState("domcontentloaded");
 
     // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({
@@ -337,18 +353,4 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       },
     });
   });
-});
-
-test("At the end of tests, we change secrets manager to DB because all other tests rely on it", async ({
-  adminPage,
-  extractCookieHeaders,
-}) => {
-  const cookieHeaders = await extractCookieHeaders(adminPage);
-  const { data } = await archestraApiSdk.initializeSecretsManager({
-    body: {
-      type: SecretsManagerType.DB,
-    },
-    headers: { Cookie: cookieHeaders },
-  });
-  expect(data?.type).toBe(SecretsManagerType.DB);
 });

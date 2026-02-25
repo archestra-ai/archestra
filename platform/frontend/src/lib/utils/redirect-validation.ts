@@ -6,14 +6,19 @@
  * - Paths with query strings: /search?q=hello
  * - Paths with fragments: /docs#api-section
  * - Path traversal sequences: /../foo (browser normalizes these safely)
+ * - Paths with protocol URLs in query params: /oauth/consent?redirect_uri=cursor://...
  *
  * Rejected patterns (open redirect vectors):
  * - Absolute URLs with protocols: https://evil.com, javascript:alert(1)
  * - Protocol-relative URLs: //evil.com (browser treats as https://evil.com)
- * - Paths containing protocol markers: /redirect?url=https://evil.com
- * - Paths containing backslashes: /\evil.com (some browsers normalize to //evil.com)
+ * - Path portion containing protocol markers: /https://evil.com
+ * - Path portion containing backslashes: /\evil.com (some browsers normalize to //evil.com)
  *
- * Note: Path traversal (/../) is allowed because browser normalization ensures
+ * Note: Protocol markers (://) and backslashes are only checked in the path portion
+ * (before the query string). Query parameter values may legitimately contain protocol
+ * URLs (e.g., redirect_uri=cursor://...) which are just data, not redirect targets.
+ *
+ * Path traversal (/../) is allowed because browser normalization ensures
  * the final path stays within the application. Double-encoded characters are
  * safe since we decode once and pass directly to router.push().
  *
@@ -21,11 +26,14 @@
  * @returns true if the path is a safe relative path
  */
 function isValidRelativePath(path: string): boolean {
+  // Only check for protocol markers and backslashes in the path portion (before query string).
+  // Query parameter values may legitimately contain protocol URLs (e.g., redirect_uri=cursor://...)
+  const pathPortion = path.split("?")[0];
   return (
     path.startsWith("/") &&
     !path.startsWith("//") &&
-    !path.includes("://") &&
-    !path.includes("\\")
+    !pathPortion.includes("://") &&
+    !pathPortion.includes("\\")
   );
 }
 

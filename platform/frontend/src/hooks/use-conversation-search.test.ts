@@ -1,8 +1,13 @@
 "use client";
 
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversationSearch } from "./use-conversation-search";
+
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
 
 describe("useConversationSearch", () => {
   let originalPlatform: string;

@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_TEAM_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import dotenv from "dotenv";
@@ -76,13 +77,72 @@ export const MEMBER_PASSWORD = "password";
 /**
  * Team names for e2e tests
  */
-export const DEFAULT_TEAM_NAME = "Default Team";
+export { DEFAULT_TEAM_NAME };
 export const ENGINEERING_TEAM_NAME = "Engineering Team";
 export const MARKETING_TEAM_NAME = "Marketing Team";
-
-export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 export { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 
 export const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
 export const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
+
+// =============================================================================
+// Keycloak Configuration (matches helm/e2e-tests/values.yaml)
+// =============================================================================
+
+export const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
+export const KEYCLOAK_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-keycloak:8080"
+  : "http://localhost:30081";
+export const KEYCLOAK_REALM = "archestra";
+
+/** OIDC client configuration for Keycloak */
+export const KEYCLOAK_OIDC = {
+  clientId: "archestra-oidc",
+  clientSecret: "archestra-oidc-secret",
+  issuer: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`,
+  discoveryEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+  authorizationEndpoint: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+  tokenEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+  jwksEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+};
+
+/** SAML configuration for Keycloak */
+export const KEYCLOAK_SAML = {
+  entityId: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`,
+  ssoUrl: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`,
+};
+
+/** Keycloak test user credentials (match Archestra admin for account linking) */
+export const KC_TEST_USER = {
+  username: ADMIN_EMAIL.split("@")[0],
+  password: ADMIN_PASSWORD,
+  email: ADMIN_EMAIL,
+  name: "Admin User",
+};
+
+/** SSO domain - extracted from admin email for account linking */
+export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
+
+// =============================================================================
+// MCP Server JWKS (example server for JWT propagation testing)
+// =============================================================================
+
+export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
+export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-mcp-server-jwks:3456"
+  : "http://localhost:30082";
+
+/** Docker image for the JWKS MCP server (used for local K8s deployment tests) */
+export const MCP_SERVER_JWKS_DOCKER_IMAGE =
+  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.1";
+
+/**
+ * Keycloak internal URL for use by K8s pods (MCP servers spawned by orchestrator).
+ * In CI: pods and Keycloak are in the same namespace (default), so short service name works.
+ * In local dev: MCP server pods run in archestra-dev namespace, Keycloak in default namespace,
+ * so use FQDN for cross-namespace DNS resolution.
+ */
+export const KEYCLOAK_K8S_INTERNAL_URL = IS_CI
+  ? "http://e2e-tests-keycloak:8080"
+  : "http://e2e-tests-keycloak.default.svc.cluster.local:8080";

@@ -14,8 +14,8 @@ import logger from "@/logging";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
-  /** Chat model list cache */
-  GetChatModels: "get-chat-models",
+  /** models.dev sync tracking */
+  ModelsDevSync: "models-dev-sync",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
   /** Deduplication for processed emails */
@@ -26,8 +26,16 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
-  /** SSO groups cache during login flow */
-  SsoGroups: "sso-groups",
+  /** IdP groups cache during login flow */
+  IdpGroups: "idp-groups",
+  /** Chat stream stop signal for cross-pod abort */
+  ChatStop: "chat-stop",
+  /** Channel discovery TTL per workspace */
+  ChannelDiscovery: "channel-discovery",
+  /** Slack user ID → email mapping */
+  SlackUserEmail: "slack-user-email",
+  /** Virtual API key brute-force rate limiting per IP */
+  VirtualKeyRateLimit: "virtual-key-rate-limit",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

@@ -31,7 +31,7 @@ export const ExtendedSelectToolSchema = SelectToolSchema.omit({
     })
     .nullable(),
   // Nullable for tools "sniffed" from LLM proxy requests
-  mcpServer: z
+  catalog: z
     .object({
       id: z.string(),
       name: z.string(),
@@ -75,9 +75,6 @@ export const ToolWithAssignmentsSchema = z.object({
   description: z.string().nullable(),
   parameters: ToolParametersContentSchema,
   catalogId: z.string().nullable(),
-  mcpServerId: z.string().nullable(),
-  mcpServerName: z.string().nullable(),
-  mcpServerCatalogId: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
   assignmentCount: z.number(),

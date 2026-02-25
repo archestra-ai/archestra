@@ -75,15 +75,16 @@ describe("WebSocketService", () => {
     const socket = FakeWebSocket.instances[0];
     expect(socket).toBeDefined();
 
-    websocketService.send({ type: "hello-world", payload: {} });
+    const testMessage = {
+      type: "unsubscribe_browser_stream" as const,
+      payload: { conversationId: "test-conversation-id" },
+    };
+    websocketService.send(testMessage);
     expect(socket.sent).toHaveLength(0);
 
     socket.triggerOpen();
     expect(socket.sent).toHaveLength(1);
-    expect(JSON.parse(socket.sent[0])).toEqual({
-      type: "hello-world",
-      payload: {},
-    });
+    expect(JSON.parse(socket.sent[0])).toEqual(testMessage);
   });
 
   test("sends immediately when the socket is open", async () => {
@@ -94,7 +95,10 @@ describe("WebSocketService", () => {
     const socket = FakeWebSocket.instances[0];
     socket.triggerOpen();
 
-    websocketService.send({ type: "hello-world", payload: {} });
+    websocketService.send({
+      type: "unsubscribe_browser_stream",
+      payload: { conversationId: "test-conversation-id" },
+    });
     expect(socket.sent).toHaveLength(1);
   });
 });

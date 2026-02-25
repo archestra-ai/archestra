@@ -1,6 +1,7 @@
 import { E2eTestId } from "@shared";
+import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
+import { clickButton, navigateAndVerifyAuth } from "../../utils";
 
 test.describe(
   "Invitation functionality",
@@ -15,32 +16,19 @@ test.describe(
       page,
       goToPage,
     }) => {
-      // Navigate to the members settings page
-      await goToPage(page, "/settings/members");
-
-      // Wait for the page to fully load (API calls to complete)
-      await page.waitForLoadState("networkidle");
-
-      // Wait for the "Invite Member" button to be visible before clicking
-      // Firefox/WebKit may take longer to render buttons in CI environments
-      // The button is hidden while permission checks are loading (shows skeleton instead)
-      // Note: We don't wait for the Members card title because during loading,
-      // the OrganizationMembersCard shows a Skeleton instead of the actual title
-      // Use polling with page reload as fallback for React hydration delays
+      // Navigate to the members settings page with polling retry
+      // Firefox/WebKit may need multiple attempts for React hydration and permission checks
       const inviteButton = page.getByRole("button", {
         name: /invite member/i,
       });
-      let attempts = 0;
-      await expect(async () => {
-        attempts++;
-        // If button not visible after first attempt, try reloading the page
-        if (attempts > 1) {
-          await page.reload();
-          await page.waitForLoadState("networkidle");
-        }
-        await expect(inviteButton).toBeVisible({ timeout: 5000 });
-        await expect(inviteButton).toBeEnabled({ timeout: 5000 });
-      }).toPass({ timeout: 90_000, intervals: [2000, 5000, 10000] });
+      await navigateAndVerifyAuth({
+        page,
+        path: "/settings/members",
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        verifyLocator: inviteButton,
+        goToPage,
+      });
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
@@ -72,32 +60,18 @@ test.describe(
       const TEST_PASSWORD = "TestPassword123!";
 
       // PART 1: Generate the invitation link (as admin)
-      // Navigate to the members settings page
-      await goToPage(page, "/settings/members");
-
-      // Wait for the page to fully load (API calls to complete)
-      await page.waitForLoadState("networkidle");
-
-      // Wait for the "Invite Member" button to be visible before clicking
-      // Firefox/WebKit may take longer to render buttons in CI environments
-      // The button is hidden while permission checks are loading (shows skeleton instead)
-      // Note: We don't wait for the Members card title because during loading,
-      // the OrganizationMembersCard shows a Skeleton instead of the actual title
-      // Use polling with page reload as fallback for React hydration delays
+      // Navigate with polling retry for Firefox/WebKit React hydration delays
       const inviteButton = page.getByRole("button", {
         name: /invite member/i,
       });
-      let attempts = 0;
-      await expect(async () => {
-        attempts++;
-        // If button not visible after first attempt, try reloading the page
-        if (attempts > 1) {
-          await page.reload();
-          await page.waitForLoadState("networkidle");
-        }
-        await expect(inviteButton).toBeVisible({ timeout: 5000 });
-        await expect(inviteButton).toBeEnabled({ timeout: 5000 });
-      }).toPass({ timeout: 90_000, intervals: [2000, 5000, 10000] });
+      await navigateAndVerifyAuth({
+        page,
+        path: "/settings/members",
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        verifyLocator: inviteButton,
+        goToPage,
+      });
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });

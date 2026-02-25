@@ -1,5 +1,5 @@
 "use client";
-import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
+import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
 import { E2eTestId } from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
@@ -7,39 +7,36 @@ import {
   Bot,
   Bug,
   Cable,
-  DollarSign,
   Github,
-  LogIn,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
   Network,
-  Router,
+  Route,
   Settings,
-  Shield,
   Slack,
   Star,
-  Wrench,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
-import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { WithPermissions } from "@/components/roles/with-permissions";
-import { SecurityEngineWarning } from "@/components/security-engine-warning";
-import { Badge } from "@/components/ui/badge";
+import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarRail,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { usePermissionMap } from "@/lib/auth.query";
@@ -47,263 +44,318 @@ import config from "@/lib/config";
 import { useGithubStars } from "@/lib/github.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 
-interface MenuItem {
+interface NavSubItem {
   title: string;
   url: string;
-  icon: LucideIcon;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
-const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
-  if (!isAuthenticated) {
-    return [];
-  }
-  return [
-    {
-      title: "Chat",
-      url: "/chat",
-      icon: MessageCircle,
-      customIsActive: (pathname: string, searchParams: URLSearchParams) =>
-        pathname === "/chat" && !searchParams.get("conversation"),
-    },
-    {
-      title: "Agents",
-      url: "/agents",
-      icon: Bot,
-    },
-    {
-      title: "MCP Gateways",
-      url: "/mcp-gateways",
-      icon: Shield,
-    },
-    {
-      title: "LLM Proxies",
-      url: "/llm-proxies",
-      icon: Network,
-    },
-    {
-      title: "Logs",
-      url: "/logs/llm-proxy",
-      icon: MessagesSquare,
-      customIsActive: (pathname: string) => pathname.startsWith("/logs"),
-    },
-    {
-      title: "Tool Policies",
-      url: "/tools",
-      icon: Wrench,
-      customIsActive: (pathname: string) => pathname.startsWith("/tools"),
-    },
-    {
-      title: "MCP Registry",
-      url: "/mcp-catalog/registry",
-      icon: Router,
-      customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
-    },
-    {
-      title: "Cost & Limits",
-      url: "/cost",
-      icon: DollarSign,
-    },
-    {
-      title: "Connect",
-      url: "/connection",
-      icon: Cable,
-    },
-    {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings,
-      customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-    },
-  ];
-};
+interface NavItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  iconClassName?: string;
+  customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
+  onClick?: () => void;
+  subItems?: NavSubItem[];
+}
 
-const userItems: MenuItem[] = [
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+// Primary nav items shown in the header (flat list, like sidebar-10 NavMain)
+const headerNavItems: NavItem[] = [
   {
-    title: "Sign in",
-    url: "/auth/sign-in",
-    icon: LogIn,
+    title: "New Chat",
+    url: "/chat",
+    icon: MessageCircle,
+    customIsActive: (pathname: string, searchParams: URLSearchParams) =>
+      pathname === "/chat" && !searchParams.get("conversation"),
   },
-  // Sign up is disabled - users must use invitation links to join
 ];
 
-const CommunitySideBarSection = ({ starCount }: { starCount: number }) => (
-  <SidebarGroup className="px-4 py-0">
-    <SidebarGroupLabel>Community</SidebarGroupLabel>
-    <SidebarGroupContent>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <a
-              href="https://github.com/archestra-ai/archestra"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Github />
-              <span className="flex items-center gap-2">
-                Star us on GitHub
-                <span className="flex items-center gap-1 text-xs">
-                  <Star className="h-3 w-3" />
-                  {starCount}
-                </span>
-              </span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <a
-              href="https://archestra.ai/docs/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <BookOpen />
-              <span>Documentation</span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <a
-              href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Slack />
-              <span>Talk to developers</span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <a
-              href="https://github.com/archestra-ai/archestra/issues/new"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Bug />
-              <span>Report a bug</span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarGroupContent>
-  </SidebarGroup>
-);
+// Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
+const contentNavGroups: NavGroup[] = [
+  {
+    label: "Agents",
+    items: [
+      {
+        title: "Agents",
+        url: "/agents",
+        icon: Bot,
+        subItems: [
+          {
+            title: "Triggers",
+            url: "/agent-triggers/ms-teams",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/agent-triggers"),
+          },
+        ],
+      },
+    ],
+  },
+  {
+    label: "LLM Proxies",
+    items: [
+      {
+        title: "LLM Proxies",
+        url: "/llm-proxies",
+        icon: Network,
+        customIsActive: (pathname: string) => pathname === "/llm-proxies",
+        subItems: [
+          {
+            title: "Providers",
+            url: "/llm-proxies/provider-settings",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/llm-proxies/provider-settings"),
+          },
+          {
+            title: "Cost & Limits",
+            url: "/cost",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    label: "MCP & Tools",
+    items: [
+      {
+        title: "MCP Gateways",
+        url: "/mcp-gateways",
+        icon: Route,
+        subItems: [
+          {
+            title: "MCP Registry",
+            url: "/mcp-catalog/registry",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/mcp-catalog"),
+          },
+          {
+            title: "Tool Policies",
+            url: "/tool-policies",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/tool-policies"),
+          },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Other",
+    items: [
+      {
+        title: "Logs",
+        url: "/logs/llm-proxy",
+        icon: MessagesSquare,
+        customIsActive: (pathname: string) => pathname.startsWith("/logs"),
+      },
+      {
+        title: "Connect",
+        url: "/connection",
+        icon: Cable,
+      },
+      {
+        title: "Settings",
+        url: "/settings",
+        icon: Settings,
+        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+      },
+    ],
+  },
+];
 
-const MainSideBarSection = ({
-  isAuthenticated,
+// Primary navigation: renders all items in a single SidebarGroup/SidebarMenu
+const NavPrimary = ({
+  items,
+  groups,
   pathname,
   searchParams,
-  starCount,
+  permissionMap,
+  chatSection,
 }: {
-  isAuthenticated: boolean;
+  items: NavItem[];
+  groups: NavGroup[];
   pathname: string;
   searchParams: URLSearchParams;
-  starCount: number;
+  permissionMap: Record<string, boolean>;
+  chatSection?: React.ReactNode;
 }) => {
-  const allItems = getNavigationItems(isAuthenticated);
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  if (permissionMap === null) {
-    return null;
-  }
-  const permittedItems = allItems.filter(
+  const renderItem = (item: NavItem) => (
+    <SidebarMenuItem key={item.title}>
+      <SidebarMenuButton
+        asChild
+        isActive={
+          item.customIsActive?.(pathname, searchParams) ??
+          pathname.startsWith(item.url)
+        }
+      >
+        <Link href={item.url}>
+          <item.icon className={item.iconClassName} />
+          <span>{item.title}</span>
+        </Link>
+      </SidebarMenuButton>
+      {item.title === "New Chat" && chatSection}
+      {item.subItems && item.subItems.length > 0 && (
+        <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
+          {item.subItems.map((sub) => (
+            <SidebarMenuSubItem key={sub.title}>
+              <SidebarMenuSubButton
+                asChild
+                isActive={
+                  sub.customIsActive?.(pathname, searchParams) ??
+                  pathname.startsWith(sub.url)
+                }
+              >
+                <Link href={sub.url}>
+                  <span>{sub.title}</span>
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      )}
+    </SidebarMenuItem>
+  );
+
+  const permittedHeaderItems = items.filter(
     (item) => permissionMap[item.url] ?? true,
   );
 
   return (
-    <>
-      <SidebarGroup className="px-4">
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {permittedItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={
-                    item.customIsActive?.(pathname, searchParams) ??
-                    pathname.startsWith(item.url)
-                  }
-                >
-                  <Link href={item.url}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-      <WithPermissions
-        permissions={{ conversation: ["read"] }}
-        noPermissionHandle="tooltip"
-      >
-        {({ hasPermission }) => {
-          return hasPermission === undefined ? null : hasPermission ? (
-            <ChatSidebarSection />
-          ) : (
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <Badge variant="outline" className="text-xs mx-4">
-                  Recent chats are not shown
-                </Badge>
-              </SidebarGroupContent>
-            </SidebarGroup>
+    <SidebarGroup>
+      <SidebarMenu>
+        {permittedHeaderItems.map(renderItem)}
+        {groups.map((group) => {
+          const permittedItems = group.items.filter(
+            (item) => permissionMap[item.url] ?? true,
           );
-        }}
-      </WithPermissions>
-      {!config.enterpriseLicenseActivated && (
-        <CommunitySideBarSection starCount={starCount} />
-      )}
-    </>
+          if (permittedItems.length === 0) return null;
+          return (
+            <React.Fragment key={group.label}>
+              {permittedItems.map(renderItem)}
+            </React.Fragment>
+          );
+        })}
+      </SidebarMenu>
+    </SidebarGroup>
   );
 };
 
-const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
-  <SidebarFooter>
-    <SecurityEngineWarning />
-    <DefaultCredentialsWarning />
-    <SignedIn>
-      <SidebarGroup className="mt-auto">
-        <SidebarGroupContent>
-          <div data-testid={E2eTestId.SidebarUserProfile}>
-            <UserButton
-              size="default"
-              align="center"
-              className="w-full bg-transparent hover:bg-transparent text-foreground"
-              disableDefaultLinks
-            />
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </SignedIn>
-    <SignedOut>
-      <SidebarGroupContent className="mb-4">
-        <SidebarGroupLabel>User</SidebarGroupLabel>
+// Matches sidebar-10 NavSecondary: SidebarGroup with mt-auto
+const NavSecondary = ({
+  items,
+  pathname,
+  searchParams,
+  permissionMap,
+  starCount,
+  className,
+}: {
+  items: NavItem[];
+  pathname: string;
+  searchParams: URLSearchParams;
+  permissionMap: Record<string, boolean>;
+  starCount: string;
+  className?: string;
+}) => {
+  const permittedItems = items.filter(
+    (item) => permissionMap[item.url] ?? true,
+  );
+
+  return (
+    <SidebarGroup className={className}>
+      <SidebarGroupContent>
         <SidebarMenu>
-          {userItems.map((item) => (
+          {permittedItems.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild isActive={item.url === pathname}>
+              <SidebarMenuButton
+                asChild
+                isActive={
+                  item.customIsActive?.(pathname, searchParams) ??
+                  pathname.startsWith(item.url)
+                }
+              >
                 <Link href={item.url}>
-                  <item.icon />
+                  <item.icon className={item.iconClassName} />
                   <span>{item.title}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
+          {!config.enterpriseLicenseActivated && (
+            <>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://github.com/archestra-ai/archestra"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Github />
+                    <span className="flex items-center gap-2">
+                      Star us on GitHub
+                      <span className="flex items-center gap-1 text-xs">
+                        <Star className="h-3 w-3" />
+                        {starCount}
+                      </span>
+                    </span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://archestra.ai/docs/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <BookOpen />
+                    <span>Documentation</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://archestra.ai/join-slack"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Slack />
+                    <span>Talk to developers</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://github.com/archestra-ai/archestra/issues/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Bug />
+                    <span>Report a bug</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </>
+          )}
         </SidebarMenu>
       </SidebarGroupContent>
-    </SignedOut>
-  </SidebarFooter>
-);
+    </SidebarGroup>
+  );
+};
 
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
+  const formattedStarCount = starCount ?? "";
   const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
+  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
 
   const logoToShow = logo ? (
     <div className="flex justify-center">
@@ -335,22 +387,58 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="flex flex-col gap-2">
-        {isLoadingAppearance ? <div className="h-[20px]" /> : logoToShow}
+      <SidebarHeader>
+        {isLoadingAppearance ? <div className="h-[47px]" /> : logoToShow}
       </SidebarHeader>
       <SidebarContent>
-        {isAuthenticated ? (
-          <MainSideBarSection
-            isAuthenticated={isAuthenticated}
+        {isAuthenticated && permissionMap && (
+          <>
+            <NavPrimary
+              items={headerNavItems}
+              groups={contentNavGroups}
+              pathname={pathname}
+              searchParams={searchParams}
+              permissionMap={permissionMap}
+              chatSection={<ChatSidebarSection />}
+            />
+            <NavSecondary
+              items={[]}
+              pathname={pathname}
+              searchParams={searchParams}
+              permissionMap={permissionMap}
+              starCount={formattedStarCount}
+              className="mt-auto"
+            />
+          </>
+        )}
+        {!isAuthenticated && !config.enterpriseLicenseActivated && (
+          <NavSecondary
+            items={[]}
             pathname={pathname}
             searchParams={searchParams}
-            starCount={starCount}
+            permissionMap={{}}
+            starCount={formattedStarCount}
           />
-        ) : (
-          <CommunitySideBarSection starCount={starCount} />
         )}
       </SidebarContent>
-      <FooterSideBarSection pathname={pathname} />
+      <SidebarFooter>
+        <SidebarWarningsAccordion />
+        <SignedIn>
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <div data-testid={E2eTestId.SidebarUserProfile}>
+                <UserButton
+                  size="default"
+                  align="center"
+                  className="w-full bg-transparent hover:bg-transparent text-foreground"
+                  disableDefaultLinks
+                />
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SignedIn>
+      </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

@@ -6,12 +6,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
-import { permissionsToStrings } from "@/lib/auth.utils";
+import { useHasPermissions, useMissingPermissions } from "@/lib/auth.query";
+import { formatMissingPermissions } from "@/lib/auth.utils";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
   tooltip?: string;
+  noPermissionHandle?: "tooltip" | "hide";
 };
 
 /**
@@ -39,21 +40,29 @@ export function PermissionButton({
   permissions,
   tooltip,
   children,
+  noPermissionHandle = "tooltip",
   ...props
 }: PermissionButtonProps) {
   const { data: hasPermission } = useHasPermissions(permissions);
+  const missingPermissions = useMissingPermissions(permissions);
 
   if (hasPermission && tooltip) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button {...props}>{children}</Button>
+          <span>
+            <Button {...props}>{children}</Button>
+          </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
       </Tooltip>
     );
   } else if (hasPermission) {
     return <Button {...props}>{children}</Button>;
+  }
+
+  if (noPermissionHandle === "hide") {
+    return null;
   }
 
   return (
@@ -74,9 +83,7 @@ export function PermissionButton({
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-60">
-        <p>
-          Required permissions: {permissionsToStrings(permissions).join(", ")}.
-        </p>
+        {tooltip || formatMissingPermissions(missingPermissions)}
       </TooltipContent>
     </Tooltip>
   );

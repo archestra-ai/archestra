@@ -1,8 +1,8 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { DEFAULT_TABLE_LIMIT } from "./utils";
+import { useQuery } from "@tanstack/react-query";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
 const {
   getInteraction,
@@ -39,7 +39,7 @@ export function useInteractions({
   sortDirection?: "asc" | "desc";
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [
       "interactions",
       profileId,
@@ -68,15 +68,22 @@ export function useInteractions({
           sortDirection,
         },
       });
+      const emptyResponse = {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      };
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch interactions",
-        );
+        handleApiError(response.error);
+        return emptyResponse;
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch interactions");
-      }
-      return response.data;
+      return response.data ?? emptyResponse;
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
     initialData:
@@ -105,19 +112,15 @@ export function useInteraction({
   initialData?: archestraApiTypes.GetInteractionResponses["200"];
   refetchInterval?: number | null;
 }) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch interaction",
-        );
+        handleApiError(response.error);
+        return null;
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch interaction");
-      }
-      return response.data;
+      return response.data ?? null;
     },
     initialData,
     ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
@@ -125,37 +128,29 @@ export function useInteraction({
 }
 
 export function useUniqueExternalAgentIds() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
       if (response.error) {
-        const msg =
-          response.error.error?.message ?? "Failed to fetch external agent IDs";
-        throw new Error(msg);
+        handleApiError(response.error);
+        return [];
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch external agent IDs");
-      }
-      return response.data;
+      return response.data ?? [];
     },
   });
 }
 
 export function useUniqueUserIds() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
       const response = await getUniqueUserIds();
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch user IDs",
-        );
+        handleApiError(response.error);
+        return [];
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch user IDs");
-      }
-      return response.data;
+      return response.data ?? [];
     },
   });
 }
@@ -181,7 +176,7 @@ export function useInteractionSessions({
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [
       "interactions",
       "sessions",
@@ -207,15 +202,23 @@ export function useInteractionSessions({
           offset,
         },
       });
+      const emptyResponse = {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      };
+
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch sessions",
-        );
+        handleApiError(response.error);
+        return emptyResponse;
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch sessions");
-      }
-      return response.data;
+      return response.data ?? emptyResponse;
     },
     initialData:
       offset === 0 &&

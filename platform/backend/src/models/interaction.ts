@@ -167,7 +167,7 @@ async function getAgentNamesById(
  * Resolve an external agent ID to a human-readable label.
  * - Single agent ID: Returns the agent name
  * - Delegation chain: Returns only the last (most specific) agent name
- * - Non-UUID: Returns null (will fall back to Main/Subagent)
+ * - Non-UUID: Returns the original string as-is
  */
 function resolveExternalAgentIdLabel(
   externalAgentId: string | null,
@@ -226,11 +226,50 @@ function buildExternalAgentDisplayName(
   return externalAgentId;
 }
 
+/**
+ * Strips null bytes (\u0000) from JSON-serializable data.
+ * PostgreSQL JSONB rejects null byte unicode escape sequences, which can appear
+ * in LLM responses (e.g., Gemini's thoughtSignature fields).
+ */
+function stripNullBytes<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    return value.replaceAll("\u0000", "") as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripNullBytes) as T;
+  }
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = stripNullBytes(v);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 class InteractionModel {
+  static async existsByExecutionId(executionId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.executionId, executionId))
+      .limit(1);
+    return result !== undefined;
+  }
+
   static async create(data: InsertInteraction) {
+    // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
+    const sanitized = {
+      ...data,
+      request: stripNullBytes(data.request),
+      response: stripNullBytes(data.response),
+    };
+
     const [interaction] = await db
       .insert(schema.interactionsTable)
-      .values(data)
+      .values(sanitized)
       .returning();
 
     // Update usage tracking after interaction is created
@@ -411,6 +450,10 @@ class InteractionModel {
 
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
+      // If profileId is null (agent was deleted), only admins can see the interaction
+      if (!interaction.profileId) {
+        return null;
+      }
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         interaction.profileId,
@@ -613,6 +656,13 @@ class InteractionModel {
       }
 
       // Get agent's teams to update team and organization limits
+      // If profileId is null (agent was deleted), we can't update usage - skip silently
+      if (!interaction.profileId) {
+        logger.info(
+          `Interaction ${interaction.id} has null profileId (agent deleted) - skipping limit update`,
+        );
+        return;
+      }
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
         interaction.profileId,
       );
@@ -746,7 +796,7 @@ class InteractionModel {
       firstRequestTime: Date;
       lastRequestTime: Date;
       models: string[];
-      profileId: string;
+      profileId: string | null; // null when profile was deleted
       profileName: string | null;
       externalAgentIds: string[];
       externalAgentIdLabels: (string | null)[]; // Resolved agent names for external agent IDs
@@ -1102,46 +1152,26 @@ class InteractionModel {
           !requestStr.includes("prompt suggestion generator") &&
           !requestStr.includes("Please write a 5-10 word title")
         ) {
-          // Check message content length - support both OpenAI/Anthropic and Gemini formats
+          // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
+          // We accept any interaction that has a valid request structure, not just text content.
+          // This ensures we don't skip requests with images, files, or function calls.
           const request = interaction.request as {
             // OpenAI/Anthropic format
-            messages?: Array<{ content?: string | Array<{ text?: string }> }>;
+            messages?: Array<{ content?: string | Array<unknown> }>;
             // Gemini format
             contents?: Array<{
               role?: string;
-              parts?: Array<{ text?: string }>;
+              parts?: Array<unknown>;
             }>;
           };
 
-          let contentText = "";
+          // Check if request has valid content (messages or contents array with items)
+          const hasOpenAiContent =
+            Array.isArray(request?.messages) && request.messages.length > 0;
+          const hasGeminiContent =
+            Array.isArray(request?.contents) && request.contents.length > 0;
 
-          // Try OpenAI/Anthropic format first (messages[].content)
-          const firstMessage = request?.messages?.[0]?.content;
-          if (firstMessage) {
-            contentText =
-              typeof firstMessage === "string"
-                ? firstMessage
-                : Array.isArray(firstMessage)
-                  ? firstMessage
-                      .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
-                      .join(" ")
-                  : "";
-          }
-
-          // Try Gemini format (contents[].parts[].text)
-          if (!contentText && request?.contents) {
-            const userContent = request.contents.find(
-              (c) => c.role === "user" || !c.role,
-            );
-            if (userContent?.parts) {
-              contentText = userContent.parts
-                .map((p) => p.text ?? "")
-                .filter(Boolean)
-                .join(" ");
-            }
-          }
-
-          if (contentText.length > 0) {
+          if (hasOpenAiContent || hasGeminiContent) {
             lastMainInteraction = interaction;
           }
         }

@@ -47,8 +47,7 @@ export function TokenSelect({
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
 
-  // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
-  const isLoading = false;
+  const isLoading = !groupedCredentials;
 
   const staticCredentialOutsideOfGroupedCredentials =
     value &&
@@ -96,14 +95,12 @@ export function TokenSelect({
         )}
         size="sm"
       >
-        <SelectValue placeholder="Select credentials..." />
+        <SelectValue placeholder="Select connection..." />
       </SelectTrigger>
       <SelectContent>
         {mcpServers.length > 0 && (
           <>
-            <div className="text-xs text-muted-foreground ml-2">
-              Static credentials
-            </div>
+            <div className="text-xs text-muted-foreground ml-2">Static</div>
             {mcpServers.map((server) => (
               <SelectItem
                 key={server.id}

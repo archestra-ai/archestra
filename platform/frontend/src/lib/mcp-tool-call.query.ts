@@ -1,8 +1,26 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { DEFAULT_TABLE_LIMIT } from "./utils";
+import { useQuery } from "@tanstack/react-query";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
+
+type MCPGatewayAuthMethod =
+  archestraApiTypes.GetMcpToolCallResponses["200"]["authMethod"];
+
+export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
+  switch (authMethod) {
+    case "oauth":
+      return "OAuth";
+    case "user_token":
+      return "User Token";
+    case "org_token":
+      return "Org Token";
+    case "team_token":
+      return "Team Token";
+    case "external_idp":
+      return "External IdP";
+  }
+}
 
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
@@ -29,7 +47,7 @@ export function useMcpToolCalls({
   sortDirection?: "asc" | "desc";
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [
       "mcpToolCalls",
       agentId,
@@ -55,14 +73,32 @@ export function useMcpToolCalls({
         },
       });
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch MCP tool calls",
-        );
+        handleApiError(response.error);
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        };
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch MCP tool calls");
-      }
-      return response.data;
+      return (
+        response.data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
     initialData:
@@ -85,19 +121,15 @@ export function useMcpToolCall({
   mcpToolCallId: string;
   initialData?: archestraApiTypes.GetMcpToolCallResponses["200"];
 }) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["mcpToolCalls", mcpToolCallId],
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch MCP tool call",
-        );
+        handleApiError(response.error);
+        return null;
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch MCP tool call");
-      }
-      return response.data;
+      return response.data ?? null;
     },
     initialData,
   });

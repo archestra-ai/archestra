@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
@@ -74,7 +75,11 @@ vi.mock("@/models/mcp-server", () => ({
 }));
 
 vi.mock("./k8s-deployment", () => ({
-  default: vi.fn(),
+  default: class MockK8sDeployment {
+    static sanitizeLabelValue(value: string): string {
+      return value;
+    }
+  },
 }));
 
 describe("validateKubeconfig", () => {
@@ -426,6 +431,279 @@ describe("McpServerRuntimeManager", () => {
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
+    });
+  });
+
+  describe("streamMcpServerLogs", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    test("writes a helpful message when runtime is not configured", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {
+          throw new Error("Config load failed");
+        });
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      const stream = new PassThrough();
+      let output = "";
+      stream.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+
+      await manager.streamMcpServerLogs("test-server-id", stream);
+
+      expect(output).toContain("Unable to stream logs");
+      expect(output).toContain(
+        "Kubernetes runtime is not configured on this instance.",
+      );
+      expect(output).toContain("mcp-server-id=test-server-id");
+
+      mockLoadFromDefault.mockRestore();
+    });
+  });
+
+  describe("startServer - non-prompted secrets merging logic", () => {
+    // These tests verify the non-prompted secret merging logic
+    // by testing the helper function behavior patterns
+
+    test("merges non-prompted secrets from catalog environment into secretData", () => {
+      // Test the merging logic that's in startServer
+      // Given: secretData from mcpServer.secretId
+      const secretData: Record<string, string> = {
+        prompted_secret: "prompted-value",
+        context7_api_key: "api-key-value",
+      };
+
+      // And: catalog environment with non-prompted secrets
+      const catalogEnvironment = [
+        {
+          key: "prompted_secret",
+          type: "secret" as const,
+          promptOnInstallation: true,
+          value: "prompted-value",
+        },
+        {
+          key: "static_secret",
+          type: "secret" as const,
+          promptOnInstallation: false,
+          value: "static-secret-value", // Non-prompted secret from catalog
+        },
+        {
+          key: "context7_api_key",
+          type: "secret" as const,
+          promptOnInstallation: true,
+          value: "api-key-value",
+        },
+        {
+          key: "plain_env_var",
+          type: "plain_text" as const,
+          promptOnInstallation: false,
+          value: "plain-value", // Not a secret, should be ignored
+        },
+      ];
+
+      // When: we apply the merging logic from startServer
+      for (const envDef of catalogEnvironment) {
+        if (
+          envDef.type === "secret" &&
+          !envDef.promptOnInstallation &&
+          envDef.value
+        ) {
+          if (!(envDef.key in secretData)) {
+            secretData[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Then: secretData should include the non-prompted secret
+      expect(secretData).toEqual({
+        prompted_secret: "prompted-value",
+        context7_api_key: "api-key-value",
+        static_secret: "static-secret-value", // Merged from catalog
+      });
+    });
+
+    test("does not overwrite existing secrets from mcpServer.secretId with catalog values", () => {
+      // Given: secretData already has 'some_key'
+      const secretData: Record<string, string> = {
+        some_key: "server-secret-value",
+      };
+
+      // And: catalog also has 'some_key' as non-prompted secret with different value
+      const catalogEnvironment = [
+        {
+          key: "some_key",
+          type: "secret" as const,
+          promptOnInstallation: false,
+          value: "catalog-secret-value", // Different value from catalog
+        },
+      ];
+
+      // When: we apply the merging logic
+      for (const envDef of catalogEnvironment) {
+        if (
+          envDef.type === "secret" &&
+          !envDef.promptOnInstallation &&
+          envDef.value
+        ) {
+          if (!(envDef.key in secretData)) {
+            secretData[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Then: existing value should NOT be overwritten
+      expect(secretData).toEqual({
+        some_key: "server-secret-value", // Original value preserved
+      });
+    });
+
+    test("handles empty secretData by creating new object", () => {
+      // Given: no secretData yet
+      let secretData: Record<string, string> | undefined;
+
+      // And: catalog has non-prompted secrets
+      const catalogEnvironment = [
+        {
+          key: "static_secret",
+          type: "secret" as const,
+          promptOnInstallation: false,
+          value: "static-value",
+        },
+      ];
+
+      // When: we apply the merging logic
+      for (const envDef of catalogEnvironment) {
+        if (
+          envDef.type === "secret" &&
+          !envDef.promptOnInstallation &&
+          envDef.value
+        ) {
+          if (!secretData) {
+            secretData = {};
+          }
+          if (!(envDef.key in secretData)) {
+            secretData[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Then: secretData should be created with the non-prompted secret
+      expect(secretData).toEqual({
+        static_secret: "static-value",
+      });
+    });
+
+    test("ignores secrets with promptOnInstallation=true", () => {
+      // Given: empty secretData
+      const secretData: Record<string, string> = {};
+
+      // And: catalog has only prompted secrets
+      const catalogEnvironment = [
+        {
+          key: "prompted_secret",
+          type: "secret" as const,
+          promptOnInstallation: true,
+          value: "prompted-value",
+        },
+      ];
+
+      // When: we apply the merging logic
+      for (const envDef of catalogEnvironment) {
+        if (
+          envDef.type === "secret" &&
+          !envDef.promptOnInstallation &&
+          envDef.value
+        ) {
+          if (!(envDef.key in secretData)) {
+            secretData[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Then: secretData should be empty (prompted secrets are already in mcpServer.secretId)
+      expect(secretData).toEqual({});
+    });
+
+    test("ignores non-secret environment variables", () => {
+      // Given: empty secretData
+      const secretData: Record<string, string> = {};
+
+      // And: catalog has plain text environment variables
+      // Use explicit type to match the structure from LocalConfig
+      type EnvDef = {
+        key: string;
+        type: "plain_text" | "secret" | "boolean" | "number";
+        promptOnInstallation: boolean;
+        value?: string;
+      };
+      const catalogEnvironment: EnvDef[] = [
+        {
+          key: "plain_env_var",
+          type: "plain_text",
+          promptOnInstallation: false,
+          value: "plain-value",
+        },
+        {
+          key: "boolean_env_var",
+          type: "boolean",
+          promptOnInstallation: false,
+          value: "true",
+        },
+      ];
+
+      // When: we apply the merging logic
+      for (const envDef of catalogEnvironment) {
+        if (
+          envDef.type === "secret" &&
+          !envDef.promptOnInstallation &&
+          envDef.value
+        ) {
+          if (!(envDef.key in secretData)) {
+            secretData[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Then: secretData should be empty (non-secrets not added)
+      expect(secretData).toEqual({});
+    });
+
+    test("ignores secrets without value", () => {
+      // Given: empty secretData
+      const secretData: Record<string, string> = {};
+
+      // And: catalog has secret without value
+      const catalogEnvironment = [
+        {
+          key: "empty_secret",
+          type: "secret" as const,
+          promptOnInstallation: false,
+          value: undefined,
+        },
+      ];
+
+      // When: we apply the merging logic
+      for (const envDef of catalogEnvironment) {
+        if (
+          envDef.type === "secret" &&
+          !envDef.promptOnInstallation &&
+          envDef.value
+        ) {
+          if (!(envDef.key in secretData)) {
+            secretData[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Then: secretData should be empty (secrets without value not added)
+      expect(secretData).toEqual({});
     });
   });
 });

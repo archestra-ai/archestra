@@ -50,6 +50,130 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("create - null byte sanitization", () => {
+    test("strips null bytes from JSONB fields to avoid PostgreSQL rejection", async () => {
+      // PostgreSQL JSONB rejects \u0000 (null byte) Unicode escape sequences.
+      // These can appear in LLM responses, e.g. Gemini's thoughtSignature fields.
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Hello \u0000 world \u0000 test" },
+          ],
+        },
+        response: {
+          id: "test-nullbytes",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Response \u0000 with \u0000 null bytes",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      expect(interaction).toBeDefined();
+      expect(interaction.id).toBeDefined();
+
+      // Verify the null bytes were stripped by reading back from DB
+      const found = await InteractionModel.findById(interaction.id);
+      expect(found).not.toBeNull();
+
+      const response = found?.response as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      expect(response?.choices?.[0]?.message?.content).toBe(
+        "Response  with  null bytes",
+      );
+
+      const request = found?.request as {
+        messages?: Array<{ content?: string }>;
+      };
+      expect(request?.messages?.[0]?.content).toBe("Hello  world  test");
+    });
+
+    test("throws FK violation when profileId does not exist", async () => {
+      await expect(
+        InteractionModel.create({
+          profileId: "00000000-0000-0000-0000-000000000000",
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          response: {
+            id: "test-response",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: "Hi",
+                  refusal: null,
+                },
+                finish_reason: "stop",
+                logprobs: null,
+              },
+            ],
+          },
+          type: "openai:chatCompletions",
+        }),
+      ).rejects.toThrow();
+    });
+
+    test("handles data without null bytes unchanged", async () => {
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Normal text without null bytes" },
+          ],
+        },
+        response: {
+          id: "test-response",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Normal response",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(interaction.id);
+      const request = found?.request as {
+        messages?: Array<{ content?: string }>;
+      };
+      expect(request?.messages?.[0]?.content).toBe(
+        "Normal text without null bytes",
+      );
+    });
+  });
+
   describe("findById", () => {
     test("returns interaction by id", async () => {
       const created = await InteractionModel.create({
@@ -274,9 +398,12 @@ describe("InteractionModel", () => {
       expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
-    test("member with no access sees no interactions", async ({ makeUser }) => {
+    test("member with no access sees only org-wide agent interactions", async ({
+      makeUser,
+    }) => {
       const user = await makeUser();
 
+      // Teamless agent is org-wide, visible to all members
       const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
 
       await InteractionModel.create({
@@ -298,7 +425,9 @@ describe("InteractionModel", () => {
         user.id,
         false,
       );
-      expect(interactions.data).toHaveLength(0);
+      // Org-wide agents are visible to all members
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
     test("findById returns interaction for admin", async ({ makeAdmin }) => {
@@ -369,11 +498,12 @@ describe("InteractionModel", () => {
       expect(found?.id).toBe(interaction.id);
     });
 
-    test("findById returns null for user without profile access", async ({
+    test("findById returns interaction for org-wide agent", async ({
       makeUser,
     }) => {
       const user = await makeUser();
 
+      // Teamless agent is org-wide
       const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
@@ -394,7 +524,9 @@ describe("InteractionModel", () => {
         user.id,
         false,
       );
-      expect(found).toBeNull();
+      // Org-wide agents are accessible to all members
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(interaction.id);
     });
   });
 
@@ -584,12 +716,13 @@ describe("InteractionModel", () => {
         name: "Accessible Agent",
         teams: [team.id],
       });
-      const inaccessibleAgent = await AgentModel.create({
-        name: "Inaccessible Agent",
+      // Org-wide agent (no teams) is also accessible
+      const orgWideAgent = await AgentModel.create({
+        name: "Org-Wide Agent",
         teams: [],
       });
 
-      // Interaction for accessible agent
+      // Interaction for team-scoped agent
       await InteractionModel.create({
         profileId: accessibleAgent.id,
         externalAgentId: "my-app",
@@ -604,9 +737,9 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Interaction for inaccessible agent with same external ID
+      // Interaction for org-wide agent with same external ID
       await InteractionModel.create({
-        profileId: inaccessibleAgent.id,
+        profileId: orgWideAgent.id,
         externalAgentId: "my-app",
         request: { model: "gpt-4", messages: [] },
         response: {
@@ -619,7 +752,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // User should only see the accessible agent's interaction
+      // User sees both: team-scoped + org-wide agent interactions
       const interactions = await InteractionModel.findAllPaginated(
         { limit: 100, offset: 0 },
         undefined,
@@ -628,8 +761,7 @@ describe("InteractionModel", () => {
         { externalAgentId: "my-app" },
       );
 
-      expect(interactions.data).toHaveLength(1);
-      expect(interactions.data[0].profileId).toBe(accessibleAgent.id);
+      expect(interactions.data).toHaveLength(2);
     });
 
     test("filters by userId", async ({ makeAdmin, makeUser }) => {
@@ -1954,6 +2086,131 @@ describe("InteractionModel", () => {
       );
     });
 
+    test("returns lastInteractionRequest for Gemini with image-only content (no text)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Gemini request with only image data (no text parts)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "gemini-image-session",
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        response: {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "I see an image" }],
+              },
+              finishReason: "STOP",
+              index: 0,
+            },
+          ],
+          modelVersion: "gemini-2.5-pro",
+        },
+        type: "gemini:generateContent",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "gemini-image-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe(
+        "gemini:generateContent",
+      );
+    });
+
+    test("returns lastInteractionRequest for Gemini with function response (tool result)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Gemini request with function response (common in agentic workflows)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "gemini-function-session",
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: "Search for weather" }],
+            },
+            {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "get_weather",
+                    args: { location: "New York" },
+                  },
+                },
+              ],
+            },
+            {
+              role: "user",
+              parts: [
+                {
+                  functionResponse: {
+                    name: "get_weather",
+                    response: { temperature: 72, condition: "sunny" },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        response: {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "The weather in New York is sunny at 72°F" }],
+              },
+              finishReason: "STOP",
+              index: 0,
+            },
+          ],
+          modelVersion: "gemini-2.5-pro",
+        },
+        type: "gemini:generateContent",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "gemini-function-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe(
+        "gemini:generateContent",
+      );
+    });
+
     test("handles single interactions without sessionId (null session)", async ({
       makeAdmin,
     }) => {
@@ -1996,6 +2253,78 @@ describe("InteractionModel", () => {
       expect(ourSession?.sessionId).toBeNull();
       expect(ourSession?.interactionId).toBe(interaction.id);
       expect(ourSession?.lastInteractionRequest).not.toBeNull();
+    });
+  });
+
+  describe("existsByExecutionId", () => {
+    test("returns false when no interaction has the execution id", async () => {
+      const exists = await InteractionModel.existsByExecutionId(
+        "non-existent-exec-id",
+      );
+      expect(exists).toBe(false);
+    });
+
+    test("returns true when an interaction has the execution id", async () => {
+      await InteractionModel.create({
+        profileId,
+        executionId: "test-exec-123",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const exists =
+        await InteractionModel.existsByExecutionId("test-exec-123");
+      expect(exists).toBe(true);
+    });
+
+    test("returns true when multiple interactions share the execution id", async () => {
+      await InteractionModel.create({
+        profileId,
+        executionId: "shared-exec-id",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "First" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId,
+        executionId: "shared-exec-id",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Second" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const exists =
+        await InteractionModel.existsByExecutionId("shared-exec-id");
+      expect(exists).toBe(true);
     });
   });
 
@@ -2125,12 +2454,12 @@ describe("InteractionModel", () => {
         name: "Accessible Agent",
         teams: [team.id],
       });
-      const inaccessibleAgent = await AgentModel.create({
-        name: "Inaccessible Agent",
+      const orgWideAgent = await AgentModel.create({
+        name: "Org-Wide Agent",
         teams: [],
       });
 
-      // Interaction for accessible agent with otherUser
+      // Interaction for team-scoped agent with otherUser
       await InteractionModel.create({
         profileId: accessibleAgent.id,
         userId: otherUser.id,
@@ -2145,9 +2474,9 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Interaction for inaccessible agent with admin
+      // Interaction for org-wide agent with admin
       await InteractionModel.create({
-        profileId: inaccessibleAgent.id,
+        profileId: orgWideAgent.id,
         userId: admin.id,
         request: { model: "gpt-4", messages: [] },
         response: {
@@ -2160,11 +2489,236 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // User should only see userIds from accessible agent's interactions
+      // User sees userIds from both team-scoped and org-wide agent interactions
       const userIds = await InteractionModel.getUniqueUserIds(user.id, false);
 
-      expect(userIds).toHaveLength(1);
-      expect(userIds[0].name).toBe("Other User");
+      expect(userIds).toHaveLength(2);
+    });
+  });
+
+  describe("preserves interactions when profile is deleted", () => {
+    test("interaction is preserved with null profileId when profile is deleted", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [],
+      });
+
+      // Create an interaction for the agent
+      const interaction = await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Hi there",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Delete the agent
+      await AgentModel.delete(agent.id);
+
+      // Admin should still be able to see the interaction with null profileId
+      const found = await InteractionModel.findById(
+        interaction.id,
+        admin.id,
+        true,
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(interaction.id);
+      expect(found?.profileId).toBeNull();
+    });
+
+    test("non-admin cannot see interaction with deleted profile (null profileId)", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Give user access to the team
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const agent = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [team.id],
+      });
+
+      // Create an interaction for the agent
+      const interaction = await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // User can see interaction before agent deletion
+      const beforeDelete = await InteractionModel.findById(
+        interaction.id,
+        user.id,
+        false,
+      );
+      expect(beforeDelete).not.toBeNull();
+
+      // Delete the agent
+      await AgentModel.delete(agent.id);
+
+      // Non-admin should NOT see the interaction with null profileId
+      const afterDelete = await InteractionModel.findById(
+        interaction.id,
+        user.id,
+        false,
+      );
+      expect(afterDelete).toBeNull();
+
+      // But admin should still see it
+      const adminView = await InteractionModel.findById(
+        interaction.id,
+        admin.id,
+        true,
+      );
+      expect(adminView).not.toBeNull();
+      expect(adminView?.profileId).toBeNull();
+    });
+
+    test("getSessions includes sessions with deleted profiles for admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [],
+      });
+
+      // Create an interaction with session
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-to-preserve",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Session message" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Delete the agent
+      await AgentModel.delete(agent.id);
+
+      // Admin should see the session with null profileId
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-to-preserve" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].sessionId).toBe("session-to-preserve");
+      expect(sessions.data[0].profileId).toBeNull();
+    });
+
+    test("findAllPaginated includes interactions with deleted profiles for admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agentToDelete = await AgentModel.create({
+        name: "Agent To Delete",
+        teams: [],
+      });
+      const agentToKeep = await AgentModel.create({
+        name: "Agent To Keep",
+        teams: [],
+      });
+
+      // Create interactions for both agents
+      await InteractionModel.create({
+        profileId: agentToDelete.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agentToKeep.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Delete one agent
+      await AgentModel.delete(agentToDelete.id);
+
+      // Admin should see both interactions
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+      );
+
+      expect(interactions.data).toHaveLength(2);
+
+      const deletedProfileInteraction = interactions.data.find(
+        (i) => i.profileId === null,
+      );
+      const existingProfileInteraction = interactions.data.find(
+        (i) => i.profileId === agentToKeep.id,
+      );
+
+      expect(deletedProfileInteraction).toBeDefined();
+      expect(existingProfileInteraction).toBeDefined();
     });
   });
 });

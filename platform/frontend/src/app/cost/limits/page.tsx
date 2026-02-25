@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,7 +59,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useModelsWithApiKeys } from "@/lib/chat-models.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
   useDeleteLimit,
@@ -70,11 +72,15 @@ import {
   useUpdateOrganization,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { useTokenPrices } from "@/lib/token-price.query";
 
 // Type aliases for better readability
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
-type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
+type TokenPriceData = {
+  model: string;
+  provider: string;
+  pricePerMillionInput: string;
+  pricePerMillionOutput: string;
+};
 type TeamData = archestraApiTypes.GetTeamsResponses["200"][number];
 type UsageStatus = "safe" | "warning" | "danger";
 type LimitType = Pick<LimitData, "limitType">["limitType"];
@@ -606,10 +612,16 @@ export default function LimitsPage() {
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
-  const { data: mcpServers = [] } = useInternalMcpCatalogSuspense();
+  const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
   const { data: organizationDetails } = useOrganization();
-  const { data: tokenPrices = [] } = useTokenPrices();
+  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const tokenPrices: TokenPriceData[] = modelsWithApiKeys.map((m) => ({
+    model: m.modelId,
+    provider: m.provider,
+    pricePerMillionInput: m.capabilities?.pricePerMillionInput ?? "0",
+    pricePerMillionOutput: m.capabilities?.pricePerMillionOutput ?? "0",
+  }));
 
   const updateCleanupInterval = useUpdateOrganization(
     "Cleanup interval updated successfully",
@@ -756,28 +768,35 @@ export default function LimitsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Auto-cleanup interval</CardTitle>
-            <Select
-              value={organizationDetails?.limitCleanupInterval || "1h"}
-              onValueChange={(value) => {
-                updateCleanupInterval.mutate({
-                  limitCleanupInterval: value as NonNullable<
-                    archestraApiTypes.UpdateOrganizationData["body"]
-                  >["limitCleanupInterval"],
-                });
-              }}
-              disabled={updateCleanupInterval.isPending}
+            <WithPermissions
+              permissions={{ limit: ["update"] }}
+              noPermissionHandle="tooltip"
             >
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1h">Every hour</SelectItem>
-                <SelectItem value="12h">Every 12 hours</SelectItem>
-                <SelectItem value="24h">Every 24 hours</SelectItem>
-                <SelectItem value="1w">Every week</SelectItem>
-                <SelectItem value="1m">Every month</SelectItem>
-              </SelectContent>
-            </Select>
+              {({ hasPermission }) => (
+                <Select
+                  value={organizationDetails?.limitCleanupInterval || "1h"}
+                  onValueChange={(value) => {
+                    updateCleanupInterval.mutate({
+                      limitCleanupInterval: value as NonNullable<
+                        archestraApiTypes.UpdateOrganizationData["body"]
+                      >["limitCleanupInterval"],
+                    });
+                  }}
+                  disabled={updateCleanupInterval.isPending || !hasPermission}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1h">Every hour</SelectItem>
+                    <SelectItem value="12h">Every 12 hours</SelectItem>
+                    <SelectItem value="24h">Every 24 hours</SelectItem>
+                    <SelectItem value="1w">Every week</SelectItem>
+                    <SelectItem value="1m">Every month</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
           </div>
         </CardHeader>
       </Card>

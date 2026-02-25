@@ -1,11 +1,11 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { Check, ChevronDown, Copy } from "lucide-react";
-import { useCallback, useState } from "react";
-import { toast } from "sonner";
+import { MoreHorizontal } from "lucide-react";
+import { useState } from "react";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -44,6 +44,14 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.mistral,
     originalUrl: "https://api.mistral.ai/v1/",
   },
+  perplexity: {
+    label: providerDisplayNames.perplexity,
+    originalUrl: "https://api.perplexity.ai/",
+  },
+  groq: {
+    label: providerDisplayNames.groq,
+    originalUrl: "https://api.groq.com/openai/v1/",
+  },
   cohere: {
     label: providerDisplayNames.cohere,
     originalUrl: "https://api.cohere.com/v2/",
@@ -60,18 +68,26 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
   },
+  bedrock: {
+    label: providerDisplayNames.bedrock,
+    originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 
-/** Providers to show as buttons (subset of all providers) */
-const VISIBLE_PROVIDERS: ProviderOption[] = [
+/** Featured providers to show as primary buttons */
+const PRIMARY_PROVIDERS: ProviderOption[] = [
   "openai",
-  "gemini",
   "anthropic",
-  "cerebras",
+  "gemini",
+  "bedrock",
   "claude-code",
-  "mistral",
 ];
+
+/** All other providers to show in the overflow dropdown */
+const DROPDOWN_PROVIDERS: ProviderOption[] = (
+  Object.keys(PROVIDER_CONFIG) as ProviderOption[]
+).filter((provider) => !PRIMARY_PROVIDERS.includes(provider));
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -85,6 +101,7 @@ export function ProxyConnectionInstructions({
   const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
@@ -100,7 +117,7 @@ export function ProxyConnectionInstructions({
   return (
     <div className="space-y-3">
       <ButtonGroup>
-        {VISIBLE_PROVIDERS.map((provider) => (
+        {PRIMARY_PROVIDERS.map((provider) => (
           <Button
             key={provider}
             variant={selectedProvider === provider ? "default" : "outline"}
@@ -110,16 +127,41 @@ export function ProxyConnectionInstructions({
             {PROVIDER_CONFIG[provider].label}
           </Button>
         ))}
-        <Popover>
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm">
-              <ChevronDown className="h-4 w-4" />
+            <Button
+              variant={
+                DROPDOWN_PROVIDERS.includes(selectedProvider)
+                  ? "default"
+                  : "outline"
+              }
+              size="sm"
+              aria-label="More providers"
+            >
+              {DROPDOWN_PROVIDERS.includes(selectedProvider)
+                ? PROVIDER_CONFIG[selectedProvider].label
+                : null}
+              <MoreHorizontal className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-2">
-            <p className="text-xs text-muted-foreground px-2 py-1">
-              More providers coming soon
-            </p>
+          <PopoverContent
+            className="w-auto p-1 flex flex-col"
+            aria-label="Additional providers"
+          >
+            {DROPDOWN_PROVIDERS.map((provider) => (
+              <Button
+                key={provider}
+                variant={selectedProvider === provider ? "default" : "ghost"}
+                size="sm"
+                className="justify-start"
+                onClick={() => {
+                  setSelectedProvider(provider);
+                  setPopoverOpen(false);
+                }}
+              >
+                {PROVIDER_CONFIG[provider].label}
+              </Button>
+            ))}
           </PopoverContent>
         </Popover>
       </ButtonGroup>
@@ -135,15 +177,15 @@ export function ProxyConnectionInstructions({
           <p className="text-sm text-muted-foreground">
             Run Claude Code with the Archestra proxy:
           </p>
-          <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-            <CodeText className="text-xs text-primary flex-1">
+          <CopyableCode
+            value={claudeCodeCommand}
+            toastMessage="Command copied to clipboard"
+            variant="primary"
+          >
+            <CodeText className="text-xs text-primary break-all">
               {claudeCodeCommand}
             </CodeText>
-            <CopyButton
-              textToCopy={claudeCodeCommand}
-              toastMessage="Command copied to clipboard"
-            />
-          </div>
+          </CopyableCode>
         </div>
       ) : (
         <div className="space-y-4">
@@ -156,39 +198,31 @@ export function ProxyConnectionInstructions({
           />
         </div>
       )}
+
+      <div className="mt-4 space-y-1">
+        <p className="text-sm text-muted-foreground">
+          <a
+            href="/llm-proxies/provider-settings?tab=virtual-keys"
+            className="underline hover:text-foreground"
+          >
+            Virtual API Keys
+          </a>{" "}
+          — generate keys for external clients without exposing real provider
+          keys
+        </p>
+        <p className="text-sm text-muted-foreground">
+          <a
+            href="https://archestra.ai/docs/platform-llm-proxy-authentication#jwks-external-identity-provider"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            JWKS Authentication
+          </a>{" "}
+          — authenticate with an external identity provider
+        </p>
+      </div>
     </div>
-  );
-}
-
-function CopyButton({
-  textToCopy,
-  toastMessage,
-}: {
-  textToCopy: string;
-  toastMessage: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    toast.success(toastMessage);
-    setTimeout(() => setCopied(false), 2000);
-  }, [textToCopy, toastMessage]);
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 flex-shrink-0"
-      onClick={handleCopy}
-    >
-      {copied ? (
-        <Check className="h-3 w-3 text-green-500" />
-      ) : (
-        <Copy className="h-3 w-3" />
-      )}
-    </Button>
   );
 }
 
@@ -210,15 +244,13 @@ function UrlReplacementRow({
         </CodeText>
       </div>
       <span className="text-muted-foreground flex-shrink-0">→</span>
-      <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-        <CodeText className="text-xs text-primary flex-1 break-all">
-          {newUrl}
-        </CodeText>
-        <CopyButton
-          textToCopy={newUrl}
-          toastMessage="Proxy URL copied to clipboard"
-        />
-      </div>
+      <CopyableCode
+        value={newUrl}
+        toastMessage="Proxy URL copied to clipboard"
+        variant="primary"
+      >
+        <CodeText className="text-xs text-primary break-all">{newUrl}</CodeText>
+      </CopyableCode>
     </div>
   );
 }

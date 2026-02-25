@@ -5,25 +5,24 @@ import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
-  ArrowRight,
   ChevronDown,
   ChevronUp,
   DollarSign,
-  ExternalLink,
   Eye,
   Lock,
   Network,
   Plus,
   Search,
-  Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
+import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
-import { LoadingSpinner } from "@/components/loading";
+import { LabelTags } from "@/components/label-tags";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
@@ -66,9 +65,7 @@ export default function LlmProxiesPage({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <LlmProxies initialData={initialData} />
-        </Suspense>
+        <LlmProxies initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -163,7 +160,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse } = useProfilesPaginated({
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -172,9 +169,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     name: nameFilter || undefined,
     agentTypes: ["llm_proxy", "profile"],
   });
-
-  const agents = agentsResponse?.data || [];
-  const pagination = agentsResponse?.pagination;
 
   const { data: _teams } = useQuery({
     queryKey: ["teams"],
@@ -195,6 +189,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
+  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingProxy, setConnectingProxy] = useState<{
     id: string;
@@ -203,8 +199,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   } | null>(null);
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
-
-  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -254,6 +248,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     [searchParams, router, pathname],
   );
 
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+  const showLoading = isPending && !initialData?.agents;
+
   // LLM Proxies table columns - no Tools or Subagents
   const columns: ColumnDef<ProxyData>[] = [
     {
@@ -295,29 +293,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 </TooltipProvider>
               )}
               {agent.labels && agent.labels.length > 0 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="inline-flex">
-                        <Tag className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {agent.labels.map((label) => (
-                          <Badge
-                            key={label.key}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            <span className="font-semibold">{label.key}:</span>
-                            <span className="ml-1">{label.value}</span>
-                          </Badge>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <LabelTags labels={agent.labels} />
               )}
             </div>
           </div>
@@ -388,107 +364,112 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   ];
 
   return (
-    <PageLayout
-      title="LLM Proxies"
-      description={
-        <p className="text-sm text-muted-foreground">
-          LLM Proxies provide security, observability, and cost management for
-          your LLM API calls.{" "}
-          <a
-            href="https://archestra.ai/docs/platform-agents"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Read more in the docs
-          </a>
-        </p>
-      }
-      actionButton={
-        <PermissionButton
-          permissions={{ profile: ["create"] }}
-          onClick={() => setIsCreateDialogOpen(true)}
-          data-testid={E2eTestId.CreateAgentButton}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create LLM Proxy
-        </PermissionButton>
-      }
+    <LoadingWrapper
+      isPending={showLoading}
+      loadingFallback={<LoadingSpinner />}
     >
-      <div>
+      <PageLayout
+        title="LLM Proxies"
+        description={
+          <p className="text-sm text-muted-foreground">
+            LLM Proxies provide security, observability, and cost management for
+            your LLM API calls.{" "}
+            <a
+              href="https://archestra.ai/docs/platform-llm-proxy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Read more in the docs
+            </a>
+          </p>
+        }
+        actionButton={
+          <PermissionButton
+            permissions={{ llmProxy: ["create"] }}
+            onClick={() => setIsCreateDialogOpen(true)}
+            data-testid={E2eTestId.CreateAgentButton}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create LLM Proxy
+          </PermissionButton>
+        }
+      >
         <div>
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <DebouncedInput
-                placeholder="Search proxies by name..."
-                initialValue={searchQuery}
-                onChange={handleSearchChange}
-                className="pl-9"
-              />
+          <div>
+            <div className="mb-6">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <DebouncedInput
+                  placeholder="Search proxies by name..."
+                  initialValue={searchQuery}
+                  onChange={handleSearchChange}
+                  className="pl-9"
+                />
+              </div>
             </div>
+
+            {!agents || agents.length === 0 ? (
+              <div className="text-muted-foreground">
+                {nameFilter
+                  ? "No LLM proxies found matching your search"
+                  : "No LLM proxies found"}
+              </div>
+            ) : (
+              <div data-testid={E2eTestId.AgentsTable}>
+                <DataTable
+                  columns={columns}
+                  data={agents}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
+                  manualSorting={true}
+                  manualPagination={true}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: pagination?.total || 0,
+                  }}
+                  onPaginationChange={handlePaginationChange}
+                />
+              </div>
+            )}
+
+            <AgentDialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+              agentType="llm_proxy"
+              onCreated={(proxy) => {
+                setIsCreateDialogOpen(false);
+                setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
+              }}
+            />
+
+            {connectingProxy && (
+              <ConnectProxyDialog
+                agent={connectingProxy}
+                open={!!connectingProxy}
+                onOpenChange={(open) => !open && setConnectingProxy(null)}
+              />
+            )}
+
+            <AgentDialog
+              open={!!editingProxy}
+              onOpenChange={(open) => !open && setEditingProxy(null)}
+              agent={editingProxy}
+              agentType={editingProxy?.agentType || "llm_proxy"}
+            />
+
+            {deletingProxyId && (
+              <DeleteProxyDialog
+                agentId={deletingProxyId}
+                open={!!deletingProxyId}
+                onOpenChange={(open) => !open && setDeletingProxyId(null)}
+              />
+            )}
           </div>
-
-          {!agents || agents.length === 0 ? (
-            <div className="text-muted-foreground">
-              {nameFilter
-                ? "No LLM proxies found matching your search"
-                : "No LLM proxies found"}
-            </div>
-          ) : (
-            <div data-testid={E2eTestId.AgentsTable}>
-              <DataTable
-                columns={columns}
-                data={agents}
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                manualSorting={true}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: pagination?.total || 0,
-                }}
-                onPaginationChange={handlePaginationChange}
-              />
-            </div>
-          )}
-
-          <AgentDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-            agentType="llm_proxy"
-            onCreated={(proxy) => {
-              setIsCreateDialogOpen(false);
-              setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
-            }}
-          />
-
-          {connectingProxy && (
-            <ConnectProxyDialog
-              agent={connectingProxy}
-              open={!!connectingProxy}
-              onOpenChange={(open) => !open && setConnectingProxy(null)}
-            />
-          )}
-
-          <AgentDialog
-            open={!!editingProxy}
-            onOpenChange={(open) => !open && setEditingProxy(null)}
-            agent={editingProxy}
-            agentType={editingProxy?.agentType || "llm_proxy"}
-          />
-
-          {deletingProxyId && (
-            <DeleteProxyDialog
-              agentId={deletingProxyId}
-              open={!!deletingProxyId}
-              onOpenChange={(open) => !open && setDeletingProxyId(null)}
-            />
-          )}
         </div>
-      </div>
-    </PageLayout>
+      </PageLayout>
+    </LoadingWrapper>
   );
 }
 
@@ -541,56 +522,14 @@ function ConnectProxyDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col border-0">
-        {/* Header with gradient */}
-        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
-          <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
-          <div className="relative">
-            <DialogHeader>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-full bg-primary/10">
-                  <Network className="h-4 w-4 text-primary" />
-                </div>
-                <DialogTitle className="text-xl font-semibold">
-                  Connect via "{agent.name}"
-                </DialogTitle>
-              </div>
-            </DialogHeader>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <ProxyConnectionColumns agentId={agent.id} />
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30 shrink-0">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ExternalLink className="h-3.5 w-3.5" />
-            <span>Need help? Check our</span>
-            <a
-              href="https://archestra.ai/docs/platform-profiles"
-              target="_blank"
-              className="text-primary hover:underline font-medium"
-              rel="noopener"
-            >
-              documentation
-            </a>
-          </div>
-          <Button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            size="default"
-            className="min-w-[100px]"
-          >
-            Done
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ConnectDialog
+      agent={agent}
+      open={open}
+      onOpenChange={onOpenChange}
+      docsPage="platform-llm-proxy"
+    >
+      <ProxyConnectionColumns agentId={agent.id} />
+    </ConnectDialog>
   );
 }
 
@@ -606,12 +545,10 @@ function DeleteProxyDialog({
   const deleteProxy = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
-    try {
-      await deleteProxy.mutateAsync(agentId);
+    const result = await deleteProxy.mutateAsync(agentId);
+    if (result) {
       toast.success("LLM Proxy deleted successfully");
       onOpenChange(false);
-    } catch (_error) {
-      toast.error("Failed to delete LLM Proxy");
     }
   }, [agentId, deleteProxy, onOpenChange]);
 

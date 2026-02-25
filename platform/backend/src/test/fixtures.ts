@@ -72,7 +72,10 @@ interface TestFixtures {
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
   makeChatApiKey: typeof makeChatApiKey;
-  makeSsoProvider: typeof makeSsoProvider;
+  makeIdentityProvider: typeof makeIdentityProvider;
+  makeOAuthClient: typeof makeOAuthClient;
+  makeOAuthAccessToken: typeof makeOAuthAccessToken;
+  makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
 
@@ -215,15 +218,7 @@ async function makeInternalAgent(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<
-      Tool,
-      | "name"
-      | "description"
-      | "parameters"
-      | "catalogId"
-      | "mcpServerId"
-      | "agentId"
-    >
+    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
   > = {},
 ): Promise<Tool> {
   const toolData = {
@@ -315,7 +310,7 @@ async function makeCustomRole(
     role: roleName,
     name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
-    permission: { profile: ["read"] },
+    permission: { agent: ["read"] },
     ...overrides,
   };
 
@@ -363,7 +358,7 @@ async function makeMember(
  */
 async function makeMcpServer(
   overrides: Partial<
-    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId">
+    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId">
   > = {},
 ) {
   // Create a catalog if catalogId is not provided
@@ -399,6 +394,7 @@ async function makeInternalMcpCatalog(
   overrides: Partial<
     Pick<
       InsertInternalMcpCatalog,
+      | "id"
       | "name"
       | "serverType"
       | "serverUrl"
@@ -672,10 +668,10 @@ async function makeChatApiKey(
 }
 
 /**
- * Creates a test SSO provider in the database.
+ * Creates a test identity provider in the database.
  * Bypasses Better Auth API for test simplicity.
  */
-async function makeSsoProvider(
+async function makeIdentityProvider(
   organizationId: string,
   overrides: {
     providerId?: string;
@@ -692,7 +688,7 @@ async function makeSsoProvider(
     overrides.providerId ?? `TestProvider-${id.substring(0, 8)}`;
 
   const [provider] = await db
-    .insert(schema.ssoProvidersTable)
+    .insert(schema.identityProvidersTable)
     .values({
       id,
       providerId,
@@ -717,6 +713,100 @@ async function makeSsoProvider(
     .returning();
 
   return provider;
+}
+
+/**
+ * Creates a test OAuth client
+ */
+async function makeOAuthClient(
+  overrides: {
+    clientId?: string;
+    name?: string;
+    redirectUris?: string[];
+    userId?: string;
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [client] = await db
+    .insert(schema.oauthClientsTable)
+    .values({
+      id,
+      clientId: overrides.clientId ?? `client-${id.substring(0, 8)}`,
+      name: overrides.name ?? `Test Client ${id.substring(0, 8)}`,
+      redirectUris: overrides.redirectUris ?? [
+        "http://localhost:8005/callback",
+      ],
+      tokenEndpointAuthMethod: "none",
+      grantTypes: ["authorization_code", "refresh_token"],
+      responseTypes: ["code"],
+      public: true,
+      type: "web",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(overrides.userId ? { userId: overrides.userId } : {}),
+    })
+    .returning();
+  return client;
+}
+
+/**
+ * Creates a test OAuth access token
+ */
+async function makeOAuthAccessToken(
+  clientId: string,
+  userId: string,
+  overrides: {
+    token?: string;
+    expiresAt?: Date;
+    scopes?: string[];
+    refreshId?: string;
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [accessToken] = await db
+    .insert(schema.oauthAccessTokensTable)
+    .values({
+      id,
+      token: overrides.token ?? `token-hash-${id.substring(0, 8)}`,
+      clientId,
+      userId,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 3600000),
+      scopes: overrides.scopes ?? ["mcp"],
+      refreshId: overrides.refreshId ?? null,
+      createdAt: new Date(),
+    })
+    .returning();
+  return accessToken;
+}
+
+/**
+ * Creates a test OAuth refresh token
+ */
+async function makeOAuthRefreshToken(
+  clientId: string,
+  userId: string,
+  overrides: {
+    token?: string;
+    expiresAt?: Date;
+    scopes?: string[];
+    revoked?: Date | null;
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [refreshToken] = await db
+    .insert(schema.oauthRefreshTokensTable)
+    .values({
+      id,
+      token: overrides.token ?? `refresh-token-hash-${id.substring(0, 8)}`,
+      clientId,
+      userId,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 86400000),
+      scopes: overrides.scopes ?? ["mcp"],
+      revoked: overrides.revoked ?? null,
+      createdAt: new Date(),
+    })
+    .returning();
+  return refreshToken;
 }
 
 /**
@@ -818,8 +908,17 @@ export const test = baseTest.extend<TestFixtures>({
   makeChatApiKey: async ({}, use) => {
     await use(makeChatApiKey);
   },
-  makeSsoProvider: async ({}, use) => {
-    await use(makeSsoProvider);
+  makeIdentityProvider: async ({}, use) => {
+    await use(makeIdentityProvider);
+  },
+  makeOAuthClient: async ({}, use) => {
+    await use(makeOAuthClient);
+  },
+  makeOAuthAccessToken: async ({}, use) => {
+    await use(makeOAuthAccessToken);
+  },
+  makeOAuthRefreshToken: async ({}, use) => {
+    await use(makeOAuthRefreshToken);
   },
   seedAndAssignArchestraTools: async ({}, use) => {
     await use(seedAndAssignArchestraTools);

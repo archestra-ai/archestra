@@ -22,6 +22,10 @@ export const formSchema = z
     authMethod: z.enum(["none", "bearer", "raw_token", "oauth"]),
     oauthConfig: oauthConfigSchema.optional(),
     localConfig: LocalConfigFormSchema.optional(),
+    // Kubernetes Deployment spec YAML (for local servers)
+    deploymentSpecYaml: z.string().optional(),
+    // Original YAML from API (used to detect if user modified the YAML)
+    originalDeploymentSpecYaml: z.string().optional(),
     // BYOS: External Vault path for OAuth client secret
     oauthClientSecretVaultPath: z.string().optional(),
     // BYOS: External Vault key for OAuth client secret
@@ -30,6 +34,10 @@ export const formSchema = z
     localConfigVaultPath: z.string().optional(),
     // BYOS: External Vault key for local config secret env vars
     localConfigVaultKey: z.string().optional(),
+    // Labels for categorizing catalog items
+    labels: z
+      .array(z.object({ key: z.string(), value: z.string() }))
+      .optional(),
   })
   .refine(
     (data) => {

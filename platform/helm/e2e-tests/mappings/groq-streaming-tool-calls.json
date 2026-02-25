@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/groq/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "groq-streaming-tool-calls"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache"
+    },
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 5,
+      "totalDuration": 500
+    },
+    "body": "data: {\"id\":\"chatcmpl-stream-tc-groq\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"llama-3.1-8b-instant\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"index\":0,\"id\":\"call_stream_1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stream-tc-groq\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"llama-3.1-8b-instant\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"file_path\\\":\\\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stream-tc-groq\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"llama-3.1-8b-instant\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"/tmp/test\\\"}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stream-tc-groq\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"llama-3.1-8b-instant\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":50,\"completion_tokens\":20,\"total_tokens\":70}}\n\ndata: [DONE]\n\n"
+  }
+}

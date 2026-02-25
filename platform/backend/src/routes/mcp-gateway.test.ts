@@ -115,7 +115,7 @@ describe("MCP Gateway (stateless mode)", () => {
     }
   });
 
-  test("returns 401 for missing authorization header", async ({
+  test("returns 401 with WWW-Authenticate header for missing authorization header", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -141,9 +141,20 @@ describe("MCP Gateway (stateless mode)", () => {
     });
 
     expect(response.statusCode).toBe(401);
+
+    // Verify WWW-Authenticate header is present with resource_metadata URL
+    const wwwAuth = response.headers["www-authenticate"];
+    expect(wwwAuth).toBeDefined();
+    expect(wwwAuth).toContain("Bearer");
+    expect(wwwAuth).toContain("resource_metadata=");
+    expect(wwwAuth).toContain(
+      `/.well-known/oauth-protected-resource/v1/mcp/${agent.id}`,
+    );
   });
 
-  test("returns 401 for invalid token", async ({ makeAgent }) => {
+  test("returns 401 with WWW-Authenticate header for invalid token", async ({
+    makeAgent,
+  }) => {
     const agent = await makeAgent();
 
     const response = await app.inject({
@@ -163,6 +174,34 @@ describe("MCP Gateway (stateless mode)", () => {
     });
 
     expect(response.statusCode).toBe(401);
+
+    // Verify WWW-Authenticate header is present
+    const wwwAuth = response.headers["www-authenticate"];
+    expect(wwwAuth).toBeDefined();
+    expect(wwwAuth).toContain("Bearer");
+    expect(wwwAuth).toContain("resource_metadata=");
+  });
+
+  test("GET endpoint returns 401 with WWW-Authenticate header for missing authorization", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        accept: "application/json",
+        // No authorization header
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    const wwwAuth = response.headers["www-authenticate"];
+    expect(wwwAuth).toBeDefined();
+    expect(wwwAuth).toContain("Bearer");
+    expect(wwwAuth).toContain("resource_metadata=");
   });
 
   test("GET endpoint returns server discovery info", async ({

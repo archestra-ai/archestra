@@ -1,11 +1,8 @@
 export * as tokenizers from "@/tokenizers";
-export * as adapters from "./adapters";
 export * as costOptimization from "./cost-optimization";
-export * as externalAgentId from "./external-agent-id";
-export * as sessionId from "./session-id";
+export * as headers from "./headers";
 export * as toolInvocation from "./tool-invocation";
 export * as tools from "./tools";
 export * as toonConversion from "./toon-conversion";
 export * as tracing from "./tracing";
 export * as trustedData from "./trusted-data";
-export * as userId from "./user-id";

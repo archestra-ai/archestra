@@ -29,7 +29,7 @@
                 "id": "call_1",
                 "type": "function",
                 "function": {
-                  "name": "read_file",
+                  "name": "e2e_read_file_mistral",
                   "arguments": "{\"path\": \"/etc/passwd\"}"
                 }
               }

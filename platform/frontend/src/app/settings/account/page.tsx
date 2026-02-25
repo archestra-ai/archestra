@@ -5,10 +5,12 @@ import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
+import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
 
 function AccountSettingsContent() {
   return (
     <div className="space-y-6">
+      <RolePermissionsCard />
       <PersonalTokenCard />
       <ApiKeysCard
         classNames={{

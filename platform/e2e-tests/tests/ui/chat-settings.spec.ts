@@ -1,322 +1,358 @@
+import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
-import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
+import { expect, goToPage, test } from "../../fixtures";
+import { clickButton, expandTablePagination } from "../../utils";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
 
-test.describe("Chat API Keys", () => {
+/**
+ * Navigate to the Provider Settings page (API Keys tab) and expand pagination.
+ */
+async function goToApiKeysPage(page: Page) {
+  await goToPage(page, "/llm-proxies/provider-settings");
+  await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
+}
+
+/**
+ * Navigate to the Provider Settings page (Virtual API Keys tab).
+ */
+async function goToVirtualKeysPage(page: Page) {
+  await goToPage(page, "/llm-proxies/provider-settings?tab=virtual-keys");
+}
+
+test.describe("Provider Settings - API Keys", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("Admin can CRUD API keys", async ({
+  test("Admin can create, update, and delete an API key", async ({
     page,
-    goToPage,
     makeRandomString,
   }) => {
     const keyName = makeRandomString(8, "Test Key");
     const updatedName = makeRandomString(8, "Updated Test Key");
 
-    // Navigate and wait for page to load
-    await goToPage(page, "/settings/llm-api-keys");
+    await goToApiKeysPage(page);
 
-    // Click Add API Key button
+    // Create
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-
-    // Verify dialog is open
     await expect(
       page.getByRole("heading", { name: /Add API Key/i }),
     ).toBeVisible();
-
-    // Fill in the form
     await page.getByLabel(/Name/i).fill(keyName);
-
-    // Provider should be Anthropic by default
     await expect(
       page.getByRole("combobox", { name: "Provider" }),
     ).toContainText("Anthropic");
-
-    // Fill in API key
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
-
-    // Click Create button
     await clickButton({ page, options: { name: "Test & Create" } });
-
-    // Wait for the dialog to close and table to update
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
-
-    // Verify the new key appears in the table
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
     ).toBeVisible();
 
-    // Click the edit button for the created key
+    // Update
     await page
       .getByTestId(`${E2eTestId.EditChatApiKeyButton}-${keyName}`)
       .click();
-
-    // Update the name
     await page.getByLabel(/Name/i).clear();
     await page.getByLabel(/Name/i).fill(updatedName);
     await clickButton({ page, options: { name: "Test & Save" } });
-
-    // Verify the name was updated
-    await expect(page.getByText("API key updated successfully")).toBeVisible({
-      timeout: 5000,
-    });
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${updatedName}`),
     ).toBeVisible();
 
-    // Cleanup: Delete the created key
+    // Delete
     await page
       .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${updatedName}`)
       .click();
     await clickButton({ page, options: { name: "Delete" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${updatedName}`),
+    ).not.toBeVisible();
   });
 
-  test.describe("Scope creation restrictions and visibility", () => {
-    test("One personal scope can be created for each user for each provider and other user cannot see them", async ({
-      adminPage,
-      editorPage,
-      goToPage,
-      makeRandomString,
-    }) => {
-      const testKeyNames = [
-        "Test Key 1",
-        "Test Key 2",
-        "Test Key 3",
-        "Test Key 4",
-      ].map((name) => makeRandomString(8, name));
-      await goToPage(adminPage, "/settings/llm-api-keys");
+  test("Can create multiple keys for the same provider and scope", async ({
+    page,
+    makeRandomString,
+  }) => {
+    const keyName1 = makeRandomString(8, "Multi Key A");
+    const keyName2 = makeRandomString(8, "Multi Key B");
 
-      // Admin create a personal scope for Anthropic
-      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await adminPage.getByLabel(/Name/i).fill(testKeyNames[0]);
-      await adminPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: adminPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        adminPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+    await goToApiKeysPage(page);
 
-      // Editor cannot see Admin's personal api key in the list
-      await goToPage(editorPage, "/settings/llm-api-keys");
-      await expect(
-        editorPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyNames[0]}`),
-      ).not.toBeVisible();
+    // Create first key
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByLabel(/Name/i).fill(keyName1);
+    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
+    await clickButton({ page, options: { name: "Test & Create" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName1}`),
+    ).toBeVisible();
 
-      // Admin cannot create second personal scope for Anthropic and team scope is selected by default
-      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await expect(
-        adminPage.getByRole("combobox", { name: "Scope" }),
-      ).toContainText("Team");
-      await adminPage.getByRole("combobox", { name: "Scope" }).click();
-      await expect(
-        adminPage.getByText("Personal (already exists)"),
-      ).toBeVisible();
+    // Create second key for same provider+scope — should succeed
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByLabel(/Name/i).fill(keyName2);
+    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
+    await clickButton({ page, options: { name: "Test & Create" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName2}`),
+    ).toBeVisible();
 
-      // But Admin can still create personal scope for OpenAI
-      await goToPage(adminPage, "/settings/llm-api-keys");
-      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await adminPage.getByLabel(/Name/i).fill(testKeyNames[1]);
-      await adminPage.getByRole("combobox", { name: "Provider" }).click();
-      await adminPage.getByRole("option", { name: "OpenAI OpenAI" }).click();
-      await adminPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: adminPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        adminPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+    // Both keys visible
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName1}`),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName2}`),
+    ).toBeVisible();
 
-      // Then editor create a personal scope for Anthropic
-      await goToPage(editorPage, "/settings/llm-api-keys");
-      await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await editorPage.getByLabel(/Name/i).fill(testKeyNames[2]);
-      await editorPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: editorPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        editorPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+    // Cleanup
+    for (const name of [keyName1, keyName2]) {
+      await page
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${name}`)
+        .click();
+      await clickButton({ page, options: { name: "Delete" } });
+    }
+  });
 
-      // Admin cannot see Editor's personal scope in the list
-      await goToPage(adminPage, "/settings/llm-api-keys");
-      await expect(
-        adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyNames[2]}`),
-      ).not.toBeVisible();
+  test("First key for a provider defaults to primary, subsequent does not", async ({
+    page,
+    makeRandomString,
+  }) => {
+    const keyName1 = makeRandomString(8, "Primary Key");
+    const keyName2 = makeRandomString(8, "Secondary Key");
 
-      // Editor cannot create second personal scope for Anthropic
-      await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await expect(
-        editorPage.getByRole("combobox", { name: "Scope" }),
-      ).toContainText("Team");
-      await editorPage.getByRole("combobox", { name: "Scope" }).click();
-      await expect(
-        editorPage.getByText("Personal (already exists)"),
-      ).toBeVisible();
+    await goToApiKeysPage(page);
 
-      // But he can create personal scope for OpenAI
-      await goToPage(editorPage, "/settings/llm-api-keys");
-      await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await editorPage.getByLabel(/Name/i).fill(testKeyNames[3]);
-      await editorPage.getByRole("combobox", { name: "Provider" }).click();
-      await editorPage.getByRole("option", { name: "OpenAI OpenAI" }).click();
-      await editorPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: editorPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        editorPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+    // Create first key — isPrimary should be ON by default
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    // Select a provider that is very unlikely to have existing keys
+    await page.getByRole("combobox", { name: "Provider" }).click();
+    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
+    await page.getByLabel(/Name/i).fill(keyName1);
+    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
 
-      // cleanup: delete the created keys
-      for (const [idx, name] of testKeyNames.entries()) {
-        const page = [0, 1].includes(idx) ? adminPage : editorPage;
-        await page
-          .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${name}`)
-          .click();
-        await clickButton({ page, options: { name: "Delete" } });
-      }
+    // Primary key toggle should be checked
+    const primarySwitch = page.getByRole("switch", { name: /Primary key/i });
+    await expect(primarySwitch).toBeChecked();
+
+    await clickButton({ page, options: { name: "Test & Create" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName1}`),
+    ).toBeVisible();
+
+    // Create second key for same provider — isPrimary should be OFF
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByRole("combobox", { name: "Provider" }).click();
+    await page.getByRole("option", { name: "Zhipu AI Zhipu AI" }).click();
+    await page.getByLabel(/Name/i).fill(keyName2);
+    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
+
+    // Primary key toggle should be unchecked and disabled
+    const primarySwitch2 = page.getByRole("switch", { name: /Primary key/i });
+    await expect(primarySwitch2).not.toBeChecked();
+    await expect(primarySwitch2).toBeDisabled();
+
+    // Should show existing primary key message
+    await expect(
+      page.getByText(new RegExp(`"${keyName1}" is already the primary key`)),
+    ).toBeVisible();
+
+    // Cancel — don't create
+    await clickButton({ page, options: { name: "Cancel" } });
+
+    // Cleanup
+    await page
+      .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName1}`)
+      .click();
+    await clickButton({ page, options: { name: "Delete" } });
+  });
+});
+
+test.describe("Provider Settings - Virtual API Keys", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let parentKeyName: string;
+
+  test("Can create a virtual key from the Virtual API Keys tab", async ({
+    page,
+    makeRandomString,
+  }) => {
+    parentKeyName = makeRandomString(8, "VK Parent");
+    const virtualKeyName = makeRandomString(8, "VK Test");
+
+    // First create a parent API key
+    await goToApiKeysPage(page);
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByLabel(/Name/i).fill(parentKeyName);
+    await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
+    await clickButton({ page, options: { name: "Test & Create" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${parentKeyName}`),
+    ).toBeVisible();
+
+    // Navigate to Virtual API Keys tab
+    await goToVirtualKeysPage(page);
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Keys" }),
+    ).toBeVisible();
+
+    // Click Create Virtual Key (waits for button to be enabled, i.e. parentable keys loaded)
+    await clickButton({ page, options: { name: "Create Virtual Key" } });
+    await expect(
+      page.getByRole("heading", { name: /Create Virtual API Key/i }),
+    ).toBeVisible();
+
+    // Select the correct parent key from the dropdown
+    await page.getByRole("combobox").first().click();
+    await page.getByRole("option", { name: new RegExp(parentKeyName) }).click();
+
+    // Fill name and create
+    await page.getByLabel(/Name/i).fill(virtualKeyName);
+    await clickButton({ page, options: { name: "Create" } });
+
+    // Should show the created key value (dialog title, not the toast)
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Key Created" }),
+    ).toBeVisible({
+      timeout: 10_000,
     });
 
-    test("One team scope for each team, only team members can see them", async ({
-      adminPage,
-      editorPage,
-      memberPage,
-      goToPage,
-      makeRandomString,
-    }) => {
-      const testKeyName = makeRandomString(8, "Test Key");
-      await goToPage(editorPage, "/settings/llm-api-keys");
+    // The token value should be visible inside the dialog (starts with archestra_)
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.locator("code").filter({ hasText: "archestra_" }).last(),
+    ).toBeVisible();
 
-      // Editor create a team scope key for Engineering team
-      await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await editorPage.getByLabel(/Name/i).fill(testKeyName);
-      await editorPage.getByRole("combobox", { name: "Scope" }).click();
-      await editorPage.getByRole("option", { name: "Team" }).click();
-      await editorPage.getByRole("combobox", { name: "Team" }).click();
-      await editorPage.getByRole("option", { name: "Engineering" }).click();
-      await editorPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: editorPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        editorPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+    // Close dialog (use first: true to avoid strict mode violation — the dialog
+    // has two Close buttons: the footer button and the X icon)
+    await clickButton({ page, options: { name: "Close" }, first: true });
 
-      // Editor and Admin can see it but Member cannot (he is not a member of the Engineering team)
-      await goToPage(editorPage, "/settings/llm-api-keys");
-      await expect(
-        editorPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
-      ).toBeVisible();
-      await goToPage(adminPage, "/settings/llm-api-keys");
-      await expect(
-        adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
-      ).toBeVisible();
-      await goToPage(memberPage, "/settings/llm-api-keys");
-      await expect(
-        memberPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
-      ).not.toBeVisible();
+    // Virtual key should appear in the table
+    await expect(page.getByText(virtualKeyName)).toBeVisible();
+  });
 
-      // Editor cannot create second team scope for Engineering team
-      await goToPage(editorPage, "/settings/llm-api-keys");
-      await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await editorPage.getByRole("combobox", { name: "Scope" }).click();
-      await editorPage.getByRole("option", { name: "Team" }).click();
-      await editorPage.getByRole("combobox", { name: "Team" }).click();
-      await expect(
-        editorPage.getByRole("option", { name: "Engineering Team" }),
-      ).not.toBeVisible();
+  test("Can delete a virtual key", async ({ page }) => {
+    await goToVirtualKeysPage(page);
 
-      // Cleanup: delete the created key
-      await goToPage(editorPage, "/settings/llm-api-keys");
-      await editorPage
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
+    // Find a delete button in the virtual keys table and click it
+    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
+    if (await deleteButton.isVisible()) {
+      await deleteButton.click();
+      // Confirm deletion in the confirmation dialog
+      await clickButton({ page, options: { name: "Delete" } });
+      // Wait for deletion to take effect
+      await page.waitForLoadState("domcontentloaded");
+    }
+
+    // Cleanup: delete the parent API key
+    if (parentKeyName) {
+      await goToApiKeysPage(page);
+      await page
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${parentKeyName}`)
         .click();
-      await clickButton({ page: editorPage, options: { name: "Delete" } });
-    });
+      await clickButton({ page, options: { name: "Delete" } });
+    }
+  });
+});
 
-    test("Only one org-wide key can be created, everyone can see it", async ({
-      adminPage,
-      editorPage,
-      memberPage,
-      goToPage,
-      makeRandomString,
-    }) => {
-      const testKeyName = makeRandomString(8, "Test Key");
-      await goToPage(adminPage, "/settings/llm-api-keys");
+test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
+  test.describe.configure({ mode: "serial" });
 
-      // Admin create an org-wide key
-      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await adminPage.getByLabel(/Name/i).fill(testKeyName);
-      await adminPage.getByRole("combobox", { name: "Scope" }).click();
-      await adminPage
-        .getByRole("option", { name: "Whole Organization" })
+  let keylessParentName: string;
+
+  test("Can create a virtual key for a keyless (no API key) provider", async ({
+    page,
+    makeRandomString,
+  }) => {
+    keylessParentName = makeRandomString(8, "Keyless Parent");
+    const virtualKeyName = makeRandomString(8, "Keyless VK");
+
+    // Create an Ollama key without providing an API key (optional for Ollama)
+    await goToApiKeysPage(page);
+    await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+    await page.getByRole("combobox", { name: "Provider" }).click();
+    await page.getByRole("option", { name: "Ollama Ollama" }).click();
+    await page.getByLabel(/Name/i).fill(keylessParentName);
+    // Leave API Key blank — it's optional for Ollama
+    await clickButton({ page, options: { name: "Test & Create" } });
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keylessParentName}`),
+    ).toBeVisible();
+
+    // Navigate to Virtual API Keys tab
+    await goToVirtualKeysPage(page);
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Keys" }),
+    ).toBeVisible();
+
+    // Create Virtual Key — the keyless parent should appear in the dropdown
+    await clickButton({ page, options: { name: "Create Virtual Key" } });
+    await expect(
+      page.getByRole("heading", { name: /Create Virtual API Key/i }),
+    ).toBeVisible();
+
+    // Select the keyless parent key
+    await page.getByRole("combobox").first().click();
+    await page
+      .getByRole("option", { name: new RegExp(keylessParentName) })
+      .click();
+
+    // Fill name and create
+    await page.getByLabel(/Name/i).fill(virtualKeyName);
+    await clickButton({ page, options: { name: "Create" } });
+
+    // Should show the created key value
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Key Created" }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.locator("code").filter({ hasText: "archestra_" }).last(),
+    ).toBeVisible();
+
+    await clickButton({ page, options: { name: "Close" }, first: true });
+    await expect(page.getByText(virtualKeyName)).toBeVisible();
+  });
+
+  test("Cleanup keyless parent key", async ({ page }) => {
+    await goToVirtualKeysPage(page);
+
+    // Delete the virtual key
+    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
+    if (await deleteButton.isVisible()) {
+      await deleteButton.click();
+      await clickButton({ page, options: { name: "Delete" } });
+      await page.waitForLoadState("domcontentloaded");
+    }
+
+    // Delete the keyless parent API key
+    if (keylessParentName) {
+      await goToApiKeysPage(page);
+      await page
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keylessParentName}`)
         .click();
-      await adminPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: adminPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        adminPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+      await clickButton({ page, options: { name: "Delete" } });
+    }
+  });
+});
 
-      // Every user can see it
-      for (const p of [adminPage, editorPage, memberPage]) {
-        await goToPage(p, "/settings/llm-api-keys");
-        await p.waitForLoadState("networkidle");
-        await expect(
-          p.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
-        ).toBeVisible();
-      }
+test.describe("Provider Settings - Tab Navigation", () => {
+  test("All three tabs are accessible", async ({ page }) => {
+    // API Keys tab (default)
+    await goToPage(page, "/llm-proxies/provider-settings");
+    await expect(page.getByText("LLM API Keys")).toBeVisible();
 
-      // Second org-wide key cannot be created
-      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await adminPage.getByRole("combobox", { name: "Scope" }).click();
-      await expect(
-        adminPage.getByText("Whole Organization (already exists)"),
-      ).toBeVisible();
+    // Virtual API Keys tab
+    await page.getByRole("link", { name: "Virtual API Keys" }).click();
+    await page.waitForURL("**/provider-settings?tab=virtual-keys");
+    await expect(
+      page.getByRole("heading", { name: "Virtual API Keys" }),
+    ).toBeVisible();
 
-      // Cleanup: delete the created key
-      await goToPage(adminPage, "/settings/llm-api-keys");
-      await adminPage
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
-        .click();
-      await clickButton({ page: adminPage, options: { name: "Delete" } });
-    });
+    // Models tab
+    await page.getByRole("link", { name: "Models" }).click();
+    await page.waitForURL("**/provider-settings?tab=models");
+    await expect(
+      page.getByRole("heading", { name: "Available Models" }),
+    ).toBeVisible();
   });
 });

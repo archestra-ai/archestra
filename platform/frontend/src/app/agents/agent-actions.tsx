@@ -1,15 +1,9 @@
 import { E2eTestId } from "@shared";
-import { MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import { Grip, MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { useProfilesPaginated } from "@/lib/agent.query";
 
 // Infer Agent type from the API response
@@ -32,10 +26,8 @@ export function AgentActions({
 }: AgentActionsProps) {
   return (
     <ButtonGroup>
-      <PermissionButton
-        permissions={{ profile: ["update"] }}
+      <Button
         aria-label="Connect"
-        tooltip="Connect"
         variant="outline"
         size="icon-sm"
         data-testid={`${E2eTestId.ConnectAgentButton}-${agent.name}`}
@@ -45,28 +37,31 @@ export function AgentActions({
         }}
       >
         <Plug className="h-4 w-4" />
-      </PermissionButton>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Chat"
-              asChild
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Link href={`/chat/new?agent_id=${agent.id}`}>
-                <MessageSquare className="h-4 w-4" />
-              </Link>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Chat</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        aria-label="Chat"
+        asChild
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Link href={`/chat/new?agent_id=${agent.id}`}>
+          <MessageSquare className="h-4 w-4" />
+        </Link>
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        aria-label="Agent Builder"
+        asChild
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Link href={`/agents/builder?agentId=${agent.id}`}>
+          <Grip className="h-4 w-4" />
+        </Link>
+      </Button>
       <PermissionButton
-        permissions={{ profile: ["update"] }}
-        tooltip="Edit"
+        permissions={{ agent: ["update"] }}
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
@@ -79,8 +74,7 @@ export function AgentActions({
         <Pencil className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
-        permissions={{ profile: ["delete"] }}
-        tooltip="Delete"
+        permissions={{ agent: ["delete"] }}
         aria-label="Delete"
         variant="outline"
         size="icon-sm"

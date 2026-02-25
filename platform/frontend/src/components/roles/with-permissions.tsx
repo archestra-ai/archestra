@@ -5,14 +5,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
-import { permissionsToStrings } from "@/lib/auth.utils";
+import { useHasPermissions, useMissingPermissions } from "@/lib/auth.query";
+import { formatMissingPermissions } from "@/lib/auth.utils";
 
 type WithPermissionsProps = {
   permissions: Permissions;
 } & (
   | {
       noPermissionHandle: "tooltip";
+      side?: "top" | "bottom" | "left" | "right";
       children: ({
         hasPermission,
       }: {
@@ -22,6 +23,7 @@ type WithPermissionsProps = {
   | {
       noPermissionHandle: "hide";
       children: React.ReactNode;
+      side?: never;
     }
 );
 
@@ -29,8 +31,10 @@ export function WithPermissions({
   children,
   permissions,
   noPermissionHandle,
+  side,
 }: WithPermissionsProps) {
   const { data: hasPermission, isPending } = useHasPermissions(permissions);
+  const missingPermissions = useMissingPermissions(permissions);
 
   // if has permission, return children as is
   if (hasPermission) {
@@ -46,15 +50,16 @@ export function WithPermissions({
 
   // if no permission and noPermissionHandle is 'tooltip', return a tooltip with the permission error
   if (noPermissionHandle === "tooltip") {
-    const permissionError = `Missing permissions: ${permissionsToStrings(permissions).join(", ")}`;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-not-allowed">
+          <div className="cursor-not-allowed">
             {children({ hasPermission: isPending ? undefined : false })}
-          </span>
+          </div>
         </TooltipTrigger>
-        <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>
+        <TooltipContent className="max-w-60" side={side}>
+          {formatMissingPermissions(missingPermissions)}
+        </TooltipContent>
       </Tooltip>
     );
   }

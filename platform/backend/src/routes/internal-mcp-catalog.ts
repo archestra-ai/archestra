@@ -1,9 +1,24 @@
-import { RouteId } from "@shared";
+import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import {
+  generateDeploymentYamlTemplate,
+  mergeLocalConfigIntoYaml,
+  validateDeploymentYaml,
+} from "@/mcp-server-runtime/k8s-yaml-generator";
+import {
+  InternalMcpCatalogModel,
+  McpCatalogLabelModel,
+  McpServerModel,
+  ToolModel,
+} from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import {
+  autoReinstallServer,
+  requiresNewUserInputForReinstall,
+} from "@/services/mcp-reinstall";
 import {
   ApiError,
   constructResponseSchema,
@@ -184,6 +199,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Only merge environment variables into YAML if YAML is explicitly provided
+      // The YAML is only stored when explicitly edited via the "Edit Deployment Yaml" dialog
+      if (restBody.deploymentSpecYaml && restBody.localConfig?.environment) {
+        restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
+          restBody.deploymentSpecYaml,
+          restBody.localConfig.environment,
+        );
+      }
+
       const catalogItem = await InternalMcpCatalogModel.create(restBody);
       return reply.send(catalogItem);
     },
@@ -266,6 +290,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body }, reply) => {
+      if (isBuiltInCatalogId(id) && !isPlaywrightCatalogItem(id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be modified");
+      }
+
+      // Prevent renaming the Playwright catalog item
+      if (isPlaywrightCatalogItem(id) && body.name !== undefined) {
+        delete body.name;
+      }
+
       const {
         oauthClientSecretVaultPath,
         oauthClientSecretVaultKey,
@@ -379,17 +412,33 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Created Readonly Vault external vault secret reference for local config secrets",
         );
       } else if (restBody.localConfig?.environment) {
+        // Get existing secret values to preserve keys that are still in the request
+        const existingSecretValues: Record<string, string> = {};
+        if (localConfigSecretId) {
+          const existingSecret =
+            await secretManager().getSecret(localConfigSecretId);
+          if (existingSecret?.secret) {
+            for (const [key, value] of Object.entries(existingSecret.secret)) {
+              existingSecretValues[key] = String(value);
+            }
+          }
+        }
+
         // Extract secret env vars from localConfig.environment
+        // Preserve existing values for keys that are in the request but have no new value
         const secretEnvVars: Record<string, string> = {};
 
         for (const envVar of restBody.localConfig.environment) {
-          if (
-            envVar.type === "secret" &&
-            envVar.value &&
-            !envVar.promptOnInstallation
-          ) {
-            secretEnvVars[envVar.key] = envVar.value;
-            delete envVar.value; // Remove value from catalog template
+          if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+            if (envVar.value) {
+              // New value provided - use it
+              secretEnvVars[envVar.key] = envVar.value;
+              delete envVar.value; // Remove value from catalog template
+            } else if (existingSecretValues[envVar.key]) {
+              // No new value but key exists in existing secret - preserve it
+              secretEnvVars[envVar.key] = existingSecretValues[envVar.key];
+            }
+            // If no value and not in existing secret, skip (user added key without value)
           }
         }
 
@@ -413,6 +462,30 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Merge environment variables into YAML in two cases:
+      // 1. YAML is explicitly provided in request (user editing via "Edit Deployment Yaml" dialog)
+      // 2. YAML already exists in database and env vars are being updated (main form edit)
+      const yamlToUpdate =
+        restBody.deploymentSpecYaml ?? originalCatalogItem.deploymentSpecYaml;
+
+      if (yamlToUpdate && restBody.localConfig?.environment) {
+        const environment = restBody.localConfig.environment;
+
+        // Build set of previously managed keys to detect removed env vars
+        const previouslyManagedKeys = new Set<string>(
+          (originalCatalogItem.localConfig?.environment ?? []).map(
+            (env) => env.key,
+          ),
+        );
+
+        // Merge current environment into the YAML
+        restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
+          yamlToUpdate,
+          environment,
+          previouslyManagedKeys,
+        );
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
@@ -420,19 +493,80 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Mark all installed servers for reinstall
-      // and delete existing tools so they can be rediscovered
+      // Handle reinstall for installed servers
       const installedServers = await McpServerModel.findByCatalogId(id);
 
-      for (const server of installedServers) {
-        await McpServerModel.update(server.id, {
-          reinstallRequired: true,
-        });
+      if (installedServers.length > 0) {
+        // Check if new user input is required for reinstall
+        if (
+          requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
+        ) {
+          // Manual reinstall required: mark servers and let user trigger reinstall
+          logger.info(
+            { catalogId: id, serverCount: installedServers.length },
+            "Catalog edit requires new user input - marking servers for manual reinstall",
+          );
+          for (const server of installedServers) {
+            await McpServerModel.update(server.id, { reinstallRequired: true });
+          }
+        } else {
+          // Auto-reinstall in background (no new user input needed)
+          logger.info(
+            { catalogId: id, serverCount: installedServers.length },
+            "Catalog edit does not require new user input - auto-reinstalling servers",
+          );
+
+          // Use setImmediate to not block the response
+          // Wrap entire callback in try/catch to prevent unhandled promise rejections
+          setImmediate(async () => {
+            try {
+              for (const server of installedServers) {
+                try {
+                  await McpServerModel.update(server.id, {
+                    localInstallationStatus: "pending",
+                    localInstallationError: null,
+                  });
+                  await autoReinstallServer(server, catalogItem);
+                  await McpServerModel.update(server.id, {
+                    localInstallationStatus: "success",
+                    localInstallationError: null,
+                  });
+                  logger.info(
+                    { serverId: server.id, serverName: server.name },
+                    "Auto-reinstalled MCP server successfully",
+                  );
+                } catch (error) {
+                  const errorMessage =
+                    error instanceof Error ? error.message : "Unknown error";
+                  logger.error(
+                    {
+                      err: error,
+                      serverId: server.id,
+                      serverName: server.name,
+                    },
+                    "Failed to auto-reinstall MCP server - marking for manual reinstall",
+                  );
+                  // Mark for manual reinstall on failure
+                  await McpServerModel.update(server.id, {
+                    reinstallRequired: true,
+                    localInstallationStatus: "error",
+                    localInstallationError: errorMessage,
+                  });
+                }
+              }
+            } catch (error) {
+              // Catch any unexpected errors from the iteration itself
+              logger.error(
+                { err: error, catalogId: id },
+                "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
+              );
+            }
+          });
+        }
       }
 
-      // Delete all tools associated with this catalog id
-      // This ensures tools are rediscovered with updated configuration during reinstall
-      await ToolModel.deleteByCatalogId(id);
+      // Note: Tools are NOT deleted - they are synced during reinstall to preserve
+      // policies and profile assignments
 
       return reply.send(catalogItem);
     },
@@ -452,6 +586,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
+      if (isBuiltInCatalogId(id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be deleted");
+      }
+
       // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         expandSecrets: false,
@@ -494,6 +632,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `Catalog item with name "${name}" not found`);
       }
 
+      if (isBuiltInCatalogId(catalogItem.id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be deleted");
+      }
+
       if (catalogItem?.clientSecretId) {
         // Delete the associated OAuth secret
         await secretManager().deleteSecret(catalogItem.clientSecretId);
@@ -507,6 +649,180 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
       });
+    },
+  );
+
+  // Schema for deployment YAML preview response
+  const DeploymentYamlPreviewSchema = z.object({
+    yaml: z.string(),
+  });
+
+  // Schema for deployment YAML validation response
+  const DeploymentYamlValidationSchema = z.object({
+    valid: z.boolean(),
+    errors: z.array(z.string()),
+    warnings: z.array(z.string()),
+  });
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/deployment-yaml-preview",
+    {
+      schema: {
+        operationId: RouteId.GetDeploymentYamlPreview,
+        description:
+          "Generate a deployment YAML template preview for a catalog item",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeploymentYamlPreviewSchema),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      const catalogItem = await InternalMcpCatalogModel.findById(id);
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (catalogItem.serverType !== "local") {
+        throw new ApiError(
+          400,
+          "Deployment YAML preview is only available for local MCP servers",
+        );
+      }
+
+      // If the catalog item already has a deploymentSpecYaml, return it
+      if (catalogItem.deploymentSpecYaml) {
+        return reply.send({
+          yaml: catalogItem.deploymentSpecYaml,
+        });
+      }
+
+      // Generate a default YAML template
+      const yamlTemplate = generateDeploymentYamlTemplate({
+        serverId: "{server_id}",
+        serverName: catalogItem.name,
+        namespace: config.orchestrator.kubernetes.namespace,
+        dockerImage:
+          catalogItem.localConfig?.dockerImage ||
+          config.orchestrator.mcpServerBaseImage,
+        command: catalogItem.localConfig?.command,
+        arguments: catalogItem.localConfig?.arguments,
+        environment: catalogItem.localConfig?.environment,
+        serviceAccount: catalogItem.localConfig?.serviceAccount,
+        transportType: catalogItem.localConfig?.transportType,
+        httpPort: catalogItem.localConfig?.httpPort,
+      });
+
+      return reply.send({ yaml: yamlTemplate });
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/validate-deployment-yaml",
+    {
+      schema: {
+        operationId: RouteId.ValidateDeploymentYaml,
+        description: "Validate a deployment YAML template",
+        tags: ["MCP Catalog"],
+        body: z.object({
+          yaml: z.string().min(1, "YAML content is required"),
+        }),
+        response: constructResponseSchema(DeploymentYamlValidationSchema),
+      },
+    },
+    async ({ body: { yaml } }, reply) => {
+      const result = validateDeploymentYaml(yaml);
+      return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/reset-deployment-yaml",
+    {
+      schema: {
+        operationId: RouteId.ResetDeploymentYaml,
+        description:
+          "Reset the deployment YAML to default by clearing the custom YAML",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeploymentYamlPreviewSchema),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      const catalogItem = await InternalMcpCatalogModel.findById(id);
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (catalogItem.serverType !== "local") {
+        throw new ApiError(
+          400,
+          "Deployment YAML reset is only available for local MCP servers",
+        );
+      }
+
+      // Clear the custom deployment YAML
+      await InternalMcpCatalogModel.update(id, { deploymentSpecYaml: null });
+
+      // Generate and return a fresh default YAML template
+      const yamlTemplate = generateDeploymentYamlTemplate({
+        serverId: "{server_id}",
+        serverName: catalogItem.name,
+        namespace: config.orchestrator.kubernetes.namespace,
+        dockerImage:
+          catalogItem.localConfig?.dockerImage ||
+          config.orchestrator.mcpServerBaseImage,
+        command: catalogItem.localConfig?.command,
+        arguments: catalogItem.localConfig?.arguments,
+        environment: catalogItem.localConfig?.environment,
+        serviceAccount: catalogItem.localConfig?.serviceAccount,
+        transportType: catalogItem.localConfig?.transportType,
+        httpPort: catalogItem.localConfig?.httpPort,
+      });
+
+      return reply.send({ yaml: yamlTemplate });
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogLabelKeys,
+        description: "Get all label keys used by catalog items",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await McpCatalogLabelModel.getAllKeys());
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogLabelValues,
+        description: "Get all label values for catalog items",
+        tags: ["MCP Catalog"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ query: { key } }, reply) => {
+      return reply.send(
+        key
+          ? await McpCatalogLabelModel.getValuesByKey(key)
+          : await McpCatalogLabelModel.getAllValues(),
+      );
     },
   );
 };

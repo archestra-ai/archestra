@@ -1,18 +1,19 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
-import { Loader2, Search, X } from "lucide-react";
+import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
+import { Bot, Loader2, Pencil, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ToolChecklist } from "@/components/agent-tools-editor";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
   TokenSelect,
 } from "@/components/token-select";
+import {
+  AssignmentCombobox,
+  type AssignmentComboboxItem,
+} from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -20,14 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useProfilesQuery } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
+import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useBulkAssignTools,
@@ -80,14 +81,14 @@ export function McpAssignmentsDialog({
   const assignmentsForCatalog = useMemo(() => {
     if (!assignedToolsData?.data) return [];
     return assignedToolsData.data.filter((at) => {
-      const toolCatalogId = at.tool.catalogId ?? at.tool.mcpServerCatalogId;
+      const toolCatalogId = at.tool.catalogId;
       return toolCatalogId === catalogId;
     });
   }, [assignedToolsData, catalogId]);
 
   // Fetch all profiles
-  const { data: allProfiles = [], isLoading: isLoadingProfiles } =
-    useProfilesQuery();
+  const { data: allProfiles = [], isPending: isLoadingProfiles } =
+    useProfiles();
 
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });
@@ -126,13 +127,8 @@ export function McpAssignmentsDialog({
     Map<string, PendingChanges>
   >(new Map());
   const [isSaving, setIsSaving] = useState(false);
-  const [mcpGatewaysSearch, setMcpGatewaysSearch] = useState("");
-  const [mcpGatewaysSearchOpen, setMcpGatewaysSearchOpen] = useState(false);
-  const [mcpGatewaysShowAll, setMcpGatewaysShowAll] = useState(false);
-  const [agentsSearch, setAgentsSearch] = useState("");
-  const [agentsSearchOpen, setAgentsSearchOpen] = useState(false);
-  const [agentsShowAll, setAgentsShowAll] = useState(false);
 
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const unassignTool = useUnassignTool();
   const bulkAssign = useBulkAssignTools();
   const patchTool = useProfileToolPatchMutation();
@@ -173,6 +169,8 @@ export function McpAssignmentsDialog({
   // Save all pending changes
   const handleSaveAll = async () => {
     setIsSaving(true);
+    const affectedAgentIds = new Set<string>();
+
     try {
       for (const [profileId, changes] of pendingChanges) {
         const current = assignmentsByProfile.get(profileId);
@@ -187,17 +185,24 @@ export function McpAssignmentsDialog({
         );
 
         const useDynamicCredential =
+          isPlaywrightCatalogItem(catalogId) ||
           changes.credentialId === DYNAMIC_CREDENTIAL_VALUE;
 
-        // Remove tools
+        // Track affected agents for invalidation
+        if (toAdd.length > 0 || toRemove.length > 0) {
+          affectedAgentIds.add(profileId);
+        }
+
+        // Remove tools (skip invalidation, will do it once at the end)
         for (const toolId of toRemove) {
           await unassignTool.mutateAsync({
             agentId: profileId,
             toolId,
+            skipInvalidation: true,
           });
         }
 
-        // Add new tools
+        // Add new tools (skip invalidation, will do it once at the end)
         if (toAdd.length > 0) {
           const assignments = toAdd.map((toolId) => ({
             agentId: profileId,
@@ -213,7 +218,7 @@ export function McpAssignmentsDialog({
             useDynamicTeamCredential: useDynamicCredential,
           }));
 
-          await bulkAssign.mutateAsync({ assignments });
+          await bulkAssign.mutateAsync({ assignments, skipInvalidation: true });
         }
 
         // Update credential for existing tools if it changed
@@ -222,6 +227,7 @@ export function McpAssignmentsDialog({
           current?.tools.length &&
           toRemove.length === 0
         ) {
+          affectedAgentIds.add(profileId);
           const toolsToUpdate = current.tools.filter(
             (at) => !toRemove.includes(at.tool.id),
           );
@@ -237,10 +243,14 @@ export function McpAssignmentsDialog({
                   ? changes.credentialId
                   : null,
               useDynamicTeamCredential: useDynamicCredential,
+              skipInvalidation: true,
             });
           }
         }
       }
+
+      // Invalidate all queries once at the end
+      invalidateAllQueries(affectedAgentIds);
 
       toast.success("Changes saved");
       setPendingChanges(new Map());
@@ -248,6 +258,8 @@ export function McpAssignmentsDialog({
     } catch (error) {
       console.error("Failed to save changes:", error);
       toast.error("Failed to save changes");
+      // Still invalidate on error to ensure UI is in sync
+      invalidateAllQueries(affectedAgentIds);
     } finally {
       setIsSaving(false);
     }
@@ -257,12 +269,6 @@ export function McpAssignmentsDialog({
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       setPendingChanges(new Map());
-      setMcpGatewaysSearch("");
-      setMcpGatewaysSearchOpen(false);
-      setMcpGatewaysShowAll(false);
-      setAgentsSearch("");
-      setAgentsSearchOpen(false);
-      setAgentsShowAll(false);
     }
     onOpenChange(newOpen);
   };
@@ -274,10 +280,10 @@ export function McpAssignmentsDialog({
     const mcp: Profile[] = [];
     const agent: Profile[] = [];
     for (const profile of allProfiles) {
-      if (profile.agentType === "agent") {
-        agent.push(profile);
-      } else {
+      if (profile.agentType === "mcp_gateway") {
         mcp.push(profile);
+      } else if (profile.agentType === "agent") {
+        agent.push(profile);
       }
     }
     // Sort each group: assigned first, unassigned last
@@ -291,60 +297,96 @@ export function McpAssignmentsDialog({
     return { mcpProfiles: mcp, agents: agent };
   }, [allProfiles, assignmentsByProfile]);
 
-  // Filter profiles by search
-  const filteredMcpProfiles = useMemo(() => {
-    if (!mcpGatewaysSearch.trim()) return mcpProfiles;
-    const search = mcpGatewaysSearch.toLowerCase();
-    return mcpProfiles.filter((p) => p.name.toLowerCase().includes(search));
-  }, [mcpProfiles, mcpGatewaysSearch]);
+  // Handle toggling a profile on/off from the combobox
+  const handleProfileToggle = useCallback(
+    (profileId: string) => {
+      const pending = pendingChanges.get(profileId);
+      const assignment = assignmentsByProfile.get(profileId);
+      const currentlyHasTools = pending
+        ? pending.selectedToolIds.size > 0
+        : (assignment?.tools.length ?? 0) > 0;
 
-  const filteredAgents = useMemo(() => {
-    if (!agentsSearch.trim()) return agents;
-    const search = agentsSearch.toLowerCase();
-    return agents.filter((a) => a.name.toLowerCase().includes(search));
-  }, [agents, agentsSearch]);
+      if (currentlyHasTools) {
+        // Toggle OFF: clear all tools
+        updatePendingChanges(profileId, {
+          selectedToolIds: new Set(),
+          credentialId:
+            pending?.credentialId ?? assignment?.credentialId ?? null,
+        });
+      } else {
+        // Toggle ON: pre-select all tools with default credential
+        const allToolIds = new Set(allTools.map((t) => t.id));
+        const defaultCredential =
+          pending?.credentialId ??
+          assignment?.credentialId ??
+          mcpServers[0]?.id ??
+          null;
+        updatePendingChanges(profileId, {
+          selectedToolIds: allToolIds,
+          credentialId: defaultCredential,
+        });
+      }
+    },
+    [
+      pendingChanges,
+      assignmentsByProfile,
+      allTools,
+      mcpServers,
+      updatePendingChanges,
+    ],
+  );
 
-  const renderProfilePills = (
-    profiles: Profile[],
-    showAll: boolean,
-    onShowMore: () => void,
-  ) => {
-    const visibleProfiles =
-      showAll || profiles.length <= 10 ? profiles : profiles.slice(0, 10);
-    const hiddenCount = profiles.length - 10;
+  // Build combobox items and selected IDs for each section
+  const buildComboboxData = useCallback(
+    (profiles: Profile[]) => {
+      const items: AssignmentComboboxItem[] = profiles.map((p) => {
+        const pending = pendingChanges.get(p.id);
+        const assignment = assignmentsByProfile.get(p.id);
+        const toolCount = pending
+          ? pending.selectedToolIds.size
+          : (assignment?.tools.length ?? 0);
+        return {
+          id: p.id,
+          name: p.name,
+          description: p.description || undefined,
+          badge:
+            toolCount > 0
+              ? `${toolCount}/${allTools.length}`
+              : `${allTools.length} tools`,
+        };
+      });
 
-    return (
-      <div className="flex flex-wrap gap-2">
-        {visibleProfiles.map((profile) => {
-          const assignment = assignmentsByProfile.get(profile.id);
-          const pending = pendingChanges.get(profile.id);
-          return (
-            <ProfileAssignmentPill
-              key={profile.id}
-              profile={profile}
-              assignedTools={assignment?.tools ?? []}
-              allTools={allTools}
-              catalogId={catalogId}
-              isBuiltin={isBuiltin}
-              currentCredentialId={assignment?.credentialId ?? null}
-              pendingChanges={pending}
-              onPendingChanges={updatePendingChanges}
-            />
-          );
-        })}
-        {!showAll && hiddenCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-3 text-xs border-dashed"
-            onClick={onShowMore}
-          >
-            +{hiddenCount} more
-          </Button>
-        )}
-      </div>
-    );
-  };
+      const selectedIds = profiles
+        .filter((p) => {
+          const pending = pendingChanges.get(p.id);
+          if (pending) return pending.selectedToolIds.size > 0;
+          return (assignmentsByProfile.get(p.id)?.tools.length ?? 0) > 0;
+        })
+        .map((p) => p.id);
+
+      return { items, selectedIds };
+    },
+    [pendingChanges, assignmentsByProfile, allTools],
+  );
+
+  const mcpCombobox = useMemo(
+    () => buildComboboxData(mcpProfiles),
+    [buildComboboxData, mcpProfiles],
+  );
+  const agentCombobox = useMemo(
+    () => buildComboboxData(agents),
+    [buildComboboxData, agents],
+  );
+
+  // Get selected profiles for pills
+  const selectedMcpProfiles = useMemo(
+    () => mcpProfiles.filter((p) => mcpCombobox.selectedIds.includes(p.id)),
+    [mcpProfiles, mcpCombobox.selectedIds],
+  );
+  const selectedAgents = useMemo(
+    () => agents.filter((a) => agentCombobox.selectedIds.includes(a.id)),
+    [agents, agentCombobox.selectedIds],
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -352,7 +394,8 @@ export function McpAssignmentsDialog({
         <DialogHeader>
           <DialogTitle>{serverName} - Assignments</DialogTitle>
           <DialogDescription>
-            Manage which profiles have access to tools from this MCP server
+            Manage which agents and MCP gateways have access to tools from this
+            MCP server
           </DialogDescription>
         </DialogHeader>
 
@@ -366,99 +409,84 @@ export function McpAssignmentsDialog({
             <div className="flex-1 overflow-y-auto space-y-4">
               {/* MCP Gateways Section */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-medium">MCP Gateways</Label>
-                  {mcpProfiles.length > 10 &&
-                    (mcpGatewaysSearchOpen ? (
-                      <div className="relative flex-1 max-w-[200px]">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                        <Input
-                          placeholder="Search..."
-                          value={mcpGatewaysSearch}
-                          onChange={(e) => setMcpGatewaysSearch(e.target.value)}
-                          className="h-7 pl-7 text-xs"
-                          autoFocus
-                          onBlur={() => {
-                            if (!mcpGatewaysSearch) {
-                              setMcpGatewaysSearchOpen(false);
-                            }
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => setMcpGatewaysSearchOpen(true)}
-                      >
-                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    ))}
-                </div>
+                <Label className="text-sm font-medium">MCP Gateways</Label>
                 {mcpProfiles.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No MCP gateways available.
                   </p>
-                ) : filteredMcpProfiles.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No matching MCP gateways.
-                  </p>
                 ) : (
-                  renderProfilePills(
-                    filteredMcpProfiles,
-                    mcpGatewaysShowAll || !!mcpGatewaysSearch,
-                    () => setMcpGatewaysShowAll(true),
-                  )
+                  <div className="flex flex-wrap gap-2">
+                    {selectedMcpProfiles.map((profile) => {
+                      const assignment = assignmentsByProfile.get(profile.id);
+                      const pending = pendingChanges.get(profile.id);
+                      return (
+                        <ProfileAssignmentPill
+                          key={profile.id}
+                          profile={profile}
+                          assignedTools={assignment?.tools ?? []}
+                          allTools={allTools}
+                          catalogId={catalogId}
+                          isBuiltin={isBuiltin}
+                          currentCredentialId={assignment?.credentialId ?? null}
+                          pendingChanges={pending}
+                          onPendingChanges={updatePendingChanges}
+                        />
+                      );
+                    })}
+                    <AssignmentCombobox
+                      items={mcpCombobox.items}
+                      selectedIds={mcpCombobox.selectedIds}
+                      onToggle={handleProfileToggle}
+                      placeholder="Search MCP gateways..."
+                      emptyMessage="No MCP gateways found."
+                      createAction={{
+                        label: "Create New MCP Gateway",
+                        href: "/mcp-gateways?create=true",
+                      }}
+                    />
+                  </div>
                 )}
               </div>
 
               {/* Agents Section */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-medium">Agents</Label>
-                  {agents.length > 10 &&
-                    (agentsSearchOpen ? (
-                      <div className="relative flex-1 max-w-[200px]">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                        <Input
-                          placeholder="Search..."
-                          value={agentsSearch}
-                          onChange={(e) => setAgentsSearch(e.target.value)}
-                          className="h-7 pl-7 text-xs"
-                          autoFocus
-                          onBlur={() => {
-                            if (!agentsSearch) {
-                              setAgentsSearchOpen(false);
-                            }
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => setAgentsSearchOpen(true)}
-                      >
-                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    ))}
-                </div>
+                <Label className="text-sm font-medium">Agents</Label>
                 {agents.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No agents available.
                   </p>
-                ) : filteredAgents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No matching agents.
-                  </p>
                 ) : (
-                  renderProfilePills(
-                    filteredAgents,
-                    agentsShowAll || !!agentsSearch,
-                    () => setAgentsShowAll(true),
-                  )
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAgents.map((agent) => {
+                      const assignment = assignmentsByProfile.get(agent.id);
+                      const pending = pendingChanges.get(agent.id);
+                      return (
+                        <ProfileAssignmentPill
+                          key={agent.id}
+                          profile={agent}
+                          assignedTools={assignment?.tools ?? []}
+                          allTools={allTools}
+                          catalogId={catalogId}
+                          isBuiltin={isBuiltin}
+                          currentCredentialId={assignment?.credentialId ?? null}
+                          pendingChanges={pending}
+                          onPendingChanges={updatePendingChanges}
+                          showStatusDot
+                        />
+                      );
+                    })}
+                    <AssignmentCombobox
+                      items={agentCombobox.items}
+                      selectedIds={agentCombobox.selectedIds}
+                      onToggle={handleProfileToggle}
+                      placeholder="Search agents..."
+                      emptyMessage="No agents found."
+                      createAction={{
+                        label: "Create New Agent",
+                        href: "/agents?create=true",
+                      }}
+                    />
+                  </div>
                 )}
               </div>
             </div>
@@ -489,6 +517,7 @@ interface ProfileAssignmentPillProps {
   currentCredentialId: string | null;
   pendingChanges?: PendingChanges;
   onPendingChanges: (profileId: string, changes: PendingChanges) => void;
+  showStatusDot?: boolean;
 }
 
 function ProfileAssignmentPill({
@@ -500,8 +529,10 @@ function ProfileAssignmentPill({
   currentCredentialId,
   pendingChanges,
   onPendingChanges,
+  showStatusDot,
 }: ProfileAssignmentPillProps) {
   const [open, setOpen] = useState(false);
+  const [changedInSession, setChangedInSession] = useState(false);
 
   // Use pending changes if available, otherwise use current state
   const selectedToolIds = useMemo(
@@ -544,6 +575,7 @@ function ProfileAssignmentPill({
       selectedToolIds: newSelectedIds,
       credentialId: credentialId,
     });
+    setChangedInSession(true);
   };
 
   const handleCredentialChange = (newCredentialId: string | null) => {
@@ -556,34 +588,49 @@ function ProfileAssignmentPill({
   const toolCount = selectedToolIds.size;
   const totalTools = allTools.length;
   const hasNoAssignments = toolCount === 0;
-  const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
+  const isPlaywright = isPlaywrightCatalogItem(catalogId);
+  const showCredentialSelector =
+    !isBuiltin && !isPlaywright && mcpServers.length > 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen} modal>
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setChangedInSession(false);
+      }}
+      modal
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           size="sm"
           className={cn(
             "h-8 px-3 gap-1.5 text-xs max-w-[250px]",
-            hasNoAssignments && "border-dashed",
+            hasNoAssignments && "border-dashed opacity-50",
             hasChanges && "border-primary",
           )}
         >
+          {showStatusDot && !hasNoAssignments && (
+            <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+          )}
+          {showStatusDot && <Bot className="h-3 w-3 shrink-0" />}
           <span className="font-medium truncate">{profile.name}</span>
           <span className="text-muted-foreground shrink-0">
             ({toolCount}/{totalTools})
           </span>
+          <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[420px] p-0"
+        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={8}
         avoidCollisions
+        collisionPadding={16}
       >
-        <div className="p-4 border-b flex items-start justify-between gap-2">
+        <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold truncate">{profile.name}</h4>
             <p className="text-sm text-muted-foreground mt-1">
@@ -602,8 +649,8 @@ function ProfileAssignmentPill({
 
         {/* Credential Selector */}
         {showCredentialSelector && (
-          <div className="p-4 border-b space-y-2">
-            <Label className="text-sm font-medium">Credential</Label>
+          <div className="p-4 border-b space-y-2 shrink-0">
+            <Label className="text-sm font-medium">Connect on behalf of</Label>
             <TokenSelect
               catalogId={catalogId}
               value={credentialId}
@@ -614,118 +661,22 @@ function ProfileAssignmentPill({
         )}
 
         {/* Tool Checklist */}
-        <ToolChecklist
-          tools={allTools}
-          selectedToolIds={selectedToolIds}
-          onSelectionChange={handleToolToggle}
-        />
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <ToolChecklist
+            tools={allTools}
+            selectedToolIds={selectedToolIds}
+            onSelectionChange={handleToolToggle}
+          />
+        </div>
+
+        {changedInSession && (
+          <div className="p-2 border-t shrink-0">
+            <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
+              OK
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-interface ToolChecklistProps {
-  tools: CatalogTool[];
-  selectedToolIds: Set<string>;
-  onSelectionChange: (selectedIds: Set<string>) => void;
-}
-
-function ToolChecklist({
-  tools,
-  selectedToolIds,
-  onSelectionChange,
-}: ToolChecklistProps) {
-  const allSelected = tools.every((tool) => selectedToolIds.has(tool.id));
-  const noneSelected = tools.every((tool) => !selectedToolIds.has(tool.id));
-  const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
-
-  const handleToggle = (toolId: string) => {
-    const newSet = new Set(selectedToolIds);
-    if (newSet.has(toolId)) {
-      newSet.delete(toolId);
-    } else {
-      newSet.add(toolId);
-    }
-    onSelectionChange(newSet);
-  };
-
-  const handleSelectAll = () => {
-    onSelectionChange(new Set(tools.map((t) => t.id)));
-  };
-
-  const handleDeselectAll = () => {
-    onSelectionChange(new Set());
-  };
-
-  const formatToolName = (toolName: string) => {
-    const lastSeparator = toolName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    if (lastSeparator !== -1) {
-      return toolName.substring(lastSeparator + 2);
-    }
-    return toolName;
-  };
-
-  return (
-    <div>
-      <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
-        <span className="text-xs text-muted-foreground">
-          {selectedCount} of {tools.length} selected
-        </span>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs h-6 px-2"
-            onClick={handleSelectAll}
-            disabled={allSelected}
-          >
-            Select All
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs h-6 px-2"
-            onClick={handleDeselectAll}
-            disabled={noneSelected}
-          >
-            Deselect All
-          </Button>
-        </div>
-      </div>
-      <div className="max-h-[250px] overflow-y-auto">
-        <div className="p-2 space-y-0.5">
-          {tools.map((tool) => {
-            const toolName = formatToolName(tool.name);
-            const isSelected = selectedToolIds.has(tool.id);
-
-            return (
-              <label
-                key={tool.id}
-                htmlFor={`tool-assign-${tool.id}`}
-                className={cn(
-                  "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                  isSelected ? "bg-primary/10" : "hover:bg-muted/50",
-                )}
-              >
-                <Checkbox
-                  id={`tool-assign-${tool.id}`}
-                  checked={isSelected}
-                  onCheckedChange={() => handleToggle(tool.id)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{toolName}</div>
-                  {tool.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                      {tool.description}
-                    </div>
-                  )}
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-    </div>
   );
 }

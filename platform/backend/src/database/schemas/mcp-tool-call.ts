@@ -2,12 +2,14 @@ import {
   index,
   jsonb,
   pgTable,
+  text,
   timestamp,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { CommonToolCall } from "@/types";
+import type { CommonToolCall, MCPGatewayAuthMethod } from "@/types";
 import agentsTable from "./agent";
+import usersTable from "./user";
 
 // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
 // - mcp_tool_calls_method_trgm_idx: GIN index on method column
@@ -17,9 +19,11 @@ const mcpToolCallsTable = pgTable(
   "mcp_tool_calls",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    agentId: uuid("agent_id")
-      .notNull()
-      .references(() => agentsTable.id, { onDelete: "cascade" }),
+    // Nullable to preserve MCP tool calls when agent is deleted
+    // null indicates the agent was deleted
+    agentId: uuid("agent_id").references(() => agentsTable.id, {
+      onDelete: "set null",
+    }),
     mcpServerName: varchar("mcp_server_name", { length: 255 }).notNull(),
     method: varchar("method", { length: 255 }).notNull(),
     toolCall: jsonb("tool_call").$type<CommonToolCall | null>(),
@@ -28,6 +32,12 @@ const mcpToolCallsTable = pgTable(
     // - tools/list: { tools: [...] }
     // - initialize: { capabilities, serverInfo }
     toolResult: jsonb("tool_result").$type<unknown>(),
+    userId: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    authMethod: varchar("auth_method", {
+      length: 50,
+    }).$type<MCPGatewayAuthMethod>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

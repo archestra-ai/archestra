@@ -60,6 +60,7 @@ export async function makeApiRequest({
     Origin: UI_BASE_URL,
   },
   ignoreStatusCheck = false,
+  timeoutMs,
 }: {
   request: APIRequestContext;
   method: "get" | "post" | "put" | "patch" | "delete";
@@ -67,10 +68,12 @@ export async function makeApiRequest({
   data?: unknown;
   headers?: Record<string, string>;
   ignoreStatusCheck?: boolean;
+  timeoutMs?: number;
 }) {
   const response = await request[method](`${API_BASE_URL}${urlSuffix}`, {
     headers,
     data,
+    timeout: timeoutMs,
   });
 
   if (!ignoreStatusCheck && !response.ok()) {
@@ -163,9 +166,16 @@ export async function callMcpTool(
     token: string;
     toolName: string;
     arguments?: Record<string, unknown>;
+    timeoutMs?: number;
   },
 ): Promise<{ content: Array<{ type: string; text?: string }> }> {
-  const { profileId, token, toolName, arguments: args = {} } = options;
+  const {
+    profileId,
+    token,
+    toolName,
+    arguments: args = {},
+    timeoutMs,
+  } = options;
 
   const urlSuffix = `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`;
 
@@ -183,6 +193,7 @@ export async function callMcpTool(
         arguments: args,
       },
     },
+    timeoutMs,
   });
 
   const callResult = await callToolResponse.json();

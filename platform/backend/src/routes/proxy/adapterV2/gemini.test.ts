@@ -806,5 +806,125 @@ describe("GeminiStreamAdapter", () => {
       expect(response.usageMetadata?.promptTokenCount).toBe(10);
       expect(response.usageMetadata?.candidatesTokenCount).toBe(5);
     });
+
+    test("preserves thoughtSignature on text and function call parts", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+
+      // Simulate thought text chunk
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  text: "Let me think...",
+                  thought: true,
+                  thoughtSignature: "thought-sig-abc",
+                },
+              ],
+            },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as GeminiStreamChunk);
+
+      // Simulate output text chunk with thoughtSignature
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  text: "Here is the answer",
+                  thoughtSignature: "output-sig-def",
+                },
+              ],
+            },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as GeminiStreamChunk);
+
+      // Simulate function call with thoughtSignature
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "generate_image",
+                    args: { prompt: "a cat" },
+                  },
+                  thoughtSignature: "fc-sig-ghi",
+                },
+              ],
+            },
+            finishReason: FinishReason.STOP,
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as unknown as GeminiStreamChunk);
+
+      const response = adapter.toProviderResponse();
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+
+      // Thought text part should have thought=true and thoughtSignature
+      expect(parts[0]).toEqual({
+        text: "Let me think...",
+        thought: true,
+        thoughtSignature: "thought-sig-abc",
+      });
+
+      // Output text part should have thoughtSignature
+      expect(parts[1]).toEqual({
+        text: "Here is the answer",
+        thoughtSignature: "output-sig-def",
+      });
+
+      // Function call part should have thoughtSignature
+      expect(parts[2]).toMatchObject({
+        functionCall: {
+          name: "generate_image",
+          args: { prompt: "a cat" },
+        },
+        thoughtSignature: "fc-sig-ghi",
+      });
+    });
+
+    test("handles response with only output text (no thought parts)", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ text: "Simple response" }],
+            },
+            finishReason: FinishReason.STOP,
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as GeminiStreamChunk);
+
+      const response = adapter.toProviderResponse();
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+
+      // Should have just the text part with no extra fields
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).toEqual({ text: "Simple response" });
+    });
   });
 });

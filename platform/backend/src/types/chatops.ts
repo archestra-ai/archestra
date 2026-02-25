@@ -4,7 +4,7 @@ import { z } from "zod";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams"]);
+export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 /**
@@ -21,6 +21,8 @@ export interface IncomingChatMessage {
   threadId?: string;
   /** The sender's ID in the provider's system */
   senderId: string;
+  /** Pre-resolved sender email (from Bot Framework TeamsInfo, avoids Graph API call) */
+  senderEmail?: string;
   /** The sender's display name */
   senderName: string;
   /** The message text (with bot mentions cleaned) */
@@ -99,6 +101,17 @@ export interface ChatOpsProcessingResult {
 }
 
 /**
+ * A channel discovered by a chatops provider.
+ * Used to auto-populate channel bindings so admins can assign agents from the UI.
+ */
+export interface DiscoveredChannel {
+  channelId: string;
+  channelName: string | null;
+  workspaceId: string;
+  workspaceName: string | null;
+}
+
+/**
  * Interface for chatops providers (MS Teams, Slack, Discord, etc.)
  *
  * Implementations should:
@@ -106,6 +119,7 @@ export interface ChatOpsProcessingResult {
  * 2. Parse incoming activities/events into IncomingChatMessage
  * 3. Send replies using provider-specific APIs
  * 4. Fetch thread history for conversation context
+ * 5. Discover available channels for auto-populating bindings
  */
 export interface ChatOpsProvider {
   /** Provider identifier */
@@ -168,6 +182,25 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
+   * Set a typing/loading status indicator (optional, provider-specific).
+   * For Slack: shows "App is thinking..." in the assistant thread.
+   * For Teams: sends a typing activity indicator in DMs/group chats,
+   *   or a placeholder "Thinking..." message in channels (which sendReply
+   *   later updates with the real response).
+   * Non-fatal if unsupported or not configured.
+   *
+   * Implementations may mutate `metadata` to pass state to a subsequent
+   * `sendReply` call (e.g., storing a placeholder message ID). The caller
+   * passes `message.metadata` by reference, so mutations are visible when
+   * `sendReply` reads `options.originalMessage.metadata`.
+   */
+  setTypingStatus?(
+    channelId: string,
+    threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first
@@ -181,6 +214,85 @@ export interface ChatOpsProvider {
    * @returns The user's email address, or null if not available
    */
   getUserEmail(userId: string): Promise<string | null>;
+
+  /**
+   * Get a channel's display name from its provider-specific ID.
+   * Used when creating early bindings for channels not yet in the discovery cache.
+   * @param channelId - The channel ID in the provider's system
+   * @returns The channel name, or null if not available
+   */
+  getChannelName(channelId: string): Promise<string | null>;
+
+  /**
+   * Parse an interactive payload (e.g. button click) into a structured selection.
+   * Each provider implements its own payload parsing (Block Kit for Slack, Adaptive Card for MS Teams).
+   * @param payload - The raw interactive payload from the provider
+   * @returns Parsed selection or null if not a valid agent selection
+   */
+  parseInteractivePayload(payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null;
+
+  /**
+   * Send an agent selection card/message to a channel.
+   * Each provider renders the card in its native format (Adaptive Card for MS Teams, Block Kit for Slack).
+   * @param params.message - The incoming message that triggered the selection
+   * @param params.agents - Available agents to choose from
+   * @param params.isWelcome - Whether this is a first-time welcome (true) or a change-agent request (false)
+   * @param params.providerContext - Provider-specific context (e.g., TurnContext for MS Teams)
+   */
+  sendAgentSelectionCard(params: {
+    message: IncomingChatMessage;
+    agents: { id: string; name: string }[];
+    isWelcome: boolean;
+    providerContext?: unknown;
+  }): Promise<void>;
+
+  /**
+   * Get the workspace/team ID for this provider, if known without an incoming message.
+   * Used for eager channel discovery on startup.
+   * Returns null if the workspace ID can only be determined from incoming messages
+   * (e.g., MS Teams requires a TurnContext to know which team).
+   */
+  getWorkspaceId(): string | null;
+
+  /**
+   * Get the workspace/team display name for this provider, if known.
+   * Used to populate workspaceName on channel bindings (including DMs).
+   */
+  getWorkspaceName(): string | null;
+
+  /**
+   * Discover all channels in a workspace/team.
+   * Used to auto-populate channel bindings so admins can assign agents from the UI.
+   * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
+   * @returns Discovered channels, or null if context doesn't support discovery
+   */
+  discoverChannels(context: unknown): Promise<DiscoveredChannel[] | null>;
+}
+
+/**
+ * Callback interface for socket-mode providers to delegate events
+ * back to the ChatOpsManager without depending on it directly.
+ */
+export interface ChatOpsEventHandler {
+  handleIncomingMessage(
+    provider: ChatOpsProvider,
+    body: unknown,
+  ): Promise<void>;
+  handleInteractiveSelection(
+    provider: ChatOpsProvider,
+    payload: unknown,
+  ): Promise<void>;
+  getAccessibleChatopsAgents(params: {
+    senderEmail?: string;
+  }): Promise<{ id: string; name: string }[]>;
 }
 
 /**
@@ -198,12 +310,4 @@ export interface MSTeamsConfig {
     clientId: string;
     clientSecret: string;
   };
-}
-
-/**
- * Overall chatops configuration
- */
-export interface ChatOpsConfig {
-  msTeams: MSTeamsConfig;
-  // Future: slack, discord configs
 }

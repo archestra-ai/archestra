@@ -3,6 +3,7 @@
 import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -25,6 +26,10 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
     "Logo uploaded successfully",
     "Failed to upload logo",
   );
+  const removeOrganizationLogoMutation = useUpdateOrganization(
+    "Logo removed successfully",
+    "Failed to remove logo",
+  );
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,13 +38,13 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
 
       // Validate file type
       if (file.type !== "image/png") {
-        alert("Please upload a PNG file");
+        toast.error("Please upload a PNG file");
         return;
       }
 
       // Validate file size (2MB)
       if (file.size > 2 * 1024 * 1024) {
-        alert("File size must be less than 2MB");
+        toast.error("File size must be less than 2MB");
         return;
       }
 
@@ -50,9 +55,14 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
         setPreview(base64);
 
         try {
-          await uploadOrganizationLogoMutation.mutateAsync({
+          const result = await uploadOrganizationLogoMutation.mutateAsync({
             logo: base64,
           });
+
+          if (!result) {
+            throw new Error("Upload failed");
+          }
+
           onLogoChange?.();
         } catch (error) {
           console.error("Failed to upload logo:", error);
@@ -66,15 +76,20 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
 
   const handleRemoveLogo = useCallback(async () => {
     try {
-      await uploadOrganizationLogoMutation.mutateAsync({
+      const result = await removeOrganizationLogoMutation.mutateAsync({
         logo: null,
       });
+
+      if (!result) {
+        throw new Error("Removal failed");
+      }
+
       setPreview(null);
       onLogoChange?.();
     } catch (error) {
       console.error("Failed to remove logo:", error);
     }
-  }, [onLogoChange, uploadOrganizationLogoMutation]);
+  }, [onLogoChange, removeOrganizationLogoMutation]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -123,7 +138,7 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
                 variant="outline"
                 size="sm"
                 onClick={handleRemoveLogo}
-                disabled={uploadOrganizationLogoMutation.isPending}
+                disabled={removeOrganizationLogoMutation.isPending}
               >
                 <X className="h-4 w-4 mr-2" />
                 Remove

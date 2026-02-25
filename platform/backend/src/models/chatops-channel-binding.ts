@@ -9,6 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
   ChatOpsChannelBinding,
@@ -229,7 +230,7 @@ class ChatOpsChannelBindingModel {
     // a new one. Slack/Teams can assign new channel IDs when a user
     // re-initiates a DM, leading to duplicate rows for the same person.
     if (input.isDm && input.dmOwnerEmail) {
-      await db
+      const deleted = await db
         .delete(schema.chatopsChannelBindingsTable)
         .where(
           and(
@@ -245,7 +246,19 @@ class ChatOpsChannelBindingModel {
             ),
             ne(schema.chatopsChannelBindingsTable.channelId, input.channelId),
           ),
+        )
+        .returning();
+
+      if (deleted.length > 0) {
+        logger.debug(
+          {
+            provider: input.provider,
+            dmOwnerEmail: input.dmOwnerEmail,
+            deletedCount: deleted.length,
+          },
+          "[ChatOpsChannelBinding] Removed stale DM bindings",
         );
+      }
     }
 
     return ChatOpsChannelBindingModel.create(input);

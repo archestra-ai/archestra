@@ -301,7 +301,7 @@ class SlackProvider implements ChatOpsProvider {
           type: "section",
           text: { type: "mrkdwn", text: remaining.slice(0, splitAt) },
         });
-        remaining = remaining.slice(splitAt).replace(/^\n+/, "");
+        remaining = remaining.slice(splitAt).trim();
       }
     }
 

@@ -1,5 +1,5 @@
-import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { describe, expect, test } from "vitest";
+import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { type A2AAttachment, buildUserContent } from "./a2a-executor";
 
 // Base64 string large enough to pass the MIN_IMAGE_ATTACHMENT_SIZE (2KB) filter.
@@ -125,11 +125,31 @@ describe("buildUserContent", () => {
 
   test("handles various image MIME types", () => {
     const attachments: A2AAttachment[] = [
-      { contentType: "image/png", contentBase64: VALID_IMAGE_BASE64, name: "a.png" },
-      { contentType: "image/jpeg", contentBase64: VALID_IMAGE_BASE64, name: "b.jpg" },
-      { contentType: "image/gif", contentBase64: VALID_IMAGE_BASE64, name: "c.gif" },
-      { contentType: "image/webp", contentBase64: VALID_IMAGE_BASE64, name: "d.webp" },
-      { contentType: "image/svg+xml", contentBase64: VALID_IMAGE_BASE64, name: "e.svg" },
+      {
+        contentType: "image/png",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "a.png",
+      },
+      {
+        contentType: "image/jpeg",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "b.jpg",
+      },
+      {
+        contentType: "image/gif",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "c.gif",
+      },
+      {
+        contentType: "image/webp",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "d.webp",
+      },
+      {
+        contentType: "image/svg+xml",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "e.svg",
+      },
     ];
 
     const { content } = buildUserContent("Describe", attachments);

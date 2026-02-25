@@ -5,10 +5,8 @@ import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { DateRange } from "react-day-picker";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type ChartConfig,
@@ -18,15 +16,16 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -104,9 +103,8 @@ export default function StatisticsPage() {
   const searchParams = useSearchParams();
 
   const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [fromTime, setFromTime] = useState("00:00");
-  const [toTime, setToTime] = useState("23:59");
+  const [customFrom, setCustomFrom] = useState<Date | undefined>();
+  const [customTo, setCustomTo] = useState<Date | undefined>();
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
 
   // Statistics data fetching hooks
@@ -166,24 +164,17 @@ export default function StatisticsPage() {
   );
 
   const handleCustomTimeframe = useCallback(() => {
-    if (!dateRange?.from || !dateRange?.to) {
-      return;
-    }
+    if (!customFrom || !customTo) return;
 
-    const fromDateTime = new Date(dateRange.from);
-    const toDateTime = new Date(dateRange.to);
-
-    const [fromHours, fromMinutes] = fromTime.split(":").map(Number);
-    fromDateTime.setHours(fromHours, fromMinutes, 0, 0);
-
-    const [toHours, toMinutes] = toTime.split(":").map(Number);
-    toDateTime.setHours(toHours, toMinutes, 59, 999);
+    const fromDateTime = new Date(customFrom);
+    const toDateTime = new Date(customTo);
+    toDateTime.setSeconds(59, 999);
 
     const customValue =
       `custom:${fromDateTime.toISOString()}_${toDateTime.toISOString()}` as const;
     handleTimeframeChange(customValue);
     setIsCustomDialogOpen(false);
-  }, [dateRange, fromTime, toTime, handleTimeframeChange]);
+  }, [customFrom, customTo, handleTimeframeChange]);
 
   const getTimeframeDisplay = useCallback((tf: StatisticsTimeFrame) => {
     if (tf.startsWith("custom:")) {
@@ -534,69 +525,47 @@ export default function StatisticsPage() {
             open={isCustomDialogOpen}
             onOpenChange={setIsCustomDialogOpen}
           >
-            <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Custom Timeframe</DialogTitle>
                 <DialogDescription>
                   Set a custom time period for the statistics view.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-6 py-4">
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Date Range</Label>
-                  <div className="flex justify-center">
-                    <Calendar
-                      mode="range"
-                      defaultMonth={dateRange?.from}
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                      className="rounded-md border"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+              <DialogForm onSubmit={handleCustomTimeframe}>
+                <div className="grid grid-cols-2 gap-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="from-time" className="text-sm font-medium">
-                      From Time
-                    </Label>
-                    <Input
-                      id="from-time"
-                      type="time"
-                      value={fromTime}
-                      onChange={(e) => setFromTime(e.target.value)}
+                    <Label className="text-sm font-medium">From</Label>
+                    <DateTimePicker
+                      value={customFrom}
+                      onChange={(date) => setCustomFrom(date)}
+                      placeholder="Start date & time"
                       className="w-full"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="to-time" className="text-sm font-medium">
-                      To Time
-                    </Label>
-                    <Input
-                      id="to-time"
-                      type="time"
-                      value={toTime}
-                      onChange={(e) => setToTime(e.target.value)}
+                    <Label className="text-sm font-medium">To</Label>
+                    <DateTimePicker
+                      value={customTo}
+                      onChange={(date) => setCustomTo(date)}
+                      placeholder="End date & time"
                       className="w-full"
                     />
                   </div>
                 </div>
-              </div>
-              <DialogFooter className="gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCustomDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCustomTimeframe}
-                  disabled={!dateRange?.from || !dateRange?.to}
-                >
-                  Apply
-                </Button>
-              </DialogFooter>
+                <DialogFooter className="gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCustomDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={!customFrom || !customTo}>
+                    Apply
+                  </Button>
+                </DialogFooter>
+              </DialogForm>
             </DialogContent>
           </Dialog>
         </div>

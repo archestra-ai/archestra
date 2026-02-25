@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -105,129 +106,130 @@ export function CreateVirtualKeyDialog({
             </DialogDescription>
           )}
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          {createdKeyValue ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Key className="h-4 w-4" />
-                Copy this key now. It won&apos;t be shown again.
-              </div>
-              <CopyableCode value={createdKeyValue} />
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Expires:</span>{" "}
-                {formatExpiration(createdKeyExpiresAt)}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Provider API Key</Label>
-                <Select
-                  value={selectedParentKeyId}
-                  onValueChange={setSelectedParentKeyId}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an API key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentableKeys.map((key) => {
-                      const config = PROVIDER_CONFIG[key.provider];
-                      return (
-                        <SelectItem key={key.id} value={key.id}>
-                          <div className="flex items-center gap-2">
-                            <Image
-                              src={config.icon}
-                              alt={config.name}
-                              width={16}
-                              height={16}
-                              className="rounded dark:invert"
-                            />
-                            <span>{key.name}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {config.name}
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="virtual-key-name">Name</Label>
-                <Input
-                  id="virtual-key-name"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="My virtual key"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleCreate();
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Expiration{" "}
-                  <span className="text-muted-foreground font-normal">
-                    ({Intl.DateTimeFormat().resolvedOptions().timeZone})
-                  </span>
-                </Label>
-                <div className="flex items-center gap-2">
-                  <DateTimePicker
-                    value={expiresAt ?? undefined}
-                    onChange={(date) => setExpiresAt(date ?? null)}
-                    disabledDate={(date) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      return date < today;
-                    }}
-                    placeholder="No expiration"
-                    className="flex-1"
-                  />
-                  {expiresAt && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setExpiresAt(null)}
-                    >
-                      Never
-                    </Button>
-                  )}
+        <DialogForm onSubmit={handleCreate}>
+          <div className="space-y-4 py-2">
+            {createdKeyValue ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Key className="h-4 w-4" />
+                  Copy this key now. It won&apos;t be shown again.
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {expiresAt
-                    ? `Expires ${formatExpiration(expiresAt)}`
-                    : "Key will never expire"}
-                </p>
+                <CopyableCode value={createdKeyValue} />
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Expires:</span>{" "}
+                  {formatExpiration(createdKeyExpiresAt)}
+                </div>
               </div>
-            </>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {createdKeyValue ? "Close" : "Cancel"}
-          </Button>
-          {!createdKeyValue && (
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Provider API Key</Label>
+                  <Select
+                    value={selectedParentKeyId}
+                    onValueChange={setSelectedParentKeyId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an API key" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {parentableKeys.map((key) => {
+                        const config = PROVIDER_CONFIG[key.provider];
+                        return (
+                          <SelectItem key={key.id} value={key.id}>
+                            <div className="flex items-center gap-2">
+                              <Image
+                                src={config.icon}
+                                alt={config.name}
+                                width={16}
+                                height={16}
+                                className="rounded dark:invert"
+                              />
+                              <span>{key.name}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {config.name}
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="virtual-key-name">Name</Label>
+                  <Input
+                    id="virtual-key-name"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    placeholder="My virtual key"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>
+                    Expiration{" "}
+                    <span className="text-muted-foreground font-normal">
+                      ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+                    </span>
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <DateTimePicker
+                      value={expiresAt ?? undefined}
+                      onChange={(date) => setExpiresAt(date ?? null)}
+                      disabledDate={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return date < today;
+                      }}
+                      placeholder="No expiration"
+                      className="flex-1"
+                    />
+                    {expiresAt && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpiresAt(null)}
+                      >
+                        Never
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {expiresAt
+                      ? `Expires ${formatExpiration(expiresAt)}`
+                      : "Key will never expire"}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
             <Button
-              onClick={handleCreate}
-              disabled={
-                !newKeyName.trim() ||
-                !selectedParentKeyId ||
-                createMutation.isPending
-              }
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
             >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Create
+              {createdKeyValue ? "Close" : "Cancel"}
             </Button>
-          )}
-        </DialogFooter>
+            {!createdKeyValue && (
+              <Button
+                type="submit"
+                disabled={
+                  !newKeyName.trim() ||
+                  !selectedParentKeyId ||
+                  createMutation.isPending
+                }
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Create
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

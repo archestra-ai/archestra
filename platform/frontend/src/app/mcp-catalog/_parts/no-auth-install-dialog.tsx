@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -66,25 +67,28 @@ export function NoAuthInstallDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4">
-          <SelectMcpServerCredentialTypeAndTeams
-            onTeamChange={setSelectedTeamId}
-            catalogId={catalogItem?.id}
-          />
-        </div>
+        <DialogForm onSubmit={handleInstall}>
+          <div className="py-4">
+            <SelectMcpServerCredentialTypeAndTeams
+              onTeamChange={setSelectedTeamId}
+              catalogId={catalogItem?.id}
+            />
+          </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleInstall} disabled={isInstalling}>
-            {isInstalling ? "Installing..." : "Install"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isInstalling}>
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

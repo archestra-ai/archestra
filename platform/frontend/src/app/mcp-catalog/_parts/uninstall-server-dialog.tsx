@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -61,20 +62,22 @@ export function UninstallServerDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={uninstallMutation.isPending}
-          >
-            {uninstallMutation.isPending
-              ? confirmingButtonText
-              : confirmButtonText}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleConfirm}>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={uninstallMutation.isPending}
+            >
+              {uninstallMutation.isPending
+                ? confirmingButtonText
+                : confirmButtonText}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

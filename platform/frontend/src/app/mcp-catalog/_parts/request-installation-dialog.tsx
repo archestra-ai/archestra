@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -50,61 +51,60 @@ export function RequestInstallationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {server && (
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Server</Label>
-              <div className="p-3 border rounded-md bg-muted/50">
-                <div className="flex items-center gap-2">
-                  {server.icon && (
-                    <img
-                      src={server.icon}
-                      alt={`${server.name} icon`}
-                      className="w-6 h-6 rounded"
-                    />
+        <DialogForm onSubmit={handleSubmit}>
+          {server && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Server</Label>
+                <div className="p-3 border rounded-md bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    {server.icon && (
+                      <img
+                        src={server.icon}
+                        alt={`${server.name} icon`}
+                        className="w-6 h-6 rounded"
+                      />
+                    )}
+                    <span className="font-medium">
+                      {server.display_name || server.name}
+                    </span>
+                  </div>
+                  {server.description && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {server.description}
+                    </p>
                   )}
-                  <span className="font-medium">
-                    {server.display_name || server.name}
-                  </span>
                 </div>
-                {server.description && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {server.description}
-                  </p>
-                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reason">
+                  Reason for Request{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Textarea
+                  id="reason"
+                  placeholder="Explain why your team needs this MCP server..."
+                  value={requestReason}
+                  onChange={(e) => setRequestReason(e.target.value)}
+                  rows={4}
+                />
               </div>
             </div>
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="reason">
-                Reason for Request{" "}
-                <span className="text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea
-                id="reason"
-                placeholder="Explain why your team needs this MCP server..."
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-                rows={4}
-              />
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={createRequest.isPending || !server}
-          >
-            {createRequest.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            Submit Request
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createRequest.isPending || !server}>
+              {createRequest.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

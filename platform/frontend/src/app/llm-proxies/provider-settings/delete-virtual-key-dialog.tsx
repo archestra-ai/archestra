@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -39,35 +40,43 @@ export function DeleteVirtualKeyDialog({
             action cannot be undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (virtualKey) {
-                deleteMutation.mutate(
-                  {
-                    chatApiKeyId: virtualKey.chatApiKeyId,
-                    id: virtualKey.id,
+        <DialogForm
+          onSubmit={() => {
+            if (virtualKey) {
+              deleteMutation.mutate(
+                {
+                  chatApiKeyId: virtualKey.chatApiKeyId,
+                  id: virtualKey.id,
+                },
+                {
+                  onSuccess: () => {
+                    onOpenChange(false);
                   },
-                  {
-                    onSuccess: () => {
-                      onOpenChange(false);
-                    },
-                  },
-                );
-              }
-            }}
-            disabled={deleteMutation.isPending}
-          >
-            {deleteMutation.isPending && (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            )}
-            Delete
-          </Button>
-        </DialogFooter>
+                },
+              );
+            }
+          }}
+        >
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

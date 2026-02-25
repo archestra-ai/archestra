@@ -212,6 +212,11 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - OpenRouter
+  OpenRouterChatCompletionsWithDefaultAgent:
+    "openRouterChatCompletionsWithDefaultAgent",
+  OpenRouterChatCompletionsWithAgent: "openRouterChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",

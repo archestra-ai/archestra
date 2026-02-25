@@ -382,6 +382,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     zhipuai: config.chat.zhipuai.apiKey,
     bedrock: config.chat.bedrock.apiKey,
     minimax: config.chat.minimax.apiKey,
+    openrouter: config.chat.openrouter.apiKey,
   };
 
   for (const [provider, apiKeyValue] of Object.entries(providerEnvVars)) {
@@ -473,6 +474,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     zhipuai: "ZhipuAI",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
+    openrouter: "OpenRouter",
   };
   return displayNames[provider];
 }

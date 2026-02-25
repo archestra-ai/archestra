@@ -587,6 +587,10 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
     },
+    openrouter: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
+    },
   },
   chat: {
     openai: {
@@ -627,6 +631,9 @@ export default {
     },
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+    },
+    openrouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

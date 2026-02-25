@@ -15,6 +15,7 @@ import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
+import OpenRouterChatCompletionInteraction from "./llmProviders/openrouter";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
@@ -36,6 +37,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
+  "openrouter:chatCompletions": (i) => new OpenRouterChatCompletionInteraction(i),
 };
 
 export interface CostSavingsInput {

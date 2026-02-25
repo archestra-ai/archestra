@@ -139,6 +139,15 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
+  it("creates a model for openrouter provider", () => {
+    const model = createDirectLLMModel({
+      provider: "openrouter",
+      apiKey: "test-key",
+      modelName: "auto",
+    });
+    expect(model).toBeDefined();
+  });
+
   it("throws ApiError for unsupported provider", () => {
     expect(() =>
       createDirectLLMModel({

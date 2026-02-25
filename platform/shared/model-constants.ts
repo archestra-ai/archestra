@@ -17,6 +17,7 @@ export const SupportedProvidersSchema = z.enum([
   "ollama",
   "zhipuai",
   "minimax",
+  "openrouter",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -33,6 +34,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
   "minimax:chatCompletions",
+  "openrouter:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -55,6 +57,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
   minimax: "MiniMax",
+  openrouter: "OpenRouter",
 };
 
 /**
@@ -101,6 +104,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   ollama: "http://localhost:11434/v1",
   zhipuai: "https://api.z.ai/api/paas/v4",
   minimax: "https://api.minimax.io/v1",
+  openrouter: "https://openrouter.ai/api/v1",
 };
 
 /**
@@ -172,5 +176,9 @@ export const MODEL_MARKER_PATTERNS: Record<
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
+  },
+  openrouter: {
+    fastest: ["gpt-4o-mini", "claude-3-haiku", "llama-3.1-8b"],
+    best: ["gpt-4o", "claude-3.5-sonnet", "llama-3.1-405b"],
   },
 };

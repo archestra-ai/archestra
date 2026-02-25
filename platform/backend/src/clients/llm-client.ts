@@ -73,6 +73,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "minimax";
   }
 
+  if (lowerModel.startsWith("openrouter/")) {
+    return "openrouter";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -99,6 +103,7 @@ const envApiKeyGetters: Record<
   groq: () => config.chat.groq.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  openrouter: () => config.chat.openrouter.apiKey,
 };
 
 /**
@@ -231,6 +236,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   mistral: "mistral-small-latest", // Mistral's fast model
   perplexity: "sonar", // Perplexity's fast model
   groq: "llama-3.1-8b-instant", // Groq's fast model
+  openrouter: "auto", // OpenRouter auto model
 };
 
 /**
@@ -437,6 +443,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       baseURL: config.llm.minimax.baseUrl,
     });
     return client(modelName);
+  },
+
+  openrouter: ({ apiKey, modelName, baseUrl }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+      );
+    }
+    // OpenRouter uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: baseUrl ?? config.llm.openrouter.baseUrl,
+    });
+    return client.chat(modelName);
   },
 
   bedrock: ({ apiKey, modelName, baseUrl }) => {
@@ -680,6 +701,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("minimax", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client.chat(modelName);
+    },
+
+    openrouter: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/openrouter/:agentId (SDK appends /chat/completions)
+      // OpenRouter is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("openrouter", agentId),
         headers,
         fetch: createTracedFetch(),
       });

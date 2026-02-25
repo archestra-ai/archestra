@@ -233,6 +233,10 @@ class ChatOpsChannelBindingModel {
         .delete(schema.chatopsChannelBindingsTable)
         .where(
           and(
+            eq(
+              schema.chatopsChannelBindingsTable.organizationId,
+              input.organizationId,
+            ),
             eq(schema.chatopsChannelBindingsTable.provider, input.provider),
             eq(schema.chatopsChannelBindingsTable.isDm, true),
             eq(

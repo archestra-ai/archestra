@@ -266,10 +266,44 @@ class SlackProvider implements ChatOpsProvider {
 
     const mrkdwn = slackifyMarkdown(options.text);
 
+    // Slack section blocks have a 3000-char limit; split long responses
+    // into multiple blocks to avoid silent truncation.
     // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-    const blocks: any[] = [
-      { type: "section", text: { type: "mrkdwn", text: mrkdwn } },
-    ];
+    const blocks: any[] = [];
+    const SECTION_LIMIT = 3000;
+    if (mrkdwn.length <= SECTION_LIMIT) {
+      blocks.push({
+        type: "section",
+        text: { type: "mrkdwn", text: mrkdwn },
+      });
+    } else {
+      // Split on double-newline boundaries to keep paragraphs intact
+      let remaining = mrkdwn;
+      while (remaining.length > 0) {
+        if (remaining.length <= SECTION_LIMIT) {
+          blocks.push({
+            type: "section",
+            text: { type: "mrkdwn", text: remaining },
+          });
+          break;
+        }
+        // Find last double-newline within the limit
+        let splitAt = remaining.lastIndexOf("\n\n", SECTION_LIMIT);
+        if (splitAt <= 0) {
+          // Fall back to last single newline
+          splitAt = remaining.lastIndexOf("\n", SECTION_LIMIT);
+        }
+        if (splitAt <= 0) {
+          // No good break point — hard split
+          splitAt = SECTION_LIMIT;
+        }
+        blocks.push({
+          type: "section",
+          text: { type: "mrkdwn", text: remaining.slice(0, splitAt) },
+        });
+        remaining = remaining.slice(splitAt).replace(/^\n+/, "");
+      }
+    }
 
     if (options.footer) {
       blocks.push({

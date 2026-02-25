@@ -1056,7 +1056,7 @@ export function agentFooter(agentName: string): string {
 function stripBotFooter(text: string): string {
   return text
     .replace(/\n\n---\n🤖 _.+?_$/i, "")
-    .replace(/\s*🤖 .+$/i, "")
+    .replace(/\n🤖 .+$/, "")
     .trim();
 }
 

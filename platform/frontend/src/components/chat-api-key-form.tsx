@@ -167,6 +167,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
   },
+  minimax: {
+    name: "MiniMax",
+    icon: "/icons/minimax.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://www.minimax.io/",
+    consoleName: "MiniMax Platform",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

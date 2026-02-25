@@ -4,6 +4,7 @@ import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
 import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import groqProxyRoutesV2 from "./proxy/routesv2/groq";
+import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -55,6 +56,8 @@ export const ollamaProxyRoutes = ollamaProxyRoutesV2;
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
 // Bedrock proxy routes - V2 only (unified handler, AWS Converse API)
 export const bedrockProxyRoutes = bedrockProxyRoutesV2;
+// MiniMax proxy routes - V2 only (new provider, no legacy v1)
+export const minimaxProxyRoutes = minimaxProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

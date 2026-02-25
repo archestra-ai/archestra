@@ -521,6 +521,12 @@ const zhipuaiConfig = makeOpenAiCompatibleToolConfig({
   model: "glm-4.5-flash",
 });
 
+const minimaxConfig = makeOpenAiCompatibleToolConfig({
+  providerName: "Minimax",
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+  model: "MiniMax-M2.1",
+});
+
 const bedrockConfig: ToolInvocationTestConfig = {
   providerName: "Bedrock",
 
@@ -618,6 +624,7 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  minimax: minimaxConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;

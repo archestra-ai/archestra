@@ -286,6 +286,7 @@ class OptimizationRuleModel {
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
+        minimax: [],
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

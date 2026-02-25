@@ -207,6 +207,11 @@ export const RouteId = {
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
 
+  // Proxy Routes - MiniMax
+  MinimaxChatCompletionsWithDefaultAgent:
+    "minimaxChatCompletionsWithDefaultAgent",
+  MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",

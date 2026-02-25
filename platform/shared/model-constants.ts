@@ -16,6 +16,7 @@ export const SupportedProvidersSchema = z.enum([
   "vllm",
   "ollama",
   "zhipuai",
+  "minimax",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -31,6 +32,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
+  "minimax:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -52,6 +54,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
+  minimax: "MiniMax",
 };
 
 /**
@@ -65,6 +68,19 @@ export const PERPLEXITY_MODELS = [
   { id: "sonar-reasoning-pro", displayName: "Sonar Reasoning Pro" },
   { id: "sonar-reasoning", displayName: "Sonar Reasoning" },
   { id: "sonar-deep-research", displayName: "Sonar Deep Research" },
+] as const;
+
+/**
+ * MiniMax model definitions — single source of truth.
+ * MiniMax does not provide a /v1/models endpoint, so models are maintained here.
+ * @see https://www.minimaxi.com/en/news
+ */
+export const MINIMAX_MODELS = [
+  { id: "MiniMax-M2", displayName: "MiniMax-M2" },
+  { id: "MiniMax-M2.1", displayName: "MiniMax-M2.1" },
+  { id: "MiniMax-M2.1-lightning", displayName: "MiniMax-M2.1-lightning" },
+  { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
+  { id: "MiniMax-M2.5-highspeed", displayName: "MiniMax-M2.5-highspeed" },
 ] as const;
 
 /**
@@ -84,6 +100,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   vllm: "",
   ollama: "http://localhost:11434/v1",
   zhipuai: "https://api.z.ai/api/paas/v4",
+  minimax: "https://api.minimax.io/v1",
 };
 
 /**
@@ -147,6 +164,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   zhipuai: {
     fastest: ["glm-4-flash", "glm-flash"],
     best: ["glm-4-plus", "glm-4"],
+  },
+  minimax: {
+    fastest: ["minimax-m2.5-highspeed", "minimax-m2.1-lightning"],
+    best: ["minimax-m2.5", "minimax-m2.1", "minimax-m2"],
   },
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],

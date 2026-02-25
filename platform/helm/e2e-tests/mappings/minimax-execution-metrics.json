@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/minimax/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "minimax-execution-metrics"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-execution-metrics-minimax",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "MiniMax-M2.1",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Hello! I'm here to help."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15
+      }
+    }
+  }
+}

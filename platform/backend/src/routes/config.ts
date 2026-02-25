@@ -90,6 +90,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           vllm: config.llm.vllm.baseUrl || null,
           ollama: config.llm.ollama.baseUrl || null,
           zhipuai: config.llm.zhipuai.baseUrl || null,
+          minimax: config.llm.minimax.baseUrl || null,
         },
       });
     },

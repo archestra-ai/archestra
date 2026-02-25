@@ -26,6 +26,7 @@ import { CollapsibleSetupSection } from "../_components/collapsible-setup-sectio
 import { CredentialField } from "../_components/credential-field";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
+import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 const slackProviderConfig: ProviderConfig = {
   provider: "slack",
@@ -80,13 +81,7 @@ export default function SlackPage() {
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
-
-  // Socket mode doesn't require ngrok or a public URL
-  const allStepsCompleted = isSocket
-    ? !!slack?.configured
-    : isLocalDev
-      ? !!ngrokDomain && !!slack?.configured
-      : !!slack?.configured;
+  const { slack: allStepsCompleted } = useTriggerStatuses();
 
   return (
     <div className="flex flex-col gap-6">

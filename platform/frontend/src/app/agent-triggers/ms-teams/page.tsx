@@ -25,6 +25,7 @@ import { CollapsibleSetupSection } from "../_components/collapsible-setup-sectio
 import { CredentialField } from "../_components/credential-field";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
+import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 const msTeamsProviderConfig: ProviderConfig = {
   provider: "ms-teams",
@@ -65,9 +66,7 @@ export default function MsTeamsPage() {
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
-  const allStepsCompleted = isLocalDev
-    ? !!ngrokDomain && !!msTeams?.configured
-    : !!msTeams?.configured;
+  const { msTeams: allStepsCompleted } = useTriggerStatuses();
 
   return (
     <div className="flex flex-col gap-6">

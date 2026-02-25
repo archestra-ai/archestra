@@ -714,9 +714,13 @@ export async function getChatMcpTools({
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
 
         // Construct Tool using jsonSchema() to wrap JSON Schema
+        // Include _meta information for MCP Apps support
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,
           inputSchema: jsonSchema(normalizedSchema),
+          // Preserve _meta from MCP tool (contains ui.resourceUri for MCP Apps)
+          // biome-ignore lint/suspicious/noExplicitAny: MCP tool metadata structure is dynamic
+          ...(mcpTool as any)._meta ? { _meta: (mcpTool as any)._meta } : {},
           needsApproval: async (args: unknown) => {
             return ToolInvocationPolicyModel.checkApprovalRequired(
               mcpTool.name,

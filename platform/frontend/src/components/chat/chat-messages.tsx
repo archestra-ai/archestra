@@ -43,6 +43,7 @@ import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { McpAppRenderer } from "./mcp-app-renderer";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -954,6 +955,40 @@ function MessageTool({
         errorText={errorText}
         onToolApprovalResponse={onToolApprovalResponse}
       />
+    );
+  }
+
+  // Check if tool has MCP App UI (_meta.ui.resourceUri)
+  // biome-ignore lint/suspicious/noExplicitAny: Tool metadata structure is dynamic
+  const toolMeta = (part as any)._meta;
+  const resourceUri = toolMeta?.ui?.resourceUri;
+  
+  // If tool has UI resource and we have a result, render MCP App UI
+  if (resourceUri && toolResultPart && agentId) {
+    return (
+      <Tool className="cursor-pointer" defaultOpen={true}>
+        <ToolHeader
+          type={`tool-${toolName}`}
+          state={getHeaderState({
+            state: part.state || "input-available",
+            toolResultPart,
+            errorText,
+          })}
+          isCollapsible={true}
+        />
+        <ToolContent>
+          {part.input && Object.keys(part.input).length > 0 ? (
+            <ToolInput input={part.input} />
+          ) : null}
+          <McpAppRenderer
+            toolName={toolName}
+            toolInput={part.input || {}}
+            toolResult={toolResultPart.output}
+            resourceUri={resourceUri}
+            agentId={agentId}
+          />
+        </ToolContent>
+      </Tool>
     );
   }
 

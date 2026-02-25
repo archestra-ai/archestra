@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
 import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
+import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -195,7 +196,10 @@ export async function executeA2AMessage(
     // can surface the real cause instead of a generic NoOutputGeneratedError.
 
     // Build multimodal user content when image attachments are present
-    const userContent = buildUserContent(message, attachments);
+    const { content: userContent, skippedNote } = buildUserContent(
+      message,
+      attachments,
+    );
 
     let capturedStreamError: unknown;
     const onError = ({ error }: { error: unknown }) => {
@@ -216,7 +220,7 @@ export async function executeA2AMessage(
       : streamText({
           model,
           system: systemPrompt,
-          prompt: message,
+          prompt: message + skippedNote,
           tools: mcpTools,
           stopWhen: stepCountIs(500),
           abortSignal,
@@ -297,42 +301,85 @@ export async function executeA2AMessage(
 
 /**
  * Build AI SDK UserContent from a text message and optional attachments.
- * Returns `null` when there are no image attachments (caller should use plain `prompt` instead).
+ * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
+ * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
+ * so the caller can append it to the prompt for the LLM to mention.
  *
  * Only image attachments are currently supported as inline content parts.
- * Non-image attachments are ignored (they could be handled as tool inputs in the future).
+ * Non-image attachments are noted so the LLM can inform the user.
  */
 export function buildUserContent(
   message: string,
   attachments?: A2AAttachment[],
-): UserContent | null {
+): { content: UserContent | null; skippedNote: string } {
   const allAttachments = attachments ?? [];
+
+  // Split into image and non-image attachments
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
+  const nonImageAttachments = allAttachments.filter(
+    (a) => !a.contentType.startsWith("image/"),
+  );
 
-  const skippedCount = allAttachments.length - imageAttachments.length;
-  if (skippedCount > 0) {
-    const skippedTypes = allAttachments
-      .filter((a) => !a.contentType.startsWith("image/"))
-      .map((a) => `${a.name ?? "unnamed"} (${a.contentType})`);
+  // Filter out tiny images (broken inline references from email replies).
+  // Estimate actual byte size from base64 length: every 4 base64 chars = 3 bytes.
+  const validImageAttachments = imageAttachments.filter((a) => {
+    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
+    return estimatedBytes >= MIN_IMAGE_ATTACHMENT_SIZE;
+  });
+  const tinyImageAttachments = imageAttachments.filter((a) => {
+    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
+    return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
+  });
+
+  if (tinyImageAttachments.length > 0) {
     logger.debug(
-      { skippedCount, skippedTypes },
+      {
+        count: tinyImageAttachments.length,
+        images: tinyImageAttachments.map((a) => ({
+          name: a.name ?? "unnamed",
+          contentType: a.contentType,
+          estimatedBytes: Math.ceil((a.contentBase64.length * 3) / 4),
+        })),
+      },
+      "Filtering out tiny image attachments (likely broken inline references from email replies)",
+    );
+  }
+
+  if (nonImageAttachments.length > 0) {
+    logger.debug(
+      {
+        skippedCount: nonImageAttachments.length,
+        skippedTypes: nonImageAttachments.map(
+          (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
+        ),
+      },
       "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
     );
   }
 
-  if (imageAttachments.length === 0) {
-    return null;
+  // Build a note about all skipped attachments so the LLM can mention them
+  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
+  const skippedNote =
+    allSkipped.length > 0
+      ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
+      : "";
+
+  if (validImageAttachments.length === 0) {
+    return { content: null, skippedNote };
   }
 
-  return [
-    { type: "text" as const, text: message },
-    ...imageAttachments.map((a) => ({
-      type: "image" as const,
-      image: `data:${a.contentType};base64,${a.contentBase64}`,
-    })),
-  ];
+  return {
+    content: [
+      { type: "text" as const, text: message + skippedNote },
+      ...validImageAttachments.map((a) => ({
+        type: "image" as const,
+        image: `data:${a.contentType};base64,${a.contentBase64}`,
+      })),
+    ],
+    skippedNote,
+  };
 }
 
 // ============================================================================

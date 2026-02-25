@@ -925,23 +925,37 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       let totalSize = 0;
 
       for (const attachment of attachmentList) {
-        // Skip item attachments (attached emails) - only process file attachments.
+        // Skip non-file attachments — only process file attachments.
         // This check must come before size checks so that non-file attachments
         // (e.g. large forwarded emails) don't consume the size budget.
+        // Note: @odata.type is a system annotation typically returned by Graph
+        // regardless of $select, but is not contractually guaranteed.
+        const odataType = attachment["@odata.type"];
         if (
-          attachment["@odata.type"] === "#microsoft.graph.itemAttachment" ||
-          attachment["@odata.type"] === "#microsoft.graph.referenceAttachment"
+          odataType === "#microsoft.graph.itemAttachment" ||
+          odataType === "#microsoft.graph.referenceAttachment"
         ) {
           logger.debug(
             {
               messageId,
               attachmentId: attachment.id,
               attachmentName: attachment.name,
-              type: attachment["@odata.type"],
+              type: odataType,
             },
             "[OutlookEmailProvider] Skipping non-file attachment",
           );
           continue;
+        }
+        if (odataType && odataType !== "#microsoft.graph.fileAttachment") {
+          logger.warn(
+            {
+              messageId,
+              attachmentId: attachment.id,
+              attachmentName: attachment.name,
+              type: odataType,
+            },
+            "[OutlookEmailProvider] Unknown attachment type, processing as file attachment",
+          );
         }
 
         // Skip attachments that are too large

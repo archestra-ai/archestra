@@ -54,3 +54,12 @@ export const MAX_TOTAL_ATTACHMENTS_SIZE = 25 * 1024 * 1024; // 25MB
  * Prevents excessive API calls and processing time
  */
 export const MAX_ATTACHMENTS_PER_EMAIL = 20;
+
+/**
+ * Minimum size for image attachments in bytes (2KB)
+ * Filters out broken inline image references that email clients include when
+ * forwarding/replying (e.g., Outlook includes tiny ~988 byte broken references
+ * to the previous message's inline images). These broken images cause LLM
+ * providers like Gemini to reject the request with "Provided image is not valid".
+ */
+export const MIN_IMAGE_ATTACHMENT_SIZE = 2 * 1024; // 2KB

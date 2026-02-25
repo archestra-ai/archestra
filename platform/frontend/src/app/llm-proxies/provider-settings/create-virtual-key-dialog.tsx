@@ -206,7 +206,11 @@ export function CreateVirtualKeyDialog({
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               {createdKeyValue ? "Close" : "Cancel"}
             </Button>
             {!createdKeyValue && (

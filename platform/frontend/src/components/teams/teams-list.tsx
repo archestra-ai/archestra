@@ -359,27 +359,27 @@ export function TeamsList() {
               Create a team to organize access to profiles and MCP servers
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Team Name *</Label>
-              <Input
-                id="name"
-                placeholder="Engineering Team"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Team for engineering staff..."
-                value={teamDescription}
-                onChange={(e) => setTeamDescription(e.target.value)}
-              />
-            </div>
-          </div>
           <DialogForm onSubmit={handleCreateTeam}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Team Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="Engineering Team"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Team for engineering staff..."
+                  value={teamDescription}
+                  onChange={(e) => setTeamDescription(e.target.value)}
+                />
+              </div>
+            </div>
             <DialogFooter>
               <Button
                 type="button"
@@ -388,10 +388,7 @@ export function TeamsList() {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={createMutation.isPending}
-              >
+              <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Creating..." : "Create Team"}
               </Button>
             </DialogFooter>

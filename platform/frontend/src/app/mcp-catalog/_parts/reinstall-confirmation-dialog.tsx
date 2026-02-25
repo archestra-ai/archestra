@@ -44,7 +44,12 @@ export function ReinstallConfirmationDialog({
         </DialogHeader>
         <DialogForm onSubmit={onConfirm}>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={isReinstalling}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isReinstalling}
+            >
               Skip for Now
             </Button>
             <Button type="submit" disabled={isReinstalling}>

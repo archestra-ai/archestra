@@ -80,27 +80,27 @@ export function OAuthConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {byosEnabled && (
-          <Alert
-            variant="default"
-            className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
-          >
-            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
-            <AlertDescription className="text-amber-700 dark:text-amber-400">
-              Read-only Vault Secret Manager doesn't support OAuth credentials.
-              They will be stored in the database.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="py-4">
-          <SelectMcpServerCredentialTypeAndTeams
-            onTeamChange={setSelectedTeamId}
-            catalogId={catalogId}
-          />
-        </div>
-
         <DialogForm onSubmit={handleConfirm}>
+          {byosEnabled && (
+            <Alert
+              variant="default"
+              className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
+            >
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+              <AlertDescription className="text-amber-700 dark:text-amber-400">
+                Read-only Vault Secret Manager doesn't support OAuth
+                credentials. They will be stored in the database.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="py-4">
+            <SelectMcpServerCredentialTypeAndTeams
+              onTeamChange={setSelectedTeamId}
+              catalogId={catalogId}
+            />
+          </div>
+
           <DialogFooter className="gap-3 sm:gap-3">
             <Button type="button" variant="outline" onClick={handleCancel}>
               Cancel

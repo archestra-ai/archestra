@@ -1733,18 +1733,22 @@ function NoApiKeySetup() {
               Add an LLM provider API key to start chatting
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <ChatApiKeyForm
-              mode="full"
-              showConsoleLink
-              form={form}
-              isPending={createMutation.isPending}
-              geminiVertexAiEnabled={geminiVertexAiEnabled}
-            />
-          </div>
           <DialogForm onSubmit={handleCreate}>
+            <div className="py-2">
+              <ChatApiKeyForm
+                mode="full"
+                showConsoleLink
+                form={form}
+                isPending={createMutation.isPending}
+                geminiVertexAiEnabled={geminiVertexAiEnabled}
+              />
+            </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
                 Cancel
               </Button>
               <Button

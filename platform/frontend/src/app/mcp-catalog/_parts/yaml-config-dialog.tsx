@@ -179,30 +179,27 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {item &&
-          isLocalServer &&
-          (isLoadingYaml ? (
-            <div className="flex items-center justify-center h-[60vh] w-full text-muted-foreground">
-              Loading YAML...
-            </div>
-          ) : (
-            <K8sYamlEditor
-              catalogId={item.id}
-              value={deploymentYaml}
-              onChange={handleYamlChange}
-              isSaved={true}
-            />
-          ))}
-
         <DialogForm onSubmit={handleSave}>
+          {item &&
+            isLocalServer &&
+            (isLoadingYaml ? (
+              <div className="flex items-center justify-center h-[60vh] w-full text-muted-foreground">
+                Loading YAML...
+              </div>
+            ) : (
+              <K8sYamlEditor
+                catalogId={item.id}
+                value={deploymentYaml}
+                onChange={handleYamlChange}
+                isSaved={true}
+              />
+            ))}
+
           <DialogFooter>
             <Button variant="outline" onClick={handleClose} type="button">
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={updateMutation.isPending}
-            >
+            <Button type="submit" disabled={updateMutation.isPending}>
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

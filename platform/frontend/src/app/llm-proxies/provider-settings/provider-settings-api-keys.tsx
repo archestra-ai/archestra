@@ -448,17 +448,17 @@ export function ProviderSettingsApiKeys() {
                 Add a new LLM provider API key for use in Chat and LLM Proxy
               </DialogDescription>
             </DialogHeader>
-            <div className="py-2">
-              <ChatApiKeyForm
-                mode="full"
-                showConsoleLink={false}
-                form={createForm}
-                existingKeys={apiKeys}
-                isPending={createMutation.isPending}
-                geminiVertexAiEnabled={geminiVertexAiEnabled}
-              />
-            </div>
             <DialogForm onSubmit={handleCreate}>
+              <div className="py-2">
+                <ChatApiKeyForm
+                  mode="full"
+                  showConsoleLink={false}
+                  form={createForm}
+                  existingKeys={apiKeys}
+                  isPending={createMutation.isPending}
+                  geminiVertexAiEnabled={geminiVertexAiEnabled}
+                />
+              </div>
               <DialogFooter>
                 <Button
                   type="button"
@@ -490,19 +490,19 @@ export function ProviderSettingsApiKeys() {
                 Update the name, API key value, or scope
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              {selectedApiKey && (
-                <ChatApiKeyForm
-                  mode="full"
-                  showConsoleLink={false}
-                  existingKey={selectedApiKey}
-                  existingKeys={apiKeys}
-                  form={editForm}
-                  isPending={updateMutation.isPending}
-                />
-              )}
-            </div>
             <DialogForm onSubmit={handleEdit}>
+              <div className="py-4">
+                {selectedApiKey && (
+                  <ChatApiKeyForm
+                    mode="full"
+                    showConsoleLink={false}
+                    existingKey={selectedApiKey}
+                    existingKeys={apiKeys}
+                    form={editForm}
+                    isPending={updateMutation.isPending}
+                  />
+                )}
+              </div>
               <DialogFooter>
                 <Button
                   type="button"

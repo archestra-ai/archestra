@@ -67,14 +67,14 @@ export function NoAuthInstallDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4">
-          <SelectMcpServerCredentialTypeAndTeams
-            onTeamChange={setSelectedTeamId}
-            catalogId={catalogItem?.id}
-          />
-        </div>
-
         <DialogForm onSubmit={handleInstall}>
+          <div className="py-4">
+            <SelectMcpServerCredentialTypeAndTeams
+              onTeamChange={setSelectedTeamId}
+              catalogId={catalogItem?.id}
+            />
+          </div>
+
           <DialogFooter>
             <Button
               type="button"

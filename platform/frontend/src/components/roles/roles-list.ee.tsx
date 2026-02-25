@@ -243,26 +243,26 @@ export function RolesList() {
               actions.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Role Name *</Label>
-              <Input
-                id="name"
-                placeholder="e.g., Developer, Viewer, Editor"
-                value={roleName}
-                onChange={(e) => setRoleName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Permissions *</Label>
-              <RolePermissionBuilder
-                permission={permission}
-                onChange={setPermission}
-                userPermissions={allAvailableActions}
-              />
-            </div>
-          </div>
           <DialogForm onSubmit={handleCreateRole}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Role Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="e.g., Developer, Viewer, Editor"
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Permissions *</Label>
+                <RolePermissionBuilder
+                  permission={permission}
+                  onChange={setPermission}
+                  userPermissions={allAvailableActions}
+                />
+              </div>
+            </div>
             <DialogFooter>
               <Button
                 type="button"
@@ -275,10 +275,7 @@ export function RolesList() {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={createMutation.isPending}
-              >
+              <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Creating..." : "Create Role"}
               </Button>
             </DialogFooter>
@@ -295,26 +292,26 @@ export function RolesList() {
               users with this role.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Role Name *</Label>
-              <Input
-                id="edit-name"
-                placeholder="e.g., Developer, Viewer, Editor"
-                value={roleName}
-                onChange={(e) => setRoleName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Permissions *</Label>
-              <RolePermissionBuilder
-                permission={permission}
-                onChange={setPermission}
-                userPermissions={allAvailableActions}
-              />
-            </div>
-          </div>
           <DialogForm onSubmit={handleEditRole}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Role Name *</Label>
+                <Input
+                  id="edit-name"
+                  placeholder="e.g., Developer, Viewer, Editor"
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Permissions *</Label>
+                <RolePermissionBuilder
+                  permission={permission}
+                  onChange={setPermission}
+                  userPermissions={allAvailableActions}
+                />
+              </div>
+            </div>
             <DialogFooter>
               <Button
                 type="button"
@@ -328,10 +325,7 @@ export function RolesList() {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={updateMutation.isPending}
-              >
+              <Button type="submit" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>

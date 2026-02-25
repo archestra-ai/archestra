@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
-  isAgentTool,
-  PLAYWRIGHT_MCP_CATALOG_ID,
-} from "@shared";
+import { isAgentTool, PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import { Globe, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -85,13 +81,7 @@ export function usePlaywrightSetupRequired(
     if (conversationId && enabledToolsData?.hasCustomSelection) {
       return enabledToolsData.enabledToolIds;
     }
-    const defaultIds = profileTools
-      .filter(
-        (tool) =>
-          !tool.name.startsWith("archestra__") ||
-          DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
-      )
-      .map((t) => t.id);
+    const defaultIds = profileTools.map((t) => t.id);
 
     if (!conversationId && agentId) {
       const pendingActions = getPendingActions(agentId);
@@ -230,13 +220,7 @@ function useDisablePlaywrightTools(
     if (conversationId) {
       const currentEnabled = enabledToolsData?.hasCustomSelection
         ? enabledToolsData.enabledToolIds
-        : profileTools
-            .filter(
-              (tool) =>
-                !tool.name.startsWith("archestra__") ||
-                DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
-            )
-            .map((t) => t.id);
+        : profileTools.map((t) => t.id);
 
       const disableSet = new Set(toolIdsToDisable);
       const newEnabledIds = currentEnabled.filter((id) => !disableSet.has(id));

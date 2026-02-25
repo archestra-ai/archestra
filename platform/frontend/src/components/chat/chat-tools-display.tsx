@@ -2,7 +2,6 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
   isAgentTool,
   parseFullToolName,
 } from "@shared";
@@ -23,12 +22,15 @@ import {
 } from "@/lib/chat.query";
 import {
   addPendingAction,
-  applyPendingActions,
   getPendingActions,
   PENDING_TOOL_STATE_CHANGE_EVENT,
   type PendingToolAction,
 } from "@/lib/pending-tool-state";
 import { Button } from "../ui/button";
+import {
+  getCurrentEnabledToolIds,
+  getDefaultEnabledToolIds,
+} from "./chat-tools-display.utils";
 
 interface ChatToolsDisplayProps {
   agentId: string;
@@ -124,45 +126,28 @@ export function ChatToolsDisplay({
   // Mutation for updating enabled tools
   const updateEnabledTools = useUpdateConversationEnabledTools();
 
-  // Default enabled tools logic (matches backend ConversationModel.create):
-  // - Disable all Archestra tools (archestra__*) by default
-  // - Except archestra__todo_write and archestra__artifact_write which stay enabled
-  // - All other tools (non-Archestra, agent delegation, global) remain enabled
-  const defaultEnabledToolIds = useMemo(() => {
-    return profileTools
-      .filter(
-        (tool) =>
-          !tool.name.startsWith("archestra__") ||
-          DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
-      )
-      .map((t) => t.id);
-  }, [profileTools]);
+  const defaultEnabledToolIds = useMemo(
+    () => getDefaultEnabledToolIds(profileTools),
+    [profileTools],
+  );
 
-  // Compute current enabled tools:
-  // - If conversation exists with custom selection, use that
-  // - If conversation exists without custom selection, use defaults
-  // - If no conversation, apply pending actions to defaults
-  const currentEnabledToolIds = useMemo(() => {
-    if (conversationId && hasCustomSelection) {
-      return enabledToolIds;
-    }
-
-    // Start with defaults
-    const baseIds = defaultEnabledToolIds;
-
-    // If no conversation, apply pending actions for display
-    if (!conversationId && localPendingActions.length > 0) {
-      return applyPendingActions(baseIds, localPendingActions);
-    }
-
-    return baseIds;
-  }, [
-    conversationId,
-    hasCustomSelection,
-    enabledToolIds,
-    defaultEnabledToolIds,
-    localPendingActions,
-  ]);
+  const currentEnabledToolIds = useMemo(
+    () =>
+      getCurrentEnabledToolIds({
+        conversationId,
+        hasCustomSelection,
+        enabledToolIds,
+        defaultEnabledToolIds,
+        pendingActions: localPendingActions,
+      }),
+    [
+      conversationId,
+      hasCustomSelection,
+      enabledToolIds,
+      defaultEnabledToolIds,
+      localPendingActions,
+    ],
+  );
 
   // Create enabled tool IDs set for quick lookup
   const enabledToolIdsSet = new Set(currentEnabledToolIds);

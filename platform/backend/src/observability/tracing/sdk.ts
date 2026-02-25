@@ -28,6 +28,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import sentryClient from "@/sentry";
+import { ATTR_ROUTE_CATEGORY } from "./attributes";
 
 const {
   api: { name, version },
@@ -83,7 +84,7 @@ class AgentSpanFilterProcessor implements SpanProcessor {
   }
 
   onEnd(span: ReadableSpan): void {
-    if (span.attributes["route.category"]) {
+    if (span.attributes[ATTR_ROUTE_CATEGORY]) {
       this.delegate.onEnd(span);
     }
   }

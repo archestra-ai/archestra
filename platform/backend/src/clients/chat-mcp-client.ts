@@ -26,7 +26,10 @@ import {
 } from "@/models";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
-import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
+import {
+  ATTR_MCP_IS_ERROR_RESULT,
+  startActiveMcpSpan,
+} from "@/observability/tracing";
 import type { AgentType } from "@/types";
 
 /**
@@ -765,7 +768,7 @@ export async function getChatMcpTools({
                     );
 
                     span.setAttribute(
-                      "mcp.is_error_result",
+                      ATTR_MCP_IS_ERROR_RESULT,
                       archestraResponse.isError ?? false,
                     );
                     reportToolMetrics({
@@ -945,7 +948,7 @@ export async function getChatMcpTools({
                     );
 
                     span.setAttribute(
-                      "mcp.is_error_result",
+                      ATTR_MCP_IS_ERROR_RESULT,
                       response.isError ?? false,
                     );
                     reportToolMetrics({

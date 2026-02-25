@@ -1,8 +1,8 @@
 import {
   context,
   SpanStatusCode,
-  trace,
   type TracerProvider,
+  trace,
 } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
@@ -11,7 +11,8 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import { recordBlockedToolSpans, RouteCategory } from "./tracing";
+import { RouteCategory } from "./attributes";
+import { recordBlockedToolSpans } from "./mcp";
 
 let exporter: InMemorySpanExporter;
 let provider: BasicTracerProvider;
@@ -57,9 +58,7 @@ describe("recordBlockedToolSpans", () => {
     expect(githubSpan.attributes["route.category"]).toBe(
       RouteCategory.MCP_GATEWAY,
     );
-    expect(githubSpan.attributes["gen_ai.operation.name"]).toBe(
-      "execute_tool",
-    );
+    expect(githubSpan.attributes["gen_ai.operation.name"]).toBe("execute_tool");
     expect(githubSpan.attributes["gen_ai.tool.name"]).toBe(
       "github__list_repos",
     );

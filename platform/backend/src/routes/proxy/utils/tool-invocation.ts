@@ -87,7 +87,8 @@ export const evaluatePolicies = async (
   if (disabledToolNames.length > 0) {
     const toolList = disabledToolNames.join(", ");
     const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
-    const reason = "Tool invocation blocked: tool not enabled for this conversation";
+    const reason =
+      "Tool invocation blocked: tool not enabled for this conversation";
     return {
       refusalMessage: message,
       contentMessage: message,

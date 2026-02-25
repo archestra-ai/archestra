@@ -24,6 +24,17 @@ import {
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import {
+  ATTR_ARCHESTRA_COST,
+  ATTR_GENAI_COMPLETION,
+  ATTR_GENAI_RESPONSE_FINISH_REASONS,
+  ATTR_GENAI_RESPONSE_ID,
+  ATTR_GENAI_RESPONSE_MODEL,
+  ATTR_GENAI_USAGE_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_OUTPUT_TOKENS,
+  ATTR_GENAI_USAGE_TOTAL_TOKENS,
+  EVENT_GENAI_CONTENT_COMPLETION,
+} from "@/observability/tracing";
+import {
   type Agent,
   ApiError,
   type InteractionRequest,
@@ -655,22 +666,22 @@ async function handleStreaming<
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
         if (state.model) {
-          llmSpan.setAttribute("gen_ai.response.model", state.model);
+          llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
         }
         if (state.responseId) {
-          llmSpan.setAttribute("gen_ai.response.id", state.responseId);
+          llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, state.responseId);
         }
         if (state.usage) {
           llmSpan.setAttribute(
-            "gen_ai.usage.input_tokens",
+            ATTR_GENAI_USAGE_INPUT_TOKENS,
             state.usage.inputTokens,
           );
           llmSpan.setAttribute(
-            "gen_ai.usage.output_tokens",
+            ATTR_GENAI_USAGE_OUTPUT_TOKENS,
             state.usage.outputTokens,
           );
           llmSpan.setAttribute(
-            "gen_ai.usage.total_tokens",
+            ATTR_GENAI_USAGE_TOTAL_TOKENS,
             state.usage.inputTokens + state.usage.outputTokens,
           );
           const cost = await utils.costOptimization.calculateCost(
@@ -680,19 +691,19 @@ async function handleStreaming<
             providerName,
           );
           if (cost !== undefined) {
-            llmSpan.setAttribute("archestra.cost", cost);
+            llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
           }
         }
         if (state.stopReason) {
-          llmSpan.setAttribute("gen_ai.response.finish_reasons", [
+          llmSpan.setAttribute(ATTR_GENAI_RESPONSE_FINISH_REASONS, [
             state.stopReason,
           ]);
         }
 
         // Capture streamed completion content
         if (captureContent && state.text) {
-          llmSpan.addEvent("gen_ai.content.completion", {
-            "gen_ai.completion": state.text.slice(0, contentMaxLength),
+          llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
+            [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
           });
         }
       },
@@ -969,12 +980,12 @@ async function handleNonStreaming<
 
       // Set response attributes on span per OTEL GenAI semconv
       const usage = adapter.getUsage();
-      llmSpan.setAttribute("gen_ai.response.model", adapter.getModel());
-      llmSpan.setAttribute("gen_ai.response.id", adapter.getId());
-      llmSpan.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens);
-      llmSpan.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens);
+      llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, adapter.getModel());
+      llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, adapter.getId());
+      llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, usage.inputTokens);
+      llmSpan.setAttribute(ATTR_GENAI_USAGE_OUTPUT_TOKENS, usage.outputTokens);
       llmSpan.setAttribute(
-        "gen_ai.usage.total_tokens",
+        ATTR_GENAI_USAGE_TOTAL_TOKENS,
         usage.inputTokens + usage.outputTokens,
       );
       const cost = await utils.costOptimization.calculateCost(
@@ -984,10 +995,10 @@ async function handleNonStreaming<
         providerName,
       );
       if (cost !== undefined) {
-        llmSpan.setAttribute("archestra.cost", cost);
+        llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
       }
       llmSpan.setAttribute(
-        "gen_ai.response.finish_reasons",
+        ATTR_GENAI_RESPONSE_FINISH_REASONS,
         adapter.getFinishReasons(),
       );
 
@@ -995,8 +1006,8 @@ async function handleNonStreaming<
       if (captureContent) {
         const text = adapter.getText?.();
         if (text) {
-          llmSpan.addEvent("gen_ai.content.completion", {
-            "gen_ai.completion": text.slice(0, contentMaxLength),
+          llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
+            [ATTR_GENAI_COMPLETION]: text.slice(0, contentMaxLength),
           });
         }
       }

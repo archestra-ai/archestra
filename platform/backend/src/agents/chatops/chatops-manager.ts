@@ -11,10 +11,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
-import {
-  RouteCategory,
-  startActiveChatSpan,
-} from "@/routes/proxy/utils/tracing";
+import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import type {
   ChatOpsProcessingResult,
   ChatOpsProvider,

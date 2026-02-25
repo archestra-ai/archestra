@@ -13,6 +13,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -149,6 +150,7 @@ export function CustomServerRequestDialog({
         </DialogHeader>
 
         <Form {...form}>
+          <DialogForm onSubmit={form.handleSubmit(onSubmit)}>
           <div className="space-y-4 py-4">
             <FormField
               control={form.control}
@@ -320,11 +322,11 @@ export function CustomServerRequestDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button
-              onClick={form.handleSubmit(onSubmit)}
+              type="submit"
               disabled={createRequest.isPending}
             >
               {createRequest.isPending && (
@@ -333,6 +335,7 @@ export function CustomServerRequestDialog({
               Submit Request
             </Button>
           </DialogFooter>
+          </DialogForm>
         </Form>
       </DialogContent>
     </Dialog>

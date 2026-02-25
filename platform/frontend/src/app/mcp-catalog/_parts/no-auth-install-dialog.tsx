@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -73,18 +74,21 @@ export function NoAuthInstallDialog({
           />
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleInstall} disabled={isInstalling}>
-            {isInstalling ? "Installing..." : "Install"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleInstall}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isInstalling}>
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

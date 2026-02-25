@@ -52,6 +52,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -1260,26 +1261,28 @@ export function AgentDialog({
           </div>
         </div>
 
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={
-              !name.trim() ||
-              createAgent.isPending ||
-              updateAgent.isPending ||
-              requiresTeamSelection ||
-              (!isAdmin && !isInternalAgent && hasNoAvailableTeams)
-            }
-          >
-            {(createAgent.isPending || updateAgent.isPending) && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            {agent ? "Update" : "Create"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleSave}>
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                !name.trim() ||
+                createAgent.isPending ||
+                updateAgent.isPending ||
+                requiresTeamSelection ||
+                (!isAdmin && !isInternalAgent && hasNoAvailableTeams)
+              }
+            >
+              {(createAgent.isPending || updateAgent.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {agent ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

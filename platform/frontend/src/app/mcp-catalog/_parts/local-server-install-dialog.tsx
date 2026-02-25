@@ -20,6 +20,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -541,25 +542,27 @@ export function LocalServerInstallDialog({
           )}
         </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleInstall} disabled={!isValid || isInstalling}>
-            {isInstalling
-              ? isReinstall
-                ? "Reinstalling..."
-                : "Installing..."
-              : isReinstall
-                ? "Reinstall"
-                : "Install"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleInstall}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!isValid || isInstalling}>
+              {isInstalling
+                ? isReinstall
+                  ? "Reinstalling..."
+                  : "Installing..."
+                : isReinstall
+                  ? "Reinstall"
+                  : "Install"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

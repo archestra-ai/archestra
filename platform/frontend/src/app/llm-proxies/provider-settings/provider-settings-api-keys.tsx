@@ -40,6 +40,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -457,23 +458,26 @@ export function ProviderSettingsApiKeys() {
                 geminiVertexAiEnabled={geminiVertexAiEnabled}
               />
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={!isCreateValid || createMutation.isPending}
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Create
-              </Button>
-            </DialogFooter>
+            <DialogForm onSubmit={handleCreate}>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!isCreateValid || createMutation.isPending}
+                >
+                  {createMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Test & Create
+                </Button>
+              </DialogFooter>
+            </DialogForm>
           </DialogContent>
         </Dialog>
 
@@ -498,23 +502,26 @@ export function ProviderSettingsApiKeys() {
                 />
               )}
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleEdit}
-                disabled={!isEditValid || updateMutation.isPending}
-              >
-                {updateMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Save
-              </Button>
-            </DialogFooter>
+            <DialogForm onSubmit={handleEdit}>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!isEditValid || updateMutation.isPending}
+                >
+                  {updateMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Test & Save
+                </Button>
+              </DialogFooter>
+            </DialogForm>
           </DialogContent>
         </Dialog>
 
@@ -528,24 +535,27 @@ export function ProviderSettingsApiKeys() {
                 &quot;? This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsDeleteDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Delete
-              </Button>
-            </DialogFooter>
+            <DialogForm onSubmit={handleDelete}>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDeleteDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deleteMutation.isPending}
+                >
+                  {deleteMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogForm>
           </DialogContent>
         </Dialog>
       </div>

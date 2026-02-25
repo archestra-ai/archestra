@@ -23,6 +23,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -583,20 +584,23 @@ export default function StatisticsPage() {
                   </div>
                 </div>
               </div>
-              <DialogFooter className="gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCustomDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCustomTimeframe}
-                  disabled={!dateRange?.from || !dateRange?.to}
-                >
-                  Apply
-                </Button>
-              </DialogFooter>
+              <DialogForm onSubmit={handleCustomTimeframe}>
+                <DialogFooter className="gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCustomDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={!dateRange?.from || !dateRange?.to}
+                  >
+                    Apply
+                  </Button>
+                </DialogFooter>
+              </DialogForm>
             </DialogContent>
           </Dialog>
         </div>

@@ -130,12 +130,54 @@ function DialogDescription({
   );
 }
 
+/**
+ * A form wrapper for dialog content that enables Enter key submission.
+ *
+ * Wrap your dialog body and footer inside `<DialogForm onSubmit={handler}>` to
+ * allow pressing Enter to trigger the primary action. The primary action button
+ * should use `type="submit"` and cancel/secondary buttons should use `type="button"`.
+ *
+ * @example
+ * ```tsx
+ * <DialogContent>
+ *   <DialogHeader>...</DialogHeader>
+ *   <DialogForm onSubmit={handleSave}>
+ *     <Input ... />
+ *     <DialogFooter>
+ *       <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+ *       <Button type="submit">Save</Button>
+ *     </DialogFooter>
+ *   </DialogForm>
+ * </DialogContent>
+ * ```
+ */
+function DialogForm({
+  className,
+  onSubmit,
+  ...props
+}: React.ComponentProps<"form"> & {
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form
+      data-slot="dialog-form"
+      className={cn("contents", className)}
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(e);
+      }}
+      {...props}
+    />
+  );
+}
+
 export {
   Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogOverlay,
   DialogPortal,

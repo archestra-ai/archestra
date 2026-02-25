@@ -33,6 +33,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -562,22 +563,24 @@ function DeleteProxyDialog({
             be undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={deleteProxy.isPending}
-          >
-            {deleteProxy.isPending ? "Deleting..." : "Delete LLM Proxy"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleDelete}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteProxy.isPending}
+            >
+              {deleteProxy.isPending ? "Deleting..." : "Delete LLM Proxy"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

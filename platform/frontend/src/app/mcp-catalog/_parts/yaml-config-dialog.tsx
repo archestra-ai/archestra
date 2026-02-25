@@ -14,6 +14,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -193,18 +194,19 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
             />
           ))}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} type="button">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={updateMutation.isPending}
-            type="button"
-          >
-            {updateMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleSave}>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleClose} type="button">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

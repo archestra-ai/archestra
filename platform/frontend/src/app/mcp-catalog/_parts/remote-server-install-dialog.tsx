@@ -11,6 +11,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -360,18 +361,21 @@ export function RemoteServerInstallDialog({
           )}
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={!isValid || isInstalling}>
-            {isInstalling ? "Installing..." : "Install"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleConfirm}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!isValid || isInstalling}>
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -99,17 +100,19 @@ export function OAuthConfirmationDialog({
           />
         </div>
 
-        <DialogFooter className="gap-3 sm:gap-3">
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            Continue to Authorization...
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleConfirm}>
+          <DialogFooter className="gap-3 sm:gap-3">
+            <Button type="button" variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Continue to Authorization...
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

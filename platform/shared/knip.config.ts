@@ -5,8 +5,9 @@ const config: KnipConfig = {
   project: ["**/*.ts"],
   ignore: [],
   ignoreBinaries: [
-    // biome is in root package.json
+    // biome and concurrently are in the workspace root package.json
     "biome",
+    "concurrently",
     // These are provided by devDependencies (typescript, vitest, tsx, knip)
     // but knip doesn't resolve them in a pnpm monorepo
     "tsc",

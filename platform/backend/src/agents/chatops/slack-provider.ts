@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
+import { slackifyMarkdown } from "slackify-markdown";
+import { agentFooter } from "@/agents/chatops/chatops-manager";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {
@@ -262,24 +264,25 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
+    const mrkdwn = slackifyMarkdown(options.text);
+
     // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
     const blocks: any[] = [
-      { type: "section", text: { type: "mrkdwn", text: options.text } },
+      { type: "section", text: { type: "mrkdwn", text: mrkdwn } },
     ];
 
     if (options.footer) {
-      blocks.push(
-        { type: "divider" },
-        {
-          type: "context",
-          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
-        },
-      );
+      blocks.push({
+        type: "context",
+        elements: [
+          { type: "plain_text", text: agentFooter(options.footer), emoji: true },
+        ],
+      });
     }
 
     const result = await this.client.chat.postMessage({
       channel: options.originalMessage.channelId,
-      text: options.text,
+      text: mrkdwn,
       blocks,
       thread_ts: options.originalMessage.threadId,
     });

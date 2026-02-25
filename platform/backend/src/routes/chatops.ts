@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { agentFooter, chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
@@ -1356,7 +1356,7 @@ async function handleAgentSelection(
       if (result.success && result.agentResponse) {
         // Send agent response via turn context (ensures correct thread)
         await context.sendActivity(
-          `${result.agentResponse}\n\n---\n_Via ${agent.name}_`,
+          `${result.agentResponse}\n\n---\n_${agentFooter(agent.name)}_`,
         );
       } else if (!result.success && result.error) {
         // Send error message via turn context (ensures correct thread)

@@ -47,7 +47,7 @@ export interface ChatReplyOptions {
   text: string;
   /** Optional: Reply in thread (if supported) */
   replyInThread?: boolean;
-  /** Optional: Footer text to append */
+  /** Optional: Footer text to append (e.g. agent name) */
   footer?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;

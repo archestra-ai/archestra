@@ -36,6 +36,28 @@ export const EnvironmentVariableSchema = z.object({
   mounted: z.boolean().optional(), // When true for secret type, mount as file at /secrets/<key> instead of env var
 });
 
+// Image pull secret configuration for pulling container images from private registries
+// Discriminated union: either select an existing k8s secret or provide registry credentials
+export const ImagePullSecretExistingSchema = z.object({
+  source: z.literal("existing"),
+  name: z.string().min(1),
+});
+
+export const ImagePullSecretCredentialsSchema = z.object({
+  source: z.literal("credentials"),
+  server: z.string().min(1),
+  username: z.string().min(1),
+  password: z.string().optional(), // stripped from template, stored in secret manager
+  email: z.string().optional(),
+});
+
+export const ImagePullSecretConfigSchema = z.discriminatedUnion("source", [
+  ImagePullSecretExistingSchema,
+  ImagePullSecretCredentialsSchema,
+]);
+
+export type ImagePullSecretConfig = z.infer<typeof ImagePullSecretConfigSchema>;
+
 export const LocalConfigSchema = z
   .object({
     command: z.string().optional(),
@@ -54,7 +76,7 @@ export const LocalConfigSchema = z
     // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-operator")
     serviceAccount: z.string().optional(),
     // Kubernetes imagePullSecrets for pulling container images from private registries
-    imagePullSecrets: z.array(z.object({ name: z.string().min(1) })).optional(),
+    imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
   })
   .refine(
     (data) => {
@@ -78,7 +100,7 @@ export const LocalConfigFormSchema = z.object({
   httpPort: z.string().optional(), // UI uses string, gets parsed to number
   httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
   serviceAccount: z.string().optional(), // K8s service account for the MCP server pod
-  imagePullSecrets: z.array(z.object({ name: z.string().min(1) })).optional(), // K8s imagePullSecrets for private registries
+  imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(), // K8s imagePullSecrets for private registries
 });
 
 /**

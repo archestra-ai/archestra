@@ -1880,8 +1880,13 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "node",
       arguments: ["server.js"],
-      imagePullSecrets: [{ name: "my-registry-secret" }],
+      imagePullSecrets: [{ source: "existing", name: "my-registry-secret" }],
     };
+
+    // Set resolved names (as manager.ts would do before calling generateDeploymentSpec)
+    k8sDeployment.resolvedImagePullSecretNames = [
+      { name: "my-registry-secret" },
+    ];
 
     const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
@@ -1910,10 +1915,16 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       command: "node",
       arguments: ["server.js"],
       imagePullSecrets: [
-        { name: "registry-secret-1" },
-        { name: "registry-secret-2" },
+        { source: "existing", name: "registry-secret-1" },
+        { source: "existing", name: "registry-secret-2" },
       ],
     };
+
+    // Set resolved names (as manager.ts would do before calling generateDeploymentSpec)
+    k8sDeployment.resolvedImagePullSecretNames = [
+      { name: "registry-secret-1" },
+      { name: "registry-secret-2" },
+    ];
 
     const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
@@ -3409,10 +3420,12 @@ describe("K8sDeployment.removeDeployment", () => {
     const mockDeleteDeployment = vi.fn().mockResolvedValue({});
     const mockDeleteService = vi.fn().mockResolvedValue({});
     const mockDeleteSecret = vi.fn().mockResolvedValue({});
+    const mockListSecret = vi.fn().mockResolvedValue({ items: [] });
 
     const mockK8sApi = {
       deleteNamespacedService: mockDeleteService,
       deleteNamespacedSecret: mockDeleteSecret,
+      listNamespacedSecret: mockListSecret,
     };
     const mockK8sAppsApi = {
       deleteNamespacedDeployment: mockDeleteDeployment,
@@ -3444,10 +3457,12 @@ describe("K8sDeployment.removeDeployment", () => {
     const mockDeleteDeployment = vi.fn().mockResolvedValue({});
     const mockDeleteService = vi.fn().mockRejectedValue(notFoundError);
     const mockDeleteSecret = vi.fn().mockRejectedValue(notFoundError);
+    const mockListSecret = vi.fn().mockResolvedValue({ items: [] });
 
     const mockK8sApi = {
       deleteNamespacedService: mockDeleteService,
       deleteNamespacedSecret: mockDeleteSecret,
+      listNamespacedSecret: mockListSecret,
     };
     const mockK8sAppsApi = {
       deleteNamespacedDeployment: mockDeleteDeployment,

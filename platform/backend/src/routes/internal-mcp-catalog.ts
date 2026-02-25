@@ -8,6 +8,7 @@ import {
   mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
 } from "@/mcp-server-runtime/k8s-yaml-generator";
+import mcpServerRuntimeManager from "@/mcp-server-runtime/manager";
 import {
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
@@ -185,6 +186,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ) {
             secretEnvVars[envVar.key] = envVar.value;
             delete envVar.value; // Remove value from catalog template
+          }
+        }
+
+        // Extract image pull secret passwords from credentials entries
+        if (restBody.localConfig.imagePullSecrets) {
+          for (const [
+            index,
+            entry,
+          ] of restBody.localConfig.imagePullSecrets.entries()) {
+            if (entry.source === "credentials" && entry.password) {
+              secretEnvVars[`__regcred_${index}_password`] = entry.password;
+              delete entry.password; // Strip from catalog template
+            }
           }
         }
 
@@ -439,6 +453,38 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               secretEnvVars[envVar.key] = existingSecretValues[envVar.key];
             }
             // If no value and not in existing secret, skip (user added key without value)
+          }
+        }
+
+        // Extract image pull secret passwords from credentials entries
+        // Preserve existing passwords for entries that don't provide a new one
+        if (restBody.localConfig.imagePullSecrets) {
+          for (const [
+            index,
+            entry,
+          ] of restBody.localConfig.imagePullSecrets.entries()) {
+            if (entry.source === "credentials") {
+              const regcredKey = `__regcred_${index}_password`;
+              if (entry.password) {
+                // New password provided - use it
+                secretEnvVars[regcredKey] = entry.password;
+                delete entry.password; // Strip from catalog template
+              } else if (existingSecretValues[regcredKey]) {
+                // No new password but key exists in existing secret - preserve it
+                secretEnvVars[regcredKey] = existingSecretValues[regcredKey];
+              }
+            }
+          }
+        }
+
+        // Clean up stale __regcred_* keys that no longer have corresponding entries
+        // (e.g., if a credentials entry was removed or reordered)
+        for (const key of Object.keys(existingSecretValues)) {
+          if (
+            key.startsWith("__regcred_") &&
+            !Object.prototype.hasOwnProperty.call(secretEnvVars, key)
+          ) {
+            // Don't preserve orphaned regcred keys
           }
         }
 
@@ -699,6 +745,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Extract imagePullSecrets names for YAML preview (existing names only,
+      // credentials entries use generated names at deploy time)
+      const imagePullSecretsForYaml = catalogItem.localConfig?.imagePullSecrets
+        ?.filter((s) => s.source === "existing")
+        .map((s) => ({ name: s.name }));
+
       // Generate a default YAML template
       const yamlTemplate = generateDeploymentYamlTemplate({
         serverId: "{server_id}",
@@ -713,6 +765,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serviceAccount: catalogItem.localConfig?.serviceAccount,
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
+        imagePullSecrets: imagePullSecretsForYaml,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -769,6 +822,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clear the custom deployment YAML
       await InternalMcpCatalogModel.update(id, { deploymentSpecYaml: null });
 
+      // Extract imagePullSecrets names for YAML preview
+      const imagePullSecretsForYaml = catalogItem.localConfig?.imagePullSecrets
+        ?.filter((s) => s.source === "existing")
+        .map((s) => ({ name: s.name }));
+
       // Generate and return a fresh default YAML template
       const yamlTemplate = generateDeploymentYamlTemplate({
         serverId: "{server_id}",
@@ -783,9 +841,30 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serviceAccount: catalogItem.localConfig?.serviceAccount,
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
+        imagePullSecrets: imagePullSecretsForYaml,
       });
 
       return reply.send({ yaml: yamlTemplate });
+    },
+  );
+
+  fastify.get(
+    "/api/k8s/image-pull-secrets",
+    {
+      schema: {
+        operationId: RouteId.GetK8sImagePullSecrets,
+        description:
+          "List Kubernetes docker-registry secrets available for imagePullSecrets",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(
+          z.array(z.object({ name: z.string() })),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      const secrets =
+        await mcpServerRuntimeManager.listDockerRegistrySecrets();
+      return reply.send(secrets);
     },
   );
 

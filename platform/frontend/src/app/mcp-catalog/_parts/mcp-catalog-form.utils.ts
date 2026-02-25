@@ -1,4 +1,5 @@
 import {
+  type ImagePullSecretConfig,
   type archestraApiTypes,
   isVaultReference,
   parseVaultReference,
@@ -45,10 +46,14 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
-      imagePullSecrets:
-        values.localConfig.imagePullSecrets?.filter(
-          (s) => s.name.trim().length > 0,
-        ) || undefined,
+      // biome-ignore lint/suspicious/noExplicitAny: generated API types lag behind — backend Zod schema already accepts ImagePullSecretConfig
+      imagePullSecrets: (values.localConfig.imagePullSecrets?.filter(
+        (s) => {
+          if (s.source === "existing") return s.name.trim().length > 0;
+          if (s.source === "credentials") return s.server.trim().length > 0;
+          return false;
+        },
+      ) || undefined) as any,
     };
 
     // BYOS: Include local config vault path and key if set
@@ -212,7 +217,7 @@ export function transformCatalogItemToFormValues(
         httpPort?: string;
         httpPath?: string;
         serviceAccount?: string;
-        imagePullSecrets?: Array<{ name: string }>;
+        imagePullSecrets?: ImagePullSecretConfig[];
       }
     | undefined;
   if (item.localConfig) {
@@ -255,7 +260,24 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
-      imagePullSecrets: item.localConfig.imagePullSecrets || [],
+      // Normalize imagePullSecrets: legacy { name } → { source: "existing", name }
+      // Also hydrate passwords from localConfigSecret for credentials entries
+      imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(
+        (s: ImagePullSecretConfig | { name: string }, index: number) => {
+          if (!("source" in s)) {
+            return { source: "existing" as const, name: s.name };
+          }
+          if (s.source === "credentials" && localConfigSecret?.secret) {
+            const passwordKey = `__regcred_${index}_password`;
+            const password = localConfigSecret.secret[passwordKey];
+            return {
+              ...s,
+              password: password != null ? String(password) : undefined,
+            };
+          }
+          return s;
+        },
+      ),
     };
   }
 

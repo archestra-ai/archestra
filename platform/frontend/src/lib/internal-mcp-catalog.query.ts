@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -179,6 +183,21 @@ export function useResetDeploymentYaml() {
     onError: (error) => {
       console.error("Reset deployment YAML error:", error);
       toast.error("Failed to reset deployment YAML");
+    },
+  });
+}
+
+/**
+ * Fetch Kubernetes docker-registry secrets available for imagePullSecrets.
+ */
+export function useK8sImagePullSecrets() {
+  return useQuery({
+    queryKey: ["k8s-image-pull-secrets"],
+    queryFn: async () => {
+      const response = await archestraApiClient.get<
+        Array<{ name: string }>
+      >({ url: "/api/k8s/image-pull-secrets" });
+      return response.data ?? [];
     },
   });
 }

@@ -53,9 +53,13 @@ export function sortAndFilterTools<
     });
   }
 
+  // Use original index as tiebreaker so sort order is deterministic
+  // regardless of engine sort stability.
+  const indexMap = new Map(result.map((t, i) => [t.id, i]));
   return [...result].sort((a, b) => {
     const aSelected = selectedToolIds.has(a.id) ? 0 : 1;
     const bSelected = selectedToolIds.has(b.id) ? 0 : 1;
-    return aSelected - bSelected;
+    if (aSelected !== bSelected) return aSelected - bSelected;
+    return (indexMap.get(a.id) ?? 0) - (indexMap.get(b.id) ?? 0);
   });
 }

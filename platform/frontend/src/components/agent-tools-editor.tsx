@@ -563,14 +563,19 @@ function McpServerPill({
     }
     // Clear the flag regardless so we don't fight user deselections
     pendingSelectAllRef.current = false;
+    // Depend on .size (not the full set) intentionally — the effect only cares
+    // whether the selection is empty, and the ref guard prevents re-firing anyway.
   }, [selectedToolIds.size, allTools]);
 
-  // Report pending changes to parent whenever local state changes
+  // Report pending changes to parent whenever local state changes.
+  // The pill can only be rendered when isActive !== false, so always report as active
+  // to avoid overwriting the parent's isActive flag with undefined.
   useEffect(() => {
     onPendingChanges(catalogItem.id, {
       selectedToolIds,
       credentialSourceId: selectedCredential,
       catalogItem,
+      isActive: true,
     });
   }, [selectedToolIds, selectedCredential, catalogItem, onPendingChanges]);
 
@@ -772,9 +777,13 @@ export function ToolChecklist({
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Snapshot the initial selection for sort order so tools don't jump
+  // around as the user toggles checkboxes. Re-sorts only when the
+  // component remounts (e.g. popover re-opens) or search query changes.
+  const initialSelectedRef = useRef(selectedToolIds);
   const filteredTools = useMemo(
-    () => sortAndFilterTools(tools, selectedToolIds, searchQuery),
-    [tools, selectedToolIds, searchQuery],
+    () => sortAndFilterTools(tools, initialSelectedRef.current, searchQuery),
+    [tools, searchQuery],
   );
 
   const allSelected = filteredTools.every((tool) =>

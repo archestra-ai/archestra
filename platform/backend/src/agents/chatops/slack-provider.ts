@@ -3,7 +3,7 @@ import { TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
-import { agentFooter } from "@/agents/chatops/chatops-manager";
+import { agentFooter } from "@/agents/chatops/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {

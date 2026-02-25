@@ -22,7 +22,7 @@ import {
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
-import { agentFooter } from "@/agents/chatops/chatops-manager";
+import { agentFooter } from "@/agents/chatops/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel, type MsTeamsConfig } from "@/models";

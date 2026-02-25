@@ -49,6 +49,11 @@ export class EventDedupMap {
   }
 }
 
+/** Plain-text agent footer: `🤖 AgentName`. Single source of truth for the footer format. */
+export function agentFooter(agentName: string): string {
+  return `🤖 ${agentName}`;
+}
+
 /**
  * Extract a human-readable error message from an unknown error value.
  */

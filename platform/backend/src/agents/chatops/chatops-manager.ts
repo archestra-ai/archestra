@@ -1044,10 +1044,8 @@ function stripThinkingBlocks(text: string): string {
   return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }
 
-/** Plain-text agent footer: `🤖 AgentName`. Single source of truth for the footer format. */
-export function agentFooter(agentName: string): string {
-  return `🤖 ${agentName}`;
-}
+// Re-export agentFooter from utils for backward compatibility
+export { agentFooter } from "./utils";
 
 /**
  * Strip bot footer from message text to avoid the LLM repeating it.

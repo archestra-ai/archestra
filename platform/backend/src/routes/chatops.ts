@@ -2,7 +2,8 @@ import { RouteId } from "@shared";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { agentFooter, chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { agentFooter } from "@/agents/chatops/utils";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,

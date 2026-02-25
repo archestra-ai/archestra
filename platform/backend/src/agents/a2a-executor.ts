@@ -306,9 +306,21 @@ export function buildUserContent(
   message: string,
   attachments?: A2AAttachment[],
 ): UserContent | null {
-  const imageAttachments = (attachments ?? []).filter((a) =>
+  const allAttachments = attachments ?? [];
+  const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
+
+  const skippedCount = allAttachments.length - imageAttachments.length;
+  if (skippedCount > 0) {
+    const skippedTypes = allAttachments
+      .filter((a) => !a.contentType.startsWith("image/"))
+      .map((a) => `${a.name ?? "unnamed"} (${a.contentType})`);
+    logger.debug(
+      { skippedCount, skippedTypes },
+      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
+    );
+  }
 
   if (imageAttachments.length === 0) {
     return null;

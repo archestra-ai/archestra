@@ -351,7 +351,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           subject: message.subject || "",
           body,
           htmlBody,
-          receivedAt: new Date(message.receivedDateTime as string),
+          receivedAt: message.receivedDateTime
+            ? new Date(message.receivedDateTime)
+            : new Date(),
           metadata: {
             provider: this.providerId,
             originalResource: notif.resource,
@@ -923,6 +925,25 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       let totalSize = 0;
 
       for (const attachment of attachmentList) {
+        // Skip item attachments (attached emails) - only process file attachments.
+        // This check must come before size checks so that non-file attachments
+        // (e.g. large forwarded emails) don't consume the size budget.
+        if (
+          attachment["@odata.type"] === "#microsoft.graph.itemAttachment" ||
+          attachment["@odata.type"] === "#microsoft.graph.referenceAttachment"
+        ) {
+          logger.debug(
+            {
+              messageId,
+              attachmentId: attachment.id,
+              attachmentName: attachment.name,
+              type: attachment["@odata.type"],
+            },
+            "[OutlookEmailProvider] Skipping non-file attachment",
+          );
+          continue;
+        }
+
         // Skip attachments that are too large
         if (attachment.size > MAX_ATTACHMENT_SIZE) {
           logger.warn(
@@ -952,26 +973,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           break;
         }
 
-        // Skip item attachments (attached emails) - only process file attachments
-        if (
-          attachment["@odata.type"] === "#microsoft.graph.itemAttachment" ||
-          attachment["@odata.type"] === "#microsoft.graph.referenceAttachment"
-        ) {
-          logger.debug(
-            {
-              messageId,
-              attachmentId: attachment.id,
-              attachmentName: attachment.name,
-              type: attachment["@odata.type"],
-            },
-            "[OutlookEmailProvider] Skipping non-file attachment",
-          );
-          continue;
-        }
-
         const emailAttachment: EmailAttachment = {
           id: attachment.id,
-          name: attachment.name || "unnamed",
+          name: attachment.name || `attachment-${attachment.id}`,
           contentType: attachment.contentType || "application/octet-stream",
           size: attachment.size || 0,
           isInline: attachment.isInline || false,

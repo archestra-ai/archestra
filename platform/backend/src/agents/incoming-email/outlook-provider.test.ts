@@ -1,7 +1,11 @@
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
-import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_EMAIL } from "./constants";
+import {
+  MAX_ATTACHMENT_SIZE,
+  MAX_ATTACHMENTS_PER_EMAIL,
+  MAX_TOTAL_ATTACHMENTS_SIZE,
+} from "./constants";
 import {
   OutlookEmailProvider,
   shouldFetchAttachments,
@@ -891,6 +895,48 @@ describe("OutlookEmailProvider", () => {
       expect(attachments[0].name).toBe("actual-file.txt");
     });
 
+    test("non-file attachments do not consume size budget", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      // A large item attachment followed by a file attachment that would exceed
+      // the total limit if the item attachment's size were counted.
+      const nearLimitSize = MAX_TOTAL_ATTACHMENTS_SIZE - 1024;
+      mockGraphClient.get
+        .mockResolvedValueOnce({
+          value: [
+            {
+              "@odata.type": "#microsoft.graph.itemAttachment",
+              id: "large-item",
+              name: "Forwarded Email",
+              contentType: "message/rfc822",
+              size: nearLimitSize,
+            },
+            {
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              id: "small-file",
+              name: "file.txt",
+              contentType: "text/plain",
+              size: 2048,
+              isInline: false,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          id: "small-file",
+          contentBytes: "ZmlsZQ==",
+        });
+
+      const attachments = await provider.getAttachments("msg-123", true);
+
+      // The item attachment should be skipped without consuming size budget,
+      // so the file attachment should still be included
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0].name).toBe("file.txt");
+    });
+
     test("returns empty array when no attachments", async () => {
       const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
@@ -985,7 +1031,7 @@ describe("OutlookEmailProvider", () => {
       const attachments = await provider.getAttachments("msg-123", true);
 
       expect(attachments).toHaveLength(1);
-      expect(attachments[0].name).toBe("unnamed");
+      expect(attachments[0].name).toBe("attachment-minimal-attachment");
       expect(attachments[0].contentType).toBe("application/octet-stream");
       expect(attachments[0].size).toBe(0);
       expect(attachments[0].isInline).toBe(false);
@@ -1654,6 +1700,27 @@ describe("parseWebhookNotification", () => {
 
     expect(result).toHaveLength(1);
     expect(result?.[0].fromAddress).toBe("unknown");
+  });
+
+  test("falls back to current date when receivedDateTime is null", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    const before = new Date();
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({ receivedDateTime: null }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-nodate" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+    const after = new Date();
+
+    expect(result).toHaveLength(1);
+    const receivedAt = result?.[0].receivedAt as Date;
+    expect(receivedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(receivedAt.getTime()).toBeLessThanOrEqual(after.getTime());
   });
 
   test("uses empty string as subject when subject is missing", async () => {

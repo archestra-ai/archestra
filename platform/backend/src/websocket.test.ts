@@ -637,25 +637,27 @@ describe("websocket MCP deployment statuses", () => {
       ws,
     );
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: "mcp_deployment_statuses",
-        payload: {
-          statuses: {
-            [mcpServer1.id]: {
-              state: "running",
-              message: "Deployment is running",
-              error: null,
-            },
-            [mcpServer2.id]: {
-              state: "not_created",
-              message: "Deployment not created",
-              error: null,
-            },
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    const sentMessage = JSON.parse(
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0],
+    );
+    expect(sentMessage).toEqual({
+      type: "mcp_deployment_statuses",
+      payload: {
+        statuses: {
+          [mcpServer1.id]: {
+            state: "running",
+            message: "Deployment is running",
+            error: null,
+          },
+          [mcpServer2.id]: {
+            state: "not_created",
+            message: "Deployment not created",
+            error: null,
           },
         },
-      }),
-    );
+      },
+    });
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
   });
 

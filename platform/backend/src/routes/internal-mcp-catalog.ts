@@ -190,13 +190,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Extract image pull secret passwords from credentials entries
+        // Keyed by server hostname (stable across reorder/insert/delete)
         if (restBody.localConfig.imagePullSecrets) {
-          for (const [
-            index,
-            entry,
-          ] of restBody.localConfig.imagePullSecrets.entries()) {
+          for (const entry of restBody.localConfig.imagePullSecrets) {
             if (entry.source === "credentials" && entry.password) {
-              secretEnvVars[`__regcred_${index}_password`] = entry.password;
+              secretEnvVars[`__regcred_password:${entry.server}`] =
+                entry.password;
               delete entry.password; // Strip from catalog template
             }
           }
@@ -457,14 +456,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Extract image pull secret passwords from credentials entries
+        // Keyed by server hostname (stable across reorder/insert/delete)
         // Preserve existing passwords for entries that don't provide a new one
         if (restBody.localConfig.imagePullSecrets) {
-          for (const [
-            index,
-            entry,
-          ] of restBody.localConfig.imagePullSecrets.entries()) {
+          for (const entry of restBody.localConfig.imagePullSecrets) {
             if (entry.source === "credentials") {
-              const regcredKey = `__regcred_${index}_password`;
+              const regcredKey = `__regcred_password:${entry.server}`;
               if (entry.password) {
                 // New password provided - use it
                 secretEnvVars[regcredKey] = entry.password;
@@ -476,17 +473,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
         }
-
-        // Clean up stale __regcred_* keys that no longer have corresponding entries
-        // (e.g., if a credentials entry was removed or reordered)
-        for (const key of Object.keys(existingSecretValues)) {
-          if (
-            key.startsWith("__regcred_") &&
-            !Object.prototype.hasOwnProperty.call(secretEnvVars, key)
-          ) {
-            // Don't preserve orphaned regcred keys
-          }
-        }
+        // Orphaned __regcred_password:* keys (from removed entries) are implicitly
+        // dropped since they won't be in secretEnvVars when the secret is updated
 
         // Store secret env vars if any exist
         if (Object.keys(secretEnvVars).length > 0) {

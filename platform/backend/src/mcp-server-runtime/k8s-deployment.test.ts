@@ -1883,16 +1883,14 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       imagePullSecrets: [{ source: "existing", name: "my-registry-secret" }],
     };
 
-    // Set resolved names (as manager.ts would do before calling generateDeploymentSpec)
-    k8sDeployment.resolvedImagePullSecretNames = [
-      { name: "my-registry-secret" },
-    ];
-
     const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       false,
       8080,
+      undefined,
+      undefined,
+      [{ name: "my-registry-secret" }],
     );
 
     expect(deploymentSpec.spec?.template.spec?.imagePullSecrets).toEqual([
@@ -1920,17 +1918,14 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       ],
     };
 
-    // Set resolved names (as manager.ts would do before calling generateDeploymentSpec)
-    k8sDeployment.resolvedImagePullSecretNames = [
-      { name: "registry-secret-1" },
-      { name: "registry-secret-2" },
-    ];
-
     const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       false,
       8080,
+      undefined,
+      undefined,
+      [{ name: "registry-secret-1" }, { name: "registry-secret-2" }],
     );
 
     expect(deploymentSpec.spec?.template.spec?.imagePullSecrets).toEqual([

@@ -374,13 +374,15 @@ export class McpServerRuntimeManager {
             imagePullSecrets,
           )
         : [];
-      k8sDeployment.resolvedImagePullSecretNames =
+      const resolvedImagePullSecretNames =
         K8sDeployment.collectImagePullSecretNames(
           imagePullSecrets,
           generatedRegcredNames,
         );
 
-      await k8sDeployment.startOrCreateDeployment();
+      await k8sDeployment.startOrCreateDeployment(
+        resolvedImagePullSecretNames,
+      );
       logger.info(`Successfully started MCP server deployment ${id} (${name})`);
     } catch (error) {
       logger.error(

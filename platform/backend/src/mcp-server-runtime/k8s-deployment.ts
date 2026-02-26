@@ -215,8 +215,6 @@ export default class K8sDeployment {
   assignedHttpPort?: number;
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
-  // Resolved imagePullSecrets names for pod spec (existing + generated regcred names)
-  resolvedImagePullSecretNames?: Array<{ name: string }>;
 
   constructor(
     mcpServer: McpServer,
@@ -528,7 +526,7 @@ export default class K8sDeployment {
 
   /**
    * Create docker-registry Kubernetes Secrets from image pull secret credentials.
-   * Extracts __regcred_* entries from secretData and matches them with non-sensitive
+   * Extracts __regcred_password:<server> entries from secretData and matches them with non-sensitive
    * fields from localConfig.imagePullSecrets (credentials entries).
    *
    * @returns Array of created secret names to be used in pod spec imagePullSecrets
@@ -544,9 +542,15 @@ export default class K8sDeployment {
     for (const [index, entry] of imagePullSecrets.entries()) {
       if (entry.source !== "credentials") continue;
 
-      const passwordKey = `__regcred_${index}_password`;
+      const passwordKey = `__regcred_password:${entry.server}`;
       const password = secretData[passwordKey];
-      if (!password) continue;
+      if (!password) {
+        logger.warn(
+          { mcpServerId: this.mcpServer.id, server: entry.server },
+          "Skipping regcred creation: password not found in secret data",
+        );
+        continue;
+      }
 
       const secretName = `mcp-server-${this.mcpServer.id}-regcred-${index}`;
       const auth = Buffer.from(`${entry.username}:${password}`).toString(
@@ -720,6 +724,7 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -731,6 +736,7 @@ export default class K8sDeployment {
         httpPort,
         nodeSelector,
         tolerations,
+        resolvedImagePullSecretNames,
       );
       if (yamlDeployment) {
         logger.info(
@@ -792,9 +798,8 @@ export default class K8sDeployment {
       // Apply tolerations if provided (e.g., inherited from archestra-platform pod)
       ...(tolerations?.length ? { tolerations } : {}),
       // Apply imagePullSecrets for pulling from private registries
-      // Uses resolved names (existing + generated regcred) if available, falls back to legacy format
-      ...(this.resolvedImagePullSecretNames?.length
-        ? { imagePullSecrets: this.resolvedImagePullSecretNames }
+      ...(resolvedImagePullSecretNames?.length
+        ? { imagePullSecrets: resolvedImagePullSecretNames }
         : {}),
       // Add volumes for secrets mounted as files
       ...(volumes.length > 0 ? { volumes } : {}),
@@ -905,6 +910,7 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment | null {
     const k8sSecretName = K8sDeployment.constructK8sSecretName(
       this.mcpServer.id,
@@ -1004,15 +1010,15 @@ export default class K8sDeployment {
       deployment.spec.template.spec.tolerations = tolerations;
     }
 
-    // 3. Apply imagePullSecrets if provided (uses resolved names: existing + generated regcred)
+    // 3. Apply imagePullSecrets if provided (resolved names: existing + generated regcred)
     if (
-      this.resolvedImagePullSecretNames?.length &&
+      resolvedImagePullSecretNames?.length &&
       deployment.spec?.template?.spec
     ) {
       const existingSecrets =
         deployment.spec.template.spec.imagePullSecrets || [];
       const existingNames = new Set(existingSecrets.map((s) => s.name));
-      const newSecrets = this.resolvedImagePullSecretNames.filter(
+      const newSecrets = resolvedImagePullSecretNames.filter(
         (s) => !existingNames.has(s.name),
       );
       deployment.spec.template.spec.imagePullSecrets = [
@@ -1423,7 +1429,9 @@ export default class K8sDeployment {
   /**
    * Create or start the deployment for this MCP server
    */
-  async startOrCreateDeployment(): Promise<void> {
+  async startOrCreateDeployment(
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
+  ): Promise<void> {
     try {
       /**
        * MIGRATION STEP:
@@ -1553,6 +1561,7 @@ export default class K8sDeployment {
           httpPort,
           platformNodeSelector,
           platformTolerations,
+          resolvedImagePullSecretNames,
         ),
       });
 

@@ -275,12 +275,12 @@ export function transformCatalogItemToFormValues(
       // Normalize imagePullSecrets: legacy { name } → { source: "existing", name }
       // Also hydrate passwords from localConfigSecret for credentials entries
       imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(
-        (s: ImagePullSecretConfig | { name: string }, index: number) => {
+        (s: ImagePullSecretConfig | { name: string }) => {
           if (!("source" in s)) {
             return { source: "existing" as const, name: s.name };
           }
           if (s.source === "credentials" && localConfigSecret?.secret) {
-            const passwordKey = `__regcred_${index}_password`;
+            const passwordKey = `__regcred_password:${s.server}`;
             const password = localConfigSecret.secret[passwordKey];
             return {
               ...s,

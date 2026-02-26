@@ -7,6 +7,7 @@ import {
   Bedrock,
   Cerebras,
   Cohere,
+  OpenRouter,
   Gemini,
   Groq,
   Minimax,
@@ -37,6 +38,7 @@ export const InteractionRequestSchema = z.union([
   Mistral.API.ChatCompletionRequestSchema,
   Perplexity.API.ChatCompletionRequestSchema,
   Groq.API.ChatCompletionRequestSchema,
+  OpenRouter.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Cohere.API.ChatRequestSchema,
@@ -53,6 +55,7 @@ export const InteractionResponseSchema = z.union([
   Mistral.API.ChatCompletionResponseSchema,
   Perplexity.API.ChatCompletionResponseSchema,
   Groq.API.ChatCompletionResponseSchema,
+  OpenRouter.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Cohere.API.ChatResponseSchema,
@@ -156,6 +159,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     response: Groq.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["openrouter:chatCompletions"]),
+    request: OpenRouter.API.ChatCompletionRequestSchema,
+    processedRequest:
+      OpenRouter.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: OpenRouter.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({

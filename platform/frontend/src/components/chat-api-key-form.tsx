@@ -134,6 +134,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.groq.com/keys",
     consoleName: "Groq Console",
   },
+  openrouter: {
+    name: "OpenRouter",
+    icon: "/icons/openrouter.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://openrouter.ai/keys",
+    consoleName: "OpenRouter Platform",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

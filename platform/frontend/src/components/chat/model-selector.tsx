@@ -102,6 +102,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   mistral: "mistral",
   perplexity: "perplexity",
   groq: "groq",
+  openrouter: "openrouter",
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
   zhipuai: "zhipuai",

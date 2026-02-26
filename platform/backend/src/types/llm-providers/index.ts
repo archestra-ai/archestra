@@ -2,6 +2,7 @@ export { default as Anthropic } from "./anthropic";
 export { default as Bedrock } from "./bedrock";
 export { default as Cerebras } from "./cerebras";
 export { default as Cohere } from "./cohere";
+export { default as OpenRouter } from "./openrouter";
 export { default as Gemini } from "./gemini";
 export { default as Groq } from "./groq";
 export { default as Minimax } from "./minimax";

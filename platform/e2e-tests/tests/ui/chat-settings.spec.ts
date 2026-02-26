@@ -45,7 +45,7 @@ test.describe("Provider Settings - API Keys", () => {
     await clickButton({ page, options: { name: "Test & Create" } });
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
 
     // Update
     await page

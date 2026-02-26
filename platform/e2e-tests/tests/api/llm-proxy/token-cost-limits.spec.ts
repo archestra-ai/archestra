@@ -305,8 +305,10 @@ for (const config of testConfigs) {
     `LLMProxy-TokenCostLimits-${config.providerName}`,
     { tag: ["@flaky"] },
     () => {
-      // Retry to handle async usage tracking race conditions in CI
-      test.describe.configure({ retries: 2 });
+      // Retry to handle async usage tracking race conditions in CI.
+      // Use a generous timeout because polling for usage tracking can exceed
+      // the default 60s limit under CI resource contention.
+      test.describe.configure({ retries: 2, timeout: 120_000 });
       let profileId: string;
       let limitId: string;
       let modelUuid: string;

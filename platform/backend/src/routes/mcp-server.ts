@@ -1,4 +1,5 @@
 import { isPlaywrightCatalogItem, RouteId } from "@shared";
+import { getChatMcpClient } from "@/clients/chat-mcp-client";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -1222,6 +1223,58 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Return the server immediately with "pending" status
       return reply.send(updatedServer);
+    },
+  );
+  /**
+   * Proxy endpoint to fetch a ui:// resource from an MCP App server.
+   * Used by the chat UI to load MCP App HTML into a sandboxed iframe.
+   */
+  fastify.get(
+    "/api/mcp-app-resource",
+    {
+      schema: {
+        operationId: RouteId.GetMcpAppResource,
+        description: "Fetch a ui:// resource from an MCP App server",
+        tags: ["MCP Server"],
+        querystring: z.object({
+          agentId: UuidIdSchema,
+          uri: z.string().startsWith("ui://"),
+        }),
+        response: {
+          200: z.object({
+            uri: z.string(),
+            mimeType: z.string().optional(),
+            text: z.string().optional(),
+          }),
+        },
+      },
+    },
+    async ({ user, organizationId, query }, reply) => {
+      const { agentId, uri } = query;
+
+      const mcpClient = await getChatMcpClient(
+        agentId,
+        user.id,
+        organizationId,
+        false,
+      );
+
+      if (!mcpClient) {
+        throw new ApiError(503, "MCP client not available for this agent");
+      }
+
+      const result = await mcpClient.readResource({ uri });
+
+      if (!result.contents || result.contents.length === 0) {
+        throw new ApiError(404, "MCP App resource not found");
+      }
+
+      const content = result.contents[0];
+      return reply.send({
+        uri: content.uri,
+        mimeType: content.mimeType,
+        text: "text" in content ? content.text : undefined,
+      });
     },
   );
 };

@@ -59,6 +59,7 @@ export const RouteId = {
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
+  GetMcpAppResource: "getMcpAppResource",
   McpProxy: "mcpProxy",
 
   // MCP Server Installation Request Routes

@@ -40,6 +40,7 @@ import {
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
+import { McpAppFrame, extractMcpAppResource } from "./mcp-app-frame";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -1025,18 +1026,34 @@ function MessageTool({
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
+          <>
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={toolResultPart.output}
+              errorText={errorText}
+            />
+            {(() => {
+              const appResource = extractMcpAppResource(toolResultPart.output);
+              return appResource ? (
+                <McpAppFrame resource={appResource} toolName={toolName} agentId={agentId} />
+              ) : null;
+            })()}
+          </>
         )}
         {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
+          <>
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+            {(() => {
+              const appResource = extractMcpAppResource(part.output);
+              return appResource ? (
+                <McpAppFrame resource={appResource} toolName={toolName} agentId={agentId} />
+              ) : null;
+            })()}
+          </>
         )}
       </ToolContent>
     </Tool>

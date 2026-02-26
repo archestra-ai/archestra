@@ -100,14 +100,12 @@ function VisibilityBadge({
   teams,
   authorId,
   authorName,
-  isAdmin,
   currentUserId,
 }: {
   scope: string | undefined;
   teams: Array<{ id: string; name: string }> | undefined;
   authorId: string | null | undefined;
   authorName: string | null | undefined;
-  isAdmin: boolean;
   currentUserId: string | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
@@ -452,7 +450,6 @@ function McpGateways({
                   (row.original as unknown as Record<string, unknown>)
                     .authorName as string | null
                 }
-                isAdmin={!!isAdmin}
                 currentUserId={currentUserId}
               />
             ),

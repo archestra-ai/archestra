@@ -561,7 +561,6 @@ export function AgentDialog({
   onOpenChange,
   agent,
   agentType = "profile",
-  onViewVersionHistory,
   onCreated,
 }: AgentDialogProps) {
   const { data: allInternalAgents = [] } = useInternalAgents();

@@ -235,7 +235,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, organizationId, headers }, reply) => {
+    async ({ body, user, organizationId }, reply) => {
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
 
@@ -338,7 +338,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // Fetch agent to determine its type for permission check
       const existingAgent = await AgentModel.findById(id, user.id, true);
       if (!existingAgent) {
@@ -419,7 +419,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
       // Fetch agent to determine its type for permission check
       const agent = await AgentModel.findById(id, user.id, true);
       if (!agent) {

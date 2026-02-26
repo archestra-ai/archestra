@@ -517,6 +517,10 @@ export function McpCatalogForm({
         {(currentServerType === "remote" || currentServerType === "local") && (
           <div className="space-y-4 pt-4 border-t">
             <FormLabel>Authentication</FormLabel>
+            <p className="text-sm text-muted-foreground">
+              Configure how users authenticate with this MCP server. OAuth is
+              recommended for servers that support it.
+            </p>
 
             <FormField
               control={form.control}

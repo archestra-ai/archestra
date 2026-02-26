@@ -1,8 +1,8 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
-import { E2eTestId } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  E2eTestId,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
   SSO_DOMAIN,
@@ -11,6 +11,7 @@ import {
 import { expect, type Page, test } from "../../fixtures";
 import {
   clickButton,
+  expectAuthenticated,
   extractCertFromMetadata,
   fetchKeycloakSamlMetadata,
   loginViaApi,
@@ -358,11 +359,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(
-        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
-      ).toBeVisible({
-        timeout: 15000,
-      });
+      await expectAuthenticated(ssoPage, 15000);
 
       // STEP 5: Verify user was automatically added to the team
       // Team sync is an async background operation during SSO callback
@@ -500,13 +497,8 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
       const loginSucceeded = await loginViaKeycloak(ssoPage);
       expect(loginSucceeded).toBe(true);
 
-      // Verify we're logged in by checking for authenticated UI elements
-      // Use data-testid to avoid flaky text-based selectors
-      await expect(
-        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
-      ).toBeVisible({
-        timeout: 15000,
-      });
+      // Verify we're logged in
+      await expectAuthenticated(ssoPage, 15000);
 
       // SSO login successful - user is now logged in
     } finally {
@@ -597,11 +589,7 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(
-        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
-      ).toBeVisible({
-        timeout: 15000,
-      });
+      await expectAuthenticated(ssoPage, 15000);
 
       // STEP 3: Sign out from Archestra
       // Navigate to sign-out which should redirect to Keycloak logout, then back to sign-in
@@ -727,11 +715,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       const loginSucceeded = await loginViaKeycloak(ssoPage);
       expect(loginSucceeded).toBe(true);
 
-      await expect(
-        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
-      ).toBeVisible({
-        timeout: 15000,
-      });
+      await expectAuthenticated(ssoPage, 15000);
 
       // STEP 5: Verify the user has admin role (from second rule, not editor from first)
       // The Roles settings page is only accessible to admins
@@ -835,11 +819,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(
-        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
-      ).toBeVisible({
-        timeout: 15000,
-      });
+      await expectAuthenticated(ssoPage, 15000);
 
       // Verify the user has admin role by checking they can access admin-only pages
       // The Roles settings page is only accessible to admins
@@ -973,13 +953,8 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
       const loginSucceeded = await loginViaKeycloak(ssoPage);
       expect(loginSucceeded).toBe(true);
 
-      // Verify we're logged in by checking for authenticated UI elements
-      // Use data-testid to avoid flaky text-based selectors
-      await expect(
-        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
-      ).toBeVisible({
-        timeout: 15000,
-      });
+      // Verify we're logged in
+      await expectAuthenticated(ssoPage, 15000);
 
       // SSO login successful - user is now logged in
     } finally {

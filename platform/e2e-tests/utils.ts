@@ -523,6 +523,19 @@ export async function clickButton({
 }
 
 /**
+ * Assert that the page shows authenticated sidebar content.
+ * Uses a stable data-testid selector so sidebar renames don't break tests.
+ */
+export async function expectAuthenticated(
+  page: Page,
+  timeout = 30000,
+): Promise<void> {
+  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
+    timeout,
+  });
+}
+
+/**
  * Login via API (bypasses UI form for reliability).
  * Handles rate limiting with exponential backoff retry.
  *

@@ -1,12 +1,11 @@
 import { expect, test as setup } from "@playwright/test";
-import { E2eTestId } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   adminAuthFile,
   UI_BASE_URL,
 } from "./consts";
-import { loginViaApi } from "./utils";
+import { expectAuthenticated, loginViaApi } from "./utils";
 
 // Setup admin authentication - must run first before other users
 setup("authenticate as admin", async ({ page }) => {
@@ -27,9 +26,7 @@ setup("authenticate as admin", async ({ page }) => {
   await page.reload({ waitUntil: "domcontentloaded" });
 
   // Verify we're authenticated
-  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
-    timeout: 30000,
-  });
+  await expectAuthenticated(page);
 
   // Save admin auth state
   await page.context().storageState({ path: adminAuthFile });

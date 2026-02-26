@@ -124,7 +124,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       if (user === "Member") {
         // Members lack mcpServer:update permission — after personal install,
         // they should see an "Already installed" banner instead of the install form
-        await expect(page.getByText("Already installed")).toBeVisible();
+        await expect(page.getByText("Already installed", { exact: true })).toBeVisible();
         await closeOpenDialogs(page);
       } else {
         // Admin and Editor: a team should be auto-selected (since personal installation already exists)

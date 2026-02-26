@@ -48,6 +48,7 @@ import { useOrgTheme } from "@/lib/theme.hook";
 interface NavSubItem {
   title: string;
   url: string;
+  testId?: string;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
@@ -56,6 +57,7 @@ interface NavItem {
   url: string;
   icon: LucideIcon;
   iconClassName?: string;
+  testId?: string;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
   onClick?: () => void;
   subItems?: NavSubItem[];
@@ -116,6 +118,7 @@ const contentNavGroups: NavGroup[] = [
           {
             title: "Guardrails",
             url: "/tool-policies",
+            testId: E2eTestId.SidebarNavGuardrails,
             customIsActive: (pathname: string) =>
               pathname.startsWith("/tool-policies"),
           },
@@ -188,10 +191,6 @@ const NavPrimary = ({
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
 
-  // Generate a stable data-testid from the URL path, e.g. "/tool-policies" → "sidebar-nav-tool-policies"
-  const urlToTestId = (url: string) =>
-    `sidebar-nav-${url.replace(/^\//, "").replace(/\//g, "-")}`;
-
   const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
@@ -203,7 +202,7 @@ const NavPrimary = ({
       >
         <Link
           href={item.url}
-          data-testid={urlToTestId(item.url)}
+          data-testid={item.testId}
           onClick={() => {
             if (isMobile) setOpenMobile(false);
           }}
@@ -226,7 +225,7 @@ const NavPrimary = ({
               >
                 <Link
                   href={sub.url}
-                  data-testid={urlToTestId(sub.url)}
+                  data-testid={sub.testId}
                   onClick={() => {
                     if (isMobile) setOpenMobile(false);
                   }}

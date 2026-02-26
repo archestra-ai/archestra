@@ -308,4 +308,5 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
   zhipuai: "zhipuai:chatCompletions",
   deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",
+  xai: "xai:chatCompletions",
 };

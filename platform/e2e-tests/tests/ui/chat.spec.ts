@@ -174,6 +174,16 @@ const minimaxConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// x.ai - Uses OpenAI-compatible streaming format
+const xaiConfig: ChatProviderTestConfig = {
+  providerName: "xai",
+  providerDisplayName: "x.ai",
+  modelId: "grok-4-1-fast-non-reasoning",
+  modelDisplayName: "grok-4-1-fast-non-reasoning",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
@@ -188,6 +198,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   zhipuaiConfig,
   deepseekConfig,
   minimaxConfig,
+  xaiConfig,
 ];
 
 // =============================================================================

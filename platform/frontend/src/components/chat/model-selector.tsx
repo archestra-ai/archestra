@@ -107,6 +107,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",
+  xai: "xai",
 };
 
 /**

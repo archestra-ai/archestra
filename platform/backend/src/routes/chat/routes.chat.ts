@@ -85,6 +85,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   deepseek: "deepseek-chat",
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
   minimax: "MiniMax-M2.5",
+  xai: "grok-4-1-fast-non-reasoning",
 };
 
 /**

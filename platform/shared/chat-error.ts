@@ -162,6 +162,23 @@ export const DeepSeekErrorTypes = {
 } as const;
 
 /**
+ * x.ai API error types
+ * x.ai uses OpenAI-compatible error format.
+ * @see https://docs.x.ai/docs/api-reference
+ */
+export const XaiErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  NOT_FOUND: "not_found_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+} as const;
+
+/**
  * Zhipuai API error codes (from response body `error.code` field)
  * Zhipuai uses numeric string codes for errors
  * @see https://docs.z.ai/api-reference/api-code#errors

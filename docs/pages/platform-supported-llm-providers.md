@@ -424,3 +424,38 @@ https://bedrock-runtime.{region}.amazonaws.com
 Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
 
 For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).
+
+## x.ai (Grok)
+
+[x.ai](https://x.ai/) provides Grok language models through an OpenAI-compatible API.
+
+### Supported x.ai APIs
+
+| API Endpoint | Supported |
+| --- | --- |
+| Chat Completions | ✅ |
+| Streaming | ✅ |
+| Tool/Function Calling | ✅ |
+| Vision | ✅ |
+
+### x.ai Connection Details
+
+- **Authentication**: Pass your x.ai API key in the `Authorization` header as `Bearer <your-api-key>`
+- **Endpoint Format**: `http://localhost:9000/v1/xai/{profile-id}/chat/completions`
+- **API Documentation**: [x.ai API Reference](https://docs.x.ai/docs/api-reference)
+
+### Getting Started with x.ai
+
+1. Create an account at [console.x.ai](https://console.x.ai/)
+2. Generate an API key from the console
+3. Configure the API key in Archestra (via Chat API Keys or environment variable)
+
+### x.ai Environment Variables
+
+#### `ARCHESTRA_XAI_BASE_URL`
+
+Override the default x.ai API base URL. Defaults to `https://api.x.ai/v1`.
+
+#### `ARCHESTRA_CHAT_XAI_API_KEY`
+
+API key for the built-in Chat integration with x.ai.

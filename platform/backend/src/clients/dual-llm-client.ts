@@ -1184,6 +1184,12 @@ export const DeepSeekDualLlmClient = createOpenAiCompatibleDualLlmClient({
   defaultModel: "deepseek-chat",
 });
 
+export const XaiDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "x.ai",
+  baseUrl: config.llm.xai.baseUrl,
+  defaultModel: "grok-4-1-fast-non-reasoning",
+});
+
 /**
  * Bedrock implementation of DualLlmClient
  * Uses AWS Bedrock Converse API for chat completions
@@ -1420,6 +1426,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     minimax: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for MiniMax dual LLM");
       return new MinimaxDualLlmClient(apiKey, model);
+    },
+    xai: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for x.ai dual LLM");
+      return new XaiDualLlmClient(apiKey, model);
     },
     bedrock: (apiKey, model) => {
       if (!model) throw new Error("Model name required for Bedrock dual LLM");

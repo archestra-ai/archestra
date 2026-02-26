@@ -741,6 +741,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.minimax.io/v1`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_XAI_BASE_URL`** - Override the x.ai API base URL.
+
+  - Default: `https://api.x.ai/v1`
+  - Use this to point to your own proxy or other custom endpoints
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
 
   - Default: `10`
@@ -780,7 +785,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
 
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`, `XAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order

@@ -630,6 +630,49 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from x.ai API (OpenAI-compatible)
+ * @see https://docs.x.ai/docs/api-reference
+ */
+async function fetchXaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.xai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch x.ai models",
+    );
+    throw new Error(`Failed to fetch x.ai models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data?: Array<{
+      id: string;
+      created?: number;
+      owned_by?: string;
+    }>;
+  };
+
+  const list = Array.isArray(data?.data) ? data.data : [];
+  return list.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "xai" as const,
+    createdAt:
+      model.created != null
+        ? new Date(model.created * 1000).toISOString()
+        : new Date(0).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
  */
@@ -859,6 +902,7 @@ async function getProviderApiKey({
     deepseek: () => config.chat.deepseek?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
     minimax: () => config.chat.minimax?.apiKey || null,
+    xai: () => config.chat.xai?.apiKey || null,
   };
 
   return envApiKeyFallbacks[provider]();
@@ -883,6 +927,7 @@ const modelFetchers: Record<
   zhipuai: fetchZhipuaiModels,
   minimax: fetchMinimaxModels,
   deepseek: fetchDeepSeekModels,
+  xai: fetchXaiModels,
 };
 
 // Register all model fetchers with the sync service

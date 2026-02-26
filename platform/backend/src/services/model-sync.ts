@@ -219,7 +219,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   "fireworks-ai": "openai",
   togetherai: "openai",
   perplexity: null,
-  xai: null,
+  xai: "xai",
   nvidia: null,
   "amazon-bedrock": "bedrock",
   azure: null,

@@ -17,6 +17,7 @@ import {
   Perplexity,
   Vllm,
   Zhipuai,
+  Xai,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
@@ -210,6 +211,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Minimax.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Minimax.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["xai:chatCompletions"]),
+    request: Xai.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Xai.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Xai.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

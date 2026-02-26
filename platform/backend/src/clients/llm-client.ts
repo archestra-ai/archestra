@@ -77,6 +77,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "deepseek";
   }
 
+  if (lowerModel.includes("grok")) {
+    return "xai";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -104,6 +108,7 @@ const envApiKeyGetters: Record<
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
+  xai: () => config.chat.xai.apiKey,
 };
 
 /**
@@ -237,6 +242,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   mistral: "mistral-small-latest", // Mistral's fast model
   perplexity: "sonar", // Perplexity's fast model
   groq: "llama-3.1-8b-instant", // Groq's fast model
+  xai: "grok-4-1-fast-non-reasoning", // x.ai's fast model
 };
 
 /**
@@ -455,6 +461,20 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.deepseek.baseUrl,
+    });
+    return client.chat(modelName);
+  },
+
+  xai: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "x.ai API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
     });
     return client.chat(modelName);
   },
@@ -710,6 +730,16 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client.chat(modelName);
+    },
+
+    xai: ({ apiKey, agentId, modelName, headers }) => {
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("xai", agentId),
         headers,
         fetch: createTracedFetch(),
       });

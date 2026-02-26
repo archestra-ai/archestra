@@ -18,6 +18,7 @@ import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
 
 type InteractionFactory = (interaction: Interaction) => InteractionUtils;
@@ -38,6 +39,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
+  "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
 };
 
 export interface CostSavingsInput {

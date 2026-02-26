@@ -304,6 +304,33 @@ const bedrockConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const xaiConfig: TokenCostLimitTestConfig = {
+  providerName: "x.ai",
+
+  endpoint: (profileId) => `/v1/xai/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-xai-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-xai-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  customPricing: {
+    provider: "xai",
+    model: "test-xai-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -324,6 +351,7 @@ const testConfigsMap = {
   deepseek: deepseekConfig,
   minimax: minimaxConfig,
   bedrock: bedrockConfig,
+  xai: xaiConfig,
 } satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
 
 const testConfigs = Object.values(testConfigsMap);

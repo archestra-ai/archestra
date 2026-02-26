@@ -80,6 +80,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.bedrock,
     originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",
   },
+  xai: {
+    label: providerDisplayNames.xai,
+    originalUrl: "https://api.x.ai/v1/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 

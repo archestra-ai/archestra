@@ -12,3 +12,4 @@ export { default as OpenAi } from "./openai";
 export { default as Perplexity } from "./perplexity";
 export { default as Vllm } from "./vllm";
 export { default as Zhipuai } from "./zhipuai";
+export { default as Xai } from "./xai";

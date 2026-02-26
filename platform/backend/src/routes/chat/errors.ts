@@ -1224,6 +1224,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   zhipuai: parseZhipuaiError,
   deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
   minimax: parseMinimaxError, // MiniMax has unique error format
+  xai: parseOpenAIError, // x.ai uses OpenAI-compatible API
 };
 
 /**
@@ -1246,6 +1247,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   zhipuai: mapZhipuaiErrorWrapper,
   deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
   minimax: mapMinimaxErrorWrapper,
+  xai: mapOpenAIErrorWrapper, // x.ai uses OpenAI-compatible API
 };
 
 // =============================================================================

@@ -591,6 +591,10 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
     },
+    xai: {
+      baseUrl:
+        process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+    },
   },
   chat: {
     openai: {
@@ -634,6 +638,9 @@ export default {
     },
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+    },
+    xai: {
+      apiKey: process.env.ARCHESTRA_CHAT_XAI_API_KEY || "",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

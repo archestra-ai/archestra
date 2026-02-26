@@ -56,7 +56,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)
   perplexity: null,
-  xai: null,
+  xai: "xai",
   nvidia: null,
   "amazon-bedrock": null,
   azure: null,
@@ -416,6 +416,7 @@ class ModelsDevClient {
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
+      xai: ["xai/"],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

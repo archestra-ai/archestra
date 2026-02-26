@@ -82,6 +82,12 @@ test("Verify tool calling using dynamic credentials", async ({
       // Dialog didn't appear - that's fine, continue
     }
 
+    // Wait for any dialog overlay to fully disappear before proceeding
+    await page
+      .locator('[data-slot="dialog-overlay"]')
+      .waitFor({ state: "hidden", timeout: 10_000 })
+      .catch(() => {});
+
     // Wait for dialog to close and button to be visible and enabled again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,

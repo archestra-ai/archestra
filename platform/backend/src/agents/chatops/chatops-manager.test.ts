@@ -459,6 +459,7 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
       name: "Sales Agent",
       teams: [team.id],
+      scope: "team",
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -563,6 +564,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const accessibleAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Accessible Agent",
+      scope: "team",
     });
     await AgentTeamModel.assignTeamsToAgent(accessibleAgent.id, [team.id]);
 
@@ -572,6 +574,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const inaccessibleAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Inaccessible Agent",
+      scope: "team",
     });
     await AgentTeamModel.assignTeamsToAgent(inaccessibleAgent.id, [
       otherTeam.id,

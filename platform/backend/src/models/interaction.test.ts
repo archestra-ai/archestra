@@ -356,10 +356,12 @@ describe("InteractionModel", () => {
       const agent1 = await AgentModel.create({
         name: "Agent 1",
         teams: [team1.id],
+        scope: "team",
       });
       const agent2 = await AgentModel.create({
         name: "Agent 2",
         teams: [team2.id],
+        scope: "team",
       });
 
       await InteractionModel.create({
@@ -404,7 +406,7 @@ describe("InteractionModel", () => {
       const user = await makeUser();
 
       // Teamless agent is org-wide, visible to all members
-      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [], scope: "org" });
 
       await InteractionModel.create({
         profileId: agent1.id,
@@ -474,6 +476,7 @@ describe("InteractionModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       const interaction = await InteractionModel.create({
@@ -504,7 +507,7 @@ describe("InteractionModel", () => {
       const user = await makeUser();
 
       // Teamless agent is org-wide
-      const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
+      const agent = await AgentModel.create({ name: "Test Agent", teams: [], scope: "org" });
 
       const interaction = await InteractionModel.create({
         profileId: agent.id,
@@ -715,11 +718,13 @@ describe("InteractionModel", () => {
       const accessibleAgent = await AgentModel.create({
         name: "Accessible Agent",
         teams: [team.id],
+        scope: "team",
       });
       // Org-wide agent (no teams) is also accessible
       const orgWideAgent = await AgentModel.create({
         name: "Org-Wide Agent",
         teams: [],
+        scope: "org",
       });
 
       // Interaction for team-scoped agent
@@ -2453,10 +2458,12 @@ describe("InteractionModel", () => {
       const accessibleAgent = await AgentModel.create({
         name: "Accessible Agent",
         teams: [team.id],
+        scope: "team",
       });
       const orgWideAgent = await AgentModel.create({
         name: "Org-Wide Agent",
         teams: [],
+        scope: "org",
       });
 
       // Interaction for team-scoped agent with otherUser
@@ -2566,6 +2573,7 @@ describe("InteractionModel", () => {
       const agent = await AgentModel.create({
         name: "Agent To Delete",
         teams: [team.id],
+        scope: "team",
       });
 
       // Create an interaction for the agent

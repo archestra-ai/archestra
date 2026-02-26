@@ -148,17 +148,20 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Agent 1",
         teams: [team1.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Agent 2",
         teams: [team2.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Agent 3",
         teams: [],
+        scope: "org",
       });
 
-      // user1 has access to agent1 (via team1) and agent3 (org-wide, no teams)
+      // user1 has access to agent1 (via team1) and agent3 (org-wide)
       const agents = await AgentModel.findAll(user1.id, false);
       expect(agents).toHaveLength(2);
       expect(agents.map((a) => a.id)).toContain(agent1.id);
@@ -181,6 +184,7 @@ describe("AgentModel", () => {
       await AgentModel.create({
         name: "Agent 1",
         teams: [team.id],
+        scope: "team",
       });
 
       // user2 is not in any team
@@ -217,6 +221,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       const foundAgent = await AgentModel.findById(agent.id, user.id, false);
@@ -241,6 +246,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       const foundAgent = await AgentModel.findById(agent.id, user2.id, false);
@@ -389,17 +395,20 @@ describe("AgentModel", () => {
       const userTeamAgent = await AgentModel.create({
         name: "User Team Agent",
         teams: [userTeam.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Other Team Agent",
         teams: [otherTeam.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "No Team Agent",
         teams: [],
+        scope: "org",
       });
 
-      // Non-admin user sees agent in their team + org-wide agents (no teams)
+      // Non-admin user sees agent in their team + org-wide agents
       const agents = await AgentModel.findAll(user.id, false);
       expect(agents).toHaveLength(2);
       expect(agents.map((a) => a.id)).toContain(userTeamAgent.id);
@@ -422,9 +431,10 @@ describe("AgentModel", () => {
       const orgWideAgent = await AgentModel.create({
         name: "No Team Agent",
         teams: [],
+        scope: "org",
       });
 
-      // Non-admin user should see org-wide agents (teamless)
+      // Non-admin user should see org-wide agents
       const agents = await AgentModel.findAll(user.id, false);
       expect(agents.map((a) => a.id)).toContain(orgWideAgent.id);
     });
@@ -445,13 +455,15 @@ describe("AgentModel", () => {
       await AgentModel.create({
         name: "Agent in Team",
         teams: [team.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Agent without Team",
         teams: [],
+        scope: "org",
       });
 
-      // User with no team membership should still see org-wide agents (no teams)
+      // User with no team membership should still see org-wide agents
       const agents = await AgentModel.findAll(userWithNoTeam.id, false);
       expect(agents).toHaveLength(1);
       expect(agents[0].name).toBe("Agent without Team");
@@ -600,22 +612,26 @@ describe("AgentModel", () => {
       const team = await makeTeam(org.id, admin.id, { name: "Team 1" });
       await TeamModel.addMember(team.id, user.id);
 
-      // Create 4 agents: 1 with team assignment, 3 without
+      // Create 4 agents: 1 with team assignment, 3 org-scoped
       await AgentModel.create({
         name: "Agent 1",
         teams: [team.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Agent 2",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent 3",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent 4",
         teams: [],
+        scope: "org",
       });
 
       // Query as non-admin user (should only see Agent 1)
@@ -627,7 +643,7 @@ describe("AgentModel", () => {
         false, // not admin
       );
 
-      // User sees Agent 1 (via team) + 3 org-wide agents (no teams)
+      // User sees Agent 1 (via team) + 3 org-wide agents
       expect(result.data).toHaveLength(4);
       expect(result.pagination.total).toBe(4);
       expect(result.data.map((a) => a.name)).toContain("Agent 1");

@@ -596,6 +596,7 @@ describe("McpToolCallModel", () => {
       const agent = await AgentModel.create({
         name: "Agent To Delete",
         teams: [team.id],
+        scope: "team",
       });
 
       // Create an MCP tool call for the agent

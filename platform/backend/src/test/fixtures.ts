@@ -190,6 +190,7 @@ async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
+    scope: "org",
     teams: [],
     labels: [],
   };

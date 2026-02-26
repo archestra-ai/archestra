@@ -13,6 +13,7 @@ import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { preserveNewlines } from "@/lib/chat-utils";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
@@ -230,7 +231,7 @@ export function EditableUserMessage({
         {/* Text message bubble - only show if there's text */}
         {text && (
           <MessageContent>
-            <Response>{text}</Response>
+            <Response>{preserveNewlines(text)}</Response>
           </MessageContent>
         )}
         {/* Actions below the message - only show edit for messages with text */}

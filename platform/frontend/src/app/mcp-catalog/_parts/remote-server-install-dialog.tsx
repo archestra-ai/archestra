@@ -11,6 +11,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -223,155 +224,161 @@ export function RemoteServerInstallDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
-          <SelectMcpServerCredentialTypeAndTeams
-            onTeamChange={setSelectedTeamId}
-            catalogId={catalogItem?.id}
-            onCredentialTypeChange={setCredentialType}
-          />
+        <DialogForm onSubmit={handleConfirm}>
+          <div className="grid gap-6 py-4">
+            <SelectMcpServerCredentialTypeAndTeams
+              onTeamChange={setSelectedTeamId}
+              catalogId={catalogItem?.id}
+              onCredentialTypeChange={setCredentialType}
+            />
 
-          {hasOAuth && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                This server requires OAuth authentication. You'll be redirected
-                to complete the authentication flow after clicking Install.
-              </AlertDescription>
-            </Alert>
-          )}
+            {hasOAuth && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  This server requires OAuth authentication. You'll be
+                  redirected to complete the authentication flow after clicking
+                  Install.
+                </AlertDescription>
+              </Alert>
+            )}
 
-          {/* Config fields - always show when config exists */}
-          {hasConfig && (
-            <div className="space-y-4">
-              {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
-                <div key={fieldName} className="grid gap-2">
-                  {fieldConfig.type === "boolean" ? (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={fieldName}
-                        checked={configValues[fieldName] === "true"}
-                        onCheckedChange={(checked) =>
-                          setConfigValues((prev) => ({
-                            ...prev,
-                            [fieldName]: checked ? "true" : "false",
-                          }))
-                        }
-                      />
-                      <Label htmlFor={fieldName} className="cursor-pointer">
+            {/* Config fields - always show when config exists */}
+            {hasConfig && (
+              <div className="space-y-4">
+                {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
+                  <div key={fieldName} className="grid gap-2">
+                    {fieldConfig.type === "boolean" ? (
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={fieldName}
+                          checked={configValues[fieldName] === "true"}
+                          onCheckedChange={(checked) =>
+                            setConfigValues((prev) => ({
+                              ...prev,
+                              [fieldName]: checked ? "true" : "false",
+                            }))
+                          }
+                        />
+                        <Label htmlFor={fieldName} className="cursor-pointer">
+                          {fieldConfig.title}
+                          {fieldConfig.required && (
+                            <span className="text-red-500"> *</span>
+                          )}
+                        </Label>
+                      </div>
+                    ) : (
+                      <Label htmlFor={fieldName}>
                         {fieldConfig.title}
                         {fieldConfig.required && (
                           <span className="text-red-500"> *</span>
                         )}
                       </Label>
-                    </div>
-                  ) : (
-                    <Label htmlFor={fieldName}>
-                      {fieldConfig.title}
-                      {fieldConfig.required && (
-                        <span className="text-red-500"> *</span>
-                      )}
-                    </Label>
-                  )}
-                  {fieldConfig.description && (
-                    <p className="text-xs text-muted-foreground">
-                      {fieldConfig.description}
+                    )}
+                    {fieldConfig.description && (
+                      <p className="text-xs text-muted-foreground">
+                        {fieldConfig.description}
+                      </p>
+                    )}
+
+                    {/* BYOS mode: vault selector for sensitive fields */}
+                    {fieldConfig.type ===
+                    "boolean" ? null : fieldConfig.sensitive &&
+                      useVaultSecrets ? (
+                      <Suspense
+                        fallback={
+                          <div className="text-sm text-muted-foreground">
+                            Loading...
+                          </div>
+                        }
+                      >
+                        <InlineVaultSecretSelector
+                          teamId={selectedTeamId}
+                          selectedSecretPath={
+                            vaultSecrets[fieldName]?.path ?? null
+                          }
+                          selectedSecretKey={
+                            vaultSecrets[fieldName]?.key ?? null
+                          }
+                          onSecretPathChange={(path) =>
+                            updateVaultSecret(fieldName, "path", path)
+                          }
+                          onSecretKeyChange={(key) =>
+                            updateVaultSecret(fieldName, "key", key)
+                          }
+                          disabled={isInstalling}
+                        />
+                      </Suspense>
+                    ) : (
+                      <Input
+                        id={fieldName}
+                        type={
+                          fieldConfig.sensitive
+                            ? "password"
+                            : fieldConfig.type === "number"
+                              ? "number"
+                              : "text"
+                        }
+                        placeholder={
+                          fieldConfig.default?.toString() ||
+                          fieldConfig.description
+                        }
+                        value={configValues[fieldName] || ""}
+                        onChange={(e) =>
+                          setConfigValues((prev) => ({
+                            ...prev,
+                            [fieldName]: e.target.value,
+                          }))
+                        }
+                        min={fieldConfig.min}
+                        max={fieldConfig.max}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {catalogItem.serverUrl && (
+              <div className="rounded-md bg-muted p-4">
+                <h4 className="text-sm font-medium mb-2">Server Details:</h4>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium">URL:</span>{" "}
+                    {catalogItem.serverUrl}
+                  </p>
+                  {catalogItem.docsUrl && (
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">Documentation:</span>{" "}
+                      <a
+                        href={catalogItem.docsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {catalogItem.docsUrl}
+                      </a>
                     </p>
                   )}
-
-                  {/* BYOS mode: vault selector for sensitive fields */}
-                  {fieldConfig.type ===
-                  "boolean" ? null : fieldConfig.sensitive &&
-                    useVaultSecrets ? (
-                    <Suspense
-                      fallback={
-                        <div className="text-sm text-muted-foreground">
-                          Loading...
-                        </div>
-                      }
-                    >
-                      <InlineVaultSecretSelector
-                        teamId={selectedTeamId}
-                        selectedSecretPath={
-                          vaultSecrets[fieldName]?.path ?? null
-                        }
-                        selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
-                        onSecretPathChange={(path) =>
-                          updateVaultSecret(fieldName, "path", path)
-                        }
-                        onSecretKeyChange={(key) =>
-                          updateVaultSecret(fieldName, "key", key)
-                        }
-                        disabled={isInstalling}
-                      />
-                    </Suspense>
-                  ) : (
-                    <Input
-                      id={fieldName}
-                      type={
-                        fieldConfig.sensitive
-                          ? "password"
-                          : fieldConfig.type === "number"
-                            ? "number"
-                            : "text"
-                      }
-                      placeholder={
-                        fieldConfig.default?.toString() ||
-                        fieldConfig.description
-                      }
-                      value={configValues[fieldName] || ""}
-                      onChange={(e) =>
-                        setConfigValues((prev) => ({
-                          ...prev,
-                          [fieldName]: e.target.value,
-                        }))
-                      }
-                      min={fieldConfig.min}
-                      max={fieldConfig.max}
-                    />
-                  )}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {catalogItem.serverUrl && (
-            <div className="rounded-md bg-muted p-4">
-              <h4 className="text-sm font-medium mb-2">Server Details:</h4>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-medium">URL:</span>{" "}
-                  {catalogItem.serverUrl}
-                </p>
-                {catalogItem.docsUrl && (
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium">Documentation:</span>{" "}
-                    <a
-                      href={catalogItem.docsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {catalogItem.docsUrl}
-                    </a>
-                  </p>
-                )}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={!isValid || isInstalling}>
-            {isInstalling ? "Installing..." : "Install"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!isValid || isInstalling}>
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

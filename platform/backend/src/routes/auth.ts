@@ -373,12 +373,14 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // better-auth may return 200 JSON with { redirect: true, uri } instead
-      // of an HTTP redirect. Normalize to { redirectTo } for the frontend.
+      // better-auth may return 200 JSON with { redirect: true, url/uri }
+      // instead of an HTTP redirect. Normalize to { redirectTo } for the frontend.
+      // Note: better-auth renamed the field from "uri" to "url" in 1.4.19.
       if (response.ok && response.body) {
         const body = await response.json().catch(() => null);
-        if (body?.uri) {
-          return reply.send({ redirectTo: body.uri });
+        const redirectTarget = body?.url || body?.uri;
+        if (redirectTarget) {
+          return reply.send({ redirectTo: redirectTarget });
         }
       }
 

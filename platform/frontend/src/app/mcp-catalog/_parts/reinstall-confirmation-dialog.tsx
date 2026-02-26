@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -41,24 +42,31 @@ export function ReinstallConfirmationDialog({
             effect.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isReinstalling}>
-            Skip for Now
-          </Button>
-          <Button onClick={onConfirm} disabled={isReinstalling}>
-            {isReinstalling ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                {isRemoteServer ? "Reconnecting..." : "Reinstalling..."}
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {isRemoteServer ? "Reconnect Now" : "Reinstall Now"}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={onConfirm}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isReinstalling}
+            >
+              Skip for Now
+            </Button>
+            <Button type="submit" disabled={isReinstalling}>
+              {isReinstalling ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  {isRemoteServer ? "Reconnecting..." : "Reinstalling..."}
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  {isRemoteServer ? "Reconnect Now" : "Reinstall Now"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

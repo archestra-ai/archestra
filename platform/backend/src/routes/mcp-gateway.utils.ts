@@ -37,7 +37,10 @@ import {
   UserTokenModel,
 } from "@/models";
 import { metrics } from "@/observability";
-import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
+import {
+  ATTR_MCP_IS_ERROR_RESULT,
+  startActiveMcpSpan,
+} from "@/observability/tracing";
 import { jwksValidator } from "@/services/jwks-validator";
 import { type AgentType, type CommonToolCall, UuidIdSchema } from "@/types";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -199,7 +202,10 @@ export async function createAgentServer(
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
               });
-              span.setAttribute("mcp.is_error_result", result.isError ?? false);
+              span.setAttribute(
+                ATTR_MCP_IS_ERROR_RESULT,
+                result.isError ?? false,
+              );
               return result;
             },
           });
@@ -290,7 +296,7 @@ export async function createAgentServer(
               agentId,
               tokenAuth,
             );
-            span.setAttribute("mcp.is_error_result", r.isError ?? false);
+            span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;
           },
         });

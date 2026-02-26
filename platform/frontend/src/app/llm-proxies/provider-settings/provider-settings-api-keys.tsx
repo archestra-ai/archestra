@@ -40,6 +40,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -447,33 +448,36 @@ export function ProviderSettingsApiKeys() {
                 Add a new LLM provider API key for use in Chat and LLM Proxy
               </DialogDescription>
             </DialogHeader>
-            <div className="py-2">
-              <ChatApiKeyForm
-                mode="full"
-                showConsoleLink={false}
-                form={createForm}
-                existingKeys={apiKeys}
-                isPending={createMutation.isPending}
-                geminiVertexAiEnabled={geminiVertexAiEnabled}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={!isCreateValid || createMutation.isPending}
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Create
-              </Button>
-            </DialogFooter>
+            <DialogForm onSubmit={handleCreate}>
+              <div className="py-2">
+                <ChatApiKeyForm
+                  mode="full"
+                  showConsoleLink={false}
+                  form={createForm}
+                  existingKeys={apiKeys}
+                  isPending={createMutation.isPending}
+                  geminiVertexAiEnabled={geminiVertexAiEnabled}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!isCreateValid || createMutation.isPending}
+                >
+                  {createMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Test & Create
+                </Button>
+              </DialogFooter>
+            </DialogForm>
           </DialogContent>
         </Dialog>
 
@@ -486,35 +490,38 @@ export function ProviderSettingsApiKeys() {
                 Update the name, API key value, or scope
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              {selectedApiKey && (
-                <ChatApiKeyForm
-                  mode="full"
-                  showConsoleLink={false}
-                  existingKey={selectedApiKey}
-                  existingKeys={apiKeys}
-                  form={editForm}
-                  isPending={updateMutation.isPending}
-                />
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleEdit}
-                disabled={!isEditValid || updateMutation.isPending}
-              >
-                {updateMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <DialogForm onSubmit={handleEdit}>
+              <div className="py-4">
+                {selectedApiKey && (
+                  <ChatApiKeyForm
+                    mode="full"
+                    showConsoleLink={false}
+                    existingKey={selectedApiKey}
+                    existingKeys={apiKeys}
+                    form={editForm}
+                    isPending={updateMutation.isPending}
+                  />
                 )}
-                Test & Save
-              </Button>
-            </DialogFooter>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!isEditValid || updateMutation.isPending}
+                >
+                  {updateMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Test & Save
+                </Button>
+              </DialogFooter>
+            </DialogForm>
           </DialogContent>
         </Dialog>
 
@@ -528,24 +535,27 @@ export function ProviderSettingsApiKeys() {
                 &quot;? This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsDeleteDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Delete
-              </Button>
-            </DialogFooter>
+            <DialogForm onSubmit={handleDelete}>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDeleteDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deleteMutation.isPending}
+                >
+                  {deleteMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogForm>
           </DialogContent>
         </Dialog>
       </div>

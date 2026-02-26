@@ -54,6 +54,7 @@ import {
   useUpdateConversation,
 } from "@/lib/chat.query";
 import { getConversationDisplayTitle } from "@/lib/chat-utils";
+import { useStableConversations } from "@/lib/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -105,27 +106,29 @@ export function ChatSidebarSection() {
     ? searchParams.get(CONVERSATION_QUERY_PARAM)
     : null;
 
+  // Stabilize conversation order to prevent sidebar "jumping" when React Query
+  // re-fetches after mutations that bump updatedAt. Order resets on page refresh.
+  const stableConversations = useStableConversations(conversations);
+
   // Split conversations into pinned and unpinned.
   // Default view shows exactly SIDEBAR_CHAT_SLOTS items:
-  // pinned chats first (most recently active), then recent unpinned to fill remaining slots.
+  // pinned chats first, then recent unpinned to fill remaining slots.
+  // No re-sorting here — stable order from useStableConversations is preserved
+  // for both pinned and unpinned groups to prevent jumping.
   const { pinnedChats, recentUnpinnedChats } = useMemo(() => {
-    const pinned = conversations
+    const pinned = stableConversations
       .filter((c) => c.pinnedAt)
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      )
       .slice(0, SIDEBAR_CHAT_SLOTS);
 
     const pinnedIds = new Set(pinned.map((c) => c.id));
-    const unpinned = conversations.filter((c) => !pinnedIds.has(c.id));
+    const unpinned = stableConversations.filter((c) => !pinnedIds.has(c.id));
     const remainingSlots = Math.max(0, SIDEBAR_CHAT_SLOTS - pinned.length);
 
     return {
       pinnedChats: pinned,
       recentUnpinnedChats: unpinned.slice(0, remainingSlots),
     };
-  }, [conversations]);
+  }, [stableConversations]);
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -172,14 +175,13 @@ export function ChatSidebarSection() {
   };
 
   const handleDeleteConversation = async (id: string) => {
-    const shouldNavigate = currentConversationId === id;
+    // Navigate away before deleting to avoid "conversation not found" flash
+    if (currentConversationId === id) {
+      router.push("/chat");
+    }
 
     try {
       await deleteConversationMutation.mutateAsync(id);
-      // Navigate only after successful deletion
-      if (shouldNavigate) {
-        router.push("/chat");
-      }
     } catch {
       // Error is handled by the mutation's onError callback
     }
@@ -425,7 +427,16 @@ export function ChatSidebarSection() {
         open={deleteConfirmId !== null}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            const target = e.currentTarget as HTMLElement | null;
+            const action = target?.querySelector<HTMLButtonElement>(
+              "[data-slot='alert-dialog-action']",
+            );
+            action?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
             <AlertDialogDescription>

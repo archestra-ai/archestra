@@ -19,16 +19,8 @@ test(
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.getByRole("button", { name: "Create" }).click();
 
-    // After agent creation, wait for the connect dialog to appear
-    await expect(
-      page.getByText(new RegExp(`Connect to.*${AGENT_NAME}`, "i")),
-    ).toBeVisible({ timeout: 15_000 });
-
-    // Close the connection dialog by clicking the "Done" button
-    await page.getByRole("button", { name: "Done" }).click();
-
-    // Ensure dialog is closed
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    // Wait for the create dialog to close
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
     await page.waitForLoadState("domcontentloaded");
 
     // Poll for the agent to appear in the table

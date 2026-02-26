@@ -5,15 +5,12 @@ import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import { AgentModel, UserModel } from "@/models";
+import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
 import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
-import {
-  RouteCategory,
-  startActiveChatSpan,
-} from "@/routes/proxy/utils/tracing";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**

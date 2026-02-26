@@ -327,4 +327,168 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Only Chat")).toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
+
+  describe("stable order (prevents sidebar jumping)", () => {
+    it("preserves chat order when updatedAt changes cause backend reordering", () => {
+      mockConversations = [
+        makeConv("c1", "Chat One", { updatedAt: "2026-01-05T00:00:00Z" }),
+        makeConv("c2", "Chat Two", { updatedAt: "2026-01-04T00:00:00Z" }),
+        makeConv("c3", "Chat Three", { updatedAt: "2026-01-03T00:00:00Z" }),
+      ];
+
+      const { rerender } = render(<ChatSidebarSection />);
+
+      // Initial order
+      const getOrder = () =>
+        screen.getAllByRole("button").map((btn) => btn.textContent?.trim());
+      const initialOrder = getOrder();
+
+      // Simulate updatedAt bump moving "Chat Three" to front
+      mockConversations = [
+        makeConv("c3", "Chat Three", { updatedAt: "2026-01-06T00:00:00Z" }),
+        makeConv("c1", "Chat One", { updatedAt: "2026-01-05T00:00:00Z" }),
+        makeConv("c2", "Chat Two", { updatedAt: "2026-01-04T00:00:00Z" }),
+      ];
+
+      rerender(<ChatSidebarSection />);
+
+      // Order should remain the same as initial render
+      expect(getOrder()).toEqual(initialOrder);
+    });
+
+    it("prepends newly created conversations at the top", () => {
+      mockConversations = [
+        makeConv("c1", "Chat One", { updatedAt: "2026-01-05T00:00:00Z" }),
+        makeConv("c2", "Chat Two", { updatedAt: "2026-01-04T00:00:00Z" }),
+        makeConv("c3", "Chat Three", { updatedAt: "2026-01-03T00:00:00Z" }),
+        makeConv("c4", "Chat Four", { updatedAt: "2026-01-02T00:00:00Z" }),
+      ];
+
+      const { rerender } = render(<ChatSidebarSection />);
+
+      // Initial: shows c1, c2, c3 (3 slots)
+      expect(screen.getByText("Chat One")).toBeInTheDocument();
+      expect(screen.getByText("Chat Two")).toBeInTheDocument();
+      expect(screen.getByText("Chat Three")).toBeInTheDocument();
+
+      // New conversation created (appears first from backend)
+      mockConversations = [
+        makeConv("c-new", "New Chat", { updatedAt: "2026-01-10T00:00:00Z" }),
+        makeConv("c1", "Chat One", { updatedAt: "2026-01-05T00:00:00Z" }),
+        makeConv("c2", "Chat Two", { updatedAt: "2026-01-04T00:00:00Z" }),
+        makeConv("c3", "Chat Three", { updatedAt: "2026-01-03T00:00:00Z" }),
+        makeConv("c4", "Chat Four", { updatedAt: "2026-01-02T00:00:00Z" }),
+      ];
+
+      rerender(<ChatSidebarSection />);
+
+      // New chat should be at the top
+      expect(screen.getByText("New Chat")).toBeInTheDocument();
+    });
+
+    it("removes deleted conversations from the stable order", () => {
+      mockConversations = [
+        makeConv("c1", "Chat One", { updatedAt: "2026-01-05T00:00:00Z" }),
+        makeConv("c2", "Chat Two", { updatedAt: "2026-01-04T00:00:00Z" }),
+        makeConv("c3", "Chat Three", { updatedAt: "2026-01-03T00:00:00Z" }),
+      ];
+
+      const { rerender } = render(<ChatSidebarSection />);
+
+      expect(screen.getByText("Chat Two")).toBeInTheDocument();
+
+      // "Chat Two" deleted
+      mockConversations = [
+        makeConv("c1", "Chat One", { updatedAt: "2026-01-05T00:00:00Z" }),
+        makeConv("c3", "Chat Three", { updatedAt: "2026-01-03T00:00:00Z" }),
+      ];
+
+      rerender(<ChatSidebarSection />);
+
+      expect(screen.queryByText("Chat Two")).not.toBeInTheDocument();
+      expect(screen.getByText("Chat One")).toBeInTheDocument();
+      expect(screen.getByText("Chat Three")).toBeInTheDocument();
+    });
+
+    it("preserves pinned chat order when updatedAt changes cause backend reordering", () => {
+      // All 3 slots taken by pinned chats
+      mockConversations = [
+        makeConv("p1", "Pinned Alpha", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        }),
+        makeConv("p2", "Pinned Beta", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-04T00:00:00Z",
+        }),
+        makeConv("p3", "Pinned Gamma", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-03T00:00:00Z",
+        }),
+        makeConv("c4", "Unpinned One", { updatedAt: "2026-01-02T00:00:00Z" }),
+      ];
+
+      const { rerender } = render(<ChatSidebarSection />);
+
+      const getOrder = () =>
+        screen.getAllByRole("button").map((btn) => btn.textContent?.trim());
+      const initialOrder = getOrder();
+
+      // Simulate updatedAt bump on "Pinned Gamma" — backend returns it first now
+      mockConversations = [
+        makeConv("p3", "Pinned Gamma", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-10T00:00:00Z",
+        }),
+        makeConv("p1", "Pinned Alpha", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        }),
+        makeConv("p2", "Pinned Beta", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-04T00:00:00Z",
+        }),
+        makeConv("c4", "Unpinned One", { updatedAt: "2026-01-02T00:00:00Z" }),
+      ];
+
+      rerender(<ChatSidebarSection />);
+
+      // Pinned order should remain frozen
+      expect(getOrder()).toEqual(initialOrder);
+    });
+
+    it("preserves mixed pinned/unpinned order when updatedAt changes", () => {
+      mockConversations = [
+        makeConv("p1", "Pinned Chat", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        }),
+        makeConv("c1", "Recent One", { updatedAt: "2026-01-04T00:00:00Z" }),
+        makeConv("c2", "Recent Two", { updatedAt: "2026-01-03T00:00:00Z" }),
+        makeConv("c3", "Recent Three", { updatedAt: "2026-01-02T00:00:00Z" }),
+      ];
+
+      const { rerender } = render(<ChatSidebarSection />);
+
+      const getOrder = () =>
+        screen.getAllByRole("button").map((btn) => btn.textContent?.trim());
+      const initialOrder = getOrder();
+
+      // "Recent Two" gets updatedAt bumped, backend moves it to front
+      mockConversations = [
+        makeConv("c2", "Recent Two", { updatedAt: "2026-01-10T00:00:00Z" }),
+        makeConv("p1", "Pinned Chat", {
+          pinnedAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        }),
+        makeConv("c1", "Recent One", { updatedAt: "2026-01-04T00:00:00Z" }),
+        makeConv("c3", "Recent Three", { updatedAt: "2026-01-02T00:00:00Z" }),
+      ];
+
+      rerender(<ChatSidebarSection />);
+
+      // Order should remain frozen for both pinned and unpinned
+      expect(getOrder()).toEqual(initialOrder);
+    });
+  });
 });

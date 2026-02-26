@@ -60,6 +60,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -84,10 +85,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
+import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   fetchConversationEnabledTools,
   useConversation,
@@ -410,6 +413,15 @@ export default function ChatPage() {
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+
+  // Track title generation for typing animation in the header
+  const conversationForTitleTracking = useMemo(
+    () =>
+      conversation ? [{ id: conversation.id, title: conversation.title }] : [],
+    [conversation],
+  );
+  const { recentlyGeneratedTitles: headerAnimatingTitles } =
+    useRecentlyGeneratedTitles(conversationForTitleTracking);
 
   // Initialize artifact panel state when conversation loads or changes
   useEffect(() => {
@@ -1237,9 +1249,21 @@ export default function ChatPage() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
-                          {getConversationDisplayTitle(
-                            conversation.title,
-                            conversation.messages,
+                          {headerAnimatingTitles.has(conversation.id) ? (
+                            <TypingText
+                              text={getConversationDisplayTitle(
+                                conversation.title,
+                                conversation.messages,
+                              )}
+                              typingSpeed={35}
+                              showCursor
+                              cursorClassName="bg-muted-foreground"
+                            />
+                          ) : (
+                            getConversationDisplayTitle(
+                              conversation.title,
+                              conversation.messages,
+                            )
                           )}
                         </span>
                       </TooltipTrigger>
@@ -1732,29 +1756,35 @@ function NoApiKeySetup() {
               Add an LLM provider API key to start chatting
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <ChatApiKeyForm
-              mode="full"
-              showConsoleLink
-              form={form}
-              isPending={createMutation.isPending}
-              geminiVertexAiEnabled={geminiVertexAiEnabled}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!isValid || createMutation.isPending}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Create
-            </Button>
-          </DialogFooter>
+          <DialogForm onSubmit={handleCreate}>
+            <div className="py-2">
+              <ChatApiKeyForm
+                mode="full"
+                showConsoleLink
+                form={form}
+                isPending={createMutation.isPending}
+                geminiVertexAiEnabled={geminiVertexAiEnabled}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!isValid || createMutation.isPending}
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Test & Create
+              </Button>
+            </DialogFooter>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </div>

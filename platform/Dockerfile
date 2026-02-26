@@ -12,9 +12,14 @@ RUN apk add --no-cache git
 RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
+# Patch CVE-2026-24051: docker/cli v29.1.3 vendors go.opentelemetry.io/otel/sdk v1.38.0
+# which has a PATH hijacking vulnerability (fixed in v1.40.0). No upstream release has
+# bumped this yet, so we patch the vendored dependency at build time.
 RUN git clone --depth 1 --branch v29.1.3 https://github.com/docker/cli.git /docker-cli && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
+    go get go.opentelemetry.io/otel/sdk@v1.40.0 && \
+    go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags '-X github.com/docker/cli/cli/version.Version=29.1.3' \
     -o /docker-binary ./cmd/docker

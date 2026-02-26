@@ -81864,7 +81864,8 @@
                             "type": "string"
                           },
                           "access_token_env_var": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                           },
                           "requires_proxy": {
                             "type": "boolean"
@@ -82502,7 +82503,8 @@
                         "type": "string"
                       },
                       "access_token_env_var": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                       },
                       "requires_proxy": {
                         "type": "boolean"
@@ -82906,7 +82908,8 @@
                           "type": "string"
                         },
                         "access_token_env_var": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
                         "requires_proxy": {
                           "type": "boolean"
@@ -83561,7 +83564,8 @@
                           "type": "string"
                         },
                         "access_token_env_var": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
                         "requires_proxy": {
                           "type": "boolean"
@@ -84193,7 +84197,8 @@
                         "type": "string"
                       },
                       "access_token_env_var": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                       },
                       "requires_proxy": {
                         "type": "boolean"
@@ -84604,7 +84609,8 @@
                           "type": "string"
                         },
                         "access_token_env_var": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
                         "requires_proxy": {
                           "type": "boolean"
@@ -89209,7 +89215,8 @@
                                     "type": "string"
                                   },
                                   "access_token_env_var": {
-                                    "type": "string"
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                   },
                                   "requires_proxy": {
                                     "type": "boolean"
@@ -89786,7 +89793,8 @@
                                 "type": "string"
                               },
                               "access_token_env_var": {
-                                "type": "string"
+                                "type": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                               },
                               "requires_proxy": {
                                 "type": "boolean"
@@ -90087,7 +90095,8 @@
                                   "type": "string"
                                 },
                                 "access_token_env_var": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                 },
                                 "requires_proxy": {
                                   "type": "boolean"
@@ -90690,7 +90699,8 @@
                                   "type": "string"
                                 },
                                 "access_token_env_var": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                 },
                                 "requires_proxy": {
                                   "type": "boolean"
@@ -91270,7 +91280,8 @@
                                 "type": "string"
                               },
                               "access_token_env_var": {
-                                "type": "string"
+                                "type": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                               },
                               "requires_proxy": {
                                 "type": "boolean"
@@ -91621,7 +91632,8 @@
                                   "type": "string"
                                 },
                                 "access_token_env_var": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                 },
                                 "requires_proxy": {
                                   "type": "boolean"
@@ -92488,7 +92500,8 @@
                                   "type": "string"
                                 },
                                 "access_token_env_var": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                 },
                                 "requires_proxy": {
                                   "type": "boolean"
@@ -93105,7 +93118,8 @@
                                   "type": "string"
                                 },
                                 "access_token_env_var": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                 },
                                 "requires_proxy": {
                                   "type": "boolean"
@@ -93727,7 +93741,8 @@
                                   "type": "string"
                                 },
                                 "access_token_env_var": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                                 },
                                 "requires_proxy": {
                                   "type": "boolean"

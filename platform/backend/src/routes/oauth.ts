@@ -666,6 +666,14 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Ensure we have a usable client ID (either static or from dynamic registration)
+      if (!clientId) {
+        throw new ApiError(
+          400,
+          "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+        );
+      }
+
       // Generate PKCE parameters
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = generateCodeChallenge(codeVerifier);

@@ -391,7 +391,25 @@ export function InternalMCPCatalog({
         installResult.environmentValues &&
         Object.keys(installResult.environmentValues).length > 0
       ) {
-        setOAuthEnvironmentValues(installResult.environmentValues);
+        // Security: filter out secret-type env vars from sessionStorage.
+        // In BYOS mode values are vault references (safe). In non-BYOS mode
+        // actual secret values are excluded — they are handled server-side
+        // via secretId or re-prompted on install.
+        const secretKeys = new Set(
+          (localServerCatalogItem.localConfig?.environment ?? [])
+            .filter((e) => e.type === "secret")
+            .map((e) => e.key),
+        );
+        const safeValues = installResult.isByosVault
+          ? installResult.environmentValues
+          : Object.fromEntries(
+              Object.entries(installResult.environmentValues).filter(
+                ([key]) => !secretKeys.has(key),
+              ),
+            );
+        if (Object.keys(safeValues).length > 0) {
+          setOAuthEnvironmentValues(safeValues);
+        }
       }
       closeDialog("local-install");
       // Now initiate OAuth flow

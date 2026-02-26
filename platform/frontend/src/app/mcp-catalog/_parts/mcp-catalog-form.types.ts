@@ -14,7 +14,7 @@ export const oauthConfigSchema = z.object({
     .string()
     .url({ error: "Must be a valid URL" })
     .refine(
-      (val) => !val || val.startsWith("http://") || val.startsWith("https://"),
+      (val) => val.startsWith("http://") || val.startsWith("https://"),
       { message: "Must be an HTTP or HTTPS URL" },
     )
     .optional()

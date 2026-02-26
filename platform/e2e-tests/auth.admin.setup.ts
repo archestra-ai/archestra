@@ -5,7 +5,7 @@ import {
   adminAuthFile,
   UI_BASE_URL,
 } from "./consts";
-import { loginViaApi } from "./utils";
+import { expectAuthenticated, loginViaApi } from "./utils";
 
 // Setup admin authentication - must run first before other users
 setup("authenticate as admin", async ({ page }) => {
@@ -26,9 +26,7 @@ setup("authenticate as admin", async ({ page }) => {
   await page.reload({ waitUntil: "domcontentloaded" });
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
-    timeout: 30000,
-  });
+  await expectAuthenticated(page);
 
   // Save admin auth state
   await page.context().storageState({ path: adminAuthFile });

@@ -4,6 +4,12 @@
  * Centralizes all sessionStorage keys used during the OAuth flow so they
  * aren't duplicated as string literals across InternalMCPCatalog,
  * manage-users-dialog, and the oauth-callback page.
+ *
+ * Security note: Some values stored here (e.g. environment variables) may
+ * contain sensitive data. sessionStorage is scoped to the browser tab and
+ * cleared on tab close, and the OAuth redirect flow requires state to survive
+ * a full-page navigation. All stored values are cleaned up promptly via
+ * clearInstallContext() after the callback completes.
  */
 
 // ─── Key constants ───────────────────────────────────────────────────

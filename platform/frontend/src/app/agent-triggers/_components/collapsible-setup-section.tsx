@@ -7,7 +7,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,18 +29,38 @@ export function CollapsibleSetupSection({
   docsUrl: string;
   children: React.ReactNode;
 }) {
-  // Start collapsed while loading. Once data arrives, expand only if incomplete.
-  // After the initial decision, the user controls the state via the toggle.
-  const initializedRef = useRef(false);
   const [open, setOpen] = useState(false);
 
-  if (!isLoading && !initializedRef.current) {
-    initializedRef.current = true;
-    if (!allStepsCompleted) {
-      setOpen(true);
-    }
+  // While loading or setup incomplete: always show content, no collapse toggle
+  if (isLoading || !allStepsCompleted) {
+    return (
+      <section className="flex flex-col gap-4">
+        <div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Setup</h2>
+            <Link
+              href={docsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              Learn more
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+          {!isLoading && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Connect {providerLabel} so agents can receive and respond to
+              messages.
+            </p>
+          )}
+        </div>
+        {!isLoading && children}
+      </section>
+    );
   }
 
+  // Setup completed: collapsible, starts collapsed
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <section className="flex flex-col gap-4">
@@ -48,45 +68,51 @@ export function CollapsibleSetupSection({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold">Setup</h2>
-              {allStepsCompleted && (
-                <Badge
-                  variant="secondary"
-                  className="bg-green-500/10 text-green-600 border-green-500/70"
-                >
-                  <CheckCircle2 className="size-3" />
-                  Completed
-                </Badge>
-              )}
+              <Badge
+                variant="secondary"
+                className="bg-green-500/10 text-green-600 border-green-500/70"
+              >
+                <CheckCircle2 className="size-3" />
+                Completed
+              </Badge>
             </div>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-xs">
-                {open ? (
-                  <>
-                    Hide details
-                    <ChevronUp className="h-3 w-3 ml-1" />
-                  </>
-                ) : (
-                  <>
-                    Show details
-                    <ChevronDown className="h-3 w-3 ml-1" />
-                  </>
-                )}
-              </Button>
-            </CollapsibleTrigger>
+            <div className="flex items-center gap-1">
+              <Link
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                Learn more
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs hover:bg-transparent"
+                >
+                  {open ? (
+                    <>
+                      Hide details
+                      <ChevronUp className="h-3 w-3 ml-1" />
+                    </>
+                  ) : (
+                    <>
+                      Show details
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </>
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Connect {providerLabel} so agents can receive and respond to
-            messages.{" "}
-            <Link
-              href={docsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              Learn more
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          </p>
+          {open && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Connect {providerLabel} so agents can receive and respond to
+              messages.
+            </p>
+          )}
         </div>
         <CollapsibleContent className="flex flex-col gap-4">
           {children}

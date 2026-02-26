@@ -1,5 +1,7 @@
 import { RouteId } from "@shared";
+import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
+import { MicrosoftAppCredentials } from "botframework-connector";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -8,7 +10,7 @@ import {
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "@/agents/chatops/constants";
-import { agentFooter, EventDedupMap } from "@/agents/chatops/utils";
+import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -974,6 +976,113 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Create a pending DM binding (before actual DM interaction).
+   * Uses a placeholder channelId that gets fulfilled on first real DM.
+   */
+  fastify.post(
+    "/api/chatops/bindings/dm",
+    {
+      schema: {
+        operationId: RouteId.CreateChatOpsDmBinding,
+        description:
+          "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction",
+        tags: ["ChatOps"],
+        body: z.object({
+          provider: ChatOpsProviderTypeSchema,
+          agentId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(ChatOpsChannelBindingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { provider, agentId } = request.body;
+      const userEmail = request.user.email;
+
+      // Check if user already has a DM binding (real or pending) for this provider
+      const existingBindings =
+        await ChatOpsChannelBindingModel.findByOrganization(
+          request.organizationId,
+        );
+      const existingDm = existingBindings.find(
+        (b) =>
+          b.provider === provider && b.isDm && b.dmOwnerEmail === userEmail,
+      );
+
+      if (existingDm) {
+        // Update the existing binding's agent
+        const updated = await ChatOpsChannelBindingModel.update(existingDm.id, {
+          agentId,
+        });
+        if (!updated) {
+          throw new ApiError(500, "Failed to update DM binding");
+        }
+        return reply.send({
+          ...updated,
+          createdAt: updated.createdAt.toISOString(),
+          updatedAt: updated.updatedAt.toISOString(),
+        });
+      }
+
+      // Create a new pending DM binding with placeholder channelId
+      const pendingChannelId = `dm:pending:${userEmail}`;
+      const binding = await ChatOpsChannelBindingModel.create({
+        organizationId: request.organizationId,
+        provider,
+        channelId: pendingChannelId,
+        isDm: true,
+        dmOwnerEmail: userEmail,
+        channelName: `Direct Message - ${userEmail}`,
+        agentId,
+      });
+
+      return reply.send({
+        ...binding,
+        createdAt: binding.createdAt.toISOString(),
+        updatedAt: binding.updatedAt.toISOString(),
+      });
+    },
+  );
+
+  /**
+   * Bulk-update agent assignment for multiple channel bindings
+   */
+  fastify.patch(
+    "/api/chatops/bindings",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateChatOpsBindings,
+        description:
+          "Bulk-update agent assignment for multiple channel bindings",
+        tags: ["ChatOps"],
+        body: z.object({
+          ids: z.array(z.string().uuid()).min(1).max(500),
+          agentId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(
+          z.array(ChatOpsChannelBindingResponseSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { ids, agentId } = request.body;
+
+      const updated = await ChatOpsChannelBindingModel.bulkUpdateAgent(
+        ids,
+        request.organizationId,
+        agentId,
+      );
+
+      return reply.send(
+        updated.map((b) => ({
+          ...b,
+          createdAt: b.createdAt.toISOString(),
+          updatedAt: b.updatedAt.toISOString(),
+        })),
+      );
+    },
+  );
+
+  /**
    * Update MS Teams chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
    */
@@ -1007,6 +1116,23 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         graphClientId: appId ?? existing?.graphClientId ?? "",
         graphClientSecret: appSecret ?? existing?.graphClientSecret ?? "",
       };
+
+      // Validate credentials by requesting an OAuth token from Azure AD
+      if (merged.enabled && merged.appId && merged.appSecret) {
+        try {
+          const creds = new MicrosoftAppCredentials(
+            merged.appId,
+            merged.appSecret,
+            merged.tenantId || undefined,
+          );
+          await creds.getToken();
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid MS Teams credentials — could not authenticate with Azure AD. Please check your App ID, App Secret, and Tenant ID.",
+          );
+        }
+      }
 
       await ChatOpsConfigModel.saveMsTeamsConfig(merged);
       await chatOpsManager.reinitialize();
@@ -1059,6 +1185,36 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           SLACK_DEFAULT_CONNECTION_MODE,
         appLevelToken: appLevelToken ?? existing?.appLevelToken ?? "",
       };
+
+      // Validate bot token by calling auth.test()
+      if (merged.enabled && merged.botToken) {
+        try {
+          const client = new WebClient(merged.botToken);
+          await client.auth.test();
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Slack credentials — could not authenticate with Slack. Please check your Bot Token.",
+          );
+        }
+      }
+
+      // Validate app-level token for socket mode by calling apps.connections.open()
+      if (
+        merged.enabled &&
+        merged.connectionMode === "socket" &&
+        merged.appLevelToken
+      ) {
+        try {
+          const client = new WebClient(merged.appLevelToken);
+          await client.apps.connections.open();
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Slack App-Level Token — could not open a Socket Mode connection. Please check your App-Level Token.",
+          );
+        }
+      }
 
       await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();
@@ -1356,7 +1512,7 @@ async function handleAgentSelection(
       if (result.success && result.agentResponse) {
         // Send agent response via turn context (ensures correct thread)
         await context.sendActivity(
-          `${result.agentResponse}\n\n---\n_${agentFooter(agent.name)}_`,
+          `${result.agentResponse}\n\n---\n\n🤖 ${agent.name}`,
         );
       } else if (!result.success && result.error) {
         // Send error message via turn context (ensures correct thread)

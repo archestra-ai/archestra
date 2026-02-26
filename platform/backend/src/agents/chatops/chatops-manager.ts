@@ -317,16 +317,36 @@ export class ChatOpsManager {
     }
 
     // Check for existing binding
-    const binding = await ChatOpsChannelBindingModel.findByChannel({
+    let binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: provider.providerId,
       channelId: message.channelId,
       workspaceId: message.workspaceId,
     });
 
+    // If no binding found and this is a DM, check for a pending DM binding
+    // (pre-assigned from the UI before the first real DM interaction)
+    const isDm = message.metadata?.channelType === "im";
+    if (!binding && isDm && message.senderEmail) {
+      const pending = await ChatOpsChannelBindingModel.findPendingDmBinding(
+        provider.providerId,
+        message.senderEmail,
+      );
+      if (pending) {
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding(
+          pending.id,
+          message.channelId,
+          message.workspaceId,
+        );
+        logger.info(
+          { bindingId: pending.id, channelId: message.channelId },
+          "[ChatOps] Fulfilled pending DM binding with real channel ID",
+        );
+      }
+    }
+
     if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
-        const isDm = message.metadata?.channelType === "im";
         const channelName = isDm
           ? `Direct Message - ${message.senderEmail}`
           : await provider.getChannelName(message.channelId);
@@ -1047,7 +1067,7 @@ function stripThinkingBlocks(text: string): string {
  */
 function stripBotFooter(text: string): string {
   return text
-    .replace(/\n\n---\n_🤖 .+?_$/i, "")
+    .replace(/\n\n---\n+🤖 .+$/i, "")
     .replace(/\n🤖 .+$/, "")
     .trim();
 }

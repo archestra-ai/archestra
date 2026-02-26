@@ -45,6 +45,53 @@ export function useUpdateChatOpsBinding() {
   });
 }
 
+export function useBulkUpdateChatOpsBindings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { ids: string[]; agentId: string | null }) => {
+      const { data, error } = await archestraApiSdk.bulkUpdateChatOpsBindings({
+        body: { ids: params.ids, agentId: params.agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success(
+        `${data.length} channel${data.length === 1 ? "" : "s"} updated`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
+export function useCreateChatOpsDmBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      provider: "ms-teams" | "slack";
+      agentId: string | null;
+    }) => {
+      const { data, error } = await archestraApiSdk.createChatOpsDmBinding({
+        body: params,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Direct message channel updated");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useDeleteChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({

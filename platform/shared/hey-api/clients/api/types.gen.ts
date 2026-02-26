@@ -18162,6 +18162,97 @@ export type ListChatOpsBindingsResponses = {
 
 export type ListChatOpsBindingsResponse = ListChatOpsBindingsResponses[keyof ListChatOpsBindingsResponses];
 
+export type BulkUpdateChatOpsBindingsData = {
+    body: {
+        ids: Array<string>;
+        agentId: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/bindings';
+};
+
+export type BulkUpdateChatOpsBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpdateChatOpsBindingsError = BulkUpdateChatOpsBindingsErrors[keyof BulkUpdateChatOpsBindingsErrors];
+
+export type BulkUpdateChatOpsBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        provider: 'ms-teams' | 'slack';
+        channelId: string;
+        workspaceId: string | null;
+        channelName: string | null;
+        workspaceName: string | null;
+        isDm: boolean;
+        dmOwnerEmail: string | null;
+        agentId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type BulkUpdateChatOpsBindingsResponse = BulkUpdateChatOpsBindingsResponses[keyof BulkUpdateChatOpsBindingsResponses];
+
 export type DeleteChatOpsBindingData = {
     body?: never;
     path: {
@@ -18332,6 +18423,97 @@ export type UpdateChatOpsBindingResponses = {
 };
 
 export type UpdateChatOpsBindingResponse = UpdateChatOpsBindingResponses[keyof UpdateChatOpsBindingResponses];
+
+export type CreateChatOpsDmBindingData = {
+    body: {
+        provider: 'ms-teams' | 'slack';
+        agentId: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/bindings/dm';
+};
+
+export type CreateChatOpsDmBindingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateChatOpsDmBindingError = CreateChatOpsDmBindingErrors[keyof CreateChatOpsDmBindingErrors];
+
+export type CreateChatOpsDmBindingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        provider: 'ms-teams' | 'slack';
+        channelId: string;
+        workspaceId: string | null;
+        channelName: string | null;
+        workspaceName: string | null;
+        isDm: boolean;
+        dmOwnerEmail: string | null;
+        agentId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateChatOpsDmBindingResponse = CreateChatOpsDmBindingResponses[keyof CreateChatOpsDmBindingResponses];
 
 export type UpdateChatOpsConfigInQuickstartData = {
     body?: {

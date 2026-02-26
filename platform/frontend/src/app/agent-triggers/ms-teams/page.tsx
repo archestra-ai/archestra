@@ -20,11 +20,12 @@ import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { ChannelTilesSection } from "../_components/channel-tiles-section";
+import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
+import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 const msTeamsProviderConfig: ProviderConfig = {
   provider: "ms-teams",
@@ -65,12 +66,10 @@ export default function MsTeamsPage() {
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
-  const allStepsCompleted = isLocalDev
-    ? !!ngrokDomain && !!msTeams?.configured
-    : !!msTeams?.configured;
+  const { msTeams: allStepsCompleted } = useTriggerStatuses();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
@@ -149,9 +148,12 @@ export default function MsTeamsPage() {
         </SetupStep>
       </CollapsibleSetupSection>
 
-      <Divider />
-
-      <ChannelTilesSection providerConfig={msTeamsProviderConfig} />
+      {allStepsCompleted && (
+        <>
+          <Divider />
+          <ChannelsSection providerConfig={msTeamsProviderConfig} />
+        </>
+      )}
 
       <MsTeamsSetupDialog
         open={msTeamsSetupOpen}

@@ -101,7 +101,7 @@ test.describe("Chat - Auth Required Tool", () => {
       request,
       method: "post",
       urlSuffix: "/api/agents",
-      data: { name: profileName, teams: [], agentType: "agent" },
+      data: { name: profileName, teams: [], agentType: "agent", scope: "team" },
     });
     const profile = await profileResponse.json();
     profileId = profile.id;

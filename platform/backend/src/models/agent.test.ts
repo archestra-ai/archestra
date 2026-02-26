@@ -9,8 +9,8 @@ import TeamModel from "./team";
 
 describe("AgentModel", () => {
   test("can create an agent", async () => {
-    await AgentModel.create({ name: "Test Agent", teams: [] });
-    await AgentModel.create({ name: "Test Agent 2", teams: [] });
+    await AgentModel.create({ name: "Test Agent", teams: [], scope: "org" });
+    await AgentModel.create({ name: "Test Agent 2", teams: [], scope: "org" });
 
     expect(await AgentModel.findAll()).toHaveLength(2);
   });
@@ -20,6 +20,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
       });
 
       const exists = await AgentModel.exists(agent.id);
@@ -38,10 +39,12 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Test Agent 1",
         teams: [],
+        scope: "org",
       });
       const agent2 = await AgentModel.create({
         name: "Test Agent 2",
         teams: [],
+        scope: "org",
       });
       const nonExistentId = "00000000-0000-0000-0000-000000000000";
 
@@ -82,6 +85,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
       });
 
       const existingIds = await AgentModel.existsBatch([
@@ -108,6 +112,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       expect(agent.teams).toHaveLength(1);
@@ -117,9 +122,9 @@ describe("AgentModel", () => {
     test("admin can see all agents", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
 
-      await AgentModel.create({ name: "Agent 1", teams: [] });
-      await AgentModel.create({ name: "Agent 2", teams: [] });
-      await AgentModel.create({ name: "Agent 3", teams: [] });
+      await AgentModel.create({ name: "Agent 1", teams: [], scope: "org" });
+      await AgentModel.create({ name: "Agent 2", teams: [], scope: "org" });
+      await AgentModel.create({ name: "Agent 3", teams: [], scope: "org" });
 
       const agents = await AgentModel.findAll(admin.id, true);
       expect(agents).toHaveLength(3);
@@ -198,6 +203,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
       });
 
       const foundAgent = await AgentModel.findById(agent.id, admin.id, true);
@@ -267,6 +273,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team1.id],
+        scope: "team",
       });
 
       expect(agent.teams).toHaveLength(1);
@@ -298,6 +305,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       const initialTeams = agent.teams;
@@ -324,6 +332,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       expect(agent.teams).toBeDefined();
@@ -341,6 +350,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "No Team Agent",
         teams: [],
+        scope: "org",
       });
 
       expect(agent.teams).toHaveLength(0);
@@ -367,6 +377,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Admin Created Agent",
         teams: [team.id],
+        scope: "team",
       });
 
       expect(agent.teams).toHaveLength(1);
@@ -499,6 +510,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Valid Agent",
         teams: [team1.id],
+        scope: "team",
       });
       expect(agent.teams).toHaveLength(1);
       expect(agent.teams[0].id).toBe(team1.id);
@@ -511,6 +523,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
         labels: [
           { key: "region", value: "us-west-2" },
           { key: "environment", value: "production" },
@@ -533,6 +546,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
         labels: [
           { key: "zebra", value: "last" },
           { key: "alpha", value: "first" },
@@ -558,6 +572,7 @@ describe("AgentModel", () => {
       await AgentModel.create({
         name: "Agent 1",
         teams: [],
+        scope: "org",
         labels: [
           { key: "environment", value: "prod" },
           { key: "application", value: "web" },
@@ -567,6 +582,7 @@ describe("AgentModel", () => {
       await AgentModel.create({
         name: "Agent 2",
         teams: [],
+        scope: "org",
         labels: [
           { key: "zone", value: "us-east" },
           { key: "deployment", value: "blue" },
@@ -658,14 +674,17 @@ describe("AgentModel", () => {
       await AgentModel.create({
         name: "Agent 1",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent 2",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent 3",
         teams: [],
+        scope: "org",
       });
 
       // Query as admin (should see all agents)
@@ -692,22 +711,27 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Agent 1",
         teams: [],
+        scope: "org",
       });
       const agent2 = await AgentModel.create({
         name: "Agent 2",
         teams: [],
+        scope: "org",
       });
       const agent3 = await AgentModel.create({
         name: "Agent 3",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent 4",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent 5",
         teams: [],
+        scope: "org",
       });
 
       // Give agent1 and agent2 many tools (50+ each) via junction table
@@ -774,14 +798,17 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Agent A",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent B",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent C",
         teams: [],
+        scope: "org",
       });
 
       // Give agent1 many tools via junction table
@@ -828,18 +855,22 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Zebra",
         teams: [team1.id],
+        scope: "team",
       });
       const agent2 = await AgentModel.create({
         name: "Alpha",
         teams: [team2.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Beta",
         teams: [team1.id],
+        scope: "team",
       });
       await AgentModel.create({
         name: "Gamma",
         teams: [],
+        scope: "org",
       });
 
       // Give different numbers of tools via junction table
@@ -918,6 +949,7 @@ describe("AgentModel", () => {
         const agent = await AgentModel.create({
           name: `Agent ${i}`,
           teams: [],
+          scope: "org",
         });
         agentIds.push(agent.id);
 
@@ -976,6 +1008,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
       });
 
       // Add some regular tools
@@ -1033,11 +1066,13 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Agent with 5 regular tools",
         teams: [],
+        scope: "org",
       });
 
       const agent2 = await AgentModel.create({
         name: "Agent with 2 regular tools",
         teams: [],
+        scope: "org",
       });
 
       // Give agent1 5 regular tools + 10 Archestra tools
@@ -1125,6 +1160,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Archestra Only Agent",
         teams: [],
+        scope: "org",
       });
 
       // Add only Archestra MCP tools
@@ -1167,6 +1203,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Pattern Test Agent",
         teams: [],
+        scope: "org",
       });
 
       // Create tools with double underscore
@@ -1234,11 +1271,13 @@ describe("AgentModel", () => {
       const agent1 = await AgentModel.create({
         name: "Agent with mixed tools",
         teams: [],
+        scope: "org",
       });
 
       const agent2 = await AgentModel.create({
         name: "Agent with single underscore",
         teams: [],
+        scope: "org",
       });
 
       // Give agent1: 1 regular + 5 archestra__ tools = 6 total
@@ -1314,6 +1353,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
       });
 
       // Add tools via the junction table (agent_tools)
@@ -1359,6 +1399,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
+        scope: "org",
       });
 
       // Add regular tools
@@ -1411,6 +1452,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "No Tools Agent",
         teams: [],
+        scope: "org",
       });
 
       const foundAgent = await AgentModel.findById(agent.id);
@@ -1427,6 +1469,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Archestra Only Agent",
         teams: [],
+        scope: "org",
       });
 
       // Add only Archestra tools
@@ -1459,6 +1502,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Agent with Default Tools",
         teams: [],
+        scope: "org",
       });
 
       // Verify the agent does not have auto-assigned Archestra tools
@@ -1475,6 +1519,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         description: "An agent that helps with code review",
         teams: [],
+        scope: "org",
       });
 
       expect(agent.description).toBe("An agent that helps with code review");
@@ -1485,6 +1530,7 @@ describe("AgentModel", () => {
         name: "Basic Agent",
         agentType: "agent",
         teams: [],
+        scope: "org",
       });
 
       expect(agent.description).toBeNull();
@@ -1496,6 +1542,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         description: "Test description",
         teams: [],
+        scope: "org",
       });
 
       const found = await AgentModel.findById(agent.id);
@@ -1509,6 +1556,7 @@ describe("AgentModel", () => {
         agentType: "agent",
         description: "Original description",
         teams: [],
+        scope: "org",
       });
 
       const updated = await AgentModel.update(agent.id, {
@@ -1524,11 +1572,13 @@ describe("AgentModel", () => {
         agentType: "agent",
         description: "Desc A",
         teams: [],
+        scope: "org",
       });
       await AgentModel.create({
         name: "Agent B",
         agentType: "agent",
         teams: [],
+        scope: "org",
       });
 
       const agents = await AgentModel.findAll();
@@ -1545,6 +1595,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "No Playwright Agent",
         teams: [],
+        scope: "org",
       });
 
       const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
@@ -1559,6 +1610,7 @@ describe("AgentModel", () => {
       const agent = await AgentModel.create({
         name: "Playwright Agent",
         teams: [],
+        scope: "org",
       });
 
       const catalog = await makeInternalMcpCatalog({

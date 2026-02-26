@@ -28,7 +28,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useProfiles } from "@/lib/agent.query";
-import { useAllPermissions } from "@/lib/auth.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
@@ -36,6 +35,7 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useAllPermissions } from "@/lib/auth.query";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";

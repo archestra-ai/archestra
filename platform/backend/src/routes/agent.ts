@@ -385,7 +385,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Omit teams if scope is not 'team' — scope takes precedence
       const updateData = {
         ...body,
-        ...((body.scope ?? existingAgent.scope) !== "team" && body.teams !== undefined && { teams: [] }),
+        ...((body.scope ?? existingAgent.scope) !== "team" &&
+          body.teams !== undefined && { teams: [] }),
       };
 
       const agent = await AgentModel.update(id, updateData);

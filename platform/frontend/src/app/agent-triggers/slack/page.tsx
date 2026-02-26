@@ -21,7 +21,7 @@ import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { ChannelTilesSection } from "../_components/channel-tiles-section";
+import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { SetupStep } from "../_components/setup-step";
@@ -232,7 +232,7 @@ export default function SlackPage() {
       {allStepsCompleted && (
         <>
           <Divider />
-          <ChannelTilesSection providerConfig={slackProviderConfig} />
+          <ChannelsSection providerConfig={slackProviderConfig} />
         </>
       )}
 

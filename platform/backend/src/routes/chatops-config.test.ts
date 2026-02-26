@@ -18,6 +18,24 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
   },
 }));
 
+// Mock credential validation so tests don't hit real APIs
+vi.mock("botframework-connector", () => ({
+  MicrosoftAppCredentials: class {
+    getToken() {
+      return Promise.resolve("mock-token");
+    }
+  },
+}));
+
+vi.mock("@slack/web-api", () => ({
+  WebClient: class {
+    auth = { test: () => Promise.resolve({ ok: true }) };
+    apps = {
+      connections: { open: () => Promise.resolve({ ok: true }) },
+    };
+  },
+}));
+
 describe("PUT /api/chatops/config/ms-teams", () => {
   beforeEach(() => {
     vi.clearAllMocks();

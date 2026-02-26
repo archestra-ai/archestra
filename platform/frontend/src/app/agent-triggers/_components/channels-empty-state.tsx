@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/empty";
 import type { ChatOpsProvider } from "./types";
 
-export function ChannelTilesEmptyState({
+export function ChannelsEmptyState({
   onRefresh,
   isRefreshing,
   provider,

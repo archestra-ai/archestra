@@ -49,7 +49,7 @@ import {
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import { cn } from "@/lib/utils";
-import { ChannelTilesEmptyState } from "./channel-tiles-empty-state";
+import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";
 
 interface Agent {
@@ -90,7 +90,7 @@ function useCollapsed(key: string, defaultValue: boolean) {
   return [collapsed, setCollapsed] as const;
 }
 
-export function ChannelTilesSection({
+export function ChannelsSection({
   providerConfig,
 }: {
   providerConfig: ProviderConfig;
@@ -395,7 +395,7 @@ export function ChannelTilesSection({
           )}
         </>
       ) : (
-        <ChannelTilesEmptyState
+        <ChannelsEmptyState
           onRefresh={() => refreshMutation.mutate(providerConfig.provider)}
           isRefreshing={refreshMutation.isPending}
           provider={providerConfig.provider}

@@ -13,7 +13,7 @@ const isMainModule =
  */
 if (isMainModule) {
   await import("./sentry");
-  await import("./observability/tracing");
+  await import("./observability/tracing/sdk");
 }
 
 import fastifyCors from "@fastify/cors";
@@ -62,7 +62,10 @@ import {
   ApiError,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
+  Groq,
+  Minimax,
   Mistral,
   Ollama,
   OpenAi,
@@ -143,6 +146,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Perplexity.API.ChatCompletionResponseSchema, {
     id: "PerplexityChatCompletionResponse",
   });
+  z.globalRegistry.add(Groq.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
+  });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
   });
@@ -160,6 +169,18 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionRequestSchema, {
+    id: "DeepSeekChatCompletionRequest",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionResponseSchema, {
+    id: "DeepSeekChatCompletionResponse",
+  });
+  z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
+    id: "MinimaxChatCompletionRequest",
+  });
+  z.globalRegistry.add(Minimax.API.ChatCompletionResponseSchema, {
+    id: "MinimaxChatCompletionResponse",
   });
 }
 

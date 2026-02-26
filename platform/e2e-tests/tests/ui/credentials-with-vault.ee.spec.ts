@@ -137,12 +137,12 @@ test.describe("Chat API Keys with Readonly Vault", () => {
         await adminPage
           .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
           .click();
-        await adminPage.getByText(secretName).click();
+        await adminPage.getByRole("option", { name: secretName }).click();
         await adminPage.waitForLoadState("domcontentloaded");
         await adminPage
           .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
           .click();
-        await adminPage.getByText(secretKey).click();
+        await adminPage.getByRole("option", { name: secretKey }).click();
       } else {
         await adminPage.getByRole("combobox", { name: "Scope" }).click();
         await adminPage.getByRole("option", { name: "Team" }).click();
@@ -154,12 +154,12 @@ test.describe("Chat API Keys with Readonly Vault", () => {
         await adminPage
           .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
           .click();
-        await adminPage.getByText(secretName).click();
+        await adminPage.getByRole("option", { name: secretName }).click();
         await adminPage.waitForLoadState("domcontentloaded");
         await adminPage
           .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
           .click();
-        await adminPage.getByText(secretKey).click();
+        await adminPage.getByRole("option", { name: secretKey }).click();
       }
 
       // Click create button
@@ -225,12 +225,12 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage
       .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
       .click();
-    await adminPage.getByText(secretName).click();
+    await adminPage.getByRole("option", { name: secretName }).click();
     await adminPage.waitForLoadState("domcontentloaded");
     await adminPage
       .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
       .click();
-    await adminPage.getByText(secretKey).click();
+    await adminPage.getByRole("option", { name: secretKey }).click();
 
     // install server
     await clickButton({ page: adminPage, options: { name: "Install" } });

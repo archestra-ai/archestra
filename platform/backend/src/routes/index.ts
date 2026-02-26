@@ -2,7 +2,10 @@ import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import bedrockProxyRoutesV2 from "./proxy/routesv2/bedrock";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
 import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
+import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
+import groqProxyRoutesV2 from "./proxy/routesv2/groq";
+import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -47,12 +50,16 @@ export const cohereProxyRoutes = cohereProxyRoutesV2;
 export const geminiProxyRoutes = geminiProxyRoutesV2;
 export const mistralProxyRoutes = mistralProxyRoutesV2;
 export const perplexityProxyRoutes = perplexityProxyRoutesV2;
+export const groqProxyRoutes = groqProxyRoutesV2;
 export const openAiProxyRoutes = openAiProxyRoutesV2;
 export const vllmProxyRoutes = vllmProxyRoutesV2;
 export const ollamaProxyRoutes = ollamaProxyRoutesV2;
+export const deepseekProxyRoutes = deepseekProxyRoutesV2;
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
 // Bedrock proxy routes - V2 only (unified handler, AWS Converse API)
 export const bedrockProxyRoutes = bedrockProxyRoutesV2;
+// MiniMax proxy routes - V2 only (new provider, no legacy v1)
+export const minimaxProxyRoutes = minimaxProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

@@ -20,6 +20,12 @@ This guide covers how to add a new LLM provider to Archestra Platform. Each prov
 
 2. **[Chat](/docs/platform-chat)** - The built-in chat interface.
 
+### Getting Started: Let TypeScript Guide You
+
+The fastest way to find every file that needs updating is to add your provider's ID to the `SupportedProvidersSchema` enum in `shared/model-constants.ts` and then run `pnpm typecheck`. TypeScript will report compile errors everywhere a `Record<SupportedProvider, ...>` or exhaustive switch is missing your new provider — these are exactly the files you need to update.
+
+Use the detailed sections below for guidance on _how_ to implement each piece.
+
 ## LLM Proxy
 
 ### Provider Registration
@@ -113,6 +119,8 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 | File                    | Description                                                                                                                                                |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `backend/src/config.ts` | Add `llm.{provider}.baseUrl` and `llm.{provider}.enabled` (typically `Boolean(baseUrl)`) with environment variable (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL`) |
+
+> **Don't forget:** Document `ARCHESTRA_{PROVIDER}_BASE_URL` and `ARCHESTRA_CHAT_{PROVIDER}_API_KEY` in `docs/pages/platform-deployment.md` under the Environment Variables section.
 
 ### Tokenizer
 
@@ -283,11 +291,12 @@ Existing provider implementations for reference:
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):
 
+- Groq: `backend/src/routes/proxy/routesv2/groq.ts`, `backend/src/routes/proxy/adapterV2/groq.ts` (best starting point — cleanest example of OpenAI reuse)
 - vLLM: `backend/src/routes/proxy/routesv2/vllm.ts`, `backend/src/routes/proxy/adapterV2/vllm.ts`
 - Ollama: `backend/src/routes/proxy/routesv2/ollama.ts`, `backend/src/routes/proxy/adapterV2/ollama.ts`
 - ZhipuAI: `backend/src/routes/proxy/routesv2/zhipuai.ts`, `backend/src/routes/proxy/adapterV2/zhipuai.ts`
 
-> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI, Groq), use the vLLM/Ollama/ZhipuAI implementations as starting points - they reuse OpenAI's type definitions and adapters.
+> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate.
 
 ## Smoke Testing
 

@@ -37,6 +37,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -736,22 +737,24 @@ function DeleteGatewayDialog({
             be undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={deleteGateway.isPending}
-          >
-            {deleteGateway.isPending ? "Deleting..." : "Delete MCP Gateway"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleDelete}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteGateway.isPending}
+            >
+              {deleteGateway.isPending ? "Deleting..." : "Delete MCP Gateway"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

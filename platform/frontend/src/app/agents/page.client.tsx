@@ -33,6 +33,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -547,9 +548,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="agent"
-              onCreated={(agent) => {
+              onCreated={() => {
                 setIsCreateDialogOpen(false);
-                setConnectingAgent({ ...agent, agentType: "agent" });
               }}
               onViewVersionHistory={setVersionHistoryAgent}
             />
@@ -668,22 +668,24 @@ function DeleteAgentDialog({
             undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={deleteAgent.isPending}
-          >
-            {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
-          </Button>
-        </DialogFooter>
+        <DialogForm onSubmit={handleDelete}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteAgent.isPending}
+            >
+              {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

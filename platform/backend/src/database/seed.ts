@@ -377,10 +377,13 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     cohere: config.chat.cohere.apiKey,
     mistral: config.chat.mistral.apiKey,
     perplexity: config.chat.perplexity.apiKey,
+    groq: config.chat.groq.apiKey,
     ollama: config.chat.ollama.apiKey,
     vllm: config.chat.vllm.apiKey,
     zhipuai: config.chat.zhipuai.apiKey,
+    deepseek: config.chat.deepseek.apiKey,
     bedrock: config.chat.bedrock.apiKey,
+    minimax: config.chat.minimax.apiKey,
   };
 
   for (const [provider, apiKeyValue] of Object.entries(providerEnvVars)) {
@@ -466,10 +469,13 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     cohere: "Cohere",
     mistral: "Mistral",
     perplexity: "Perplexity AI",
+    groq: "Groq",
     ollama: "Ollama",
     vllm: "vLLM",
     zhipuai: "ZhipuAI",
+    deepseek: "DeepSeek",
     bedrock: "AWS Bedrock",
+    minimax: "MiniMax",
   };
   return displayNames[provider];
 }

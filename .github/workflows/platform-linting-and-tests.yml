@@ -38,7 +38,7 @@ on:
 jobs:
   platform-linting-and-tests:
     name: Platform Linting and Tests
-    runs-on: ubuntu-latest
+    runs-on: e2e-runner-16cpu
     permissions:
       contents: write # Required for release-please auto-commit of codegen changes
     defaults:

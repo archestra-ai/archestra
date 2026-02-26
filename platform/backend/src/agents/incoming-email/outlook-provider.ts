@@ -2,16 +2,42 @@ import crypto from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
+import type {
+  ChangeNotification,
+  ChangeNotificationCollection,
+  Message,
+} from "@microsoft/microsoft-graph-types";
 import logger from "@/logging";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import type {
   AgentIncomingEmailProvider,
+  EmailAttachment,
   EmailProviderConfig,
   EmailReplyOptions,
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
-import { DEFAULT_AGENT_EMAIL_NAME } from "./constants";
+import {
+  DEFAULT_AGENT_EMAIL_NAME,
+  MAX_ATTACHMENT_SIZE,
+  MAX_ATTACHMENTS_PER_EMAIL,
+  MAX_TOTAL_ATTACHMENTS_SIZE,
+} from "./constants";
+
+/**
+ * Determine whether attachments should be fetched for a message.
+ * The Graph API's `hasAttachments` flag can be `false` for messages that only
+ * contain inline images (pasted/dragged into the body). We detect those by
+ * looking for `cid:` references in the HTML body.
+ */
+export function shouldFetchAttachments(
+  hasAttachments: boolean,
+  htmlBody: string | undefined,
+): boolean {
+  if (hasAttachments) return true;
+  if (!htmlBody) return false;
+  return /src=["']cid:/i.test(htmlBody);
+}
 
 /**
  * Microsoft Outlook/Exchange email provider using Microsoft Graph API
@@ -178,11 +204,10 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     // Microsoft Graph uses client state for validation
     // The client state is set when creating the subscription and stored in DB
     if (typeof payload === "object" && payload !== null && "value" in payload) {
-      const notifications = (payload as { value: unknown[] }).value;
+      const collection = payload as ChangeNotificationCollection;
+      const notifications = collection.value;
       if (Array.isArray(notifications) && notifications.length > 0) {
-        const notification = notifications[0] as {
-          clientState?: string;
-        };
+        const notification: ChangeNotification = notifications[0];
 
         if (!notification.clientState) {
           logger.warn(
@@ -244,7 +269,8 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       return null;
     }
 
-    const notifications = (payload as { value: unknown[] }).value;
+    const collection = payload as ChangeNotificationCollection;
+    const notifications = collection.value;
     if (!Array.isArray(notifications) || notifications.length === 0) {
       return null;
     }
@@ -252,31 +278,26 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     const emails: IncomingEmail[] = [];
     const client = this.getGraphClient();
 
-    for (const notification of notifications) {
-      const notif = notification as {
-        resource?: string;
-        resourceData?: {
-          id?: string;
-        };
-        changeType?: string;
-      };
-
+    for (const notif of notifications as ChangeNotification[]) {
       // Only process new message notifications
       if (notif.changeType !== "created") {
         continue;
       }
 
-      const messageId = notif.resourceData?.id;
+      // ResourceData is an empty interface in the types package;
+      // the actual webhook payload includes an `id` field.
+      const messageId = (notif.resourceData as { id?: string } | undefined)?.id;
       if (!messageId) {
         continue;
       }
 
       try {
         // Fetch the full message including conversationId for thread context
-        const message = await client
+        // Also include hasAttachments to determine if we need to fetch attachments
+        const message: Message = await client
           .api(`/users/${this.config.mailboxAddress}/messages/${messageId}`)
           .select(
-            "id,conversationId,subject,body,bodyPreview,from,toRecipients,receivedDateTime",
+            "id,conversationId,subject,body,bodyPreview,from,toRecipients,receivedDateTime,hasAttachments",
           )
           .get();
 
@@ -311,22 +332,33 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           body = this.stripHtml(message.body.content);
         }
 
+        // Fetch attachments if the message has any, or if the HTML body
+        // contains inline images (cid: references).
+        let attachments: EmailAttachment[] = [];
+        const htmlBody =
+          message.body?.contentType === "html"
+            ? (message.body.content ?? undefined)
+            : undefined;
+        if (shouldFetchAttachments(!!message.hasAttachments, htmlBody)) {
+          attachments = await this.getAttachments(message.id as string, true);
+        }
+
         emails.push({
-          messageId: message.id,
-          conversationId: message.conversationId,
+          messageId: message.id as string,
+          conversationId: message.conversationId ?? undefined,
           toAddress: agentEmailAddress,
           fromAddress: message.from?.emailAddress?.address || "unknown",
           subject: message.subject || "",
           body,
-          htmlBody:
-            message.body?.contentType === "html"
-              ? message.body.content
-              : undefined,
-          receivedAt: new Date(message.receivedDateTime),
+          htmlBody,
+          receivedAt: message.receivedDateTime
+            ? new Date(message.receivedDateTime)
+            : new Date(),
           metadata: {
             provider: this.providerId,
             originalResource: notif.resource,
           },
+          attachments: attachments.length > 0 ? attachments : undefined,
         });
       } catch (error) {
         logger.error(
@@ -854,6 +886,173 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         "[OutlookEmailProvider] Failed to fetch conversation history",
       );
       // Return empty history on error - allow processing to continue
+      return [];
+    }
+  }
+
+  /**
+   * Get attachments for an email message
+   * Fetches attachment metadata and optionally the content from Microsoft Graph API
+   *
+   * @param messageId - The message ID to get attachments for
+   * @param includeContent - Whether to fetch the attachment content (base64). Default: true
+   * @returns Array of attachments with metadata and optionally content
+   */
+  async getAttachments(
+    messageId: string,
+    includeContent = true,
+  ): Promise<EmailAttachment[]> {
+    const client = this.getGraphClient();
+    const attachments: EmailAttachment[] = [];
+
+    try {
+      // First, fetch attachment metadata
+      const response = await client
+        .api(
+          `/users/${this.config.mailboxAddress}/messages/${messageId}/attachments`,
+        )
+        .select("id,name,contentType,size,isInline")
+        .top(MAX_ATTACHMENTS_PER_EMAIL)
+        .get();
+
+      const attachmentList = response.value || [];
+
+      if (attachmentList.length === 0) {
+        return [];
+      }
+
+      // Track total size for limit enforcement
+      let totalSize = 0;
+
+      for (const attachment of attachmentList) {
+        // Skip non-file attachments — only process file attachments.
+        // This check must come before size checks so that non-file attachments
+        // (e.g. large forwarded emails) don't consume the size budget.
+        // Note: @odata.type is a system annotation typically returned by Graph
+        // regardless of $select, but is not contractually guaranteed.
+        const odataType = attachment["@odata.type"];
+        if (
+          odataType === "#microsoft.graph.itemAttachment" ||
+          odataType === "#microsoft.graph.referenceAttachment"
+        ) {
+          logger.debug(
+            {
+              messageId,
+              attachmentId: attachment.id,
+              attachmentName: attachment.name,
+              type: odataType,
+            },
+            "[OutlookEmailProvider] Skipping non-file attachment",
+          );
+          continue;
+        }
+        if (odataType && odataType !== "#microsoft.graph.fileAttachment") {
+          logger.warn(
+            {
+              messageId,
+              attachmentId: attachment.id,
+              attachmentName: attachment.name,
+              type: odataType,
+            },
+            "[OutlookEmailProvider] Unknown attachment type, processing as file attachment",
+          );
+        }
+
+        // Skip attachments that are too large
+        if (attachment.size > MAX_ATTACHMENT_SIZE) {
+          logger.warn(
+            {
+              messageId,
+              attachmentId: attachment.id,
+              attachmentName: attachment.name,
+              size: attachment.size,
+              maxSize: MAX_ATTACHMENT_SIZE,
+            },
+            "[OutlookEmailProvider] Skipping attachment - exceeds size limit",
+          );
+          continue;
+        }
+
+        // Check total size limit
+        if (totalSize + attachment.size > MAX_TOTAL_ATTACHMENTS_SIZE) {
+          logger.warn(
+            {
+              messageId,
+              attachmentName: attachment.name,
+              totalSize,
+              maxTotalSize: MAX_TOTAL_ATTACHMENTS_SIZE,
+            },
+            "[OutlookEmailProvider] Skipping remaining attachments - total size limit reached",
+          );
+          break;
+        }
+
+        const emailAttachment: EmailAttachment = {
+          id: attachment.id,
+          name: attachment.name || `attachment-${attachment.id}`,
+          contentType: attachment.contentType || "application/octet-stream",
+          size: attachment.size || 0,
+          isInline: attachment.isInline || false,
+        };
+
+        // Fetch content if requested
+        if (includeContent) {
+          try {
+            const fullAttachment = await client
+              .api(
+                `/users/${this.config.mailboxAddress}/messages/${messageId}/attachments/${attachment.id}`,
+              )
+              .get();
+
+            // Microsoft Graph returns content as contentBytes for file attachments
+            if (fullAttachment.contentBytes) {
+              emailAttachment.contentBase64 = fullAttachment.contentBytes;
+            }
+            // contentId is only available on fileAttachment, not the base attachment type
+            if (fullAttachment.contentId) {
+              emailAttachment.contentId = fullAttachment.contentId;
+            }
+          } catch (contentError) {
+            logger.error(
+              {
+                messageId,
+                attachmentId: attachment.id,
+                attachmentName: attachment.name,
+                error:
+                  contentError instanceof Error
+                    ? contentError.message
+                    : String(contentError),
+              },
+              "[OutlookEmailProvider] Failed to fetch attachment content",
+            );
+            // Continue without content - still include metadata
+          }
+        }
+
+        attachments.push(emailAttachment);
+        totalSize += attachment.size || 0;
+      }
+
+      logger.debug(
+        {
+          messageId,
+          totalAttachments: attachmentList.length,
+          processedAttachments: attachments.length,
+          totalSize,
+        },
+        "[OutlookEmailProvider] Fetched attachments",
+      );
+
+      return attachments;
+    } catch (error) {
+      logger.error(
+        {
+          messageId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[OutlookEmailProvider] Failed to fetch attachments",
+      );
+      // Return empty array on error - allow processing to continue
       return [];
     }
   }

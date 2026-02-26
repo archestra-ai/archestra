@@ -54,4 +54,5 @@ ARCHESTRA_CEREBRAS_BASE_URL=http://localhost:9092/cerebras/v1
 ARCHESTRA_ZHIPUAI_BASE_URL=http://localhost:9092/zhipuai/v4
 ARCHESTRA_COHERE_BASE_URL=http://localhost:9092/cohere
 ARCHESTRA_MISTRAL_BASE_URL=http://localhost:9092/mistral
+ARCHESTRA_GROQ_BASE_URL=http://localhost:9092/groq/v1
 ```

@@ -247,6 +247,78 @@ const cohereConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const groqConfig: ToolPersistenceTestConfig = {
+  providerName: "Groq",
+
+  endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "llama-3.1-8b-instant",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
+const minimaxConfig: ToolPersistenceTestConfig = {
+  providerName: "Minimax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "MiniMax-M2.1",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
+const deepseekConfig: ToolPersistenceTestConfig = {
+  providerName: "DeepSeek",
+
+  endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "deepseek-chat",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const bedrockConfig: ToolPersistenceTestConfig = {
   providerName: "Bedrock",
 
@@ -282,11 +354,14 @@ const testConfigsMap = {
   anthropic: anthropicConfig,
   gemini: geminiConfig,
   cohere: cohereConfig,
+  groq: groqConfig,
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  minimax: minimaxConfig,
+  deepseek: deepseekConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;

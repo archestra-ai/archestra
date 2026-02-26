@@ -9,7 +9,10 @@ import type {
   Interaction,
   InteractionUtils,
 } from "./llmProviders/common";
+import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import GroqChatCompletionInteraction from "./llmProviders/groq";
+import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
@@ -32,6 +35,9 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
     new PerplexityChatCompletionInteraction(i),
   "vllm:chatCompletions": (i) => new VllmChatCompletionInteraction(i),
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
+  "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
+  "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
+  "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
 };
 
 export interface CostSavingsInput {

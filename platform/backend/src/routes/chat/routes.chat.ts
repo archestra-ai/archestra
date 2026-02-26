@@ -43,7 +43,7 @@ import {
   TeamModel,
 } from "@/models";
 import ApiKeyModelModel from "@/models/api-key-model";
-import { startActiveChatSpan } from "@/routes/proxy/utils/tracing";
+import { startActiveChatSpan } from "@/observability/tracing";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
@@ -54,6 +54,7 @@ import {
   isSupportedChatProvider,
   SelectConversationSchema,
   type SupportedChatProvider,
+  SupportedChatProviderSchema,
   type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
@@ -74,13 +75,16 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   openai: "gpt-4o",
   gemini: "gemini-2.5-pro",
   cohere: "command-r-08-2024",
+  groq: "llama-3.1-8b-instant",
   ollama: "llama3.2",
   vllm: "default",
   cerebras: "llama-4-scout-17b-16e-instruct",
   mistral: "mistral-large-latest",
   perplexity: "sonar-pro",
   zhipuai: "glm-4-plus",
+  deepseek: "deepseek-chat",
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
+  minimax: "MiniMax-M2.5",
 };
 
 /**
@@ -127,17 +131,14 @@ async function getSmartDefaultModel(
   }
 
   // Check environment variables as fallback
-  if (config.chat.anthropic.apiKey) {
-    return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
-  }
-  if (config.chat.openai.apiKey) {
-    return { model: "gpt-4o", provider: "openai" };
-  }
-  if (config.chat.gemini.apiKey) {
-    return { model: "gemini-2.5-pro", provider: "gemini" };
-  }
-  if (config.chat.cohere?.apiKey) {
-    return { model: "command-r-08-2024", provider: "cohere" };
+  // Uses DEFAULT_MODELS for model names to avoid duplicating defaults
+  for (const provider of SupportedChatProviderSchema.options) {
+    const providerConfig = config.chat[provider] as
+      | { apiKey?: string }
+      | undefined;
+    if (providerConfig?.apiKey) {
+      return { model: DEFAULT_MODELS[provider], provider };
+    }
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key

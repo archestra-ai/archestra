@@ -1430,7 +1430,7 @@ describe("AgentModel", () => {
   });
 
   describe("Default Archestra Tools Assignment", () => {
-    test("new agent has artifact_write and todo_write tools assigned by default", async ({
+    test("new agent does not have default tools auto-assigned (handled by frontend)", async ({
       seedAndAssignArchestraTools,
       makeAgent,
     }) => {
@@ -1438,45 +1438,17 @@ describe("AgentModel", () => {
       const existingAgent = await makeAgent();
       await seedAndAssignArchestraTools(existingAgent.id);
 
-      // Create a new agent - should have default tools assigned
+      // Create a new agent - should NOT have default tools auto-assigned
+      // (default tools are now pre-selected in the frontend dialog and saved explicitly)
       const agent = await AgentModel.create({
         name: "Agent with Default Tools",
         teams: [],
       });
 
-      // Verify the agent has the default Archestra tools assigned
+      // Verify the agent does not have auto-assigned Archestra tools
       const toolNames = agent.tools.map((t) => t.name);
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-    });
-
-    test("new agent returns assigned tools without Archestra prefix filtering", async ({
-      seedAndAssignArchestraTools,
-      makeAgent,
-    }) => {
-      // First seed Archestra tools
-      const existingAgent = await makeAgent();
-      await seedAndAssignArchestraTools(existingAgent.id);
-
-      // Create a new agent
-      const agent = await AgentModel.create({
-        name: "Test Default Tools Agent",
-        teams: [],
-      });
-
-      // The create method should return the assigned tools
-      expect(agent.tools.length).toBeGreaterThanOrEqual(2);
-
-      // Verify artifact_write and todo_write are present
-      const hasArtifactWrite = agent.tools.some(
-        (t) => t.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
-      );
-      const hasTodoWrite = agent.tools.some(
-        (t) => t.name === TOOL_TODO_WRITE_FULL_NAME,
-      );
-
-      expect(hasArtifactWrite).toBe(true);
-      expect(hasTodoWrite).toBe(true);
+      expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
   });
 

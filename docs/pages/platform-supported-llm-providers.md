@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Agents
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-01-14
+lastUpdated: 2026-02-22
 ---
 
 <!--
@@ -169,6 +169,41 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
 
+## Groq
+
+[Groq](https://groq.com/) provides low-latency inference for popular open-source models through an OpenAI-compatible API.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                      | Required | Description                                                              |
+| ----------------------------- | -------- | ------------------------------------------------------------------------ |
+| `ARCHESTRA_GROQ_BASE_URL`     | No       | Groq API base URL (default: `https://api.groq.com/openai/v1`)            |
+| `ARCHESTRA_CHAT_GROQ_API_KEY` | No       | Default API key for Groq (can be overridden per conversation/team/org)   |
+
+### Getting an API Key
+
+You can generate an API key from the [Groq Console](https://console.groq.com/keys).
+
+### Popular Models
+
+- `llama-3.3-70b-versatile`
+- `llama-3.1-8b-instant`
+- `gemma2-9b-it`
+
+### Important Notes
+
+- **OpenAI-compatible API**: Groq uses the OpenAI Chat Completions request/response format, which makes it a good fit for existing OpenAI client libraries.
+- **Base URL includes `/openai/v1`**: When configuring a custom Groq endpoint, ensure the base URL points to the OpenAI-compatible API root (for example, `https://api.groq.com/openai/v1`).
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.
@@ -317,6 +352,42 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## MiniMax
+
+[MiniMax](https://www.minimax.io/) is a Chinese AI company offering advanced large language models with strong reasoning capabilities. The platform provides the MiniMax-M2 series with chain-of-thought reasoning capabilities and support for text, images, and multi-turn conversations.
+
+### Supported MiniMax APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### MiniMax Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/minimax/{profile-id}`
+- **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_CHAT_MINIMAX_API_KEY`  | No       | Default API key for MiniMax (can be overridden per conversation/team/org)     |
+| `ARCHESTRA_CHAT_MINIMAX_BASE_URL` | No       | MiniMax API base URL (default: `https://api.minimax.io/v1`)                   |
+
+### Available Models
+
+- **MiniMax-M2** - Base model with strong reasoning capabilities ($0.3/$1.2 per M tokens)
+- **MiniMax-M2.1** - Enhanced model with improved performance ($0.3/$1.2 per M tokens)
+- **MiniMax-M2.1-lightning** - Fast inference variant of M2.1 ($0.6/$2.4 per M tokens)
+- **MiniMax-M2.5** - Latest model with enhanced capabilities ($0.3/$1.2 per M tokens)
+- **MiniMax-M2.5-highspeed** - Fast inference variant of M2.5 ($0.6/$2.4 per M tokens)
+
+### Important Notes
+
+- **OpenAI-compatible API (text-only)**: MiniMax's API follows the OpenAI Chat Completions format for easy integration. The integration uses text-only messages (no image or multimodal content support).
+- **Reasoning metadata**: MiniMax models support extended thinking through the `reasoning_details` field in responses, which contains the model's reasoning process as structured data (not as `<think>` tags in the message content).
+- **API Key**: Obtain your API key from the [MiniMax Platform](https://www.minimax.io/)
+- **No /models endpoint**: MiniMax does not provide a models listing API. Available models are hardcoded in the platform configuration
+- **Chinese and English support**: MiniMax models excel at both Chinese and English language tasks
 
 ## Amazon Bedrock
 

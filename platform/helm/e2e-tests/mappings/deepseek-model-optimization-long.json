@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/deepseek/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "deepseek-model-optimization-long"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "\"model\":\"e2e-test-deepseek-baseline\""
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-deepseek-model-optimization-long",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-deepseek-baseline",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Long message kept on baseline model.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1600,
+        "completion_tokens": 100,
+        "total_tokens": 1700
+      }
+    }
+  }
+}

@@ -1,7 +1,10 @@
 import type {
   Anthropic,
   Cohere,
+  DeepSeek,
   Gemini,
+  Groq,
+  Minimax,
   Ollama,
   OpenAi,
   Vllm,
@@ -13,9 +16,12 @@ export type ProviderMessage =
   | Anthropic.Types.MessagesRequest["messages"][number]
   | Cohere.Types.ChatRequest["messages"][number]
   | Gemini.Types.GenerateContentRequest["contents"][number]
+  | Groq.Types.ChatCompletionsRequest["messages"][number]
   | Vllm.Types.ChatCompletionsRequest["messages"][number]
   | Ollama.Types.ChatCompletionsRequest["messages"][number]
-  | Zhipuai.Types.ChatCompletionsRequest["messages"][number];
+  | Zhipuai.Types.ChatCompletionsRequest["messages"][number]
+  | DeepSeek.Types.ChatCompletionsRequest["messages"][number]
+  | Minimax.Types.ChatCompletionsRequest["messages"][number];
 
 /**
  * Base interface for tokenizers

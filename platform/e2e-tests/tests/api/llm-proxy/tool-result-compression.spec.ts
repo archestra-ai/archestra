@@ -79,6 +79,44 @@ const openaiConfig: CompressionTestConfig = {
   }),
 };
 
+const groqConfig: CompressionTestConfig = {
+  providerName: "Groq",
+
+  endpoint: (profileId) => `/v1/groq/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Groq uses OpenAI-compatible format: tool results are sent as separate "tool" role messages
+  buildRequestWithToolResult: () => ({
+    model: "llama-3.1-8b-instant",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 const anthropicConfig: CompressionTestConfig = {
   providerName: "Anthropic",
 
@@ -398,6 +436,82 @@ const zhipuaiConfig: CompressionTestConfig = {
   }),
 };
 
+const minimaxConfig: CompressionTestConfig = {
+  providerName: "Minimax",
+
+  endpoint: (profileId) => `/v1/minimax/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // MiniMax uses OpenAI-compatible format: tool results are sent as separate "tool" role messages
+  buildRequestWithToolResult: () => ({
+    model: "MiniMax-M2.1",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
+const deepseekConfig: CompressionTestConfig = {
+  providerName: "DeepSeek",
+
+  endpoint: (profileId) => `/v1/deepseek/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // DeepSeek uses OpenAI-compatible format: tool results are sent as separate "tool" role messages
+  buildRequestWithToolResult: () => ({
+    model: "deepseek-chat",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 const bedrockConfig: CompressionTestConfig = {
   providerName: "Bedrock",
 
@@ -455,9 +569,12 @@ const testConfigsMap = {
   cohere: cohereConfig,
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
+  groq: groqConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  minimax: minimaxConfig,
+  deepseek: deepseekConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity does not support tool calling (has built-in web search instead)
 } satisfies Record<SupportedProvider, CompressionTestConfig | null>;

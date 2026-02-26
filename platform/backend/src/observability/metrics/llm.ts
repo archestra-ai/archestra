@@ -15,6 +15,7 @@ import logger from "@/logging";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapterV2/anthropic";
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapterV2/cohere";
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemini";
+import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapterV2/minimax";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
 import type { Agent } from "@/types";
@@ -37,9 +38,12 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   ollama: getOpenAIUsage,
   mistral: getOpenAIUsage,
   perplexity: getOpenAIUsage,
+  groq: getOpenAIUsage,
   anthropic: getAnthropicUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
+  minimax: getMinimaxUsage,
+  deepseek: getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };

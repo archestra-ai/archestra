@@ -82,6 +82,26 @@ export type SubscriptionInfo = Omit<
 };
 
 /**
+ * Represents an email attachment
+ */
+export interface EmailAttachment {
+  /** Unique identifier for the attachment from the provider */
+  id: string;
+  /** The filename of the attachment */
+  name: string;
+  /** MIME content type (e.g., 'application/pdf', 'image/png') */
+  contentType: string;
+  /** Size of the attachment in bytes */
+  size: number;
+  /** Base64-encoded content of the attachment */
+  contentBase64?: string;
+  /** Whether this is an inline attachment (embedded in HTML body) */
+  isInline: boolean;
+  /** Content ID for inline attachments (used in HTML img src="cid:...") */
+  contentId?: string;
+}
+
+/**
  * Represents an incoming email that will invoke an agent
  */
 export interface IncomingEmail {
@@ -103,6 +123,8 @@ export interface IncomingEmail {
   receivedAt: Date;
   /** Any additional metadata from the provider */
   metadata?: Record<string, unknown>;
+  /** File attachments included in the email */
+  attachments?: EmailAttachment[];
 }
 
 /**
@@ -254,6 +276,18 @@ export interface AgentIncomingEmailProvider {
     conversationId: string,
     currentMessageId: string,
   ): Promise<ConversationMessage[]>;
+
+  /**
+   * Get attachments for an email message
+   * Fetches attachment metadata and optionally the content
+   * @param messageId - The message ID to get attachments for
+   * @param includeContent - Whether to fetch the attachment content (base64)
+   * @returns Array of attachments with metadata and optionally content
+   */
+  getAttachments(
+    messageId: string,
+    includeContent?: boolean,
+  ): Promise<EmailAttachment[]>;
 }
 
 /**

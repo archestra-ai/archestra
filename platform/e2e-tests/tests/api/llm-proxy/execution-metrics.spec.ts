@@ -104,6 +104,22 @@ const cerebrasConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const groqConfig: ExecutionMetricsTestConfig = {
+  providerName: "Groq",
+
+  endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "llama-3.1-8b-instant",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const mistralConfig: ExecutionMetricsTestConfig = {
   providerName: "Mistral",
 
@@ -168,6 +184,38 @@ const zhipuaiConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const minimaxConfig: ExecutionMetricsTestConfig = {
+  providerName: "Minimax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "MiniMax-M2.1",
+    messages: [{ role: "user", content }],
+  }),
+};
+
+const deepseekConfig: ExecutionMetricsTestConfig = {
+  providerName: "DeepSeek",
+
+  endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "deepseek-chat",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const bedrockConfig: ExecutionMetricsTestConfig = {
   providerName: "Bedrock",
 
@@ -195,10 +243,13 @@ const testConfigsMap = {
   gemini: geminiConfig,
   cohere: cohereConfig,
   cerebras: cerebrasConfig,
+  groq: groqConfig,
   mistral: mistralConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  deepseek: deepseekConfig,
+  minimax: minimaxConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getConversationDisplayTitle } from "./chat-utils";
+import { getConversationDisplayTitle, preserveNewlines } from "./chat-utils";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
@@ -110,5 +110,95 @@ describe("getConversationDisplayTitle", () => {
     expect(getConversationDisplayTitle(null, messages)).toBe(
       DEFAULT_SESSION_NAME,
     );
+  });
+});
+
+describe("preserveNewlines", () => {
+  it("returns empty string for empty input", () => {
+    expect(preserveNewlines("")).toBe("");
+  });
+
+  it("returns the input as-is for falsy values", () => {
+    expect(preserveNewlines("")).toBe("");
+  });
+
+  it("returns single-line text unchanged", () => {
+    expect(preserveNewlines("Hello world")).toBe("Hello world");
+  });
+
+  it("appends two trailing spaces to preserve single newlines", () => {
+    expect(preserveNewlines("line 1\nline 2")).toBe("line 1  \nline 2");
+  });
+
+  it("preserves multiple consecutive newlines as paragraph breaks", () => {
+    expect(preserveNewlines("line 1\n\nline 2")).toBe("line 1  \n\nline 2");
+  });
+
+  it("handles three or more lines", () => {
+    expect(preserveNewlines("line 1\nline 2\nline 3")).toBe(
+      "line 1  \nline 2  \nline 3",
+    );
+  });
+
+  it("does not add trailing spaces to the last line", () => {
+    const result = preserveNewlines("line 1\nline 2");
+    expect(result.endsWith("line 2")).toBe(true);
+    expect(result.endsWith("line 2  ")).toBe(false);
+  });
+
+  it("does not double-add trailing spaces to lines already ending with two spaces", () => {
+    expect(preserveNewlines("line 1  \nline 2")).toBe("line 1  \nline 2");
+  });
+
+  it("leaves empty lines unchanged (they create paragraph breaks in markdown)", () => {
+    expect(preserveNewlines("line 1\n\nline 3")).toBe("line 1  \n\nline 3");
+  });
+
+  it("preserves text inside fenced code blocks with backticks", () => {
+    const input = "before\n```\ncode line 1\ncode line 2\n```\nafter";
+    const expected = "before  \n```\ncode line 1\ncode line 2\n```\nafter";
+    expect(preserveNewlines(input)).toBe(expected);
+  });
+
+  it("preserves text inside fenced code blocks with tildes", () => {
+    const input = "before\n~~~\ncode line 1\ncode line 2\n~~~\nafter";
+    const expected = "before  \n~~~\ncode line 1\ncode line 2\n~~~\nafter";
+    expect(preserveNewlines(input)).toBe(expected);
+  });
+
+  it("preserves text inside fenced code blocks with language specifier", () => {
+    const input =
+      "before\n```python\nprint('hello')\nprint('world')\n```\nafter";
+    const expected =
+      "before  \n```python\nprint('hello')\nprint('world')\n```\nafter";
+    expect(preserveNewlines(input)).toBe(expected);
+  });
+
+  it("handles mixed content with code blocks and regular text", () => {
+    const input = "line 1\nline 2\n```\ncode\n```\nline 3\nline 4";
+    const expected = "line 1  \nline 2  \n```\ncode\n```\nline 3  \nline 4";
+    expect(preserveNewlines(input)).toBe(expected);
+  });
+
+  it("handles text with trailing newline", () => {
+    expect(preserveNewlines("line 1\nline 2\n")).toBe("line 1  \nline 2  \n");
+  });
+
+  it("handles text with only newlines", () => {
+    expect(preserveNewlines("\n\n")).toBe("\n\n");
+  });
+
+  it("handles text with indented code block fences", () => {
+    const input = "before\n  ```\n  code\n  ```\nafter";
+    const expected = "before  \n  ```\n  code\n  ```\nafter";
+    expect(preserveNewlines(input)).toBe(expected);
+  });
+
+  it("handles a single newline", () => {
+    expect(preserveNewlines("\n")).toBe("\n");
+  });
+
+  it("handles multiple empty lines between text", () => {
+    expect(preserveNewlines("a\n\n\nb")).toBe("a  \n\n\nb");
   });
 });

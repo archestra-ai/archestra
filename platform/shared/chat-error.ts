@@ -145,6 +145,23 @@ export const GeminiErrorReasons = {
 } as const;
 
 /**
+ * DeepSeek API error types
+ * DeepSeek uses OpenAI-compatible error format.
+ * @see https://api-docs.deepseek.com/
+ */
+export const DeepSeekErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  NOT_FOUND: "not_found_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+} as const;
+
+/**
  * Zhipuai API error codes (from response body `error.code` field)
  * Zhipuai uses numeric string codes for errors
  * @see https://docs.z.ai/api-reference/api-code#errors
@@ -175,6 +192,26 @@ export const ZhipuaiErrorTypes = {
   HIGH_CONCURRENCY: "1302",
   HIGH_FREQUENCY: "1303",
   RATE_LIMIT: "1305",
+} as const;
+
+/**
+ * MiniMax API error types
+ * MiniMax uses OpenAI-compatible error format, so types are similar to OpenAI.
+ * @see https://www.minimax.io/platform/document/api-reference
+ */
+export const MinimaxErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  PERMISSION_DENIED: "insufficient_quota",
+  INSUFFICIENT_BALANCE: "insufficient_balance_error", // MiniMax error 1008
+  NOT_FOUND: "not_found_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  // Additional codes that appear in error.code field
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
 } as const;
 
 // =============================================================================

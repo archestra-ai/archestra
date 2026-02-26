@@ -126,6 +126,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://www.perplexity.ai/settings/api",
     consoleName: "Perplexity Settings",
   },
+  groq: {
+    name: "Groq",
+    icon: "/icons/groq.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.groq.com/keys",
+    consoleName: "Groq Console",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",
@@ -151,6 +159,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
+  },
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",
@@ -158,6 +174,14 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
+  },
+  minimax: {
+    name: "MiniMax",
+    icon: "/icons/minimax.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://www.minimax.io/",
+    consoleName: "MiniMax Platform",
   },
 } as const;
 

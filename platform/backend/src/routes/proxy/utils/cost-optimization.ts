@@ -12,7 +12,10 @@ import type {
   Anthropic,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
+  Groq,
+  Minimax,
   Mistral,
   OpenAi,
   Perplexity,
@@ -25,12 +28,15 @@ type ProviderMessages = {
   cerebras: Cerebras.Types.ChatCompletionsRequest["messages"];
   cohere: Cohere.Types.ChatRequest["messages"];
   gemini: Gemini.Types.GenerateContentRequest["contents"];
+  groq: Groq.Types.ChatCompletionsRequest["messages"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];
   perplexity: Perplexity.Types.ChatCompletionsRequest["messages"];
+  minimax: Minimax.Types.ChatCompletionsRequest["messages"];
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

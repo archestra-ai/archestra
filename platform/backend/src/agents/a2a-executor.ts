@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
+import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
+import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -16,6 +18,20 @@ import {
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import type { SupportedChatProvider } from "@/types";
+
+/**
+ * Source-agnostic attachment for A2A execution.
+ * Callers (email, Slack, Teams, etc.) should transform their provider-specific
+ * attachment types into this format before passing to executeA2AMessage.
+ */
+export interface A2AAttachment {
+  /** MIME content type (e.g., 'image/png', 'application/pdf') */
+  contentType: string;
+  /** Base64-encoded content */
+  contentBase64: string;
+  /** Optional filename for context */
+  name?: string;
+}
 
 export interface A2AExecuteParams {
   /**
@@ -42,6 +58,8 @@ export interface A2AExecuteParams {
   conversationId?: string;
   /** Optional cancellation signal propagated from parent chat/tool execution */
   abortSignal?: AbortSignal;
+  /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
+  attachments?: A2AAttachment[];
 }
 
 export interface A2AExecuteResult {
@@ -70,6 +88,7 @@ export async function executeA2AMessage(
     sessionId,
     parentDelegationChain,
     abortSignal,
+    attachments,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -175,18 +194,38 @@ export async function executeA2AMessage(
     // We stream internally but collect the full result.
     // Capture stream-level errors (e.g. API billing errors) via onError so we
     // can surface the real cause instead of a generic NoOutputGeneratedError.
+
+    // Build multimodal user content when image attachments are present
+    const { content: userContent, skippedNote } = buildUserContent(
+      message,
+      attachments,
+    );
+
     let capturedStreamError: unknown;
-    const stream = streamText({
-      model,
-      system: systemPrompt,
-      prompt: message,
-      tools: mcpTools,
-      stopWhen: stepCountIs(500),
-      abortSignal,
-      onError: ({ error }) => {
-        capturedStreamError = error;
-      },
-    });
+    const onError = ({ error }: { error: unknown }) => {
+      capturedStreamError = error;
+    };
+
+    // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
+    const stream = userContent
+      ? streamText({
+          model,
+          system: systemPrompt,
+          messages: [{ role: "user" as const, content: userContent }],
+          tools: mcpTools,
+          stopWhen: stepCountIs(500),
+          abortSignal,
+          onError,
+        })
+      : streamText({
+          model,
+          system: systemPrompt,
+          prompt: message + skippedNote,
+          tools: mcpTools,
+          stopWhen: stepCountIs(500),
+          abortSignal,
+          onError,
+        });
 
     // Wait for the stream to complete and get the final text.
     // When the underlying provider returns an error (e.g. 400 insufficient
@@ -257,7 +296,94 @@ export async function executeA2AMessage(
 }
 
 // ============================================================================
-// Helper functions
+// Exported helper functions
+// ============================================================================
+
+/**
+ * Build AI SDK UserContent from a text message and optional attachments.
+ * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
+ * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
+ * so the caller can append it to the prompt for the LLM to mention.
+ *
+ * Only image attachments are currently supported as inline content parts.
+ * Non-image attachments are noted so the LLM can inform the user.
+ */
+export function buildUserContent(
+  message: string,
+  attachments?: A2AAttachment[],
+): { content: UserContent | null; skippedNote: string } {
+  const allAttachments = attachments ?? [];
+
+  // Split into image and non-image attachments
+  const imageAttachments = allAttachments.filter((a) =>
+    a.contentType.startsWith("image/"),
+  );
+  const nonImageAttachments = allAttachments.filter(
+    (a) => !a.contentType.startsWith("image/"),
+  );
+
+  // Filter out tiny images (broken inline references from email replies).
+  // Estimate actual byte size from base64 length: every 4 base64 chars = 3 bytes.
+  const validImageAttachments = imageAttachments.filter((a) => {
+    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
+    return estimatedBytes >= MIN_IMAGE_ATTACHMENT_SIZE;
+  });
+  const tinyImageAttachments = imageAttachments.filter((a) => {
+    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
+    return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
+  });
+
+  if (tinyImageAttachments.length > 0) {
+    logger.debug(
+      {
+        count: tinyImageAttachments.length,
+        images: tinyImageAttachments.map((a) => ({
+          name: a.name ?? "unnamed",
+          contentType: a.contentType,
+          estimatedBytes: Math.ceil((a.contentBase64.length * 3) / 4),
+        })),
+      },
+      "Filtering out tiny image attachments (likely broken inline references from email replies)",
+    );
+  }
+
+  if (nonImageAttachments.length > 0) {
+    logger.debug(
+      {
+        skippedCount: nonImageAttachments.length,
+        skippedTypes: nonImageAttachments.map(
+          (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
+        ),
+      },
+      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
+    );
+  }
+
+  // Build a note about all skipped attachments so the LLM can mention them
+  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
+  const skippedNote =
+    allSkipped.length > 0
+      ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
+      : "";
+
+  if (validImageAttachments.length === 0) {
+    return { content: null, skippedNote };
+  }
+
+  return {
+    content: [
+      { type: "text" as const, text: message + skippedNote },
+      ...validImageAttachments.map((a) => ({
+        type: "image" as const,
+        image: `data:${a.contentType};base64,${a.contentBase64}`,
+      })),
+    ],
+    skippedNote,
+  };
+}
+
+// ============================================================================
+// Internal helper functions
 // ============================================================================
 
 /**

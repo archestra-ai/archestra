@@ -9,6 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
   ChatOpsChannelBinding,
@@ -160,6 +161,76 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Find a pending DM binding (one created from the UI before actual DM interaction).
+   * Pending DM bindings have a channelId starting with "dm:pending:".
+   */
+  static async findPendingDmBinding(
+    provider: ChatOpsProviderType,
+    dmOwnerEmail: string,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, provider),
+          eq(schema.chatopsChannelBindingsTable.isDm, true),
+          eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+          sql`${schema.chatopsChannelBindingsTable.channelId} LIKE 'dm:pending:%'`,
+        ),
+      )
+      .limit(1);
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
+   * Fulfill a pending DM binding by replacing the placeholder channelId
+   * with the real one from the first DM interaction.
+   */
+  static async fulfillDmBinding(
+    id: string,
+    realChannelId: string,
+    workspaceId: string | null,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({
+        channelId: realChannelId,
+        workspaceId,
+      })
+      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .returning();
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
+   * Bulk-update the agentId for multiple bindings belonging to the same organization.
+   * Returns the updated bindings.
+   */
+  static async bulkUpdateAgent(
+    ids: string[],
+    organizationId: string,
+    agentId: string | null,
+  ): Promise<ChatOpsChannelBinding[]> {
+    if (ids.length === 0) return [];
+
+    const updated = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({ agentId })
+      .where(
+        and(
+          inArray(schema.chatopsChannelBindingsTable.id, ids),
+          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+        ),
+      )
+      .returning();
+
+    return updated as ChatOpsChannelBinding[];
+  }
+
+  /**
    * Update channel and workspace display names (internal use only).
    * Used by the name refresh mechanism — not exposed via API.
    */
@@ -188,7 +259,11 @@ class ChatOpsChannelBindingModel {
 
   /**
    * Update a binding by channel (upsert pattern)
-   * Creates if not exists, updates if exists
+   * Creates if not exists, updates if exists.
+   *
+   * For DM bindings: removes stale bindings for the same user+provider
+   * with a different channelId (Slack/Teams can assign new channel IDs
+   * when a user re-initiates a DM conversation).
    */
   static async upsertByChannel(
     input: InsertChatOpsChannelBinding,
@@ -219,6 +294,41 @@ class ChatOpsChannelBindingModel {
         return (updated as ChatOpsChannelBinding) ?? existing;
       }
       return existing;
+    }
+
+    // For DM bindings, remove stale entries for the same user before creating
+    // a new one. Slack/Teams can assign new channel IDs when a user
+    // re-initiates a DM, leading to duplicate rows for the same person.
+    if (input.isDm && input.dmOwnerEmail) {
+      const deleted = await db
+        .delete(schema.chatopsChannelBindingsTable)
+        .where(
+          and(
+            eq(
+              schema.chatopsChannelBindingsTable.organizationId,
+              input.organizationId,
+            ),
+            eq(schema.chatopsChannelBindingsTable.provider, input.provider),
+            eq(schema.chatopsChannelBindingsTable.isDm, true),
+            eq(
+              schema.chatopsChannelBindingsTable.dmOwnerEmail,
+              input.dmOwnerEmail,
+            ),
+            ne(schema.chatopsChannelBindingsTable.channelId, input.channelId),
+          ),
+        )
+        .returning();
+
+      if (deleted.length > 0) {
+        logger.debug(
+          {
+            provider: input.provider,
+            dmOwnerEmail: input.dmOwnerEmail,
+            deletedCount: deleted.length,
+          },
+          "[ChatOpsChannelBinding] Removed stale DM bindings",
+        );
+      }
     }
 
     return ChatOpsChannelBindingModel.create(input);

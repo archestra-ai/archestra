@@ -26,7 +26,10 @@ import {
 } from "@/models";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
-import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
+import {
+  ATTR_MCP_IS_ERROR_RESULT,
+  startActiveMcpSpan,
+} from "@/observability/tracing";
 import type { AgentType } from "@/types";
 
 /**
@@ -171,7 +174,9 @@ export async function selectMCPGatewayToken(
 
   // 1. Always try to get/create a personal user token first
   // This ensures userId is available in the token for global catalog tools
-  {
+  // Skip when userId is "system" (e.g., internal/public email security modes)
+  // since "system" is not a real user and cannot have a user token
+  if (userId !== "system") {
     // Ensure user has a token (creates one if missing)
     const userToken = await UserTokenModel.ensureUserToken(
       userId,
@@ -763,7 +768,7 @@ export async function getChatMcpTools({
                     );
 
                     span.setAttribute(
-                      "mcp.is_error_result",
+                      ATTR_MCP_IS_ERROR_RESULT,
                       archestraResponse.isError ?? false,
                     );
                     reportToolMetrics({
@@ -943,7 +948,7 @@ export async function getChatMcpTools({
                     );
 
                     span.setAttribute(
-                      "mcp.is_error_result",
+                      ATTR_MCP_IS_ERROR_RESULT,
                       response.isError ?? false,
                     );
                     reportToolMetrics({

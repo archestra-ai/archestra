@@ -32,13 +32,6 @@ interface ContainerEnvResult {
 }
 
 /**
- * Cached nodeSelector from the archestra-platform pod.
- * This is fetched once on first use and reused for all MCP server deployments.
- */
-let cachedPlatformNodeSelector: k8s.V1PodSpec["nodeSelector"] | null = null;
-let nodeSelectorFetched = false;
-
-/**
  * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
  * K8s client errors can have either `statusCode` or `code` property set to 404.
  */
@@ -52,23 +45,26 @@ function isK8s404Error(error: unknown): boolean {
 }
 
 /**
- * Fetches the nodeSelector from the archestra-platform pod (the pod running the backend).
- * This allows MCP server deployments to inherit the same nodeSelector as the platform,
- * which is useful when targeting specific node pools (e.g., Karpenter nodepools).
- *
- * The result is cached after the first call to avoid repeated API calls.
- *
- * @param k8sApi - The Kubernetes CoreV1Api client
- * @param namespace - The namespace to search for the platform pod
- * @returns The nodeSelector from the platform pod, or null if not found/not configured
+ * Shared cache for the archestra-platform pod spec.
+ * Both nodeSelector and tolerations fetchers read from this cache,
+ * so only one API call is made regardless of how many fields are extracted.
  */
-export async function fetchPlatformPodNodeSelector(
+let platformPodSpecCache: {
+  fetched: boolean;
+  spec: k8s.V1PodSpec | null;
+} = { fetched: false, spec: null };
+
+/**
+ * Fetches and caches the archestra-platform pod spec.
+ * Uses POD_NAME → HOSTNAME fallback → label selector lookup strategy.
+ * Only makes one API call; subsequent calls return the cached spec.
+ */
+async function fetchPlatformPodSpec(
   k8sApi: k8s.CoreV1Api,
   namespace: string,
-): Promise<k8s.V1PodSpec["nodeSelector"] | null> {
-  // Return cached value if already fetched
-  if (nodeSelectorFetched) {
-    return cachedPlatformNodeSelector;
+): Promise<k8s.V1PodSpec | null> {
+  if (platformPodSpecCache.fetched) {
+    return platformPodSpecCache.spec;
   }
 
   try {
@@ -82,25 +78,13 @@ export async function fetchPlatformPodNodeSelector(
       : process.env.POD_NAME;
 
     if (podName) {
-      // Read the current pod's spec directly
       const pod = await k8sApi.readNamespacedPod({
         name: podName,
         namespace,
       });
 
-      cachedPlatformNodeSelector = pod.spec?.nodeSelector || null;
-      nodeSelectorFetched = true;
-
-      if (cachedPlatformNodeSelector) {
-        logger.info(
-          { nodeSelector: cachedPlatformNodeSelector },
-          "Fetched nodeSelector from archestra-platform pod",
-        );
-      } else {
-        logger.debug("Archestra-platform pod has no nodeSelector configured");
-      }
-
-      return cachedPlatformNodeSelector;
+      platformPodSpecCache = { fetched: true, spec: pod.spec ?? null };
+      return platformPodSpecCache.spec;
     }
 
     // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
@@ -109,64 +93,103 @@ export async function fetchPlatformPodNodeSelector(
       labelSelector: "app.kubernetes.io/name=archestra-platform",
     });
 
-    // Get the first running pod's nodeSelector
     const runningPod = pods.items.find(
       (pod) => pod.status?.phase === "Running",
     );
 
-    if (runningPod?.spec?.nodeSelector) {
-      cachedPlatformNodeSelector = runningPod.spec.nodeSelector;
-      nodeSelectorFetched = true;
-
-      logger.info(
-        { nodeSelector: cachedPlatformNodeSelector },
-        "Fetched nodeSelector from archestra-platform pod (via label selector)",
-      );
-
-      return cachedPlatformNodeSelector;
-    }
-
-    // No nodeSelector found
-    nodeSelectorFetched = true;
-    cachedPlatformNodeSelector = null;
-
-    logger.debug(
-      "No archestra-platform pod found or no nodeSelector configured",
-    );
-
-    return null;
+    platformPodSpecCache = {
+      fetched: true,
+      spec: runningPod?.spec ?? null,
+    };
+    return platformPodSpecCache.spec;
   } catch (error) {
-    // Log the error but don't fail - nodeSelector inheritance is optional
     logger.warn(
       { err: error },
-      "Failed to fetch archestra-platform pod nodeSelector, MCP servers will use default scheduling",
+      "Failed to fetch archestra-platform pod spec, MCP servers will use default scheduling",
     );
 
-    nodeSelectorFetched = true;
-    cachedPlatformNodeSelector = null;
-
+    platformPodSpecCache = { fetched: true, spec: null };
     return null;
   }
 }
 
-/**
- * Resets the cached platform nodeSelector.
- * This is primarily useful for testing.
- */
-export function resetPlatformNodeSelectorCache(): void {
-  cachedPlatformNodeSelector = null;
-  nodeSelectorFetched = false;
+export function resetPlatformPodSpecCache(): void {
+  platformPodSpecCache = { fetched: false, spec: null };
+}
+
+interface PlatformPodSpecFetcher<T> {
+  fetch: (k8sApi: k8s.CoreV1Api, namespace: string) => Promise<T | null>;
+  getCached: () => T | null;
+  resetCache: () => void;
 }
 
 /**
- * Returns the cached platform nodeSelector without fetching.
- * This is useful for synchronous access after the initial fetch.
+ * Factory that creates a cached fetcher for a specific field from the archestra-platform pod spec.
+ * All fetchers share the same underlying pod spec cache, so only one API call is made.
  */
-export function getCachedPlatformNodeSelector():
-  | k8s.V1PodSpec["nodeSelector"]
-  | null {
-  return cachedPlatformNodeSelector;
+function createPlatformPodSpecFetcher<T>(options: {
+  extract: (spec: k8s.V1PodSpec) => T | undefined | null;
+  label: string;
+}): PlatformPodSpecFetcher<T> {
+  let cachedValue: T | null = null;
+  let extracted = false;
+
+  return {
+    async fetch(k8sApi, namespace) {
+      if (extracted) {
+        return cachedValue;
+      }
+
+      const spec = await fetchPlatformPodSpec(k8sApi, namespace);
+
+      cachedValue = spec ? (options.extract(spec) ?? null) : null;
+      extracted = true;
+
+      if (cachedValue) {
+        logger.info(
+          { [options.label]: cachedValue },
+          `Inherited ${options.label} from archestra-platform pod`,
+        );
+      } else {
+        logger.debug(
+          `Archestra-platform pod has no ${options.label} configured`,
+        );
+      }
+
+      return cachedValue;
+    },
+
+    getCached() {
+      return cachedValue;
+    },
+
+    resetCache() {
+      cachedValue = null;
+      extracted = false;
+      resetPlatformPodSpecCache();
+    },
+  };
 }
+
+const nodeSelectorFetcher = createPlatformPodSpecFetcher<
+  k8s.V1PodSpec["nodeSelector"]
+>({
+  extract: (spec) => spec.nodeSelector,
+  label: "nodeSelector",
+});
+
+const tolerationsFetcher = createPlatformPodSpecFetcher<k8s.V1Toleration[]>({
+  extract: (spec) => (spec.tolerations?.length ? spec.tolerations : null),
+  label: "tolerations",
+});
+
+export const fetchPlatformPodNodeSelector = nodeSelectorFetcher.fetch;
+export const getCachedPlatformNodeSelector = nodeSelectorFetcher.getCached;
+export const resetPlatformNodeSelectorCache = nodeSelectorFetcher.resetCache;
+
+export const fetchPlatformPodTolerations = tolerationsFetcher.fetch;
+export const getCachedPlatformTolerations = tolerationsFetcher.getCached;
+export const resetPlatformTolerationsCache = tolerationsFetcher.resetCache;
 
 /**
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
@@ -520,6 +543,7 @@ export default class K8sDeployment {
    * @param needsHttp - Whether the deployment's pod needs HTTP port exposure
    * @param httpPort - The HTTP port to expose (if needsHttp is true)
    * @param nodeSelector - Optional nodeSelector to apply to the pod spec (e.g., inherited from platform pod)
+   * @param tolerations - Optional tolerations to apply to the pod spec (e.g., inherited from platform pod)
    * @returns The Kubernetes deployment specification
    */
   generateDeploymentSpec(
@@ -528,6 +552,7 @@ export default class K8sDeployment {
     needsHttp: boolean,
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
+    tolerations?: k8s.V1Toleration[] | null,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -538,6 +563,7 @@ export default class K8sDeployment {
         needsHttp,
         httpPort,
         nodeSelector,
+        tolerations,
       );
       if (yamlDeployment) {
         logger.info(
@@ -596,6 +622,8 @@ export default class K8sDeployment {
       ...(nodeSelector && Object.keys(nodeSelector).length > 0
         ? { nodeSelector }
         : {}),
+      // Apply tolerations if provided (e.g., inherited from archestra-platform pod)
+      ...(tolerations?.length ? { tolerations } : {}),
       // Apply imagePullSecrets for pulling from private registries
       ...(localConfig.imagePullSecrets?.length
         ? { imagePullSecrets: localConfig.imagePullSecrets }
@@ -698,6 +726,7 @@ export default class K8sDeployment {
    * @param needsHttp - Whether HTTP port is needed
    * @param httpPort - The HTTP port
    * @param nodeSelector - Optional nodeSelector
+   * @param tolerations - Optional tolerations
    * @returns The K8s deployment or null if parsing failed
    */
   private generateDeploymentFromYaml(
@@ -707,6 +736,7 @@ export default class K8sDeployment {
     needsHttp: boolean,
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
+    tolerations?: k8s.V1Toleration[] | null,
   ): k8s.V1Deployment | null {
     const k8sSecretName = K8sDeployment.constructK8sSecretName(
       this.mcpServer.id,
@@ -797,7 +827,16 @@ export default class K8sDeployment {
       };
     }
 
-    // 2. Apply imagePullSecrets if provided
+    // 2. Apply inherited tolerations if the YAML doesn't define its own
+    if (
+      tolerations?.length &&
+      deployment.spec?.template?.spec &&
+      !deployment.spec.template.spec.tolerations?.length
+    ) {
+      deployment.spec.template.spec.tolerations = tolerations;
+    }
+
+    // 3. Apply imagePullSecrets if provided
     if (
       localConfig.imagePullSecrets?.length &&
       deployment.spec?.template?.spec
@@ -814,10 +853,10 @@ export default class K8sDeployment {
       ];
     }
 
-    // 3. Get environment variables and mounted secrets for system-managed env vars
+    // 4. Get environment variables and mounted secrets for system-managed env vars
     const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
 
-    // 4. Apply volume mounts for mounted secrets
+    // 5. Apply volume mounts for mounted secrets
     if (mountedSecrets.length > 0 && deployment.spec?.template?.spec) {
       const newVolume: k8s.V1Volume = {
         name: "mounted-secrets",
@@ -856,7 +895,7 @@ export default class K8sDeployment {
       }
     }
 
-    // 5. Merge environment variables (YAML env vars + system env vars)
+    // 6. Merge environment variables (YAML env vars + system env vars)
     // Also filter out YAML secretKeyRef entries for keys that don't have values
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
@@ -895,7 +934,7 @@ export default class K8sDeployment {
       }
     }
 
-    // 6. Ensure command and args from localConfig are applied
+    // 7. Ensure command and args from localConfig are applied
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
 
@@ -927,7 +966,7 @@ export default class K8sDeployment {
       }
     }
 
-    // 7. Set transport-specific container settings (stdin/tty for stdio, ports for HTTP)
+    // 8. Set transport-specific container settings (stdin/tty for stdio, ports for HTTP)
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
 
@@ -1332,9 +1371,10 @@ export default class K8sDeployment {
         })),
       };
 
-      // Get the cached nodeSelector from the platform pod (if available)
+      // Get the cached nodeSelector and tolerations from the platform pod (if available)
       // This allows MCP servers to inherit the same scheduling constraints
       const platformNodeSelector = getCachedPlatformNodeSelector();
+      const platformTolerations = getCachedPlatformTolerations();
 
       await this.k8sAppsApi.createNamespacedDeployment({
         namespace: this.namespace,
@@ -1344,6 +1384,7 @@ export default class K8sDeployment {
           needsHttp,
           httpPort,
           platformNodeSelector,
+          platformTolerations,
         ),
       });
 

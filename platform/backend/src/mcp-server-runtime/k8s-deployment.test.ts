@@ -8,8 +8,10 @@ import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
+  fetchPlatformPodTolerations,
   getCachedPlatformNodeSelector,
   resetPlatformNodeSelectorCache,
+  resetPlatformTolerationsCache,
 } from "./k8s-deployment";
 
 // Helper function to create a K8sDeployment instance with mocked dependencies
@@ -1643,6 +1645,227 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     );
   });
 
+  test("generates deploymentSpec with tolerations when provided", () => {
+    const mcpServer: McpServer = {
+      id: "toleration-test-id",
+      name: "toleration-server",
+      catalogId: "catalog-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const tolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      tolerations,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+
+  test("generates deploymentSpec with multiple tolerations", () => {
+    const mcpServer: McpServer = {
+      id: "multi-tol-test-id",
+      name: "multi-toleration-server",
+      catalogId: "catalog-multi-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const tolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+      {
+        key: "gpu",
+        operator: "Exists",
+        effect: "NoExecute",
+        tolerationSeconds: 3600,
+      },
+    ];
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      tolerations,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toHaveLength(2);
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toEqual(
+      tolerations,
+    );
+  });
+
+  test("generates deploymentSpec without tolerations when null is provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-tol-id",
+      name: "no-toleration-server",
+      catalogId: "catalog-no-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      null,
+      null,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without tolerations when undefined is provided", () => {
+    const mcpServer: McpServer = {
+      id: "undef-tol-id",
+      name: "undef-toleration-server",
+      catalogId: "catalog-undef-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      undefined,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without tolerations when empty array is provided", () => {
+    const mcpServer: McpServer = {
+      id: "empty-tol-id",
+      name: "empty-toleration-server",
+      catalogId: "catalog-empty-tol",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+      [],
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toBeUndefined();
+  });
+
+  test("combines tolerations with nodeSelector when both are configured", () => {
+    const mcpServer: McpServer = {
+      id: "combined-tol-ns-id",
+      name: "combined-tol-ns-server",
+      catalogId: "catalog-combined-tol-ns",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const nodeSelector = {
+      "karpenter.sh/nodepool": "mcp-pool",
+    };
+    const tolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      nodeSelector,
+      tolerations,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "mcp-pool",
+    });
+    expect(deploymentSpec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "mcp-servers",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+
   test("generates deploymentSpec with imagePullSecrets when provided", () => {
     const mcpServer: McpServer = {
       id: "ips-test-id",
@@ -2126,6 +2349,223 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
 
     // No env vars (all are mounted secrets, empty ones skipped entirely)
     expect(container?.env).toEqual([]);
+  });
+});
+
+describe("K8sDeployment.generateDeploymentSpec - YAML + platform nodeSelector/tolerations", () => {
+  const minimalYaml = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["server.js"]
+`;
+
+  function createK8sDeploymentWithYaml(
+    yamlString: string,
+    yamlNodeSelector?: Record<string, string>,
+    yamlTolerations?: Array<{
+      key: string;
+      operator: string;
+      value?: string;
+      effect: string;
+    }>,
+  ): K8sDeployment {
+    // Build YAML with optional nodeSelector/tolerations baked in
+    let yaml = yamlString;
+    if (yamlNodeSelector || yamlTolerations) {
+      const lines = yaml.split("\n");
+      const specInsertIndex = lines.findIndex((l) => l.includes("containers:"));
+      const insertions: string[] = [];
+      if (yamlNodeSelector) {
+        insertions.push("      nodeSelector:");
+        for (const [k, v] of Object.entries(yamlNodeSelector)) {
+          insertions.push(`        ${k}: "${v}"`);
+        }
+      }
+      if (yamlTolerations) {
+        insertions.push("      tolerations:");
+        for (const tol of yamlTolerations) {
+          insertions.push(`        - key: "${tol.key}"`);
+          insertions.push(`          operator: "${tol.operator}"`);
+          if (tol.value) {
+            insertions.push(`          value: "${tol.value}"`);
+          }
+          insertions.push(`          effect: "${tol.effect}"`);
+        }
+      }
+      lines.splice(specInsertIndex, 0, ...insertions);
+      yaml = lines.join("\n");
+    }
+
+    const catalogItem = {
+      deploymentSpecYaml: yaml,
+      localConfig: { command: "node", arguments: ["server.js"] },
+    } as unknown as import("@/types").InternalMcpCatalog;
+
+    const mcpServer = {
+      id: "yaml-test-id",
+      name: "yaml-test-server",
+      catalogId: "catalog-yaml",
+    } as McpServer;
+
+    return new K8sDeployment(
+      mcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      catalogItem,
+    );
+  }
+
+  test("applies platform nodeSelector when YAML has none", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
+
+    const platformNodeSelector = {
+      "karpenter.sh/nodepool": "general-purpose",
+    };
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      platformNodeSelector,
+      null,
+    );
+
+    expect(spec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "general-purpose",
+    });
+  });
+
+  test("merges platform nodeSelector with YAML nodeSelector (platform wins on conflict)", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml, {
+      "user-key": "user-value",
+      "karpenter.sh/nodepool": "user-pool",
+    });
+
+    const platformNodeSelector = {
+      "karpenter.sh/nodepool": "platform-pool",
+      "kubernetes.io/os": "linux",
+    };
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      platformNodeSelector,
+      null,
+    );
+
+    expect(spec.spec?.template.spec?.nodeSelector).toEqual({
+      "user-key": "user-value",
+      "karpenter.sh/nodepool": "platform-pool",
+      "kubernetes.io/os": "linux",
+    });
+  });
+
+  test("applies platform tolerations when YAML has none", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
+
+    const platformTolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      null,
+      platformTolerations,
+    );
+
+    expect(spec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+
+  test("YAML tolerations override platform tolerations entirely", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml, undefined, [
+      { key: "custom", operator: "Exists", effect: "NoExecute" },
+    ]);
+
+    const platformTolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      null,
+      platformTolerations,
+    );
+
+    // YAML tolerations win — platform tolerations are NOT merged
+    expect(spec.spec?.template.spec?.tolerations).toEqual([
+      { key: "custom", operator: "Exists", effect: "NoExecute" },
+    ]);
+  });
+
+  test("applies both platform nodeSelector and tolerations when YAML defines neither", () => {
+    const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
+
+    const platformNodeSelector = { "karpenter.sh/nodepool": "platform-pool" };
+    const platformTolerations: k8s.V1Toleration[] = [
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ];
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+      platformNodeSelector,
+      platformTolerations,
+    );
+
+    expect(spec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "platform-pool",
+    });
+    expect(spec.spec?.template.spec?.tolerations).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
   });
 });
 
@@ -3146,14 +3586,13 @@ describe("K8sDeployment.k8sDeploymentName", () => {
   });
 });
 
-describe("fetchPlatformPodNodeSelector", () => {
-  // Reset cache before each test
+// Shared pod-lookup + caching tests (uses nodeSelector fetcher as representative)
+describe("createPlatformPodSpecFetcher (shared pod-lookup logic)", () => {
   test.beforeEach(() => {
     resetPlatformNodeSelectorCache();
   });
 
-  test("returns nodeSelector from pod when POD_NAME env var is set", async () => {
-    // Save and set POD_NAME env var
+  test("looks up pod by POD_NAME env var", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "archestra-platform-abc123";
 
@@ -3182,13 +3621,10 @@ describe("fetchPlatformPodNodeSelector", () => {
       namespace: "default",
     });
 
-    // Restore env var
     process.env.POD_NAME = originalPodName;
   });
 
   test("ignores HOSTNAME when not running in-cluster (only uses POD_NAME)", async () => {
-    // When running outside K8s (Docker mode, local dev), HOSTNAME is the container ID
-    // which doesn't correspond to a K8s pod. Only POD_NAME should be used.
     const originalConfig =
       config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
     const originalPodName = process.env.POD_NAME;
@@ -3224,7 +3660,6 @@ describe("fetchPlatformPodNodeSelector", () => {
   });
 
   test("uses HOSTNAME as fallback when running in-cluster", async () => {
-    // When running inside K8s cluster, HOSTNAME is the pod name
     const originalConfig =
       config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
     const originalPodName = process.env.POD_NAME;
@@ -3264,14 +3699,13 @@ describe("fetchPlatformPodNodeSelector", () => {
     }
   });
 
-  test("returns null when pod has no nodeSelector", async () => {
+  test("returns null when pod has no matching spec field", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "archestra-platform-no-selector";
 
     const mockReadPod = vi.fn().mockResolvedValue({
       spec: {
         containers: [{ name: "archestra" }],
-        // No nodeSelector
       },
     });
 
@@ -3347,7 +3781,7 @@ describe("fetchPlatformPodNodeSelector", () => {
     process.env.HOSTNAME = originalHostname;
   });
 
-  test("caches result after first call", async () => {
+  test("caches result after first call (only one API call)", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "archestra-platform-cached";
 
@@ -3363,15 +3797,13 @@ describe("fetchPlatformPodNodeSelector", () => {
       readNamespacedPod: mockReadPod,
     } as unknown as k8s.CoreV1Api;
 
-    // First call
     const result1 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
     expect(result1).toEqual({ cached: "value" });
     expect(mockReadPod).toHaveBeenCalledTimes(1);
 
-    // Second call should return cached value without API call
     const result2 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
     expect(result2).toEqual({ cached: "value" });
-    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only called once
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
 
     process.env.POD_NAME = originalPodName;
   });
@@ -3389,29 +3821,20 @@ describe("fetchPlatformPodNodeSelector", () => {
     } as unknown as k8s.CoreV1Api;
 
     const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
-
     expect(result).toBeNull();
 
-    // Subsequent calls should return cached null without API call
     const result2 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
     expect(result2).toBeNull();
     expect(mockReadPod).toHaveBeenCalledTimes(1);
 
     process.env.POD_NAME = originalPodName;
   });
-});
 
-describe("getCachedPlatformNodeSelector", () => {
-  // Reset cache before each test to ensure isolation
-  test.beforeEach(() => {
-    resetPlatformNodeSelectorCache();
-  });
-
-  test("returns null before any fetch", () => {
+  test("getCached returns null before any fetch", () => {
     expect(getCachedPlatformNodeSelector()).toBeNull();
   });
 
-  test("returns cached value after fetch", async () => {
+  test("getCached returns value after fetch", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "test-pod";
 
@@ -3435,15 +3858,8 @@ describe("getCachedPlatformNodeSelector", () => {
 
     process.env.POD_NAME = originalPodName;
   });
-});
 
-describe("resetPlatformNodeSelectorCache", () => {
-  // Reset cache before each test to ensure isolation
-  test.beforeEach(() => {
-    resetPlatformNodeSelectorCache();
-  });
-
-  test("clears the cached nodeSelector", async () => {
+  test("resetCache clears cached value", async () => {
     const originalPodName = process.env.POD_NAME;
     process.env.POD_NAME = "test-pod";
 
@@ -3467,6 +3883,150 @@ describe("resetPlatformNodeSelectorCache", () => {
     resetPlatformNodeSelectorCache();
 
     expect(getCachedPlatformNodeSelector()).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("both fetchers share a single pod API call", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-shared";
+
+    // Reset both caches to ensure clean state
+    resetPlatformNodeSelectorCache();
+    resetPlatformTolerationsCache();
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: { "karpenter.sh/nodepool": "shared-pool" },
+        tolerations: [
+          {
+            key: "dedicated",
+            operator: "Equal",
+            value: "platform",
+            effect: "NoSchedule",
+          },
+        ],
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    // Fetch nodeSelector first — triggers the shared pod lookup
+    const ns = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(ns).toEqual({ "karpenter.sh/nodepool": "shared-pool" });
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
+
+    // Fetch tolerations — should reuse the cached pod spec, no additional API call
+    const tol = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(tol).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only one call
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+// Extractor-specific tests for nodeSelector
+describe("fetchPlatformPodNodeSelector (extractor)", () => {
+  test.beforeEach(() => {
+    resetPlatformNodeSelectorCache();
+  });
+
+  test("extracts spec.nodeSelector", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockK8sApi = {
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: {
+          nodeSelector: { "karpenter.sh/nodepool": "general-purpose" },
+          tolerations: [{ key: "other", operator: "Exists" }],
+        },
+      }),
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(result).toEqual({ "karpenter.sh/nodepool": "general-purpose" });
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+// Extractor-specific tests for tolerations
+describe("fetchPlatformPodTolerations (extractor)", () => {
+  test.beforeEach(() => {
+    resetPlatformTolerationsCache();
+  });
+
+  test("extracts spec.tolerations", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockK8sApi = {
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: {
+          nodeSelector: { "karpenter.sh/nodepool": "general-purpose" },
+          tolerations: [
+            {
+              key: "dedicated",
+              operator: "Equal",
+              value: "platform",
+              effect: "NoSchedule",
+            },
+          ],
+        },
+      }),
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(result).toEqual([
+      {
+        key: "dedicated",
+        operator: "Equal",
+        value: "platform",
+        effect: "NoSchedule",
+      },
+    ]);
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("returns null when pod has empty tolerations array", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-empty-tol";
+
+    const mockK8sApi = {
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: { tolerations: [] },
+      }),
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(result).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("returns null when pod has no tolerations", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-no-tol";
+
+    const mockK8sApi = {
+      readNamespacedPod: vi.fn().mockResolvedValue({
+        spec: { containers: [{ name: "archestra" }] },
+      }),
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodTolerations(mockK8sApi, "default");
+    expect(result).toBeNull();
 
     process.env.POD_NAME = originalPodName;
   });

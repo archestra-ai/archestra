@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/deepseek/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "deepseek-model-optimization-with-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "\"model\":\"e2e-test-deepseek-optimized\""
+      },
+      {
+        "contains": "\"tools\""
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-deepseek-model-optimization-with-tools",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-deepseek-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "refusal": null,
+            "tool_calls": [
+              {
+                "id": "call_tool_123",
+                "type": "function",
+                "function": {
+                  "name": "test_tool",
+                  "arguments": "{\"input\":\"value\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": "tool_calls",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1200,
+        "completion_tokens": 100,
+        "total_tokens": 1300
+      }
+    }
+  }
+}

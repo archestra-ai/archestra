@@ -179,6 +179,10 @@ export const RouteId = {
     "perplexityChatCompletionsWithDefaultAgent",
   PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
 
+  // Proxy Routes - Groq
+  GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
+  GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -192,6 +196,11 @@ export const RouteId = {
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
 
+  // Proxy Routes - DeepSeek
+  DeepSeekChatCompletionsWithDefaultAgent:
+    "deepseekChatCompletionsWithDefaultAgent",
+  DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",
@@ -202,6 +211,11 @@ export const RouteId = {
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
+
+  // Proxy Routes - MiniMax
+  MinimaxChatCompletionsWithDefaultAgent:
+    "minimaxChatCompletionsWithDefaultAgent",
+  MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",
@@ -308,6 +322,8 @@ export const RouteId = {
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
+  BulkUpdateChatOpsBindings: "bulkUpdateChatOpsBindings",
+  CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",

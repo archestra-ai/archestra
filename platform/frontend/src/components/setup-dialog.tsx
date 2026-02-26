@@ -29,6 +29,8 @@ interface SetupDialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: React.ReactNode;
+  /** Optional content rendered between the header and the carousel steps */
+  beforeSteps?: React.ReactNode;
   steps: React.ReactNode[];
   lastStepAction?: LastStepAction;
   /** Per-step gating: if provided, `canProceed(stepIndex)` must return true to enable the Next button */
@@ -40,6 +42,7 @@ export function SetupDialog({
   onOpenChange,
   title,
   description,
+  beforeSteps,
   steps,
   lastStepAction,
   canProceed,
@@ -65,6 +68,8 @@ export function SetupDialog({
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
+
+        {beforeSteps && <div className="px-6 pb-4">{beforeSteps}</div>}
 
         <div className="flex-1 min-h-0 [&_[data-slot=carousel-content]]:h-full">
           <Carousel

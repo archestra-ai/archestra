@@ -10,6 +10,7 @@ import {
   FileText,
   Globe,
   Loader2,
+  MoreVertical,
   Plus,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,7 +30,9 @@ import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AgentSelector } from "@/components/chat/agent-selector";
+import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import {
   PlaywrightInstallDialog,
@@ -57,9 +60,16 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Empty,
   EmptyContent,
@@ -75,10 +85,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
+import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   fetchConversationEnabledTools,
   useConversation,
@@ -107,6 +119,7 @@ import {
   getPendingActions,
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
+import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -400,6 +413,15 @@ export default function ChatPage() {
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+
+  // Track title generation for typing animation in the header
+  const conversationForTitleTracking = useMemo(
+    () =>
+      conversation ? [{ id: conversation.id, title: conversation.title }] : [],
+    [conversation],
+  );
+  const { recentlyGeneratedTitles: headerAnimatingTitles } =
+    useRecentlyGeneratedTitles(conversationForTitleTracking);
 
   // Initialize artifact panel state when conversation loads or changes
   useEffect(() => {
@@ -1227,9 +1249,21 @@ export default function ChatPage() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
-                          {getConversationDisplayTitle(
-                            conversation.title,
-                            conversation.messages,
+                          {headerAnimatingTitles.has(conversation.id) ? (
+                            <TypingText
+                              text={getConversationDisplayTitle(
+                                conversation.title,
+                                conversation.messages,
+                              )}
+                              typingSpeed={35}
+                              showCursor
+                              cursorClassName="bg-muted-foreground"
+                            />
+                          ) : (
+                            getConversationDisplayTitle(
+                              conversation.title,
+                              conversation.messages,
+                            )
                           )}
                         </span>
                       </TooltipTrigger>
@@ -1243,8 +1277,8 @@ export default function ChatPage() {
                   </TooltipProvider>
                 </div>
               )}
-              {/* Right side - show/hide controls */}
-              <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Right side - desktop: original buttons */}
+              <div className="hidden md:flex items-center gap-2 flex-shrink-0">
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1274,10 +1308,106 @@ export default function ChatPage() {
                   </>
                 )}
               </div>
+              {/* Right side - mobile: 3-dot dropdown */}
+              <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="More options"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      <span className="sr-only">More options</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={toggleArtifactPanel}>
+                      <FileText className="h-4 w-4" />
+                      {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
+                    </DropdownMenuItem>
+                    {isBrowserStreamingEnabled && (
+                      <DropdownMenuItem
+                        onSelect={toggleBrowserPanel}
+                        disabled={isPlaywrightSetupVisible}
+                      >
+                        <Globe className="h-4 w-4" />
+                        {isBrowserPanelOpen && !isPlaywrightSetupVisible
+                          ? "Hide Browser"
+                          : "Show Browser"}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto relative">
+          {/* Mobile: Inline artifact/browser panels below header */}
+          {(isArtifactOpen ||
+            (isBrowserPanelOpen &&
+              isBrowserStreamingEnabled &&
+              !isPlaywrightSetupVisible)) && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
+              {isArtifactOpen && (
+                <div
+                  className={cn(
+                    "min-h-0 overflow-auto",
+                    isBrowserPanelOpen &&
+                      isBrowserStreamingEnabled &&
+                      !isPlaywrightSetupVisible
+                      ? "h-1/2 border-b"
+                      : "flex-1",
+                  )}
+                >
+                  <ConversationArtifactPanel
+                    artifact={conversation?.artifact}
+                    isOpen={isArtifactOpen}
+                    onToggle={toggleArtifactPanel}
+                    embedded
+                  />
+                </div>
+              )}
+              {isBrowserPanelOpen &&
+                isBrowserStreamingEnabled &&
+                !isPlaywrightSetupVisible && (
+                  <div
+                    className={cn(
+                      "min-h-0 overflow-auto",
+                      isArtifactOpen ? "h-1/2" : "flex-1",
+                    )}
+                  >
+                    <BrowserPanel
+                      isOpen={true}
+                      onClose={closeBrowserPanel}
+                      conversationId={conversationId}
+                      agentId={browserToolsAgentId}
+                      onCreateConversationWithUrl={
+                        handleCreateConversationWithUrl
+                      }
+                      isCreatingConversation={
+                        createConversationMutation.isPending
+                      }
+                      initialNavigateUrl={pendingBrowserUrl}
+                      onInitialNavigateComplete={handleInitialNavigateComplete}
+                    />
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Chat content - hidden on mobile when panels are open */}
+          <div
+            className={cn(
+              "flex-1 overflow-y-auto relative",
+              (isArtifactOpen ||
+                (isBrowserPanelOpen &&
+                  isBrowserStreamingEnabled &&
+                  !isPlaywrightSetupVisible)) &&
+                "hidden md:block",
+            )}
+          >
             {isPlaywrightSetupRequired && !conversationId && (
               <PlaywrightInstallDialog
                 agentId={playwrightSetupAgentId}
@@ -1474,6 +1604,27 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {/* Right-side panel - desktop only */}
+      <div className="hidden md:flex">
+        <RightSidePanel
+          artifact={conversation?.artifact}
+          isArtifactOpen={isArtifactOpen}
+          onArtifactToggle={toggleArtifactPanel}
+          isBrowserOpen={
+            isBrowserPanelOpen &&
+            isBrowserStreamingEnabled &&
+            !isPlaywrightSetupVisible
+          }
+          onBrowserClose={closeBrowserPanel}
+          conversationId={conversationId}
+          agentId={browserToolsAgentId}
+          onCreateConversationWithUrl={handleCreateConversationWithUrl}
+          isCreatingConversation={createConversationMutation.isPending}
+          initialNavigateUrl={pendingBrowserUrl}
+          onInitialNavigateComplete={handleInitialNavigateComplete}
+        />
+      </div>
+
       <CustomServerRequestDialog
         isOpen={isDialogOpened("custom-request")}
         onClose={() => closeDialog("custom-request")}
@@ -1496,25 +1647,6 @@ export default function ChatPage() {
               : undefined
         }
         agentType="agent"
-      />
-
-      {/* Right-side panel with artifact and browser preview */}
-      <RightSidePanel
-        artifact={conversation?.artifact}
-        isArtifactOpen={isArtifactOpen}
-        onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={
-          isBrowserPanelOpen &&
-          isBrowserStreamingEnabled &&
-          !isPlaywrightSetupVisible
-        }
-        onBrowserClose={closeBrowserPanel}
-        conversationId={conversationId}
-        agentId={browserToolsAgentId}
-        onCreateConversationWithUrl={handleCreateConversationWithUrl}
-        isCreatingConversation={createConversationMutation.isPending}
-        initialNavigateUrl={pendingBrowserUrl}
-        onInitialNavigateComplete={handleInitialNavigateComplete}
       />
 
       <PromptVersionHistoryDialog
@@ -1624,29 +1756,35 @@ function NoApiKeySetup() {
               Add an LLM provider API key to start chatting
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <ChatApiKeyForm
-              mode="full"
-              showConsoleLink
-              form={form}
-              isPending={createMutation.isPending}
-              geminiVertexAiEnabled={geminiVertexAiEnabled}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!isValid || createMutation.isPending}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Create
-            </Button>
-          </DialogFooter>
+          <DialogForm onSubmit={handleCreate}>
+            <div className="py-2">
+              <ChatApiKeyForm
+                mode="full"
+                showConsoleLink
+                form={form}
+                isPending={createMutation.isPending}
+                geminiVertexAiEnabled={geminiVertexAiEnabled}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!isValid || createMutation.isPending}
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Test & Create
+              </Button>
+            </DialogFooter>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </div>

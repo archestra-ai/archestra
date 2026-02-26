@@ -6,6 +6,7 @@ import {
   fetchBedrockModels,
   fetchGeminiModels,
   fetchGeminiModelsViaVertexAi,
+  fetchModelsForProvider,
   mapOpenAiModelToModelInfo,
 } from "./routes.models";
 
@@ -454,6 +455,304 @@ describe("chat-models", () => {
           createdAt: undefined,
         });
       });
+    });
+  });
+
+  describe("fetchModelsForProvider", () => {
+    test("returns models when provider has a valid API key", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      await makeChatApiKey(org.id, secret.id, { provider: "deepseek" });
+
+      mockIsVertexAiEnabled.mockReturnValue(false);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "deepseek-chat",
+                created: 1700000000,
+                owned_by: "deepseek",
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchModelsForProvider({
+        provider: "deepseek",
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+      });
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe("deepseek-chat");
+      expect(models[0].provider).toBe("deepseek");
+    });
+
+    test("returns empty array when provider has no API key", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      mockIsVertexAiEnabled.mockReturnValue(false);
+
+      const models = await fetchModelsForProvider({
+        provider: "openai",
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+      });
+
+      expect(models).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test("vLLM returns models without API key when enabled", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      mockIsVertexAiEnabled.mockReturnValue(false);
+      const originalEnabled = config.llm.vllm.enabled;
+
+      try {
+        config.llm.vllm.enabled = true;
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              data: [{ id: "my-model", object: "model" }],
+            }),
+        });
+
+        const models = await fetchModelsForProvider({
+          provider: "vllm",
+          organizationId: org.id,
+          userId: user.id,
+          userTeamIds: [],
+        });
+
+        expect(models).toHaveLength(1);
+        expect(models[0].id).toBe("my-model");
+        // Should pass "EMPTY" as API key placeholder
+        const [, fetchOptions] = mockFetch.mock.calls[0];
+        expect(fetchOptions.headers.Authorization).toBe("Bearer EMPTY");
+      } finally {
+        config.llm.vllm.enabled = originalEnabled;
+      }
+    });
+
+    test("vLLM returns empty array when disabled and no API key", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      mockIsVertexAiEnabled.mockReturnValue(false);
+      const originalEnabled = config.llm.vllm.enabled;
+
+      try {
+        config.llm.vllm.enabled = false;
+
+        const models = await fetchModelsForProvider({
+          provider: "vllm",
+          organizationId: org.id,
+          userId: user.id,
+          userTeamIds: [],
+        });
+
+        expect(models).toEqual([]);
+        expect(mockFetch).not.toHaveBeenCalled();
+      } finally {
+        config.llm.vllm.enabled = originalEnabled;
+      }
+    });
+
+    test("Gemini uses Vertex AI when enabled, even without API key", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      mockIsVertexAiEnabled.mockReturnValue(true);
+
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            name: "publishers/google/models/gemini-2.5-pro",
+            version: "default",
+            tunedModelInfo: {},
+          };
+        },
+      };
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchModelsForProvider({
+        provider: "gemini",
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+      });
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe("gemini-2.5-pro");
+      // Should NOT have called fetch (uses SDK instead)
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test("Gemini uses API key mode when Vertex AI is disabled", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const secret = await makeSecret({ secret: { apiKey: "gemini-key" } });
+      await makeChatApiKey(org.id, secret.id, { provider: "gemini" });
+
+      mockIsVertexAiEnabled.mockReturnValue(false);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            models: [
+              {
+                name: "models/gemini-2.5-flash",
+                displayName: "Gemini 2.5 Flash",
+                supportedGenerationMethods: ["generateContent"],
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchModelsForProvider({
+        provider: "gemini",
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+      });
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe("gemini-2.5-flash");
+    });
+
+    test("returns empty array and logs error when fetch fails", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      await makeChatApiKey(org.id, secret.id, { provider: "groq" });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve("Unauthorized"),
+      });
+
+      const models = await fetchModelsForProvider({
+        provider: "groq",
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+      });
+
+      // Should catch the error and return empty array
+      expect(models).toEqual([]);
+    });
+
+    test("Bedrock returns models when enabled with API key", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const secret = await makeSecret({ secret: { apiKey: "bedrock-key" } });
+      await makeChatApiKey(org.id, secret.id, { provider: "bedrock" });
+
+      mockIsVertexAiEnabled.mockReturnValue(false);
+      const originalEnabled = config.llm.bedrock.enabled;
+      const originalBaseUrl = config.llm.bedrock.baseUrl;
+      const originalPrefix = config.llm.bedrock.inferenceProfilePrefix;
+
+      try {
+        config.llm.bedrock.enabled = true;
+        config.llm.bedrock.baseUrl =
+          "https://bedrock-runtime.us-east-1.amazonaws.com";
+        config.llm.bedrock.inferenceProfilePrefix = "";
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              modelSummaries: [
+                {
+                  modelId: "anthropic.claude-3-sonnet",
+                  modelName: "Claude 3 Sonnet",
+                  providerName: "Anthropic",
+                  inputModalities: ["TEXT"],
+                  inferenceTypesSupported: ["ON_DEMAND"],
+                },
+              ],
+            }),
+        });
+
+        const models = await fetchModelsForProvider({
+          provider: "bedrock",
+          organizationId: org.id,
+          userId: user.id,
+          userTeamIds: [],
+        });
+
+        expect(models).toHaveLength(1);
+        expect(models[0].provider).toBe("bedrock");
+      } finally {
+        config.llm.bedrock.enabled = originalEnabled;
+        config.llm.bedrock.baseUrl = originalBaseUrl;
+        config.llm.bedrock.inferenceProfilePrefix = originalPrefix;
+      }
     });
   });
 

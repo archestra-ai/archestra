@@ -144,6 +144,36 @@ const zhipuaiConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// DeepSeek - Uses OpenAI-compatible streaming format
+const deepseekConfig: ChatProviderTestConfig = {
+  providerName: "deepseek",
+  providerDisplayName: "DeepSeek",
+  modelId: "deepseek-chat",
+  modelDisplayName: "deepseek-chat",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
+// Groq - Uses OpenAI-compatible streaming format
+const groqConfig: ChatProviderTestConfig = {
+  providerName: "groq",
+  providerDisplayName: "Groq",
+  modelId: "llama-3.1-8b-instant",
+  modelDisplayName: "llama-3.1-8b-instant",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
+// MiniMax - Uses OpenAI-compatible streaming format
+const minimaxConfig: ChatProviderTestConfig = {
+  providerName: "minimax",
+  providerDisplayName: "MiniMax",
+  modelId: "MiniMax-M2.1",
+  modelDisplayName: "MiniMax-M2.1",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
@@ -152,9 +182,12 @@ const testConfigs: ChatProviderTestConfig[] = [
   cohereConfig,
   mistralConfig,
   perplexityConfig,
+  groqConfig,
   ollamaConfig,
   vllmConfig,
   zhipuaiConfig,
+  deepseekConfig,
+  minimaxConfig,
 ];
 
 // =============================================================================

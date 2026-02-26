@@ -1,4 +1,5 @@
 import {
+  MINIMAX_MODELS,
   PERPLEXITY_MODELS,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
@@ -305,6 +306,45 @@ async function fetchPerplexityModels(_apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Groq API (OpenAI-compatible)
+ * @see https://console.groq.com/docs/api-reference
+ */
+async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.groq.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Groq models",
+    );
+    throw new Error(`Failed to fetch Groq models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "groq" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -536,6 +576,59 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
   return allModels;
 }
 
+async function fetchMinimaxModels(_apiKey: string): Promise<ModelInfo[]> {
+  // MiniMax does not provide a /v1/models endpoint (returns 404)
+  // Return known models directly. API key validation happens during actual chat completion requests.
+  // Model list centralized in shared/model-constants.ts (MINIMAX_MODELS).
+  return MINIMAX_MODELS.map((m) => ({
+    id: m.id,
+    displayName: m.displayName,
+    provider: "minimax" as const,
+  }));
+}
+
+/**
+ * Fetch models from DeepSeek API
+ */
+async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data?: Array<{
+      id: string;
+      created?: number;
+      owned_by?: string;
+    }>;
+  };
+
+  const list = Array.isArray(data?.data) ? data.data : [];
+  return list.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "deepseek" as const,
+    createdAt:
+      model.created != null
+        ? new Date(model.created * 1000).toISOString()
+        : new Date(0).toISOString(),
+  }));
+}
+
 /**
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
@@ -760,9 +853,12 @@ async function getProviderApiKey({
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
     perplexity: () => config.chat.perplexity?.apiKey || null,
+    groq: () => config.chat.groq?.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
+    deepseek: () => config.chat.deepseek?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
+    minimax: () => config.chat.minimax?.apiKey || null,
   };
 
   return envApiKeyFallbacks[provider]();
@@ -780,10 +876,13 @@ const modelFetchers: Record<
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
   perplexity: fetchPerplexityModels,
+  groq: fetchGroqModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
+  minimax: fetchMinimaxModels,
+  deepseek: fetchDeepSeekModels,
 };
 
 // Register all model fetchers with the sync service
@@ -823,21 +922,21 @@ export async function fetchModelsForProvider({
     userTeamIds,
   });
 
+  // Gemini with Vertex AI uses ADC instead of API keys
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
-  // vLLM and Ollama typically don't require API keys, but need base URL configured
-  const isVllmEnabled = provider === "vllm" && config.llm.vllm.enabled;
-  const isOllamaEnabled = provider === "ollama" && config.llm.ollama.enabled;
+
+  // Some providers don't require API keys but need base URL configured
+  const isKeylessProviderEnabled =
+    (provider === "vllm" && config.llm.vllm.enabled) ||
+    (provider === "ollama" && config.llm.ollama.enabled);
+
   // Bedrock uses AWS credentials which may come from default credential chain
   const isBedrockEnabled = provider === "bedrock" && config.llm.bedrock.enabled;
 
-  // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
-  // For vLLM and Ollama, API key is optional but base URL must be configured
-  // For Bedrock, we check if it's enabled (may use default AWS credential chain)
   if (
     !apiKey &&
     !vertexAiEnabled &&
-    !isVllmEnabled &&
-    !isOllamaEnabled &&
+    !isKeylessProviderEnabled &&
     !isBedrockEnabled
   ) {
     logger.debug(
@@ -848,44 +947,17 @@ export async function fetchModelsForProvider({
   }
 
   try {
-    let models: ModelInfo[] = [];
-    if (
-      [
-        "anthropic",
-        "cerebras",
-        "cohere",
-        "mistral",
-        "openai",
-        "perplexity",
-      ].includes(provider)
-    ) {
-      if (apiKey) {
-        models = await modelFetchers[provider](apiKey);
-      }
-    } else if (provider === "gemini") {
-      if (vertexAiEnabled) {
-        // Use Vertex AI SDK for model listing (uses ADC for authentication)
-        models = await fetchGeminiModelsViaVertexAi();
-      } else if (apiKey) {
-        // Use standard Gemini API with API key
-        models = await modelFetchers[provider](apiKey);
-      }
-    } else if (provider === "vllm" && isVllmEnabled) {
-      // vLLM doesn't require API key, pass empty or configured key
+    let models: ModelInfo[];
+
+    if (provider === "gemini" && vertexAiEnabled) {
+      // Vertex AI uses ADC for authentication, not API keys
+      models = await fetchGeminiModelsViaVertexAi();
+    } else {
+      // All other providers use the standard model fetcher with an API key
+      // (keyless providers like vLLM/Ollama/MiniMax/Perplexity pass "EMPTY" as a placeholder)
       models = await modelFetchers[provider](apiKey || "EMPTY");
-    } else if (provider === "ollama" && isOllamaEnabled) {
-      // Ollama doesn't require API key, pass empty or configured key
-      models = await modelFetchers[provider](apiKey || "EMPTY");
-    } else if (provider === "zhipuai") {
-      if (apiKey) {
-        models = await modelFetchers[provider](apiKey);
-      }
-    } else if (provider === "bedrock" && isBedrockEnabled) {
-      // Bedrock uses AWS credentials via the proxy
-      if (apiKey) {
-        models = await modelFetchers[provider](apiKey);
-      }
     }
+
     logger.info(
       { provider, modelCount: models.length },
       "fetchModelsForProvider:fetched models from provider",

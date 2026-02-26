@@ -350,4 +350,80 @@ describe("ToolChecklist", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  describe("Select All and Deselect All", () => {
+    it("should select all tools when clicking Select All", async () => {
+      const user = userEvent.setup();
+      const tools = createMockTools(4);
+      render(<ToolChecklistWrapper tools={tools} />);
+
+      expect(screen.getByText("0 of 4 selected")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Select All" }));
+
+      expect(screen.getByText("4 of 4 selected")).toBeInTheDocument();
+      for (const cb of screen.getAllByRole("checkbox")) {
+        expect(cb).toBeChecked();
+      }
+    });
+
+    it("should deselect all tools when clicking Deselect All", async () => {
+      const user = userEvent.setup();
+      const tools = createMockTools(4);
+      render(
+        <ToolChecklistWrapper
+          tools={tools}
+          initialSelectedIds={new Set(["tool-1", "tool-2", "tool-3", "tool-4"])}
+        />,
+      );
+
+      expect(screen.getByText("4 of 4 selected")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Deselect All" }));
+
+      expect(screen.getByText("0 of 4 selected")).toBeInTheDocument();
+      for (const cb of screen.getAllByRole("checkbox")) {
+        expect(cb).not.toBeChecked();
+      }
+    });
+
+    it("should keep all tools visible after Deselect All empties selection", async () => {
+      const user = userEvent.setup();
+      const tools = createMockTools(4);
+      render(
+        <ToolChecklistWrapper
+          tools={tools}
+          initialSelectedIds={new Set(["tool-1", "tool-2"])}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Deselect All" }));
+
+      // All tools should still be listed
+      expect(screen.getByText("tool_1")).toBeInTheDocument();
+      expect(screen.getByText("tool_2")).toBeInTheDocument();
+      expect(screen.getByText("tool_3")).toBeInTheDocument();
+      expect(screen.getByText("tool_4")).toBeInTheDocument();
+    });
+  });
+
+  describe("tool sorting", () => {
+    it("should sort selected tools before unselected tools", () => {
+      const tools = createMockTools(4);
+      render(
+        <ToolChecklistWrapper
+          tools={tools}
+          initialSelectedIds={new Set(["tool-3"])}
+        />,
+      );
+
+      const checkboxes = screen.getAllByRole("checkbox");
+      // First checkbox should be the selected one (tool-3)
+      expect(checkboxes[0]).toBeChecked();
+      // Remaining should be unchecked
+      for (let i = 1; i < checkboxes.length; i++) {
+        expect(checkboxes[i]).not.toBeChecked();
+      }
+    });
+  });
 });

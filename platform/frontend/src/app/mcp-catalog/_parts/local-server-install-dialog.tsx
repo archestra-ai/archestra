@@ -20,6 +20,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -291,20 +292,21 @@ export function LocalServerInstallDialog({
           )}
         </DialogHeader>
 
-        <SelectMcpServerCredentialTypeAndTeams
-          onTeamChange={setSelectedTeamId}
-          catalogId={isReinstall ? undefined : catalogItem?.id}
-          onCredentialTypeChange={setCredentialType}
-          onCanInstallChange={setCanInstall}
-          isReinstall={isReinstall}
-          existingTeamId={existingTeamId}
-          personalOnly={
-            catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
-          }
-        />
+        <DialogForm onSubmit={handleInstall}>
+          <SelectMcpServerCredentialTypeAndTeams
+            onTeamChange={setSelectedTeamId}
+            catalogId={isReinstall ? undefined : catalogItem?.id}
+            onCredentialTypeChange={setCredentialType}
+            onCanInstallChange={setCanInstall}
+            isReinstall={isReinstall}
+            existingTeamId={existingTeamId}
+            personalOnly={
+              catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
+            }
+          />
 
-        {canInstall &&
-          catalogItem?.localConfig?.serviceAccount !== undefined && (
+          {canInstall &&
+            catalogItem?.localConfig?.serviceAccount !== undefined && (
             <div className="mt-4">
               <ServiceAccountField
                 value={serviceAccount}
@@ -314,7 +316,7 @@ export function LocalServerInstallDialog({
             </div>
           )}
 
-        {canInstall && (
+          {canInstall && (
           <div className="space-y-6 mt-4">
             {/* Non-secret Environment Variables (always editable) */}
             {nonSecretEnvVars.length > 0 && (
@@ -544,34 +546,32 @@ export function LocalServerInstallDialog({
               </>
             )}
           </div>
-        )}
+          )}
 
-        <DialogFooter>
-          {canInstall && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isInstalling}
-            >
-              Cancel
-            </Button>
-          )}
-          {canInstall && (
-            <Button
-              onClick={handleInstall}
-              disabled={!isValid || isInstalling}
-            >
-              {isInstalling
-                ? isReinstall
-                  ? "Reinstalling..."
-                  : "Installing..."
-                : isReinstall
-                  ? "Reinstall"
-                  : "Install"}
-            </Button>
-          )}
-        </DialogFooter>
+          <DialogFooter>
+            {canInstall && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={isInstalling}
+              >
+                Cancel
+              </Button>
+            )}
+            {canInstall && (
+              <Button type="submit" disabled={!isValid || isInstalling}>
+                {isInstalling
+                  ? isReinstall
+                    ? "Reinstalling..."
+                    : "Installing..."
+                  : isReinstall
+                    ? "Reinstall"
+                    : "Install"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

@@ -47,7 +47,7 @@ export interface ChatReplyOptions {
   text: string;
   /** Optional: Reply in thread (if supported) */
   replyInThread?: boolean;
-  /** Optional: Footer text to append */
+  /** Optional: Footer text to append (e.g. agent name) */
   footer?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
@@ -182,6 +182,25 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
+   * Set a typing/loading status indicator (optional, provider-specific).
+   * For Slack: shows "App is thinking..." in the assistant thread.
+   * For Teams: sends a typing activity indicator in DMs/group chats,
+   *   or a placeholder "Thinking..." message in channels (which sendReply
+   *   later updates with the real response).
+   * Non-fatal if unsupported or not configured.
+   *
+   * Implementations may mutate `metadata` to pass state to a subsequent
+   * `sendReply` call (e.g., storing a placeholder message ID). The caller
+   * passes `message.metadata` by reference, so mutations are visible when
+   * `sendReply` reads `options.originalMessage.metadata`.
+   */
+  setTypingStatus?(
+    channelId: string,
+    threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first
@@ -195,6 +214,30 @@ export interface ChatOpsProvider {
    * @returns The user's email address, or null if not available
    */
   getUserEmail(userId: string): Promise<string | null>;
+
+  /**
+   * Get a channel's display name from its provider-specific ID.
+   * Used when creating early bindings for channels not yet in the discovery cache.
+   * @param channelId - The channel ID in the provider's system
+   * @returns The channel name, or null if not available
+   */
+  getChannelName(channelId: string): Promise<string | null>;
+
+  /**
+   * Parse an interactive payload (e.g. button click) into a structured selection.
+   * Each provider implements its own payload parsing (Block Kit for Slack, Adaptive Card for MS Teams).
+   * @param payload - The raw interactive payload from the provider
+   * @returns Parsed selection or null if not a valid agent selection
+   */
+  parseInteractivePayload(payload: unknown): {
+    agentId: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+    userId: string;
+    userName: string;
+    responseUrl: string;
+  } | null;
 
   /**
    * Send an agent selection card/message to a channel.
@@ -235,6 +278,24 @@ export interface ChatOpsProvider {
 }
 
 /**
+ * Callback interface for socket-mode providers to delegate events
+ * back to the ChatOpsManager without depending on it directly.
+ */
+export interface ChatOpsEventHandler {
+  handleIncomingMessage(
+    provider: ChatOpsProvider,
+    body: unknown,
+  ): Promise<void>;
+  handleInteractiveSelection(
+    provider: ChatOpsProvider,
+    payload: unknown,
+  ): Promise<void>;
+  getAccessibleChatopsAgents(params: {
+    senderEmail?: string;
+  }): Promise<{ id: string; name: string }[]>;
+}
+
+/**
  * MS Teams specific configuration from environment variables
  */
 export interface MSTeamsConfig {
@@ -249,25 +310,4 @@ export interface MSTeamsConfig {
     clientId: string;
     clientSecret: string;
   };
-}
-
-/**
- * Slack specific configuration from environment variables
- */
-export interface SlackConfig {
-  enabled: boolean;
-  /** Slack Bot User OAuth Token (xoxb-...) */
-  botToken: string;
-  /** Slack Signing Secret for webhook verification */
-  signingSecret: string;
-  /** Slack App ID (used to filter bot's own messages) */
-  appId: string;
-}
-
-/**
- * Overall chatops configuration
- */
-export interface ChatOpsConfig {
-  msTeams: MSTeamsConfig;
-  slack: SlackConfig;
 }

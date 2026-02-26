@@ -86,9 +86,12 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           cerebras: config.llm.cerebras.baseUrl || null,
           mistral: config.llm.mistral.baseUrl || null,
           perplexity: config.llm.perplexity.baseUrl || null,
+          groq: config.llm.groq.baseUrl || null,
           vllm: config.llm.vllm.baseUrl || null,
           ollama: config.llm.ollama.baseUrl || null,
           zhipuai: config.llm.zhipuai.baseUrl || null,
+          minimax: config.llm.minimax.baseUrl || null,
+          deepseek: config.llm.deepseek.baseUrl || null,
         },
       });
     },

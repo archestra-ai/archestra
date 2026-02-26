@@ -468,16 +468,18 @@ export function AssignedToolsTable({
             ? parseFullToolName(row.original.name).toolName || row.original.name
             : row.original.name;
           return (
-            <TruncatedText
-              message={displayName}
-              className="break-all"
-              maxLength={60}
-            />
+            <div className="max-w-[260px] md:max-w-none truncate">
+              <TruncatedText
+                message={displayName}
+                className="break-all"
+                maxLength={60}
+              />
+            </div>
           );
         },
-        size: 150,
-        minSize: 150,
-        maxSize: 150,
+        size: 200,
+        minSize: 200,
+        maxSize: 200,
       },
       {
         id: "origin",
@@ -781,7 +783,8 @@ export function AssignedToolsTable({
           />
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
+        {/* Bulk actions - Desktop */}
+        <div className="hidden md:flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
           <div className="flex items-center gap-3">
             {hasSelection ? (
               <>
@@ -912,6 +915,148 @@ export function AssignedToolsTable({
             <Button
               size="sm"
               variant="ghost"
+              onClick={clearSelection}
+              disabled={!hasSelection || isBulkUpdating}
+            >
+              Clear selection
+            </Button>
+          </div>
+        </div>
+
+        {/* Bulk actions - Mobile */}
+        <div className="flex flex-col gap-3 p-3 bg-muted/50 border border-border rounded-lg md:hidden">
+          {/* Title / selection info */}
+          <div className="flex items-center gap-2">
+            {hasSelection ? (
+              <>
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-xs font-semibold text-primary">
+                    {selectedTools.length}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">
+                  {selectedTools.length === 1
+                    ? "tool selected"
+                    : "tools selected"}
+                </span>
+                {isBulkUpdating && (
+                  <LoadingSpinner className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Select tools to apply bulk actions
+              </span>
+            )}
+          </div>
+
+          {/* Call Policy */}
+          <WithPermissions
+            permissions={{ policy: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Call Policy
+                </span>
+                <Select
+                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                  value={bulkCallPolicyValue}
+                  onValueChange={(value: CallPolicyAction) => {
+                    setBulkCallPolicyValue(value);
+                    handleBulkAction("callPolicy", value);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-full text-sm" size="sm">
+                    <SelectValue placeholder="Select action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="allow_when_context_is_untrusted">
+                      Allow always
+                    </SelectItem>
+                    <SelectItem value="block_when_context_is_untrusted">
+                      Allow in trusted context
+                    </SelectItem>
+                    <SelectItem value="block_always">Block always</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </WithPermissions>
+
+          {/* Results are */}
+          <WithPermissions
+            permissions={{ policy: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Results are
+                </span>
+                <Select
+                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                  value={bulkResultPolicyValue}
+                  onValueChange={(value: ResultPolicyAction) => {
+                    setBulkResultPolicyValue(value);
+                    handleBulkAction("resultPolicyAction", value);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-full text-sm" size="sm">
+                    <SelectValue placeholder="Select action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </WithPermissions>
+
+          {/* Action buttons */}
+          <div className="flex flex-col gap-2 pt-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PermissionButton
+                  permissions={{ agent: ["update"], tool: ["update"] }}
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-center"
+                  onClick={handleAutoConfigurePolicies}
+                  disabled={
+                    !hasSelection ||
+                    isBulkUpdating ||
+                    autoConfigureMutation.isPending
+                  }
+                >
+                  {autoConfigureMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Configuring...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4" />
+                      Configure with Subagent
+                    </>
+                  )}
+                </PermissionButton>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Automatically configure default policies using AI analysis
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full justify-center"
               onClick={clearSelection}
               disabled={!hasSelection || isBulkUpdating}
             >

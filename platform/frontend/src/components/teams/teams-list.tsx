@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -155,7 +156,7 @@ export function TeamsList() {
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <CardTitle>Teams</CardTitle>
               <CardDescription>
@@ -165,6 +166,7 @@ export function TeamsList() {
             <PermissionButton
               permissions={{ team: ["create"] }}
               onClick={() => setCreateDialogOpen(true)}
+              className="shrink-0 self-start md:self-auto"
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Team
@@ -184,9 +186,9 @@ export function TeamsList() {
               {teams.map((team) => (
                 <div
                   key={team.id}
-                  className="flex items-center justify-between rounded-lg border p-4"
+                  className="flex flex-col md:flex-row md:items-center md:justify-between rounded-lg border p-4 gap-3"
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold">{team.name}</h3>
                     {team.description && (
                       <p className="text-sm text-muted-foreground">
@@ -198,7 +200,7 @@ export function TeamsList() {
                       {(team.members?.length || 0) !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 shrink-0">
                     <PermissionButton
                       permissions={{ team: ["update"] }}
                       variant="outline"
@@ -323,9 +325,9 @@ export function TeamsList() {
                   );
                 }
                 return (
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="flex-1">
-                      <p className="font-mono text-sm text-muted-foreground">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between rounded-lg border p-4 gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-sm text-muted-foreground truncate">
                         {orgToken.tokenStart}...
                       </p>
                     </div>
@@ -357,40 +359,40 @@ export function TeamsList() {
               Create a team to organize access to profiles and MCP servers
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Team Name *</Label>
-              <Input
-                id="name"
-                placeholder="Engineering Team"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-              />
+          <DialogForm onSubmit={handleCreateTeam}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Team Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="Engineering Team"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Team for engineering staff..."
+                  value={teamDescription}
+                  onChange={(e) => setTeamDescription(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Team for engineering staff..."
-                value={teamDescription}
-                onChange={(e) => setTeamDescription(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCreateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateTeam}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? "Creating..." : "Create Team"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Creating..." : "Create Team"}
+              </Button>
+            </DialogFooter>
+          </DialogForm>
         </DialogContent>
       </Dialog>
 
@@ -403,21 +405,24 @@ export function TeamsList() {
               action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteTeam}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
+          <DialogForm onSubmit={handleDeleteTeam}>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogForm>
         </DialogContent>
       </Dialog>
 

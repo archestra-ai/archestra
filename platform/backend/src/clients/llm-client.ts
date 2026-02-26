@@ -4,6 +4,7 @@ import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createVertex } from "@ai-sdk/google-vertex";
+import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { context, propagation } from "@opentelemetry/api";
@@ -68,6 +69,14 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("minimax")) {
+    return "minimax";
+  }
+
+  if (lowerModel.includes("deepseek")) {
+    return "deepseek";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -86,12 +95,15 @@ const envApiKeyGetters: Record<
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
+  minimax: () => config.chat.minimax.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
   perplexity: () => config.chat.perplexity.apiKey,
+  groq: () => config.chat.groq.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
 };
 
 /**
@@ -219,9 +231,12 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
+  minimax: "MiniMax-M2.5-highspeed", // MiniMax's fastest model
+  deepseek: "deepseek-chat", // DeepSeek's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
   perplexity: "sonar", // Perplexity's fast model
+  groq: "llama-3.1-8b-instant", // Groq's fast model
 };
 
 /**
@@ -360,6 +375,20 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     return client.chat(modelName);
   },
 
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
+      );
+    }
+    const client = createGroq({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
+    });
+    return client(modelName);
+  },
+
   vllm: ({ apiKey, modelName, baseUrl }) => {
     // vLLM uses OpenAI-compatible API
     // Use client.chat() to force the Chat Completions API (/chat/completions)
@@ -397,6 +426,35 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: baseUrl ?? config.llm.zhipuai.baseUrl,
+    });
+    return client.chat(modelName);
+  },
+
+  minimax: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "MiniMax API key is required. Please configure ARCHESTRA_CHAT_MINIMAX_API_KEY.",
+      );
+    }
+    // MiniMax uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
     });
     return client.chat(modelName);
   },
@@ -582,6 +640,22 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       return client.chat(modelName);
     },
 
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      if (!apiKey) {
+        throw new ApiError(
+          400,
+          "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
+        );
+      }
+      const client = createGroq({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client(modelName);
+    },
+
     vllm: ({ apiKey, agentId, modelName, headers }) => {
       // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
       // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK
@@ -614,6 +688,28 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("zhipuai", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client.chat(modelName);
+    },
+
+    minimax: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/minimax/:agentId (SDK appends /chat/completions)
+      // MiniMax is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("minimax", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client.chat(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
         headers,
         fetch: createTracedFetch(),
       });

@@ -1,3 +1,4 @@
+import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type { SecretValue } from "@/types";
@@ -28,6 +29,8 @@ export interface SlackConfig {
   botToken: string;
   signingSecret: string;
   appId: string;
+  connectionMode?: "webhook" | "socket";
+  appLevelToken?: string;
 }
 
 class ChatOpsConfigModel {
@@ -36,7 +39,23 @@ class ChatOpsConfigModel {
   }
 
   async getSlackConfig(): Promise<SlackConfig | null> {
-    return this.getConfig<SlackConfig>(SLACK_SECRET_NAME);
+    const raw = await this.getConfig<SlackConfig>(SLACK_SECRET_NAME);
+    if (!raw) return null;
+    // Backward compatibility — precedence:
+    // 1. Explicit connectionMode from DB (already set by user)
+    // 2. Infer "webhook" if signingSecret is present but connectionMode is missing
+    //    (configs saved before socket mode was added)
+    // 3. Default to SLACK_DEFAULT_CONNECTION_MODE ("socket") for new installs
+    const inferredMode =
+      !raw.connectionMode && raw.signingSecret
+        ? "webhook"
+        : (raw.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE);
+
+    return {
+      ...raw,
+      connectionMode: inferredMode,
+      appLevelToken: raw.appLevelToken ?? "",
+    };
   }
 
   async saveMsTeamsConfig(value: MsTeamsConfig): Promise<void> {

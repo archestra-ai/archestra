@@ -550,7 +550,10 @@ export function McpCatalogForm({
                             </FormLabel>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="raw_token" id="auth-raw-token" />
+                            <RadioGroupItem
+                              value="raw_token"
+                              id="auth-raw-token"
+                            />
                             <FormLabel
                               htmlFor="auth-raw-token"
                               className="font-normal cursor-pointer"

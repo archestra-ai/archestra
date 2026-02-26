@@ -113,11 +113,10 @@ describe("OAuth helper functions", () => {
       // Mock fetch to always fail
       globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
-      const scopes = await discoverScopes(
-        "https://example.com",
-        false,
-        ["read", "write"],
-      );
+      const scopes = await discoverScopes("https://example.com", false, [
+        "read",
+        "write",
+      ]);
       expect(scopes).toEqual(["read", "write"]);
 
       // Restore
@@ -134,11 +133,10 @@ describe("OAuth helper functions", () => {
         }),
       }) as Mock;
 
-      const scopes = await discoverScopes(
-        "https://example.com",
-        false,
-        ["read", "write"],
-      );
+      const scopes = await discoverScopes("https://example.com", false, [
+        "read",
+        "write",
+      ]);
       expect(scopes).toEqual(["openid", "profile", "email"]);
 
       globalThis.fetch = originalFetch;
@@ -157,11 +155,10 @@ describe("OAuth helper functions", () => {
 
       globalThis.fetch = fetchMock;
 
-      const scopes = await discoverScopes(
-        "https://example.com/mcp",
-        true,
-        ["read", "write"],
-      );
+      const scopes = await discoverScopes("https://example.com/mcp", true, [
+        "read",
+        "write",
+      ]);
       expect(scopes).toEqual(["mcp:read", "mcp:write"]);
       // Should have called fetch only once (resource metadata succeeded)
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -186,11 +183,10 @@ describe("OAuth helper functions", () => {
 
       globalThis.fetch = fetchMock;
 
-      const scopes = await discoverScopes(
-        "https://example.com",
-        true,
-        ["read", "write"],
-      );
+      const scopes = await discoverScopes("https://example.com", true, [
+        "read",
+        "write",
+      ]);
       expect(scopes).toEqual(["api:read"]);
 
       globalThis.fetch = originalFetch;

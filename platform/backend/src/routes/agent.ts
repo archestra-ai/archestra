@@ -258,16 +258,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Auto-transition: if teams provided and no explicit scope, set scope to 'team'
-      let effectiveScope = body.scope;
-      if (body.teams.length > 0 && !effectiveScope) {
-        effectiveScope = "team";
-      }
-
-      // Inject authorId and effective scope
+      // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
-        ...(effectiveScope && { scope: effectiveScope }),
+        ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
       const labelKeys = await AgentLabelModel.getAllKeys();
@@ -384,20 +378,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Prevent downgrading shared agents to personal
-      const currentScope = existingAgent.scope as string;
-      if (body.scope === "personal" && currentScope !== "personal") {
+      if (body.scope === "personal" && existingAgent.scope !== "personal") {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
-      // Auto-transition scope based on team changes
-      const updateData = { ...body };
-      if (body.teams !== undefined) {
-        if (body.teams.length > 0 && currentScope === "personal") {
-          // Assigning teams to personal agent → scope becomes 'team'
-          updateData.scope = "team";
-        }
-        // org scope is sticky — not affected by team changes
-      }
+      // Omit teams if scope is not 'team' — scope takes precedence
+      const updateData = {
+        ...body,
+        ...((body.scope ?? existingAgent.scope) !== "team" && body.teams !== undefined && { teams: [] }),
+      };
 
       const agent = await AgentModel.update(id, updateData);
 

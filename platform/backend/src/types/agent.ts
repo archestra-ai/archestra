@@ -133,7 +133,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
-    scope: AgentScopeSchema.optional(),
+    scope: AgentScopeSchema,
   })
   .omit({
     id: true,
@@ -157,7 +157,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   .extend({
     teams: z.array(z.string()),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
-    scope: AgentScopeSchema.optional(),
+    scope: AgentScopeSchema,
   })
   .omit({
     id: true,

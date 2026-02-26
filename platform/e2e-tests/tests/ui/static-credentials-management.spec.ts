@@ -92,11 +92,11 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
         ).toHaveText("1");
       }
-      // Member cannot see credentials count
+      // Member can see credentials count
       if (user === "Member") {
         await expect(
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
-        ).not.toBeVisible();
+        ).toHaveText("1");
       }
 
       // After adding a server, the install dialog opens automatically.
@@ -324,11 +324,8 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     const expectedCredentialsCount = {
       Admin: 4, // admin sees all credentials (3 personal + 1 DEFAULT team)
       Editor: 2, // editor sees their own credentials (personal + DEFAULT team)
+      Member: 1, // member sees only their own personal credential
     };
-    // Member cannot see credentials count
-    if (user === "Member") {
-      return;
-    }
     await expect(
       page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
     ).toHaveText(expectedCredentialsCount[user].toString());

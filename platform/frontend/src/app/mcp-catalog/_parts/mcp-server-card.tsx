@@ -506,14 +506,9 @@ export function McpServerCard({
   const remoteCardContent = (
     <>
       <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <WithPermissions
-          permissions={{ mcpServer: ["update"] }}
-          noPermissionHandle="hide"
-        >
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {usersAuthenticated}
-          </div>
-        </WithPermissions>
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+          {usersAuthenticated}
+        </div>
         <WithPermissions
           permissions={{ tool: ["update"], agent: ["update"] }}
           noPermissionHandle="hide"
@@ -578,14 +573,9 @@ export function McpServerCard({
   const localCardContent = (
     <>
       <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <WithPermissions
-          permissions={{ mcpServer: ["update"] }}
-          noPermissionHandle="hide"
-        >
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {localServersInstalled}
-          </div>
-        </WithPermissions>
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+          {localServersInstalled}
+        </div>
         <WithPermissions
           permissions={{ tool: ["update"], agent: ["update"] }}
           noPermissionHandle="hide"
@@ -667,14 +657,9 @@ export function McpServerCard({
   const playwrightCardContent = (
     <>
       <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <WithPermissions
-          permissions={{ mcpServer: ["update"] }}
-          noPermissionHandle="hide"
-        >
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {localServersInstalled}
-          </div>
-        </WithPermissions>
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+          {localServersInstalled}
+        </div>
         <WithPermissions
           permissions={{ tool: ["update"], agent: ["update"] }}
           noPermissionHandle="hide"

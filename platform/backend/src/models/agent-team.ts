@@ -7,7 +7,7 @@ class AgentTeamModel {
    * Get all agent IDs that a user has access to.
    * Three sources of access:
    * 1. Org-scoped agents (visible to all)
-   * 2. Author's own agents (any scope)
+   * 2. Author's own personal agents
    * 3. Team-scoped agents where user is a team member
    */
   static async getUserAccessibleAgentIds(
@@ -35,7 +35,7 @@ class AgentTeamModel {
     const result = await db.execute<{ id: string }>(sql`
       SELECT id FROM agents WHERE scope = 'org'
       UNION
-      SELECT id FROM agents WHERE author_id = ${userId}
+      SELECT id FROM agents WHERE author_id = ${userId} AND scope = 'personal'
       UNION
       SELECT at.agent_id AS id
         FROM agent_team at
@@ -58,9 +58,8 @@ class AgentTeamModel {
    * Access rules (in order):
    * 1. Admin → true
    * 2. scope = 'org' → true
-   * 3. authorId = userId → true (author always has access)
+   * 3. scope = 'personal' → only the author has access
    * 4. scope = 'team' AND user is in one of agent's teams → true
-   * 5. Otherwise → false
    */
   static async userHasAgentAccess(
     userId: string,
@@ -103,13 +102,14 @@ class AgentTeamModel {
       return true;
     }
 
-    // 3. authorId = userId → true
-    if (agent.authorId === userId) {
+    // 3. scope = 'personal' → only the author has access
+    if (agent.scope === "personal") {
+      const hasAccess = agent.authorId === userId;
       logger.debug(
-        { userId, agentId },
-        "AgentTeamModel.userHasAgentAccess: user is author, granting access",
+        { userId, agentId, hasAccess },
+        "AgentTeamModel.userHasAgentAccess: personal agent check",
       );
-      return true;
+      return hasAccess;
     }
 
     // 4. scope = 'team' AND user is in one of agent's teams
@@ -148,11 +148,6 @@ class AgentTeamModel {
       return hasAccess;
     }
 
-    // 5. scope = 'personal' and user is not the author → false
-    logger.debug(
-      { userId, agentId },
-      "AgentTeamModel.userHasAgentAccess: personal agent, not author, denying access",
-    );
     return false;
   }
 

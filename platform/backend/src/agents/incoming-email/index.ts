@@ -10,10 +10,7 @@ import OrganizationModel from "@/models/organization";
 import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
-import {
-  RouteCategory,
-  startActiveChatSpan,
-} from "@/routes/proxy/utils/tracing";
+import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,

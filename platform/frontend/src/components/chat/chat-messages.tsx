@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
 import {
@@ -945,8 +946,7 @@ function MessageTool({
     }
   }
 
-  // Check if this is the todo_write tool from Archestra
-  if (toolName === "archestra__todo_write") {
+  if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
     return (
       <TodoWriteTool
         part={part}

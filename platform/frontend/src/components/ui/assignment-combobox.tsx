@@ -28,6 +28,8 @@ interface AssignmentComboboxProps {
   items: AssignmentComboboxItem[];
   selectedIds: string[];
   onToggle: (id: string) => void;
+  /** Called when a previously-unselected item is toggled ON */
+  onItemAdded?: (id: string) => void;
   placeholder?: string;
   emptyMessage?: string;
   createAction?: { label: string; href: string };
@@ -39,6 +41,7 @@ export function AssignmentCombobox({
   items,
   selectedIds,
   onToggle,
+  onItemAdded,
   placeholder = "Search...",
   emptyMessage = "No items found.",
   createAction,
@@ -131,8 +134,14 @@ export function AssignmentCombobox({
                   <DropdownMenuCheckboxItem
                     key={item.id}
                     checked={isSelected}
-                    onCheckedChange={() => onToggle(item.id)}
-                    onSelect={(e) => e.preventDefault()}
+                    onCheckedChange={() => {
+                      onToggle(item.id);
+                      if (!isSelected) onItemAdded?.(item.id);
+                    }}
+                    onSelect={(e) => {
+                      // Keep dropdown open when deselecting; close when selecting a new item
+                      if (isSelected) e.preventDefault();
+                    }}
                   >
                     <div className="flex items-center justify-between gap-2 w-full">
                       <div className="min-w-0">

@@ -22,12 +22,20 @@ import {
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
-import { SESSION_ID_KEY } from "@/observability/request-context";
+import {
+  ATTR_ARCHESTRA_COST,
+  ATTR_GENAI_COMPLETION,
+  ATTR_GENAI_RESPONSE_FINISH_REASONS,
+  ATTR_GENAI_RESPONSE_ID,
+  ATTR_GENAI_RESPONSE_MODEL,
+  ATTR_GENAI_USAGE_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_OUTPUT_TOKENS,
+  ATTR_GENAI_USAGE_TOTAL_TOKENS,
+  EVENT_GENAI_CONTENT_COMPLETION,
+} from "@/observability/tracing";
 import {
   type Agent,
   ApiError,
-  type InteractionRequest,
-  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -41,6 +49,15 @@ import {
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
+import {
+  buildInteractionRecord,
+  calculateInteractionCosts,
+  handleError,
+  normalizeToolCallsForPolicy,
+  recordBlockedToolCallMetrics,
+  toSpanUserInfo,
+  withSessionContext,
+} from "./llm-proxy-helpers";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 
@@ -55,7 +72,7 @@ const {
  * Groups the 15+ parameters that both handlers need into a single object
  * for maintainability and readability.
  */
-interface LLMProxyContext<TRequest> {
+export interface LLMProxyContext<TRequest> {
   agent: Agent;
   originalRequest: TRequest;
   baselineModel: string;
@@ -614,13 +631,7 @@ async function handleStreaming<
         .createRequestAdapter(originalRequest)
         .getProviderMessages(),
       parentContext,
-      user: resolvedUser
-        ? {
-            id: resolvedUser.id,
-            email: resolvedUser.email,
-            name: resolvedUser.name,
-          }
-        : null,
+      user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
 
@@ -655,22 +666,22 @@ async function handleStreaming<
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
         if (state.model) {
-          llmSpan.setAttribute("gen_ai.response.model", state.model);
+          llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
         }
         if (state.responseId) {
-          llmSpan.setAttribute("gen_ai.response.id", state.responseId);
+          llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, state.responseId);
         }
         if (state.usage) {
           llmSpan.setAttribute(
-            "gen_ai.usage.input_tokens",
+            ATTR_GENAI_USAGE_INPUT_TOKENS,
             state.usage.inputTokens,
           );
           llmSpan.setAttribute(
-            "gen_ai.usage.output_tokens",
+            ATTR_GENAI_USAGE_OUTPUT_TOKENS,
             state.usage.outputTokens,
           );
           llmSpan.setAttribute(
-            "gen_ai.usage.total_tokens",
+            ATTR_GENAI_USAGE_TOTAL_TOKENS,
             state.usage.inputTokens + state.usage.outputTokens,
           );
           const cost = await utils.costOptimization.calculateCost(
@@ -680,19 +691,19 @@ async function handleStreaming<
             providerName,
           );
           if (cost !== undefined) {
-            llmSpan.setAttribute("archestra.cost", cost);
+            llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
           }
         }
         if (state.stopReason) {
-          llmSpan.setAttribute("gen_ai.response.finish_reasons", [
+          llmSpan.setAttribute(ATTR_GENAI_RESPONSE_FINISH_REASONS, [
             state.stopReason,
           ]);
         }
 
         // Capture streamed completion content
         if (captureContent && state.text) {
-          llmSpan.addEvent("gen_ai.content.completion", {
-            "gen_ai.completion": state.text.slice(0, contentMaxLength),
+          llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
+            [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
           });
         }
       },
@@ -702,7 +713,8 @@ async function handleStreaming<
 
     // Evaluate tool invocation policies
     const toolCalls = streamAdapter.state.toolCalls;
-    let toolInvocationRefusal: [string, string] | null = null;
+    let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
+      null;
 
     if (toolCalls.length > 0) {
       logger.info(
@@ -713,24 +725,8 @@ async function handleStreaming<
         "Evaluating tool invocation policies",
       );
 
-      // Parse tool arguments for policy evaluation
-      const toolCallsForPolicy = toolCalls.map((tc) => {
-        let argsString = tc.arguments;
-        try {
-          // Verify it's valid JSON
-          JSON.parse(tc.arguments);
-        } catch {
-          // If not valid JSON, wrap it
-          argsString = JSON.stringify({ raw: tc.arguments });
-        }
-        return {
-          toolCallName: tc.name,
-          toolCallArgs: argsString,
-        };
-      });
-
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-        toolCallsForPolicy,
+        normalizeToolCallsForPolicy(toolCalls),
         agent.id,
         {
           teamIds: teamIds ?? [],
@@ -748,7 +744,8 @@ async function handleStreaming<
     }
 
     if (toolInvocationRefusal) {
-      const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+      const { contentMessage, reason, allToolCallNames } =
+        toolInvocationRefusal;
 
       // Stream refusal
       ensureStreamHeaders();
@@ -757,15 +754,17 @@ async function handleStreaming<
         reply.raw.write(event);
       }
 
-      withSessionContext(sessionId, () =>
-        metrics.llm.reportBlockedTools(
-          providerName,
-          agent,
-          toolCalls.length,
-          actualModel,
-          externalAgentId,
-        ),
-      );
+      recordBlockedToolCallMetrics({
+        allToolCallNames,
+        reason,
+        agent,
+        sessionId,
+        resolvedUser,
+        providerName,
+        toolCallCount: toolCalls.length,
+        actualModel,
+        externalAgentId,
+      });
     } else if (toolCalls.length > 0) {
       // Tool calls approved - stream raw events
       logger.info(
@@ -821,54 +820,44 @@ async function handleStreaming<
         }
       });
 
-      const baselineCost = await utils.costOptimization.calculateCost(
+      const costs = await calculateInteractionCosts({
         baselineModel,
-        usage.inputTokens,
-        usage.outputTokens,
-        providerName,
-      );
-      const actualCost = await utils.costOptimization.calculateCost(
         actualModel,
-        usage.inputTokens,
-        usage.outputTokens,
+        usage,
         providerName,
-      );
+      });
 
       withSessionContext(sessionId, () =>
         metrics.llm.reportLLMCost(
           providerName,
           agent,
           actualModel,
-          actualCost,
+          costs.actualCost,
           externalAgentId,
         ),
       );
 
       try {
-        await InteractionModel.create({
-          profileId: agent.id,
-          externalAgentId,
-          executionId,
-          userId,
-          sessionId,
-          sessionSource,
-          type: provider.interactionType,
-          // Cast generic types to interaction types - valid at runtime
-          request: originalRequest as unknown as InteractionRequest,
-          processedRequest: request as unknown as InteractionRequest,
-          response:
-            streamAdapter.toProviderResponse() as unknown as InteractionResponse,
-          model: actualModel,
-          baselineModel,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          cost: actualCost?.toFixed(10) ?? null,
-          baselineCost: baselineCost?.toFixed(10) ?? null,
-          toonTokensBefore: toonStats.tokensBefore,
-          toonTokensAfter: toonStats.tokensAfter,
-          toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-          toonSkipReason,
-        });
+        await InteractionModel.create(
+          buildInteractionRecord({
+            agent,
+            externalAgentId,
+            executionId,
+            userId,
+            sessionId,
+            sessionSource,
+            providerType: provider.interactionType,
+            request: originalRequest,
+            processedRequest: request,
+            response: streamAdapter.toProviderResponse(),
+            actualModel,
+            baselineModel,
+            usage,
+            costs,
+            toonStats,
+            toonSkipReason,
+          }),
+        );
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -938,25 +927,19 @@ async function handleNonStreaming<
       .createRequestAdapter(originalRequest)
       .getProviderMessages(),
     parentContext,
-    user: resolvedUser
-      ? {
-          id: resolvedUser.id,
-          email: resolvedUser.email,
-          name: resolvedUser.name,
-        }
-      : null,
+    user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
       const result = await provider.execute(client, request);
       const adapter = provider.createResponseAdapter(result);
 
       // Set response attributes on span per OTEL GenAI semconv
       const usage = adapter.getUsage();
-      llmSpan.setAttribute("gen_ai.response.model", adapter.getModel());
-      llmSpan.setAttribute("gen_ai.response.id", adapter.getId());
-      llmSpan.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens);
-      llmSpan.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens);
+      llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, adapter.getModel());
+      llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, adapter.getId());
+      llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, usage.inputTokens);
+      llmSpan.setAttribute(ATTR_GENAI_USAGE_OUTPUT_TOKENS, usage.outputTokens);
       llmSpan.setAttribute(
-        "gen_ai.usage.total_tokens",
+        ATTR_GENAI_USAGE_TOTAL_TOKENS,
         usage.inputTokens + usage.outputTokens,
       );
       const cost = await utils.costOptimization.calculateCost(
@@ -966,10 +949,10 @@ async function handleNonStreaming<
         providerName,
       );
       if (cost !== undefined) {
-        llmSpan.setAttribute("archestra.cost", cost);
+        llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
       }
       llmSpan.setAttribute(
-        "gen_ai.response.finish_reasons",
+        ATTR_GENAI_RESPONSE_FINISH_REASONS,
         adapter.getFinishReasons(),
       );
 
@@ -977,8 +960,8 @@ async function handleNonStreaming<
       if (captureContent) {
         const text = adapter.getText?.();
         if (text) {
-          llmSpan.addEvent("gen_ai.content.completion", {
-            "gen_ai.completion": text.slice(0, contentMaxLength),
+          llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
+            [ATTR_GENAI_COMPLETION]: text.slice(0, contentMaxLength),
           });
         }
       }
@@ -996,13 +979,7 @@ async function handleNonStreaming<
   // Evaluate tool invocation policies
   if (toolCalls.length > 0) {
     const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-      toolCalls.map((tc) => ({
-        toolCallName: tc.name,
-        toolCallArgs:
-          typeof tc.arguments === "string"
-            ? tc.arguments
-            : JSON.stringify(tc.arguments),
-      })),
+      normalizeToolCallsForPolicy(toolCalls),
       agent.id,
       {
         teamIds: teamIds ?? [],
@@ -1014,7 +991,8 @@ async function handleNonStreaming<
     );
 
     if (toolInvocationRefusal) {
-      const [refusalMessage, contentMessage] = toolInvocationRefusal;
+      const { refusalMessage, contentMessage, reason, allToolCallNames } =
+        toolInvocationRefusal;
       logger.debug(
         { toolCallCount: toolCalls.length },
         `[${providerName}Proxy] Tool invocation blocked by policy`,
@@ -1025,64 +1003,57 @@ async function handleNonStreaming<
         contentMessage,
       );
 
-      withSessionContext(sessionId, () =>
-        metrics.llm.reportBlockedTools(
-          providerName,
-          agent,
-          toolCalls.length,
-          actualModel,
-          externalAgentId,
-        ),
-      );
+      recordBlockedToolCallMetrics({
+        allToolCallNames,
+        reason,
+        agent,
+        sessionId,
+        resolvedUser,
+        providerName,
+        toolCallCount: toolCalls.length,
+        actualModel,
+        externalAgentId,
+      });
 
       // Record interaction with refusal
       const usage = responseAdapter.getUsage();
-      const baselineCost = await utils.costOptimization.calculateCost(
+      const costs = await calculateInteractionCosts({
         baselineModel,
-        usage.inputTokens,
-        usage.outputTokens,
-        providerName,
-      );
-      const actualCost = await utils.costOptimization.calculateCost(
         actualModel,
-        usage.inputTokens,
-        usage.outputTokens,
+        usage,
         providerName,
-      );
+      });
 
       withSessionContext(sessionId, () =>
         metrics.llm.reportLLMCost(
           providerName,
           agent,
           actualModel,
-          actualCost,
+          costs.actualCost,
           externalAgentId,
         ),
       );
 
-      await InteractionModel.create({
-        profileId: agent.id,
-        externalAgentId,
-        executionId,
-        userId,
-        sessionId,
-        sessionSource,
-        type: provider.interactionType,
-        // Cast generic types to interaction types - valid at runtime
-        request: originalRequest as unknown as InteractionRequest,
-        processedRequest: request as unknown as InteractionRequest,
-        response: refusalResponse as unknown as InteractionResponse,
-        model: actualModel,
-        baselineModel,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cost: actualCost?.toFixed(10) ?? null,
-        baselineCost: baselineCost?.toFixed(10) ?? null,
-        toonTokensBefore: toonStats.tokensBefore,
-        toonTokensAfter: toonStats.tokensAfter,
-        toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-        toonSkipReason,
-      });
+      await InteractionModel.create(
+        buildInteractionRecord({
+          agent,
+          externalAgentId,
+          executionId,
+          userId,
+          sessionId,
+          sessionSource,
+          providerType: provider.interactionType,
+          request: originalRequest,
+          processedRequest: request,
+          response: refusalResponse,
+          actualModel,
+          baselineModel,
+          usage,
+          costs,
+          toonStats,
+          toonSkipReason,
+        }),
+      );
 
       return reply.send(refusalResponse);
     }
@@ -1103,54 +1074,44 @@ async function handleNonStreaming<
   //   externalAgentId,
   // );
 
-  const baselineCost = await utils.costOptimization.calculateCost(
+  const costs = await calculateInteractionCosts({
     baselineModel,
-    usage.inputTokens,
-    usage.outputTokens,
-    providerName,
-  );
-  const actualCost = await utils.costOptimization.calculateCost(
     actualModel,
-    usage.inputTokens,
-    usage.outputTokens,
+    usage,
     providerName,
-  );
+  });
 
   withSessionContext(sessionId, () =>
     metrics.llm.reportLLMCost(
       providerName,
       agent,
       actualModel,
-      actualCost,
+      costs.actualCost,
       externalAgentId,
     ),
   );
 
   try {
-    await InteractionModel.create({
-      profileId: agent.id,
-      externalAgentId,
-      executionId,
-      userId,
-      sessionId,
-      sessionSource,
-      type: provider.interactionType,
-      // Cast generic types to interaction types - valid at runtime
-      request: originalRequest as unknown as InteractionRequest,
-      processedRequest: request as unknown as InteractionRequest,
-      response:
-        responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
-      model: actualModel,
-      baselineModel,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cost: actualCost?.toFixed(10) ?? null,
-      baselineCost: baselineCost?.toFixed(10) ?? null,
-      toonTokensBefore: toonStats.tokensBefore,
-      toonTokensAfter: toonStats.tokensAfter,
-      toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
-      toonSkipReason,
-    });
+    await InteractionModel.create(
+      buildInteractionRecord({
+        agent,
+        externalAgentId,
+        executionId,
+        userId,
+        sessionId,
+        sessionSource,
+        providerType: provider.interactionType,
+        request: originalRequest,
+        processedRequest: request,
+        response: responseAdapter.getOriginalResponse(),
+        actualModel,
+        baselineModel,
+        usage,
+        costs,
+        toonStats,
+        toonSkipReason,
+      }),
+    );
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -1159,78 +1120,4 @@ async function handleNonStreaming<
   }
 
   return reply.send(responseAdapter.getOriginalResponse());
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-/**
- * Run a function within the OTEL context that has the session ID set.
- * Used for metric calls that happen outside the span callback so that
- * exemplar labels include the sessionID for Grafana correlation.
- */
-function withSessionContext<T>(
-  sessionId: string | null | undefined,
-  fn: () => T,
-): T {
-  if (!sessionId) return fn();
-  const ctx = otelContext.active().setValue(SESSION_ID_KEY, sessionId);
-  return otelContext.with(ctx, fn);
-}
-
-function handleError(
-  error: unknown,
-  reply: FastifyReply,
-  extractErrorMessage: (error: unknown) => string,
-  isStreaming: boolean,
-): FastifyReply | never {
-  logger.error(error);
-
-  // Extract status code from error, checking multiple common property names
-  // and ensuring the value is a valid number (not undefined/null)
-  let statusCode: number = 500;
-  if (error instanceof Error) {
-    const errorObj = error as Error & {
-      status?: number;
-      statusCode?: number;
-    };
-    if (typeof errorObj.status === "number") {
-      statusCode = errorObj.status;
-    } else if (typeof errorObj.statusCode === "number") {
-      statusCode = errorObj.statusCode;
-    }
-  }
-
-  const errorMessage = extractErrorMessage(error);
-
-  // If headers already sent (mid-stream error), write error to stream.
-  // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
-  // the status after headers are committed - so SSE error event is our only option.
-  // Check reply.raw.headersSent (set after writeHead) rather than reply.sent
-  // (which is only set after hijack or full send).
-  if (isStreaming && reply.raw.headersSent) {
-    const errorEvent = {
-      type: "error",
-      error: {
-        type: "api_error",
-        message: errorMessage,
-      },
-    };
-    try {
-      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
-      reply.raw.end();
-    } catch (writeError) {
-      // Connection already closed by the client — nothing more we can do.
-      logger.debug(
-        { err: writeError },
-        "Failed to write SSE error event (connection likely closed)",
-      );
-    }
-    return reply;
-  }
-
-  // Headers not sent yet - throw ApiError to let central handler return proper status code
-  // This matches V1 handler behavior and ensures clients receive correct HTTP status
-  throw new ApiError(statusCode, errorMessage);
 }

@@ -91,6 +91,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ollama: config.llm.ollama.baseUrl || null,
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
+          deepseek: config.llm.deepseek.baseUrl || null,
         },
       });
     },

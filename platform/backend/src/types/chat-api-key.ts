@@ -21,6 +21,7 @@ export const SupportedChatProviderSchema = z.enum([
   "vllm",
   "ollama",
   "zhipuai",
+  "deepseek",
   "minimax",
 ]);
 export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;

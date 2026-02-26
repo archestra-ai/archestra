@@ -159,6 +159,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
+  },
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",

@@ -306,5 +306,6 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",
   zhipuai: "zhipuai:chatCompletions",
+  deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",
 };

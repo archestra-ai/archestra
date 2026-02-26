@@ -169,6 +169,33 @@ const zhipuaiConfig = makeOpenAiCompatibleCostConfig({
   provider: "zhipuai",
 });
 
+const deepseekConfig: TokenCostLimitTestConfig = {
+  providerName: "DeepSeek",
+
+  endpoint: (profileId) => `/v1/deepseek/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-deepseek-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-deepseek-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  customPricing: {
+    provider: "deepseek",
+    model: "test-deepseek-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
 
@@ -294,6 +321,7 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  deepseek: deepseekConfig,
   minimax: minimaxConfig,
   bedrock: bedrockConfig,
 } satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;
@@ -305,8 +333,10 @@ for (const config of testConfigs) {
     `LLMProxy-TokenCostLimits-${config.providerName}`,
     { tag: ["@flaky"] },
     () => {
-      // Retry to handle async usage tracking race conditions in CI
-      test.describe.configure({ retries: 2 });
+      // Retry to handle async usage tracking race conditions in CI.
+      // Use a generous timeout because polling for usage tracking can exceed
+      // the default 60s limit under CI resource contention.
+      test.describe.configure({ retries: 2, timeout: 120_000 });
       let profileId: string;
       let limitId: string;
       let modelUuid: string;

@@ -10,6 +10,20 @@ import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type { GlobalToolPolicy } from "@/types";
 
 /**
+ * Result returned when tool invocation policies block a tool call.
+ */
+export interface PolicyBlockResult {
+  refusalMessage: string;
+  contentMessage: string;
+  /** Human-readable reason why the tool call was blocked */
+  reason: string;
+  /** The specific tool that triggered the block */
+  blockedToolName: string;
+  /** All tool call names in the batch (all are blocked when any one is) */
+  allToolCallNames: string[];
+}
+
+/**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,
  * if the tool call is allowed or blocked.
  *
@@ -30,7 +44,7 @@ export const evaluatePolicies = async (
   contextIsTrusted: boolean,
   enabledToolNames: Set<string>,
   globalToolPolicy: GlobalToolPolicy,
-): Promise<null | [string, string]> => {
+): Promise<PolicyBlockResult | null> => {
   logger.debug(
     {
       agentId,
@@ -73,7 +87,15 @@ export const evaluatePolicies = async (
   if (disabledToolNames.length > 0) {
     const toolList = disabledToolNames.join(", ");
     const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
-    return [message, message];
+    const reason =
+      "Tool invocation blocked: tool not enabled for this conversation";
+    return {
+      refusalMessage: message,
+      contentMessage: message,
+      reason,
+      blockedToolName: disabledToolNames[0],
+      allToolCallNames: disabledToolNames,
+    };
   }
 
   // If all tools were filtered out, nothing to evaluate
@@ -138,25 +160,13 @@ ${contentMessage}`;
       { agentId, toolCallName, reason },
       "[toolInvocation] evaluatePolicies: tool invocation blocked",
     );
-    // TODO: return string or null, not provider specific message type
-    // return {
-    //   finish_reason: "stop",
-    //   index: 0,
-    //   logprobs: null,
-    //   message: {
-    //     role: "assistant",
-    //     /**
-    //      * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-    //      * is that most clients expect to see the content field, and don't conditionally render the refusal field
-    //      *
-    //      * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-    //      * message, but also show some special UI to indicate that the tool call was blocked.
-    //      */
-    //     refusal: refusalMessage,
-    //     content: contentMessage,
-    //   },
-    // };
-    return [refusalMessage, contentMessage];
+    return {
+      refusalMessage,
+      contentMessage,
+      reason,
+      blockedToolName: toolCallName,
+      allToolCallNames: filteredToolCalls.map((tc) => tc.toolCallName),
+    };
   }
 
   logger.debug(

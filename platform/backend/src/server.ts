@@ -13,7 +13,7 @@ const isMainModule =
  */
 if (isMainModule) {
   await import("./sentry");
-  await import("./observability/tracing");
+  await import("./observability/tracing/sdk");
 }
 
 import fastifyCors from "@fastify/cors";
@@ -62,6 +62,7 @@ import {
   ApiError,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
   Groq,
   Minimax,
@@ -168,6 +169,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionRequestSchema, {
+    id: "DeepSeekChatCompletionRequest",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionResponseSchema, {
+    id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
     id: "MinimaxChatCompletionRequest",

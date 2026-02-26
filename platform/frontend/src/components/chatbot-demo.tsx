@@ -38,6 +38,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
+import { preserveNewlines } from "@/lib/chat-utils";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { cn } from "@/lib/utils";
 import { PolicyDeniedTool } from "./chat/policy-denied-tool";
@@ -157,7 +158,11 @@ const ChatBotDemo = ({
                                     System Prompt
                                   </div>
                                 )}
-                                <Response>{part.text}</Response>
+                                <Response>
+                                  {message.role === "user"
+                                    ? preserveNewlines(part.text)
+                                    : part.text}
+                                </Response>
                               </MessageContent>
                             </Message>
                             {message.role === "assistant" &&

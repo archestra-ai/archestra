@@ -1031,264 +1031,158 @@ Return only the JSON object, no other text.`;
   }
 }
 
-/**
- * Zhipuai implementation of DualLlmClient
- * Zhipuai exposes an OpenAI-compatible API, so we use the OpenAI SDK with Zhipuai's base URL
- */
-export class ZhipuaiDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
+function createOpenAiCompatibleDualLlmClient(params: {
+  providerLabel: string;
+  baseUrl: string;
+  defaultModel: string;
+}): {
+  new (apiKey: string, model?: string): DualLlmClient;
+} {
+  return class implements DualLlmClient {
+    private client: OpenAI;
+    private model: string;
 
-  constructor(apiKey: string, model = "glm-4.5-flash") {
-    logger.debug({ model }, "[dualLlmClient] Zhipuai: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.zhipuai.baseUrl,
-    });
-    this.model = model;
-  }
+    constructor(apiKey: string, model = params.defaultModel) {
+      logger.debug(
+        { model },
+        `[dualLlmClient] ${params.providerLabel}: initializing client`,
+      );
+      this.client = new OpenAI({
+        apiKey,
+        baseURL: params.baseUrl,
+      });
+      this.model = model;
+    }
 
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] Zhipuai: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Zhipuai: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] Zhipuai: starting chat with schema",
-    );
-
-    // Zhipuai supports JSON schema via response_format for some models
-    // Try OpenAI-compatible structured output first
-    try {
+    async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+      logger.debug(
+        { model: this.model, messageCount: messages.length, temperature },
+        `[dualLlmClient] ${params.providerLabel}: starting chat completion`,
+      );
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages,
-        response_format: {
-          type: "json_schema",
-          json_schema: schema,
-        },
         temperature,
       });
 
-      const content = response.choices[0].message.content || "";
+      const content = response.choices[0].message.content?.trim() || "";
       logger.debug(
         { model: this.model, responseLength: content.length },
-        "[dualLlmClient] Zhipuai: chat with schema complete, parsing response",
+        `[dualLlmClient] ${params.providerLabel}: chat completion complete`,
       );
-      return JSON.parse(content) as T;
-    } catch (error) {
-      // Fallback to prompt-based approach if structured output not supported
+      return content;
+    }
+
+    async chatWithSchema<T>(
+      messages: DualLlmMessage[],
+      schema: {
+        name: string;
+        schema: {
+          type: string;
+          properties: Record<string, unknown>;
+          required: string[];
+          additionalProperties: boolean;
+        };
+      },
+      temperature = 0,
+    ): Promise<T> {
       logger.debug(
         {
           model: this.model,
-          error: error instanceof Error ? error.message : String(error),
+          schemaName: schema.name,
+          messageCount: messages.length,
+          temperature,
         },
-        "[dualLlmClient] Zhipuai: structured output not supported, using prompt fallback",
+        `[dualLlmClient] ${params.providerLabel}: starting chat with schema`,
       );
 
-      const systemPrompt = `You must respond with valid JSON matching this schema:
+      // Try OpenAI-compatible structured output first
+      try {
+        const response = await this.client.chat.completions.create({
+          model: this.model,
+          messages,
+          response_format: {
+            type: "json_schema",
+            json_schema: schema,
+          },
+          temperature,
+        });
+
+        const content = response.choices[0].message.content || "";
+        logger.debug(
+          { model: this.model, responseLength: content.length },
+          `[dualLlmClient] ${params.providerLabel}: chat with schema complete, parsing response`,
+        );
+        return JSON.parse(content) as T;
+      } catch (error) {
+        // Fallback to prompt-based JSON-only response if structured output unsupported
+        logger.debug(
+          {
+            model: this.model,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          `[dualLlmClient] ${params.providerLabel}: structured output not supported, using prompt fallback`,
+        );
+
+        const systemPrompt = `You must respond with valid JSON matching this schema:
 ${JSON.stringify(schema.schema, null, 2)}
 
 Return only the JSON object, no other text.`;
 
-      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
-        if (idx === 0 && msg.role === "user") {
-          return {
-            ...msg,
-            content: `${systemPrompt}\n\n${msg.content}`,
-          };
-        }
-        return msg;
-      });
+        const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+          if (idx === 0 && msg.role === "user") {
+            return {
+              ...msg,
+              content: `${systemPrompt}\n\n${msg.content}`,
+            };
+          }
+          return msg;
+        });
 
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: enhancedMessages,
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      // Strip markdown code blocks if present
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
-        null,
-        content,
-      ];
-      const jsonText = jsonMatch[1].trim();
-
-      try {
-        return JSON.parse(jsonText) as T;
-      } catch (parseError) {
-        logger.error(
-          { model: this.model, content: jsonText, parseError },
-          "[dualLlmClient] Zhipuai: failed to parse JSON response",
-        );
-        throw parseError;
-      }
-    }
-  }
-}
-
-/**
- * MiniMax implementation of DualLlmClient
- * MiniMax exposes an OpenAI-compatible API, so we use the OpenAI SDK with MiniMax's base URL
- */
-export class MinimaxDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  // Default to MiniMax-M2.1 for cost-effective verification; callers can override via factory
-  constructor(apiKey: string, model = "MiniMax-M2.1") {
-    logger.debug({ model }, "[dualLlmClient] MiniMax: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.minimax.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] MiniMax: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] MiniMax: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] MiniMax: starting chat with schema",
-    );
-
-    // MiniMax aims to be OpenAI-compatible; try JSON schema first
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages,
-        response_format: {
-          type: "json_schema",
-          json_schema: schema,
-        },
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      logger.debug(
-        { model: this.model, responseLength: content.length },
-        "[dualLlmClient] MiniMax: chat with schema complete, parsing response",
-      );
-      return JSON.parse(content) as T;
-    } catch (error) {
-      // Fallback to prompt-based JSON-only response if structured output unsupported
-      logger.debug(
-        {
+        const response = await this.client.chat.completions.create({
           model: this.model,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "[dualLlmClient] MiniMax: structured output not supported, using prompt fallback",
-      );
+          messages: enhancedMessages,
+          temperature,
+        });
 
-      const systemPrompt = `You must respond with valid JSON matching this schema:
-${JSON.stringify(schema.schema, null, 2)}
+        const content = response.choices[0].message.content || "";
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+          null,
+          content,
+        ];
+        const jsonText = (jsonMatch[1] || content).trim();
 
-Return only the JSON object, no other text.`;
-
-      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
-        if (idx === 0 && msg.role === "user") {
-          return {
-            ...msg,
-            content: `${systemPrompt}\n\n${msg.content}`,
-          };
+        try {
+          return JSON.parse(jsonText) as T;
+        } catch (parseError) {
+          logger.error(
+            { model: this.model, content: jsonText, parseError },
+            `[dualLlmClient] ${params.providerLabel}: failed to parse JSON response`,
+          );
+          throw parseError;
         }
-        return msg;
-      });
-
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: enhancedMessages,
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
-        null,
-        content,
-      ];
-      const jsonText = jsonMatch[1].trim();
-
-      try {
-        return JSON.parse(jsonText) as T;
-      } catch (parseError) {
-        logger.error(
-          { model: this.model, content: jsonText, parseError },
-          "[dualLlmClient] MiniMax: failed to parse JSON response",
-        );
-        throw parseError;
       }
     }
-  }
+  };
 }
+
+export const ZhipuaiDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Zhipuai",
+  baseUrl: config.llm.zhipuai.baseUrl,
+  defaultModel: "glm-4.5-flash",
+});
+
+export const MinimaxDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "MiniMax",
+  baseUrl: config.llm.minimax.baseUrl,
+  defaultModel: "MiniMax-M2.1",
+});
+
+export const DeepSeekDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "DeepSeek",
+  baseUrl: config.llm.deepseek.baseUrl,
+  defaultModel: "deepseek-chat",
+});
 
 /**
  * Bedrock implementation of DualLlmClient
@@ -1518,6 +1412,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     zhipuai: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Zhipuai dual LLM");
       return new ZhipuaiDualLlmClient(apiKey, model);
+    },
+    deepseek: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for DeepSeek dual LLM");
+      return new DeepSeekDualLlmClient(apiKey, model);
     },
     minimax: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for MiniMax dual LLM");

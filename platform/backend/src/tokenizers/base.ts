@@ -1,6 +1,7 @@
 import type {
   Anthropic,
   Cohere,
+  DeepSeek,
   Gemini,
   Groq,
   Minimax,
@@ -19,6 +20,7 @@ export type ProviderMessage =
   | Vllm.Types.ChatCompletionsRequest["messages"][number]
   | Ollama.Types.ChatCompletionsRequest["messages"][number]
   | Zhipuai.Types.ChatCompletionsRequest["messages"][number]
+  | DeepSeek.Types.ChatCompletionsRequest["messages"][number]
   | Minimax.Types.ChatCompletionsRequest["messages"][number];
 
 /**

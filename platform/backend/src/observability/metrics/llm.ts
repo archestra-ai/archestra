@@ -43,6 +43,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,
+  deepseek: getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };

@@ -252,6 +252,7 @@ class OptimizationRuleModel {
       { organizationId },
       "OptimizationRuleModel.ensureDefaultOptimizationRules: starting",
     );
+
     // Define rules per provider
     const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
       {
@@ -285,6 +286,7 @@ class OptimizationRuleModel {
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
+        deepseek: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
       };

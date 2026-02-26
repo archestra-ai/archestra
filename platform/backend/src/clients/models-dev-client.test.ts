@@ -157,11 +157,11 @@ describe("ModelsDevClient", () => {
       expect(modelsDevClient.mapProvider("cohere")).toBe("cohere");
       expect(modelsDevClient.mapProvider("cerebras")).toBe("cerebras");
       expect(modelsDevClient.mapProvider("mistral")).toBe("mistral");
+      expect(modelsDevClient.mapProvider("deepseek")).toBe("deepseek");
     });
 
     test("maps OpenAI-compatible providers to openai", () => {
       expect(modelsDevClient.mapProvider("llama")).toBe("openai");
-      expect(modelsDevClient.mapProvider("deepseek")).toBe("openai");
       expect(modelsDevClient.mapProvider("groq")).toBe("groq");
       expect(modelsDevClient.mapProvider("fireworks-ai")).toBe("openai");
       expect(modelsDevClient.mapProvider("togetherai")).toBe("openai");

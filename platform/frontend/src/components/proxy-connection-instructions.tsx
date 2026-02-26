@@ -68,6 +68,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
   },
+  deepseek: {
+    label: providerDisplayNames.deepseek,
+    originalUrl: "https://api.deepseek.com/",
+  },
   minimax: {
     label: providerDisplayNames.minimax,
     originalUrl: "https://api.minimax.io/v1/",

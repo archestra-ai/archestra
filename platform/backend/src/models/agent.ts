@@ -65,9 +65,6 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
-    // Assign default Archestra tools (artifact_write, todo_write) to new profiles
-    await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
-
     // For internal agents, create a delegation tool so other agents can delegate to this one
     if (createdAgent.agentType === "agent") {
       await ToolModel.findOrCreateDelegationTool(createdAgent.id);

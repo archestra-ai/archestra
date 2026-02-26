@@ -483,6 +483,41 @@ const minimaxConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const deepseekConfig: ModelOptimizationTestConfig = {
+  providerName: "DeepSeek",
+  provider: "deepseek",
+
+  endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-deepseek-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-deepseek-baseline",
+  optimizedModel: "e2e-test-deepseek-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -521,6 +556,7 @@ const testConfigsMap = {
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
   minimax: minimaxConfig,
+  deepseek: deepseekConfig,
   bedrock: null, // Bedrock messages use nested content arrays that the tokenizer doesn't count correctly
 } satisfies Record<SupportedProvider, ModelOptimizationTestConfig | null>;
 

@@ -256,10 +256,8 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
           });
           if (await gatewayItem.isVisible().catch(() => false)) {
             await gatewayItem.click();
-            await page.waitForTimeout(200);
-            // Close the dropdown by pressing Escape
-            await page.keyboard.press("Escape");
-            await page.waitForTimeout(200);
+            // The dropdown auto-closes when selecting a new item
+            await page.waitForTimeout(300);
           }
         }
       }

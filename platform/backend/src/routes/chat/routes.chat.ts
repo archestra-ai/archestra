@@ -43,7 +43,7 @@ import {
   TeamModel,
 } from "@/models";
 import ApiKeyModelModel from "@/models/api-key-model";
-import { startActiveChatSpan } from "@/routes/proxy/utils/tracing";
+import { startActiveChatSpan } from "@/observability/tracing";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
@@ -82,6 +82,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   mistral: "mistral-large-latest",
   perplexity: "sonar-pro",
   zhipuai: "glm-4-plus",
+  deepseek: "deepseek-chat",
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
   minimax: "MiniMax-M2.5",
 };

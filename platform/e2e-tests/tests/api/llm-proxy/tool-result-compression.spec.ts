@@ -557,6 +557,43 @@ const bedrockConfig: CompressionTestConfig = {
   }),
 };
 
+const openrouterConfig: CompressionTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (profileId) => `/v1/openrouter/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequestWithToolResult: () => ({
+    model: "openrouter/auto",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -576,6 +613,7 @@ const testConfigsMap = {
   minimax: minimaxConfig,
   deepseek: deepseekConfig,
   bedrock: bedrockConfig,
+  openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling (has built-in web search instead)
 } satisfies Record<SupportedProvider, CompressionTestConfig | null>;
 

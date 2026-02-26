@@ -514,9 +514,13 @@ export function McpCatalogForm({
           )}
         </div>
 
-        {currentServerType === "remote" && (
+        {(currentServerType === "remote" || currentServerType === "local") && (
           <div className="space-y-4 pt-4 border-t">
             <FormLabel>Authentication</FormLabel>
+            <p className="text-sm text-muted-foreground">
+              Configure how users authenticate with this MCP server. OAuth is
+              recommended for servers that support it.
+            </p>
 
             <FormField
               control={form.control}
@@ -538,24 +542,31 @@ export function McpCatalogForm({
                           No authorization
                         </FormLabel>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="bearer" id="auth-bearer" />
-                        <FormLabel
-                          htmlFor="auth-bearer"
-                          className="font-normal cursor-pointer"
-                        >
-                          "Authorization: Bearer &lt;your token&gt;" header
-                        </FormLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="raw_token" id="auth-raw-token" />
-                        <FormLabel
-                          htmlFor="auth-raw-token"
-                          className="font-normal cursor-pointer"
-                        >
-                          "Authorization: &lt;your token&gt;" header
-                        </FormLabel>
-                      </div>
+                      {currentServerType === "remote" && (
+                        <>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="bearer" id="auth-bearer" />
+                            <FormLabel
+                              htmlFor="auth-bearer"
+                              className="font-normal cursor-pointer"
+                            >
+                              "Authorization: Bearer &lt;your token&gt;" header
+                            </FormLabel>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="raw_token"
+                              id="auth-raw-token"
+                            />
+                            <FormLabel
+                              htmlFor="auth-raw-token"
+                              className="font-normal cursor-pointer"
+                            >
+                              "Authorization: &lt;your token&gt;" header
+                            </FormLabel>
+                          </div>
+                        </>
+                      )}
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="oauth" id="auth-oauth" />
                         <FormLabel
@@ -583,6 +594,34 @@ export function McpCatalogForm({
 
             {authMethod === "oauth" && (
               <div className="space-y-4 pl-6 border-l-2">
+                {currentServerType === "local" && (
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.oauthServerUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          OAuth Server URL{" "}
+                          <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          The OAuth server endpoint used for authorization and
+                          token exchange. This is separate from the K8s-deployed
+                          server.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 <FormField
                   control={form.control}
                   name="oauthConfig.client_id"
@@ -728,6 +767,10 @@ export function McpCatalogForm({
             )}
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-4">
+            <p className="text-sm text-muted-foreground pb-2">
+              Add labels to organize, filter, and search for this server in the
+              catalog.
+            </p>
             <ProfileLabels
               ref={labelsRef}
               labels={labels}

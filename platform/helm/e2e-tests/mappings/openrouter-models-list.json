@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/openrouter/api/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "openrouter/auto",
+          "created": 1700000000,
+          "owned_by": "openrouter"
+        },
+        {
+          "id": "openrouter/openai/gpt-4o-mini",
+          "created": 1700000000,
+          "owned_by": "openrouter"
+        }
+      ]
+    }
+  }
+}

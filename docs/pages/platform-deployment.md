@@ -698,7 +698,7 @@ The following environment variables can be used to configure Archestra Platform.
 
 These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
 
-- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
+- **`ARCHESTRA_AI_BASE_URL`** - Override the OpenAI API base URL.
 
   - Default: `https://api.openai.com/v1`
   - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
@@ -718,6 +718,11 @@ These environment variables set the default base URL for each LLM provider. Per-
 
   - Default: `https://api.groq.com/openai/v1`
   - Use this to point to your own proxy, a Groq-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_OPENROUTER_BASE_URL`** - Override the OpenRouter API base URL.
+
+  - Default: `https://openrouter.ai/api/v1`
+  - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your vLLM server.
 
@@ -780,7 +785,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
 
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order

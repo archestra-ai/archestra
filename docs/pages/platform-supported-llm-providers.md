@@ -204,6 +204,42 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 - **OpenAI-compatible API**: Groq uses the OpenAI Chat Completions request/response format, which makes it a good fit for existing OpenAI client libraries.
 - **Base URL includes `/openai/v1`**: When configuring a custom Groq endpoint, ensure the base URL points to the OpenAI-compatible API root (for example, `https://api.groq.com/openai/v1`).
 
+## OpenRouter
+
+[OpenRouter](https://openrouter.ai/) provides access to many models via a single OpenAI-compatible API, with optional attribution headers for ranking and analytics.
+
+### Supported OpenRouter APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### OpenRouter Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/openrouter/{profile-id}`
+- **Authentication**: Pass your OpenRouter API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                 |
+| ---------------------------------- | -------- | --------------------------------------------------------------------------- |
+| `ARCHESTRA_OPENROUTER_BASE_URL`    | No       | OpenRouter API base URL (default: `https://openrouter.ai/api/v1`)           |
+| `ARCHESTRA_CHAT_OPENROUTER_API_KEY`| No       | Default API key for OpenRouter (can be overridden per conversation/team/org)|
+| `ARCHESTRA_OPENROUTER_REFERER`     | No       | Attribution header `HTTP-Referer` sent to OpenRouter (recommended)          |
+| `ARCHESTRA_OPENROUTER_TITLE`       | No       | Attribution header `X-Title` sent to OpenRouter (recommended)               |
+
+### Getting an API Key
+
+You can generate an API key from the [OpenRouter dashboard](https://openrouter.ai/keys).
+
+### Popular Models
+
+- `openrouter/auto`
+- `openrouter/openai/gpt-4o-mini`
+
+### Important Notes
+
+- **OpenAI-compatible API**: OpenRouter uses the OpenAI Chat Completions request/response format.
+- **Attribution headers**: OpenRouter recommends sending `HTTP-Referer` and `X-Title` headers. Archestra can be configured to send these automatically via `ARCHESTRA_OPENROUTER_REFERER` and `ARCHESTRA_OPENROUTER_TITLE`.
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.

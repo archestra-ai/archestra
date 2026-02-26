@@ -164,6 +164,16 @@ const groqConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// OpenRouter - Uses OpenAI-compatible streaming format
+const openrouterConfig: ChatProviderTestConfig = {
+  providerName: "openrouter",
+  providerDisplayName: "OpenRouter",
+  modelId: "openrouter/auto",
+  modelDisplayName: "openrouter/auto",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 // MiniMax - Uses OpenAI-compatible streaming format
 const minimaxConfig: ChatProviderTestConfig = {
   providerName: "minimax",
@@ -183,6 +193,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   mistralConfig,
   perplexityConfig,
   groqConfig,
+  openrouterConfig,
   ollamaConfig,
   vllmConfig,
   zhipuaiConfig,

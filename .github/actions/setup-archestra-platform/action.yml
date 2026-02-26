@@ -130,6 +130,19 @@ runs:
         kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
         echo "MCP server base image loaded into Kind"
 
+    - name: Load MCP example OAuth server image into Kind
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      shell: bash
+      env:
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+      run: |
+        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+        echo "Pulling MCP example OAuth server image..."
+        docker pull "${MCP_OAUTH_IMAGE}"
+        echo "Loading MCP example OAuth server image into Kind cluster..."
+        kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}"
+        echo "MCP example OAuth server image loaded into Kind"
+
     - name: Deploy e2e dependencies and platform in parallel
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash

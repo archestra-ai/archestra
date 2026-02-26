@@ -12,14 +12,14 @@ import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 /**
  * Generate PKCE code verifier
  */
-function generateCodeVerifier(): string {
+export function generateCodeVerifier(): string {
   return randomBytes(32).toString("base64url");
 }
 
 /**
  * Generate PKCE code challenge from verifier
  */
-function generateCodeChallenge(verifier: string): string {
+export function generateCodeChallenge(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
@@ -60,7 +60,7 @@ async function discoverOAuthResourceMetadata(serverUrl: string) {
  * Discover OAuth scopes from server metadata
  * Tries multiple discovery methods like the desktop app does
  */
-async function discoverScopes(
+export async function discoverScopes(
   serverUrl: string,
   supportsResourceMetadata: boolean,
   defaultScopes: string[],
@@ -103,7 +103,7 @@ async function discoverScopes(
  * Build discovery URLs to try for authorization server metadata
  * Implements the same fallback strategy as MCP SDK
  */
-function buildDiscoveryUrls(serverUrl: string): string[] {
+export function buildDiscoveryUrls(serverUrl: string): string[] {
   const url = new URL(serverUrl);
   const hasPath = url.pathname !== "/" && url.pathname !== "";
   const urls: string[] = [];
@@ -180,6 +180,71 @@ async function discoverAuthorizationServerMetadata(serverUrl: string): Promise<{
   throw new Error(
     "Authorization server metadata discovery failed: No valid metadata found at any discovery endpoint",
   );
+}
+
+interface DiscoveredEndpoints {
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  registrationEndpoint?: string;
+}
+
+/**
+ * Discover OAuth endpoints via resource metadata → auth server metadata chain.
+ * Shared by the initiate, callback, and refresh flows to avoid duplicated discovery logic.
+ */
+export async function discoverOAuthEndpoints(
+  oauthConfig: { server_url: string; supports_resource_metadata: boolean },
+  log?: {
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+  },
+): Promise<DiscoveredEndpoints> {
+  let discoveryServerUrl = oauthConfig.server_url;
+
+  if (oauthConfig.supports_resource_metadata) {
+    try {
+      log?.info(
+        { serverUrl: oauthConfig.server_url },
+        "Discovering resource metadata",
+      );
+      const resourceMetadata = await discoverOAuthResourceMetadata(
+        oauthConfig.server_url,
+      );
+      if (
+        resourceMetadata.authorization_servers &&
+        Array.isArray(resourceMetadata.authorization_servers) &&
+        resourceMetadata.authorization_servers.length > 0
+      ) {
+        discoveryServerUrl = resourceMetadata.authorization_servers[0];
+        log?.info(
+          { authServerUrl: discoveryServerUrl },
+          "Using authorization server URL from resource metadata",
+        );
+      }
+    } catch (error) {
+      log?.warn(
+        { error },
+        "Resource metadata discovery failed; continuing with standard discovery",
+      );
+    }
+  }
+
+  const metadata =
+    await discoverAuthorizationServerMetadata(discoveryServerUrl);
+  log?.info(
+    {
+      authorizationEndpoint: metadata.authorization_endpoint,
+      tokenEndpoint: metadata.token_endpoint,
+      registrationEndpoint: metadata.registration_endpoint,
+    },
+    "Discovery successful",
+  );
+
+  return {
+    authorizationEndpoint: metadata.authorization_endpoint,
+    tokenEndpoint: metadata.token_endpoint,
+    registrationEndpoint: metadata.registration_endpoint,
+  };
 }
 
 /**
@@ -327,30 +392,9 @@ export async function refreshOAuthToken(
 
     // Discover token endpoint
     let tokenEndpoint: string;
-    let discoveryServerUrl = oauthConfig.server_url;
-
-    // Try resource metadata discovery first if supported
-    if (oauthConfig.supports_resource_metadata) {
-      try {
-        const resourceMetadata = await discoverOAuthResourceMetadata(
-          oauthConfig.server_url,
-        );
-        if (
-          resourceMetadata.authorization_servers &&
-          Array.isArray(resourceMetadata.authorization_servers) &&
-          resourceMetadata.authorization_servers.length > 0
-        ) {
-          discoveryServerUrl = resourceMetadata.authorization_servers[0];
-        }
-      } catch {
-        // Continue with standard discovery
-      }
-    }
-
     try {
-      const metadata =
-        await discoverAuthorizationServerMetadata(discoveryServerUrl);
-      tokenEndpoint = metadata.token_endpoint;
+      const endpoints = await discoverOAuthEndpoints(oauthConfig);
+      tokenEndpoint = endpoints.tokenEndpoint;
     } catch {
       // Fallback to config or constructed endpoint
       tokenEndpoint =
@@ -559,7 +603,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Discover authorization server metadata to get the correct authorization endpoint
       let authorizationEndpoint: string;
       let registrationEndpoint: string | undefined;
-      let discoveryServerUrl = oauthConfig.server_url;
 
       // For proxy servers, skip discovery and use the MCP server URL directly
       if (oauthConfig.requires_proxy) {
@@ -572,57 +615,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Proxy servers typically don't support dynamic registration
         registrationEndpoint = undefined;
       } else {
-        // Try resource metadata discovery first, but treat failures as non-fatal
-        if (oauthConfig.supports_resource_metadata) {
-          try {
-            fastify.log.info(
-              { serverUrl: oauthConfig.server_url },
-              "Server supports resource metadata, discovering resource metadata first",
-            );
-            const resourceMetadata = await discoverOAuthResourceMetadata(
-              oauthConfig.server_url,
-            );
-
-            // Extract authorization server URL from resource metadata
-            // RFC 8414: authorization_servers is an array of issuer URLs
-            if (
-              resourceMetadata.authorization_servers &&
-              Array.isArray(resourceMetadata.authorization_servers) &&
-              resourceMetadata.authorization_servers.length > 0
-            ) {
-              discoveryServerUrl = resourceMetadata.authorization_servers[0];
-              fastify.log.info(
-                { authServerUrl: discoveryServerUrl },
-                "Using authorization server URL from resource metadata",
-              );
-            }
-          } catch (error) {
-            // Some servers require auth to access resource metadata (may return 401).
-            // Log and continue with standard authorization server discovery.
-            fastify.log.warn(
-              { error },
-              "Resource metadata discovery failed; continuing with standard discovery",
-            );
-          }
-        }
-
         try {
-          fastify.log.info(
-            { serverUrl: discoveryServerUrl },
-            "Discovering authorization server metadata",
+          const endpoints = await discoverOAuthEndpoints(
+            oauthConfig,
+            fastify.log,
           );
-          const metadata =
-            await discoverAuthorizationServerMetadata(discoveryServerUrl);
-          authorizationEndpoint = metadata.authorization_endpoint;
-          registrationEndpoint = metadata.registration_endpoint;
-          fastify.log.info(
-            {
-              authorizationEndpoint,
-              tokenEndpoint: metadata.token_endpoint,
-              registrationEndpoint,
-            },
-            "Discovery successful",
-          );
+          authorizationEndpoint = endpoints.authorizationEndpoint;
+          registrationEndpoint = endpoints.registrationEndpoint;
         } catch (error) {
           fastify.log.error({ error }, "Authorization server discovery failed");
           throw new ApiError(500, "Failed to discover OAuth endpoints");
@@ -664,6 +663,14 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           // Continue with default client_id if registration fails
         }
+      }
+
+      // Ensure we have a usable client ID (either static or from dynamic registration)
+      if (!clientId) {
+        throw new ApiError(
+          400,
+          "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+        );
       }
 
       // Generate PKCE parameters
@@ -798,47 +805,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else {
         // For non-proxy servers, use standard OAuth token exchange
         let tokenEndpoint: string;
-        let discoveryServerUrl = oauthConfig.server_url;
-
         try {
-          // Try resource metadata discovery first, but treat failures as non-fatal
-          if (oauthConfig.supports_resource_metadata) {
-            try {
-              fastify.log.info(
-                { serverUrl: oauthConfig.server_url },
-                "Server supports resource metadata, discovering resource metadata first",
-              );
-              const resourceMetadata = await discoverOAuthResourceMetadata(
-                oauthConfig.server_url,
-              );
-
-              // Extract authorization server URL from resource metadata
-              if (
-                resourceMetadata.authorization_servers &&
-                Array.isArray(resourceMetadata.authorization_servers) &&
-                resourceMetadata.authorization_servers.length > 0
-              ) {
-                discoveryServerUrl = resourceMetadata.authorization_servers[0];
-                fastify.log.info(
-                  { authServerUrl: discoveryServerUrl },
-                  "Using authorization server URL from resource metadata",
-                );
-              }
-            } catch (error) {
-              fastify.log.warn(
-                { error },
-                "Resource metadata discovery failed; continuing with standard discovery",
-              );
-            }
-          }
-
-          const metadata =
-            await discoverAuthorizationServerMetadata(discoveryServerUrl);
-          tokenEndpoint = metadata.token_endpoint;
-          fastify.log.info(
-            { tokenEndpoint },
-            "Discovered token endpoint for callback",
+          const endpoints = await discoverOAuthEndpoints(
+            oauthConfig,
+            fastify.log,
           );
+          tokenEndpoint = endpoints.tokenEndpoint;
         } catch (error) {
           fastify.log.error(
             { error },

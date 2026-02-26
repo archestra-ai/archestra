@@ -520,6 +520,16 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
     },
+    openrouter: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
+        "https://openrouter.ai/api/v1",
+      referer:
+        process.env.ARCHESTRA_OPENROUTER_REFERER ||
+        process.env.ARCHESTRA_FRONTEND_URL?.trim() ||
+        frontendBaseUrl,
+      title: process.env.ARCHESTRA_OPENROUTER_TITLE || "Archestra",
+    },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
@@ -596,6 +606,9 @@ export default {
     openai: {
       apiKey: process.env.ARCHESTRA_CHAT_OPENAI_API_KEY || "",
     },
+    openrouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
+    },
     anthropic: {
       apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
     },
@@ -668,7 +681,7 @@ export default {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.50", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.51", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

@@ -344,6 +344,30 @@ const bedrockConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const openrouterConfig: ToolPersistenceTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "test-openrouter-tool-persistence",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -363,6 +387,7 @@ const testConfigsMap = {
   minimax: minimaxConfig,
   deepseek: deepseekConfig,
   bedrock: bedrockConfig,
+  openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;
 

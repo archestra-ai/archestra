@@ -104,6 +104,27 @@ mcpServerJwks:
       cpu: 500m
       memory: 256Mi
 
+# MCP Example OAuth Server for testing OAuth 2.1 flows with self-hosted MCP servers
+mcpExampleOAuth:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server
+    tag: "0.0.1"
+    pullPolicy: IfNotPresent
+  # Service configuration
+  service:
+    type: NodePort
+    port: 3232
+    nodePort: 30083
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 # HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
 vault:
   enabled: true

@@ -296,6 +296,7 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
 > = {
   anthropic: "anthropic:messages",
   openai: "openai:chatCompletions",
+  openrouter: "openrouter:chatCompletions",
   gemini: "gemini:generateContent",
   bedrock: "bedrock:converse",
   cohere: "cohere:chat",

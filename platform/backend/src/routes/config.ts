@@ -79,6 +79,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
+          openrouter: config.llm.openrouter.baseUrl || null,
           anthropic: config.llm.anthropic.baseUrl || null,
           gemini: config.llm.gemini.baseUrl || null,
           bedrock: config.llm.bedrock.baseUrl || null,

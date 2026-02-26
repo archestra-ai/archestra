@@ -259,6 +259,22 @@ const deepseekConfig: StreamingToolCallTestConfig = {
   expectedToolName: "read_file",
 };
 
+const openrouterConfig: StreamingToolCallTestConfig = {
+  providerName: "OpenRouter",
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildStreamingRequest: (content, tools) =>
+    buildOpenAIStreamingRequest(
+      "test-openrouter-streaming-tool-calls",
+      content,
+      tools,
+    ),
+  expectedToolName: "read_file",
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -278,6 +294,7 @@ const testConfigsMap = {
   deepseek: deepseekConfig,
   minimax: minimaxConfig,
   bedrock: null, // Bedrock uses binary AWS EventStream format which cannot be mocked via WireMock SSE
+  openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, StreamingToolCallTestConfig | null>;
 

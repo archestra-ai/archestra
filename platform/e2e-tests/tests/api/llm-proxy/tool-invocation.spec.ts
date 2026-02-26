@@ -614,6 +614,14 @@ const bedrockConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const openrouterConfig: ToolInvocationTestConfig = {
+  ...makeOpenAiCompatibleToolConfig({
+    providerName: "OpenRouter",
+    endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+    model: "openrouter/auto",
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -633,6 +641,7 @@ const testConfigsMap = {
   minimax: minimaxConfig,
   deepseek: deepseekConfig,
   bedrock: bedrockConfig,
+  openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
 

@@ -13,6 +13,7 @@ export const SupportedProvidersSchema = z.enum([
   "mistral",
   "perplexity",
   "groq",
+  "openrouter",
   "vllm",
   "ollama",
   "zhipuai",
@@ -30,6 +31,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
   "groq:chatCompletions",
+  "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
@@ -53,6 +55,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   mistral: "Mistral AI",
   perplexity: "Perplexity AI",
   groq: "Groq",
+  openrouter: "OpenRouter",
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
@@ -100,6 +103,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   mistral: "https://api.mistral.ai/v1",
   perplexity: "https://api.perplexity.ai",
   groq: "https://api.groq.com/openai/v1",
+  openrouter: "https://openrouter.ai/api/v1",
   vllm: "",
   ollama: "http://localhost:11434/v1",
   zhipuai: "https://api.z.ai/api/paas/v4",
@@ -156,6 +160,15 @@ export const MODEL_MARKER_PATTERNS: Record<
   groq: {
     fastest: ["llama-3.1-8b", "gemma2-9b"],
     best: ["llama-3.3-70b", "llama-3.1-70b"],
+  },
+  openrouter: {
+    fastest: ["openrouter/auto"],
+    best: [
+      "openai/gpt-4.1",
+      "openai/gpt-4o",
+      "anthropic/claude-3.7",
+      "anthropic/claude-3-opus",
+    ],
   },
   ollama: {
     fastest: ["llama3.2", "phi"],

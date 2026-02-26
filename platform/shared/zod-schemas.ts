@@ -16,7 +16,13 @@ export const OAuthConfigSchema = z.object({
   supports_resource_metadata: z.boolean(),
   generic_oauth: z.boolean().optional(),
   token_endpoint: z.string().optional(),
-  access_token_env_var: z.string().optional(),
+  access_token_env_var: z
+    .string()
+    .regex(
+      /^[A-Za-z_][A-Za-z0-9_]*$/,
+      "Must be a valid environment variable name (letters, digits, underscores)",
+    )
+    .optional(),
   requires_proxy: z.boolean().optional(),
   provider_name: z.string().optional(),
   browser_auth: z.boolean().optional(),

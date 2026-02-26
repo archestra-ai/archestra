@@ -158,11 +158,13 @@ describe("ModelsDevClient", () => {
       expect(modelsDevClient.mapProvider("cerebras")).toBe("cerebras");
       expect(modelsDevClient.mapProvider("mistral")).toBe("mistral");
       expect(modelsDevClient.mapProvider("deepseek")).toBe("deepseek");
+      expect(modelsDevClient.mapProvider("openrouter")).toBe("openrouter");
     });
 
     test("maps OpenAI-compatible providers to openai", () => {
       expect(modelsDevClient.mapProvider("llama")).toBe("openai");
       expect(modelsDevClient.mapProvider("groq")).toBe("groq");
+      expect(modelsDevClient.mapProvider("openrouter")).toBe("openrouter");
       expect(modelsDevClient.mapProvider("fireworks-ai")).toBe("openai");
       expect(modelsDevClient.mapProvider("togetherai")).toBe("openai");
     });
@@ -289,6 +291,13 @@ describe("ModelsDevClient", () => {
             cost: { input: 3, output: 15 },
           }),
         }),
+        openrouter: createMockProvider("openrouter", {
+          "anthropic/claude-3.5-sonnet": createMockModel({
+            id: "anthropic/claude-3.5-sonnet",
+            name: "Anthropic Claude 3.5 Sonnet",
+            cost: { input: 3, output: 15 },
+          }),
+        }),
         perplexity: createMockProvider("perplexity", {
           "sonar-medium": createMockModel({
             id: "sonar-medium",
@@ -304,8 +313,8 @@ describe("ModelsDevClient", () => {
 
       const count = await modelsDevClient.syncModelMetadata(true);
 
-      // Should sync 2 models (openai + anthropic), not perplexity
-      expect(count).toBe(2);
+      // Should sync 3 models (openai + anthropic + openrouter), not perplexity
+      expect(count).toBe(3);
 
       const openaiMetadata = await ModelModel.findByProviderAndModelId(
         "openai",
@@ -319,6 +328,15 @@ describe("ModelsDevClient", () => {
         "claude-3-5-sonnet",
       );
       expect(anthropicMetadata).not.toBeNull();
+
+      const openrouterMetadata = await ModelModel.findByProviderAndModelId(
+        "openrouter",
+        "anthropic/claude-3.5-sonnet",
+      );
+      expect(openrouterMetadata).not.toBeNull();
+      expect(openrouterMetadata?.description).toBe(
+        "Anthropic Claude 3.5 Sonnet",
+      );
     });
 
     test("maps Google provider to Gemini", async () => {

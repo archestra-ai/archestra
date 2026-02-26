@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.0.51](https://github.com/archestra-ai/archestra/compare/platform-v1.0.50...platform-v1.0.51) (2026-02-26)
+
+
+### Features
+
+* add DeepSeek LLM provider ([#2930](https://github.com/archestra-ai/archestra/issues/2930)) ([d760b3a](https://github.com/archestra-ai/archestra/commit/d760b3a3ec4289a77dd27efb73d2ae9571c1c332))
+* add DialogForm component for Enter key submission in form dialogs ([#3011](https://github.com/archestra-ai/archestra/issues/3011)) ([1746561](https://github.com/archestra-ai/archestra/commit/174656105eba5aad46330d6ac780d4510791774d))
+* add openrouter support ([#3029](https://github.com/archestra-ai/archestra/issues/3029)) ([a66b60c](https://github.com/archestra-ai/archestra/commit/a66b60cec1dcf9a49bf7b7ff62f94e33ce76890b))
+* export blocked reason in OTEL traces for MCP tool calls ([#3020](https://github.com/archestra-ai/archestra/issues/3020)) ([b089b5a](https://github.com/archestra-ai/archestra/commit/b089b5ad58e83bbacca2fccc7c0633d1d0dc8184))
+
+
+### Bug Fixes
+
+* don't disable agent-assigned tools in chat ([#3021](https://github.com/archestra-ai/archestra/issues/3021)) ([60ca7ff](https://github.com/archestra-ai/archestra/commit/60ca7ff76e116cf4e1c94826227fef2b180bb7b8)), closes [#2599](https://github.com/archestra-ai/archestra/issues/2599)
+* improve agent tool assignment UX ([#3009](https://github.com/archestra-ai/archestra/issues/3009)) ([cb4dfa8](https://github.com/archestra-ai/archestra/commit/cb4dfa86fd1abb141004bb64a30c9232b053e29a))
+* preserve multi-line formatting in user chat messages ([#3022](https://github.com/archestra-ai/archestra/issues/3022)) ([f55767e](https://github.com/archestra-ai/archestra/commit/f55767ed4f69600fb61278a7591ba37de5283384))
+* resolve (more) performance issues ([#3036](https://github.com/archestra-ai/archestra/issues/3036)) ([b6a96ea](https://github.com/archestra-ai/archestra/commit/b6a96ea13f7eab209628dbb8af6f203b8ad68dcf))
+* resolve top 5 Sentry issues (N+1 query, consecutive DB queries) ([#3033](https://github.com/archestra-ai/archestra/issues/3033)) ([3a151d0](https://github.com/archestra-ai/archestra/commit/3a151d0d98a33f03a2be4e4a7190e6ee411f286c))
+* sidebar menu reorder, renames, and UI tweaks ([#3030](https://github.com/archestra-ai/archestra/issues/3030)) ([f6c305c](https://github.com/archestra-ai/archestra/commit/f6c305ce1a9b4fb7c04ee6064500031f1e8bf165))
+* stabilize sidebar chat order to prevent jumping during interaction ([#3014](https://github.com/archestra-ai/archestra/issues/3014)) ([a288055](https://github.com/archestra-ai/archestra/commit/a288055622d327154650a6225df727d4907d5cc6))
+
+
+### Dependencies
+
+* bump `better-auth` to 1.4.19 ([#2997](https://github.com/archestra-ai/archestra/issues/2997)) ([e7e42c1](https://github.com/archestra-ai/archestra/commit/e7e42c134a1a7763aaa4246e70f7b53da56eb341))
+
+
+### Miscellaneous Chores
+
+* agent triggers UI UX improvements ([#3007](https://github.com/archestra-ai/archestra/issues/3007)) ([d8ca1fd](https://github.com/archestra-ai/archestra/commit/d8ca1fd676d4781023fed9174abfc817db50ca43))
+* **deps:** bump hono from 4.12.0 to 4.12.2 in /platform/mcp_server_docker_image ([#3015](https://github.com/archestra-ai/archestra/issues/3015)) ([7b7149f](https://github.com/archestra-ai/archestra/commit/7b7149fbc0a4449443da436394c9b38eeb1ecad9))
+* fix slash command wording ([#3035](https://github.com/archestra-ai/archestra/issues/3035)) ([ed90b1f](https://github.com/archestra-ai/archestra/commit/ed90b1f050364a7a50769e7b592d6cff6d2f8044))
+
 ## [1.0.50](https://github.com/archestra-ai/archestra/compare/platform-v1.0.49...platform-v1.0.50) (2026-02-25)
 
 

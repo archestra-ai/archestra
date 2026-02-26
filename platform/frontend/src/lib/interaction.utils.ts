@@ -16,6 +16,7 @@ import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
+import OpenrouterChatCompletionInteraction from "./llmProviders/openrouter";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
@@ -24,6 +25,8 @@ type InteractionFactory = (interaction: Interaction) => InteractionUtils;
 
 const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "openai:chatCompletions": (i) => new OpenAiChatCompletionInteraction(i),
+  "openrouter:chatCompletions": (i) =>
+    new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
   "bedrock:converse": (i) => new BedrockConverseInteraction(i),
   "cerebras:chatCompletions": (i) => new CerebrasChatCompletionInteraction(i),

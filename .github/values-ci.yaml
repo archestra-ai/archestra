@@ -23,6 +23,7 @@ archestra:
     ARCHESTRA_VLLM_BASE_URL: "http://e2e-tests-wiremock:8080/vllm/v1"
     ARCHESTRA_OLLAMA_BASE_URL: "http://e2e-tests-wiremock:8080/ollama/v1"
     ARCHESTRA_GROQ_BASE_URL: "http://e2e-tests-wiremock:8080/groq/v1"
+    ARCHESTRA_OPENROUTER_BASE_URL: "http://e2e-tests-wiremock:8080/openrouter/api/v1"
     ARCHESTRA_ZHIPUAI_BASE_URL: "http://e2e-tests-wiremock:8080/zhipuai/v4"
     ARCHESTRA_MISTRAL_BASE_URL: "http://e2e-tests-wiremock:8080/mistral/v1"
     ARCHESTRA_BEDROCK_BASE_URL: "http://e2e-tests-wiremock:8080/bedrock"
@@ -38,6 +39,7 @@ archestra:
     ARCHESTRA_CHAT_VLLM_API_KEY: test-key
     ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
     ARCHESTRA_CHAT_GROQ_API_KEY: test-key
+    ARCHESTRA_CHAT_OPENROUTER_API_KEY: test-key
     ARCHESTRA_CHAT_ZHIPUAI_API_KEY: test-key
     ARCHESTRA_CHAT_MISTRAL_API_KEY: test-key
     ARCHESTRA_CHAT_BEDROCK_API_KEY: test-key

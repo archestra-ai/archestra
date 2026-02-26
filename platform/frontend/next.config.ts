@@ -64,6 +64,9 @@ export default withSentryConfig(nextConfig, {
 
   project: "archestra-platform-frontend",
 
+  // The archestra Sentry org is hosted in the EU region
+  sentryUrl: "https://de.sentry.io/",
+
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 

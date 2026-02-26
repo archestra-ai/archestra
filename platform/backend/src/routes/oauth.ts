@@ -194,7 +194,10 @@ interface DiscoveredEndpoints {
  */
 export async function discoverOAuthEndpoints(
   oauthConfig: { server_url: string; supports_resource_metadata: boolean },
-  log?: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void },
+  log?: {
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+  },
 ): Promise<DiscoveredEndpoints> {
   let discoveryServerUrl = oauthConfig.server_url;
 

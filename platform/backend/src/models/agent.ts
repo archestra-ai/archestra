@@ -646,12 +646,16 @@ class AgentModel {
     const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
 
-    return {
+    const result: Agent = {
       ...agent,
       tools,
       teams,
       labels,
     };
+
+    await AgentModel.populateAuthorNames([result]);
+
+    return result;
   }
 
   static async getMCPGatewayOrCreateDefault(

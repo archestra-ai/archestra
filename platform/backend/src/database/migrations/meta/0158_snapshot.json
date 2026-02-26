@@ -624,6 +624,19 @@
         }
       },
       "foreignKeys": {
+        "agents_author_id_user_id_fk": {
+          "name": "agents_author_id_user_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "user",
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
         "agents_llm_api_key_id_chat_api_keys_id_fk": {
           "name": "agents_llm_api_key_id_chat_api_keys_id_fk",
           "tableFrom": "agents",

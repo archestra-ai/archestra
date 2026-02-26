@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -31,58 +31,20 @@ class AgentTeamModel {
       return allAgents.map((agent) => agent.id);
     }
 
-    // 1. Org-scoped agents — visible to all org members
-    const orgAgents = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.scope, "org"));
-    const orgAgentIds = orgAgents.map((a) => a.id);
+    // Single query: UNION of org-scoped, author's own, and team-scoped agents
+    const result = await db.execute<{ id: string }>(sql`
+      SELECT id FROM agents WHERE scope = 'org'
+      UNION
+      SELECT id FROM agents WHERE author_id = ${userId}
+      UNION
+      SELECT at.agent_id AS id
+        FROM agent_team at
+        INNER JOIN agents a ON at.agent_id = a.id
+        INNER JOIN team_members tm ON at.team_id = tm.team_id
+        WHERE tm.user_id = ${userId} AND a.scope = 'team'
+    `);
 
-    // 2. Author's own agents — visible regardless of scope
-    const ownAgents = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.authorId, userId));
-    const ownAgentIds = ownAgents.map((a) => a.id);
-
-    // 3. Team-scoped agents where user is a team member
-    const userTeams = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, userId));
-
-    const teamIds = userTeams.map((t) => t.teamId);
-
-    logger.debug(
-      { userId, teamCount: teamIds.length },
-      "AgentTeamModel.getUserAccessibleAgentIds: found user teams",
-    );
-
-    let teamAgentIds: string[] = [];
-    if (teamIds.length > 0) {
-      const agentTeams = await db
-        .select({ agentId: schema.agentTeamsTable.agentId })
-        .from(schema.agentTeamsTable)
-        .innerJoin(
-          schema.agentsTable,
-          eq(schema.agentTeamsTable.agentId, schema.agentsTable.id),
-        )
-        .where(
-          and(
-            inArray(schema.agentTeamsTable.teamId, teamIds),
-            eq(schema.agentsTable.scope, "team"),
-          ),
-        );
-      teamAgentIds = agentTeams.map((at) => at.agentId);
-    }
-
-    // Union all three sources
-    const accessibleSet = new Set([
-      ...orgAgentIds,
-      ...ownAgentIds,
-      ...teamAgentIds,
-    ]);
-    const accessibleAgentIds = [...accessibleSet];
+    const accessibleAgentIds = result.rows.map((r) => r.id);
 
     logger.debug(
       { userId, agentCount: accessibleAgentIds.length },

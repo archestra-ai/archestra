@@ -379,7 +379,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body.scope === "team" ||
           (body.teams && body.teams.length > 0)
         ) {
-          throw new ApiError(403, "Only admins can create shared agents");
+          throw new ApiError(403, "Only admins can manage shared agents");
         }
       }
 

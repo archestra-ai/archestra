@@ -20,6 +20,7 @@ export const agentScopeEnum = pgEnum("agent_scope", [
 
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
+import usersTable from "./user";
 
 /**
  * Unified agents table supporting both external profiles and internal agents.
@@ -46,7 +47,9 @@ const agentsTable = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
-    authorId: text("author_id"),
+    authorId: text("author_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     scope: agentScopeEnum("scope").notNull().default("personal"),
     name: text("name").notNull(),
     isDemo: boolean("is_demo").notNull().default(false),

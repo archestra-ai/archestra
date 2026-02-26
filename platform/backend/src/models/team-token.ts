@@ -278,17 +278,21 @@ class TeamTokenModel {
   static async validateToken(
     tokenValue: string,
   ): Promise<SelectTeamToken | null> {
-    // Get all team tokens
-    const allTokens = await db.select().from(schema.teamTokensTable);
-    if (allTokens.length === 0) return null;
+    // Use tokenStart (first 14 chars) to narrow candidates instead of scanning all tokens.
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates = await db
+      .select()
+      .from(schema.teamTokensTable)
+      .where(eq(schema.teamTokensTable.tokenStart, tokenStart));
+    if (candidates.length === 0) return null;
 
-    // Batch-fetch all secrets in a single query (team tokens always use DB storage)
-    const secretIds = allTokens.map((t) => t.secretId);
+    // Batch-fetch secrets for candidates (team tokens always use DB storage)
+    const secretIds = candidates.map((t) => t.secretId);
     const secrets = await SecretModel.findByIds(secretIds);
     const secretMap = new Map(secrets.map((s) => [s.id, s]));
 
     // Match the provided token value against stored secrets
-    for (const token of allTokens) {
+    for (const token of candidates) {
       const secret = secretMap.get(token.secretId);
       if (
         secret?.secret &&

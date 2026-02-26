@@ -63,6 +63,129 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("findByOrganization", () => {
+    test("returns all teams with members in a single batch query", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      // Add members
+      const member1 = await makeUser({ email: "m1@test.com" });
+      const member2 = await makeUser({ email: "m2@test.com" });
+      await TeamModel.addMember(team1.id, member1.id);
+      await TeamModel.addMember(team1.id, member2.id);
+      await TeamModel.addMember(team2.id, member1.id);
+
+      const teams = await TeamModel.findByOrganization(org.id);
+
+      expect(teams).toHaveLength(2);
+
+      const t1 = teams.find((t) => t.id === team1.id);
+      const t2 = teams.find((t) => t.id === team2.id);
+
+      expect(t1?.members).toHaveLength(2);
+      expect(t2?.members).toHaveLength(1);
+    });
+
+    test("returns teams with empty members array when no members", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeTeam(org.id, user.id);
+
+      const teams = await TeamModel.findByOrganization(org.id);
+
+      expect(teams).toHaveLength(1);
+      expect(teams[0].members).toEqual([]);
+    });
+  });
+
+  describe("getUserTeams", () => {
+    test("returns teams with members for the user", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      // Add another member to team1
+      const other = await makeUser({ email: "other@test.com" });
+      await TeamModel.addMember(team1.id, other.id);
+
+      const teams = await TeamModel.getUserTeams(user.id);
+
+      expect(teams).toHaveLength(2);
+      const t1 = teams.find((t) => t.id === team1.id);
+      expect(t1?.members).toHaveLength(2);
+    });
+
+    test("returns empty array when user has no teams", async ({ makeUser }) => {
+      const user = await makeUser();
+
+      const teams = await TeamModel.getUserTeams(user.id);
+
+      expect(teams).toEqual([]);
+    });
+  });
+
+  describe("getTeamMembersBatch", () => {
+    test("returns members grouped by team ID", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      const m1 = await makeUser({ email: "m1@test.com" });
+      const m2 = await makeUser({ email: "m2@test.com" });
+      await TeamModel.addMember(team1.id, m1.id);
+      await TeamModel.addMember(team1.id, m2.id);
+      await TeamModel.addMember(team2.id, m1.id);
+
+      const result = await TeamModel.getTeamMembersBatch([team1.id, team2.id]);
+
+      expect(result.get(team1.id)).toHaveLength(2);
+      expect(result.get(team2.id)).toHaveLength(1);
+    });
+
+    test("returns empty arrays for teams with no members", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      const result = await TeamModel.getTeamMembersBatch([team.id]);
+
+      expect(result.get(team.id)).toEqual([]);
+    });
+
+    test("returns empty map for empty input", async () => {
+      const result = await TeamModel.getTeamMembersBatch([]);
+
+      expect(result.size).toBe(0);
+    });
+  });
+
   describe("findByName", () => {
     test("should find a team by name and organization", async ({
       makeUser,

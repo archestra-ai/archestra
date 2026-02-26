@@ -45,6 +45,11 @@ export const SelectChatApiKeySchema = createSelectSchema(
 ).extend({
   provider: SupportedChatProviderSchema,
   scope: ChatApiKeyScopeSchema,
+  // baseUrl is nullable in the DB schema (text without .notNull()) but
+  // drizzle-zod's createSelectSchema defaults text columns to z.string().
+  // Override to match the actual DB column nullability so Fastify response
+  // serialization doesn't throw when baseUrl is null.
+  baseUrl: z.string().nullable(),
 });
 
 export const InsertChatApiKeySchema = createInsertSchema(

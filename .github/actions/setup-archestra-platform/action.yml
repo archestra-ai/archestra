@@ -56,10 +56,6 @@ inputs:
     description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
     required: false
     default: ""
-  install-calico:
-    description: "Whether to install Calico CNI for NetworkPolicy enforcement. Only needed for SSRF protection tests."
-    required: false
-    default: "false"
 
 outputs:
   backend-url:
@@ -77,7 +73,6 @@ runs:
       with:
         config: ${{ inputs.kind-config-path }}
         cluster-name: ${{ inputs.kind-cluster-name }}
-        install-calico: ${{ inputs.install-calico }}
 
     - name: Debug Kind cluster
       shell: bash

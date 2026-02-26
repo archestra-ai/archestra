@@ -3,6 +3,7 @@ import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
 
@@ -198,12 +199,24 @@ class UserTokenModel {
   static async validateToken(
     tokenValue: string,
   ): Promise<SelectUserToken | null> {
-    // Get all user tokens (this is not ideal for scale, but matches team token pattern)
-    const allTokens = await db.select().from(schema.userTokensTable);
+    // Use tokenStart (first 14 chars) to narrow candidates instead of scanning all tokens.
+    // tokenStart has very low collision rate (archestra_ prefix + 4 hex chars), so this
+    // typically returns 0-1 candidates.
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates = await db
+      .select()
+      .from(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.tokenStart, tokenStart));
+    if (candidates.length === 0) return null;
 
-    // Check each token's secret
-    for (const token of allTokens) {
-      const secret = await secretManager().getSecret(token.secretId);
+    // Batch-fetch secrets for candidates (user tokens always use DB storage)
+    const secretIds = candidates.map((t) => t.secretId);
+    const secrets = await SecretModel.findByIds(secretIds);
+    const secretMap = new Map(secrets.map((s) => [s.id, s]));
+
+    // Match the provided token value against stored secrets
+    for (const token of candidates) {
+      const secret = secretMap.get(token.secretId);
       if (
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue

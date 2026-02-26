@@ -83,7 +83,7 @@ jobs:
 
   deploy-to-staging:
     name: Deploy to staging
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: build-staging-image
     permissions:
       contents: read

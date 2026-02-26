@@ -13,7 +13,7 @@ permissions:
 jobs:
   release-please:
     name: Release Please
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: write
       pull-requests: write
@@ -131,7 +131,7 @@ jobs:
     # Depends on both jobs explicitly for safety against future reordering, even though
     # publish-platform-helm-chart already transitively depends on the Docker image job.
     if: needs.release-please.outputs.platform_release_created
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     needs:
       - release-please
       - build-and-push-platform-docker-image-to-dockerhub

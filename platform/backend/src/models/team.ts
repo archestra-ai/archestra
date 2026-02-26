@@ -63,13 +63,14 @@ class TeamModel {
       .from(schema.teamsTable)
       .where(eq(schema.teamsTable.organizationId, organizationId));
 
-    // Fetch members for each team
-    const teamsWithMembers = await Promise.all(
-      teams.map(async (team) => {
-        const members = await TeamModel.getTeamMembers(team.id);
-        return { ...team, members };
-      }),
-    );
+    // Batch fetch all members for all teams in one query
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
 
     logger.debug(
       { organizationId, count: teamsWithMembers.length },
@@ -219,6 +220,32 @@ class TeamModel {
   }
 
   /**
+   * Get members for multiple teams in a single query to avoid N+1
+   */
+  static async getTeamMembersBatch(
+    teamIds: string[],
+  ): Promise<Map<string, TeamMember[]>> {
+    if (teamIds.length === 0) {
+      return new Map();
+    }
+
+    const allMembers = await db
+      .select()
+      .from(schema.teamMembersTable)
+      .where(inArray(schema.teamMembersTable.teamId, teamIds));
+
+    const membersByTeam = new Map<string, TeamMember[]>();
+    for (const teamId of teamIds) {
+      membersByTeam.set(teamId, []);
+    }
+    for (const member of allMembers) {
+      membersByTeam.get(member.teamId)?.push(member);
+    }
+
+    return membersByTeam;
+  }
+
+  /**
    * Add a member to a team
    */
   static async addMember(
@@ -280,23 +307,38 @@ class TeamModel {
    */
   static async getUserTeams(userId: string): Promise<Team[]> {
     logger.debug({ userId }, "TeamModel.getUserTeams: fetching user teams");
+    // Fetch user's team memberships
     const teamMemberships = await db
       .select()
       .from(schema.teamMembersTable)
       .where(eq(schema.teamMembersTable.userId, userId));
 
-    const teams = await Promise.all(
-      teamMemberships.map(async (membership) => {
-        return TeamModel.findById(membership.teamId);
-      }),
-    );
+    if (teamMemberships.length === 0) {
+      logger.debug({ userId, count: 0 }, "TeamModel.getUserTeams: completed");
+      return [];
+    }
 
-    const filteredTeams = teams.filter((team) => team !== null);
+    const teamIds = teamMemberships.map((m) => m.teamId);
+
+    // Batch fetch teams and their members in parallel
+    const [teams, membersByTeam] = await Promise.all([
+      db
+        .select()
+        .from(schema.teamsTable)
+        .where(inArray(schema.teamsTable.id, teamIds)),
+      TeamModel.getTeamMembersBatch(teamIds),
+    ]);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
     logger.debug(
-      { userId, count: filteredTeams.length },
+      { userId, count: teamsWithMembers.length },
       "TeamModel.getUserTeams: completed",
     );
-    return filteredTeams;
+    return teamsWithMembers;
   }
 
   /**

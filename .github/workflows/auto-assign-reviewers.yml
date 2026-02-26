@@ -9,7 +9,7 @@ jobs:
     if: |
       github.event.pull_request.draft == false &&
       !contains(fromJson('["iskhakov", "Konstantinov-Innokentii", "joeyorlando", "brojd"]'), github.event.pull_request.user.login)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       pull-requests: write
     steps:

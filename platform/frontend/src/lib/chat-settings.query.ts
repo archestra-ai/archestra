@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "./utils";
+import { handleApiError, toApiError } from "./utils";
 
 export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
@@ -75,7 +75,7 @@ export function useCreateChatApiKey() {
       });
       if (error) {
         handleApiError(error);
-        throw error;
+        throw toApiError(error);
       }
       return responseData;
     },
@@ -106,7 +106,7 @@ export function useUpdateChatApiKey() {
       });
       if (error) {
         handleApiError(error);
-        throw error;
+        throw toApiError(error);
       }
       return responseData;
     },
@@ -128,7 +128,7 @@ export function useDeleteChatApiKey() {
       });
       if (error) {
         handleApiError(error);
-        throw error;
+        throw toApiError(error);
       }
       return responseData;
     },
@@ -177,7 +177,7 @@ export function useCreateVirtualApiKey() {
       });
       if (error) {
         handleApiError(error);
-        throw error;
+        throw toApiError(error);
       }
       return responseData;
     },
@@ -208,7 +208,7 @@ export function useDeleteVirtualApiKey() {
       });
       if (error) {
         handleApiError(error);
-        throw error;
+        throw toApiError(error);
       }
       return responseData;
     },
@@ -274,7 +274,7 @@ export function useSyncChatModels() {
       const { data: responseData, error } = await syncChatModels();
       if (error) {
         handleApiError(error);
-        throw error;
+        throw toApiError(error);
       }
       return responseData;
     },

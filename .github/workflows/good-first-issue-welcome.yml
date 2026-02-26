@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   welcome-new-contributor:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.label.name == 'good first issue'
     
     steps:

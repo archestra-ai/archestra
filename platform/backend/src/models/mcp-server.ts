@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -11,6 +12,9 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
+
+// Alias for users table to avoid conflict with the owner LEFT JOIN
+const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 
 class McpServerModel {
   /**
@@ -112,6 +116,8 @@ class McpServerModel {
     userId?: string,
     isMcpServerAdmin?: boolean,
   ): Promise<McpServer[]> {
+    // Single query with LEFT JOINs for all related data including assigned users,
+    // eliminating the consecutive DB query for user details.
     let query = db
       .select({
         server: schema.mcpServersTable,
@@ -120,6 +126,9 @@ class McpServerModel {
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
         secretIsByosVault: schema.secretsTable.isByosVault,
+        assignedUserId: schema.mcpServerUsersTable.userId,
+        assignedUserEmail: assignedUsersTable.email,
+        assignedUserCreatedAt: schema.mcpServerUsersTable.createdAt,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -137,6 +146,14 @@ class McpServerModel {
       .leftJoin(
         schema.secretsTable,
         eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServerUsersTable,
+        eq(schema.mcpServersTable.id, schema.mcpServerUsersTable.mcpServerId),
+      )
+      .leftJoin(
+        assignedUsersTable,
+        eq(schema.mcpServerUsersTable.userId, assignedUsersTable.id),
       )
       .$dynamic();
 
@@ -167,44 +184,50 @@ class McpServerModel {
 
     const results = await query;
 
-    const serverIds = results.map((result) => result.server.id);
+    // Aggregate rows by server (LEFT JOIN on assigned users creates duplicates)
+    const serversMap = new Map<string, McpServer>();
+    for (const row of results) {
+      if (!serversMap.has(row.server.id)) {
+        const teamDetails = row.server.teamId
+          ? {
+              teamId: row.server.teamId,
+              name: row.teamName || "",
+              createdAt: row.server.createdAt,
+            }
+          : null;
 
-    // Populate user details for all MCP servers with bulk query to avoid N+1
-    const userDetailsMap =
-      await McpServerUserModel.getUserDetailsForMcpServers(serverIds);
+        const secretStorageType = computeSecretStorageType(
+          row.server.secretId,
+          row.secretIsVault,
+          row.secretIsByosVault,
+        );
 
-    // Build the servers with relations
-    const serversWithRelations: McpServer[] = results.map((result) => {
-      const userDetails = userDetailsMap.get(result.server.id) || [];
+        serversMap.set(row.server.id, {
+          ...row.server,
+          ownerEmail: row.ownerEmail,
+          catalogName: row.catalogName,
+          users: [],
+          userDetails: [],
+          teamDetails,
+          secretStorageType,
+        });
+      }
 
-      // Build teamDetails from the joined team data
-      const teamDetails = result.server.teamId
-        ? {
-            teamId: result.server.teamId,
-            name: result.teamName || "",
-            createdAt: result.server.createdAt, // Use server createdAt as team assignment time
-          }
-        : null;
+      // Append assigned user if present (may be null from LEFT JOIN)
+      if (row.assignedUserId) {
+        const server = serversMap.get(row.server.id);
+        if (server && !server.users?.includes(row.assignedUserId)) {
+          server.users?.push(row.assignedUserId);
+          server.userDetails?.push({
+            userId: row.assignedUserId,
+            email: row.assignedUserEmail ?? "",
+            createdAt: row.assignedUserCreatedAt ?? new Date(),
+          });
+        }
+      }
+    }
 
-      // Compute secret storage type
-      const secretStorageType = computeSecretStorageType(
-        result.server.secretId,
-        result.secretIsVault,
-        result.secretIsByosVault,
-      );
-
-      return {
-        ...result.server,
-        ownerEmail: result.ownerEmail,
-        catalogName: result.catalogName,
-        users: userDetails.map((u) => u.userId),
-        userDetails,
-        teamDetails,
-        secretStorageType,
-      };
-    });
-
-    return serversWithRelations;
+    return Array.from(serversMap.values());
   }
 
   static async findById(
@@ -277,6 +300,21 @@ class McpServerModel {
       teamDetails,
       secretStorageType,
     };
+  }
+
+  /**
+   * Find multiple MCP servers by IDs with a single query.
+   * Returns basic table records (no JOINs) for lightweight validation.
+   */
+  static async findByIdsBasic(
+    ids: string[],
+  ): Promise<(typeof schema.mcpServersTable.$inferSelect)[]> {
+    if (ids.length === 0) return [];
+
+    return db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(inArray(schema.mcpServersTable.id, ids));
   }
 
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {

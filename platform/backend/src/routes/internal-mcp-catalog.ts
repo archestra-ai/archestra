@@ -850,8 +850,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const secrets =
-        await mcpServerRuntimeManager.listDockerRegistrySecrets();
+      const secrets = await mcpServerRuntimeManager.listDockerRegistrySecrets();
       return reply.send(secrets);
     },
   );

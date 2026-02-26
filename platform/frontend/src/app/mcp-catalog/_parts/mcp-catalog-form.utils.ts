@@ -1,6 +1,6 @@
 import {
-  type ImagePullSecretConfig,
   type archestraApiTypes,
+  type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
 } from "@shared";
@@ -46,14 +46,12 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
-      // biome-ignore lint/suspicious/noExplicitAny: generated API types lag behind — backend Zod schema already accepts ImagePullSecretConfig
-      imagePullSecrets: (values.localConfig.imagePullSecrets?.filter(
-        (s) => {
-          if (s.source === "existing") return s.name.trim().length > 0;
-          if (s.source === "credentials") return s.server.trim().length > 0;
-          return false;
-        },
-      ) || undefined) as any,
+      imagePullSecrets: (values.localConfig.imagePullSecrets?.filter((s) => {
+        if (s.source === "existing") return s.name.trim().length > 0;
+        if (s.source === "credentials") return s.server.trim().length > 0;
+        return false;
+        // biome-ignore lint/suspicious/noExplicitAny: generated API types lag behind — backend Zod schema already accepts ImagePullSecretConfig
+      }) || undefined) as any,
     };
 
     // BYOS: Include local config vault path and key if set

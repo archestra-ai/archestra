@@ -194,9 +194,9 @@ export function useK8sImagePullSecrets() {
   return useQuery({
     queryKey: ["k8s-image-pull-secrets"],
     queryFn: async () => {
-      const response = await archestraApiClient.get<
-        Array<{ name: string }>
-      >({ url: "/api/k8s/image-pull-secrets" });
+      const response = await archestraApiClient.get<Array<{ name: string }>>({
+        url: "/api/k8s/image-pull-secrets",
+      });
       return response.data ?? [];
     },
   });

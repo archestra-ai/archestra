@@ -380,9 +380,7 @@ export class McpServerRuntimeManager {
           generatedRegcredNames,
         );
 
-      await k8sDeployment.startOrCreateDeployment(
-        resolvedImagePullSecretNames,
-      );
+      await k8sDeployment.startOrCreateDeployment(resolvedImagePullSecretNames);
       logger.info(`Successfully started MCP server deployment ${id} (${name})`);
     } catch (error) {
       logger.error(

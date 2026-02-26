@@ -1,9 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ImagePullSecretConfig, archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import { AlertCircle, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import {
   type ProfileLabel,
@@ -464,14 +464,14 @@ export function McpCatalogForm({
                 </p>
 
                 {imagePullSecretFields.map((field, index) => {
-                  // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
                   const watchField = (key: string) =>
                     form.watch(
+                      // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
                       `localConfig.imagePullSecrets.${index}.${key}` as any,
                     ) ?? "";
-                  // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
                   const setField = (key: string, value: string) =>
                     form.setValue(
+                      // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
                       `localConfig.imagePullSecrets.${index}.${key}` as any,
                       value,
                     );

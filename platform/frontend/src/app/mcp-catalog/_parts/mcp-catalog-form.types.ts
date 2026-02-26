@@ -1,4 +1,4 @@
-import { type ImagePullSecretConfig, LocalConfigFormSchema } from "@shared";
+import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
 // Simplified OAuth config schema

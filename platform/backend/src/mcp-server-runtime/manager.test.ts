@@ -340,7 +340,9 @@ describe("McpServerRuntimeManager", () => {
       const mockStopDeployment = vi.fn().mockResolvedValue(undefined);
       const mockDeleteK8sService = vi.fn().mockResolvedValue(undefined);
       const mockDeleteK8sSecret = vi.fn().mockResolvedValue(undefined);
-      const mockDeleteDockerRegistrySecrets = vi.fn().mockResolvedValue(undefined);
+      const mockDeleteDockerRegistrySecrets = vi
+        .fn()
+        .mockResolvedValue(undefined);
 
       const mockDeployment = {
         stopDeployment: mockStopDeployment,

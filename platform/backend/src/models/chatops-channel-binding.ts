@@ -161,6 +161,76 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Find a pending DM binding (one created from the UI before actual DM interaction).
+   * Pending DM bindings have a channelId starting with "dm:pending:".
+   */
+  static async findPendingDmBinding(
+    provider: ChatOpsProviderType,
+    dmOwnerEmail: string,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, provider),
+          eq(schema.chatopsChannelBindingsTable.isDm, true),
+          eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+          sql`${schema.chatopsChannelBindingsTable.channelId} LIKE 'dm:pending:%'`,
+        ),
+      )
+      .limit(1);
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
+   * Fulfill a pending DM binding by replacing the placeholder channelId
+   * with the real one from the first DM interaction.
+   */
+  static async fulfillDmBinding(
+    id: string,
+    realChannelId: string,
+    workspaceId: string | null,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({
+        channelId: realChannelId,
+        workspaceId,
+      })
+      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .returning();
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
+   * Bulk-update the agentId for multiple bindings belonging to the same organization.
+   * Returns the updated bindings.
+   */
+  static async bulkUpdateAgent(
+    ids: string[],
+    organizationId: string,
+    agentId: string | null,
+  ): Promise<ChatOpsChannelBinding[]> {
+    if (ids.length === 0) return [];
+
+    const updated = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({ agentId })
+      .where(
+        and(
+          inArray(schema.chatopsChannelBindingsTable.id, ids),
+          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+        ),
+      )
+      .returning();
+
+    return updated as ChatOpsChannelBinding[];
+  }
+
+  /**
    * Update channel and workspace display names (internal use only).
    * Used by the name refresh mechanism — not exposed via API.
    */

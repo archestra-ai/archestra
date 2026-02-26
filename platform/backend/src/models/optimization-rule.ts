@@ -252,6 +252,7 @@ class OptimizationRuleModel {
       { organizationId },
       "OptimizationRuleModel.ensureDefaultOptimizationRules: starting",
     );
+
     // Define rules per provider
     const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
       {
@@ -282,9 +283,11 @@ class OptimizationRuleModel {
         mistral: [],
         perplexity: [], // Perplexity optimization rules - no defaults (no tool support)
         groq: [], // Groq optimization rules - no defaults
+        openrouter: [], // OpenRouter optimization rules - no defaults
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
+        deepseek: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
       };

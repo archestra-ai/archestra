@@ -8,6 +8,16 @@ export const oauthConfigSchema = z.object({
   redirect_uris: z.string().min(1, "At least one redirect URI is required"),
   scopes: z.string().optional().or(z.literal("")),
   supports_resource_metadata: z.boolean(),
+  // OAuth Server URL for local servers (since they don't have a serverUrl field)
+  // Used for OAuth discovery/authorization, NOT for tool execution
+  oauthServerUrl: z
+    .string()
+    .url({ error: "Must be a valid URL" })
+    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
+      message: "Must be an HTTP or HTTPS URL",
+    })
+    .optional()
+    .or(z.literal("")),
 });
 
 export const formSchema = z
@@ -50,6 +60,27 @@ export const formSchema = z
     {
       message: "Server URL is required for remote servers.",
       path: ["serverUrl"],
+    },
+  )
+  .refine(
+    (data) => {
+      // For local servers with OAuth, oauthServerUrl is required
+      if (
+        data.serverType === "local" &&
+        data.authMethod === "oauth" &&
+        data.oauthConfig
+      ) {
+        return (
+          data.oauthConfig.oauthServerUrl &&
+          data.oauthConfig.oauthServerUrl.length > 0
+        );
+      }
+      return true;
+    },
+    {
+      message:
+        "OAuth Server URL is required for self-hosted servers with OAuth.",
+      path: ["oauthConfig", "oauthServerUrl"],
     },
   )
   .refine(

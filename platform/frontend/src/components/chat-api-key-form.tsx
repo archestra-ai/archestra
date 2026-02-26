@@ -134,6 +134,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.groq.com/keys",
     consoleName: "Groq Console",
   },
+  openrouter: {
+    name: "OpenRouter",
+    icon: "/icons/openrouter.png",
+    placeholder: "sk-or-v1-...",
+    enabled: true,
+    consoleUrl: "https://openrouter.ai/keys",
+    consoleName: "OpenRouter",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",
@@ -158,6 +166,14 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
+  },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
   },
   bedrock: {
     name: "AWS Bedrock",

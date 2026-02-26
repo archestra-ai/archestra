@@ -200,6 +200,22 @@ const minimaxConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const deepseekConfig: ExecutionMetricsTestConfig = {
+  providerName: "DeepSeek",
+
+  endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "deepseek-chat",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const bedrockConfig: ExecutionMetricsTestConfig = {
   providerName: "Bedrock",
 
@@ -213,6 +229,22 @@ const bedrockConfig: ExecutionMetricsTestConfig = {
   buildRequest: (content) => ({
     modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
     messages: [{ role: "user", content: [{ text: content }] }],
+  }),
+};
+
+const openrouterConfig: ExecutionMetricsTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-openrouter-execution-metrics",
+    messages: [{ role: "user", content }],
   }),
 };
 
@@ -232,8 +264,10 @@ const testConfigsMap = {
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  deepseek: deepseekConfig,
   minimax: minimaxConfig,
   bedrock: bedrockConfig,
+  openrouter: openrouterConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;
 

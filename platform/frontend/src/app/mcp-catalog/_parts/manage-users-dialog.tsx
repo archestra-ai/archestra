@@ -33,6 +33,11 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
+import {
+  setOAuthCatalogId,
+  setOAuthMcpServerId,
+  setOAuthState,
+} from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
 
 interface ManageUsersDialogProps {
@@ -132,7 +137,7 @@ export function ManageUsersDialog({
 
     try {
       // Store the MCP server ID in session storage for re-authentication flow
-      sessionStorage.setItem("oauth_mcp_server_id", mcpServer.id);
+      setOAuthMcpServerId(mcpServer.id);
 
       // Call backend to initiate OAuth flow
       const { authorizationUrl, state } =
@@ -141,13 +146,13 @@ export function ManageUsersDialog({
         });
 
       // Store state in session storage for the callback
-      sessionStorage.setItem("oauth_state", state);
-      sessionStorage.setItem("oauth_catalog_id", catalogItem.id);
+      setOAuthState(state);
+      setOAuthCatalogId(catalogItem.id);
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
     } catch {
-      sessionStorage.removeItem("oauth_mcp_server_id");
+      setOAuthMcpServerId(null);
       toast.error("Failed to initiate re-authentication");
     }
   };

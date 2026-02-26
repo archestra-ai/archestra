@@ -184,6 +184,11 @@ export const RouteId = {
   GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
   GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
 
+  // Proxy Routes - OpenRouter
+  OpenrouterChatCompletionsWithDefaultAgent:
+    "openrouterChatCompletionsWithDefaultAgent",
+  OpenrouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -196,6 +201,11 @@ export const RouteId = {
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
+
+  // Proxy Routes - DeepSeek
+  DeepSeekChatCompletionsWithDefaultAgent:
+    "deepseekChatCompletionsWithDefaultAgent",
+  DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
@@ -318,6 +328,8 @@ export const RouteId = {
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",
+  BulkUpdateChatOpsBindings: "bulkUpdateChatOpsBindings",
+  CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",

@@ -527,6 +527,12 @@ const minimaxConfig = makeOpenAiCompatibleToolConfig({
   model: "MiniMax-M2.1",
 });
 
+const deepseekConfig = makeOpenAiCompatibleToolConfig({
+  providerName: "DeepSeek",
+  endpoint: (agentId) => `/v1/deepseek/${agentId}/chat/completions`,
+  model: "deepseek-chat",
+});
+
 const bedrockConfig: ToolInvocationTestConfig = {
   providerName: "Bedrock",
 
@@ -608,6 +614,14 @@ const bedrockConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const openrouterConfig: ToolInvocationTestConfig = {
+  ...makeOpenAiCompatibleToolConfig({
+    providerName: "OpenRouter",
+    endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+    model: "openrouter/auto",
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -625,7 +639,9 @@ const testConfigsMap = {
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
   minimax: minimaxConfig,
+  deepseek: deepseekConfig,
   bedrock: bedrockConfig,
+  openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
 

@@ -1,37 +1,44 @@
 "use client";
 
-import { type LucideIcon, Mail } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Mail } from "lucide-react";
+import { useMemo } from "react";
+import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
 import { cn } from "@/lib/utils";
+import { useTriggerStatuses } from "./_components/use-trigger-statuses";
 
-type Trigger = {
+function TabLabel({
+  iconSrc,
+  icon: Icon,
+  label,
+  active,
+}: {
+  iconSrc?: string;
+  icon?: React.ComponentType<{ className?: string }>;
   label: string;
-  href: string;
-  description: string;
-} & ({ icon: LucideIcon } | { iconSrc: string });
-
-const triggers: Trigger[] = [
-  {
-    label: "MS Teams",
-    href: "/agent-triggers/ms-teams",
-    iconSrc: "/icons/ms-teams.png",
-    description: "Chat with you agents via MS Teams",
-  },
-  {
-    label: "Slack",
-    href: "/agent-triggers/slack",
-    iconSrc: "/icons/slack.png",
-    description: "Chat with your agents via Slack",
-  },
-  {
-    label: "Email",
-    href: "/agent-triggers/email",
-    icon: Mail,
-    description: "Let agents respond to incoming emails",
-  },
-];
+  active: boolean;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      {iconSrc ? (
+        <img src={iconSrc} alt="" className="h-4 w-4" />
+      ) : Icon ? (
+        <Icon className="h-4 w-4" />
+      ) : null}
+      {label}
+      <span
+        className={cn(
+          "text-[11px] px-1.5 py-0.5 rounded-full font-normal",
+          active
+            ? "bg-green-500/10 text-green-600 dark:text-green-400"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        {active ? "Active" : "Configure"}
+      </span>
+    </span>
+  );
+}
 
 export default function AgentTriggersLayout({
   children,
@@ -41,74 +48,58 @@ export default function AgentTriggersLayout({
   const { data: canUpdate } = useHasPermissions({
     organization: ["update"],
   });
-  const pathname = usePathname();
+  const {
+    msTeams: msTeamsActive,
+    slack: slackActive,
+    email: emailActive,
+  } = useTriggerStatuses();
+
+  const tabs = useMemo(() => {
+    const allTabs = [
+      {
+        label: (
+          <TabLabel
+            iconSrc="/icons/ms-teams.png"
+            label="MS Teams"
+            active={msTeamsActive}
+          />
+        ),
+        href: "/agent-triggers/ms-teams",
+        active: msTeamsActive,
+      },
+      {
+        label: (
+          <TabLabel
+            iconSrc="/icons/slack.png"
+            label="Slack"
+            active={slackActive}
+          />
+        ),
+        href: "/agent-triggers/slack",
+        active: slackActive,
+      },
+      {
+        label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
+        href: "/agent-triggers/email",
+        active: emailActive,
+      },
+    ];
+
+    // Sort: active tabs first
+    return allTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
+  }, [msTeamsActive, slackActive, emailActive]);
 
   if (canUpdate === false) {
     return null;
   }
 
   return (
-    <div className="flex h-full w-full flex-col">
-      <div className="border-b border-border bg-card/30">
-        <div className="mx-auto max-w-[1680px] px-6 pt-4 pb-6 md:px-6">
-          <h1 className="text-center text-2xl font-semibold tracking-tight mb-4">
-            How do you want to chat with your agent?
-          </h1>
-          <div className="flex justify-center gap-4">
-            {triggers.map((trigger) => {
-              const isActive =
-                pathname === trigger.href ||
-                pathname.startsWith(`${trigger.href}/`);
-              return (
-                <Link
-                  key={trigger.href}
-                  href={trigger.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg border-2 px-6 py-4 transition-all w-[310px]",
-                    "hover:border-primary/60 hover:bg-primary/5",
-                    isActive
-                      ? "border-primary bg-primary/10 shadow-sm"
-                      : "border-border bg-card",
-                  )}
-                >
-                  {"iconSrc" in trigger ? (
-                    <img
-                      src={trigger.iconSrc}
-                      alt={trigger.label}
-                      className="h-5 w-5 shrink-0"
-                    />
-                  ) : (
-                    <trigger.icon
-                      className={cn(
-                        "h-5 w-5 shrink-0",
-                        isActive ? "text-primary" : "text-muted-foreground",
-                      )}
-                    />
-                  )}
-                  <div>
-                    <div
-                      className={cn(
-                        "text-sm font-medium",
-                        isActive ? "text-primary" : "text-foreground",
-                      )}
-                    >
-                      {trigger.label}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {trigger.description}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      <div className="w-full h-full">
-        <div className="mx-auto w-full max-w-[1680px] px-6 py-4 md:px-6">
-          {children}
-        </div>
-      </div>
-    </div>
+    <PageLayout
+      title="Triggers"
+      description="Manage how your agents connect to messaging channels"
+      tabs={tabs}
+    >
+      {children}
+    </PageLayout>
   );
 }

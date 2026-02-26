@@ -246,11 +246,32 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
           : new Map<string, InternalMcpCatalog>();
 
+      // Batch fetch unique MCP server IDs for credential/execution source validation
+      const uniqueMcpServerIds = [
+        ...new Set(
+          [
+            ...assignments.map((a) => a.credentialSourceMcpServerId),
+            ...assignments.map((a) => a.executionSourceMcpServerId),
+          ].filter((id): id is string => id != null),
+        ),
+      ];
+      const mcpServersBasicMap = new Map<
+        string,
+        Awaited<ReturnType<typeof McpServerModel.findByIdsBasic>>[number]
+      >();
+      if (uniqueMcpServerIds.length > 0) {
+        const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
+        for (const s of servers) {
+          mcpServersBasicMap.set(s.id, s);
+        }
+      }
+
       // Prepare pre-fetched data to pass to assignToolToAgent
       const preFetchedData = {
         existingAgentIds,
         toolsMap,
         catalogItemsMap,
+        mcpServersBasicMap,
       };
 
       const results = await Promise.allSettled(
@@ -935,6 +956,10 @@ export async function assignToolToAgent(
     existingAgentIds?: Set<string>;
     toolsMap?: Map<string, Tool>;
     catalogItemsMap?: Map<string, InternalMcpCatalog>;
+    mcpServersBasicMap?: Map<
+      string,
+      { id: string; ownerId: string | null; catalogId: string | null }
+    >;
   },
   useDynamicTeamCredential?: boolean,
 ): Promise<
@@ -1023,9 +1048,13 @@ export async function assignToolToAgent(
 
   // If a credential source is specified, validate it
   if (credentialSourceMcpServerId) {
+    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
+      credentialSourceMcpServerId,
+    );
     const validationError = await validateCredentialSource(
       agentId,
       credentialSourceMcpServerId,
+      preFetchedServer,
     );
 
     if (validationError) {
@@ -1035,9 +1064,13 @@ export async function assignToolToAgent(
 
   // If an execution source is specified, validate it
   if (executionSourceMcpServerId) {
+    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
+      executionSourceMcpServerId,
+    );
     const validationError = await validateExecutionSource(
       toolId,
       executionSourceMcpServerId,
+      preFetchedServer,
     );
 
     if (validationError) {
@@ -1078,12 +1111,16 @@ export async function assignToolToAgent(
 async function validateCredentialSource(
   agentId: string,
   credentialSourceMcpServerId: string,
+  preFetchedServer?: { id: string; ownerId: string | null } | null,
 ): Promise<{
   status: 400 | 404;
   error: { message: string; type: string };
 } | null> {
-  // Check that the MCP server exists
-  const mcpServer = await McpServerModel.findById(credentialSourceMcpServerId);
+  // Check that the MCP server exists (use pre-fetched data if available)
+  const mcpServer =
+    preFetchedServer !== undefined
+      ? preFetchedServer
+      : await McpServerModel.findById(credentialSourceMcpServerId);
 
   if (!mcpServer) {
     return {
@@ -1142,12 +1179,16 @@ async function validateCredentialSource(
 async function validateExecutionSource(
   toolId: string,
   executionSourceMcpServerId: string,
+  preFetchedServer?: { id: string; catalogId: string | null } | null,
 ): Promise<{
   status: 400 | 404;
   error: { message: string; type: string };
 } | null> {
-  // 1. Check MCP server exists
-  const mcpServer = await McpServerModel.findById(executionSourceMcpServerId);
+  // 1. Check MCP server exists (use pre-fetched data if available)
+  const mcpServer =
+    preFetchedServer !== undefined
+      ? preFetchedServer
+      : await McpServerModel.findById(executionSourceMcpServerId);
   if (!mcpServer) {
     return {
       status: 404,

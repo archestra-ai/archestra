@@ -2,7 +2,7 @@ name: Install Kind Cluster
 description: |
   Creates a Kind cluster with a pinned node image for deterministic behavior.
   Wraps helm/kind-action with a known-good kindest/node version.
-  Optionally installs Calico CNI for NetworkPolicy enforcement (SSRF protection).
+  NetworkPolicy enforcement is provided by kindnet's built-in support (Kind >= v0.24.0).
 
 inputs:
   config:
@@ -13,10 +13,6 @@ inputs:
     description: "Name of the Kind cluster"
     required: false
     default: "archestra-ci-cluster"
-  install-calico:
-    description: "Whether to install Calico CNI for NetworkPolicy enforcement. Only needed for SSRF protection tests."
-    required: false
-    default: "false"
 
 runs:
   using: composite
@@ -31,74 +27,4 @@ runs:
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
         node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
         install_only: false
-        # When Calico is being installed, skip the Ready wait — with disableDefaultCNI the
-        # node stays NotReady until Calico is running, so this wait always times out (wasting 5m).
-        # The Calico install step below handles waiting for node readiness instead.
-        # For non-Calico clusters, wait 300s for control-plane Ready (CI runners can be slow).
-        wait: ${{ inputs.install-calico == 'true' && '10s' || '300s' }}
-
-    - name: Install Calico CNI for NetworkPolicy enforcement
-      if: ${{ inputs.install-calico == 'true' }}
-      shell: bash
-      run: |
-        # Install Calico operator and custom resources for NetworkPolicy support.
-        # Kind's default CNI (kindnet) does NOT enforce NetworkPolicies.
-        # Calico provides full NetworkPolicy enforcement needed for SSRF protection.
-        # See: https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind
-        echo "Installing Calico CNI..."
-        kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/tigera-operator.yaml
-        kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/custom-resources.yaml
-
-        # Wait for calico-system namespace to be created by the operator
-        echo "Waiting for calico-system namespace..."
-        for i in $(seq 1 60); do
-          if kubectl get namespace calico-system > /dev/null 2>&1; then
-            echo "calico-system namespace exists"
-            break
-          fi
-          echo "Waiting for calico-system namespace... ($i/60)"
-          sleep 2
-        done
-        if ! kubectl get namespace calico-system > /dev/null 2>&1; then
-          echo "ERROR: calico-system namespace was not created within 120s"
-          echo "=== Tigera operator pods ==="
-          kubectl get pods -n tigera-operator 2>/dev/null || true
-          kubectl logs -n tigera-operator -l k8s-app=tigera-operator --tail=50 2>/dev/null || true
-          exit 1
-        fi
-
-        # Wait for Calico pods to exist before waiting for readiness.
-        # kubectl wait fails immediately with "no matching resources found" if no pods exist yet.
-        echo "Waiting for Calico pods to appear..."
-        for i in $(seq 1 60); do
-          POD_COUNT=$(kubectl get pods -n calico-system --no-headers 2>/dev/null | wc -l)
-          if [ "$POD_COUNT" -gt 0 ]; then
-            echo "Found $POD_COUNT Calico pod(s)"
-            break
-          fi
-          echo "No Calico pods yet... ($i/60)"
-          sleep 2
-        done
-        POD_COUNT=$(kubectl get pods -n calico-system --no-headers 2>/dev/null | wc -l)
-        if [ "$POD_COUNT" -eq 0 ]; then
-          echo "ERROR: No Calico pods appeared in calico-system within 120s"
-          kubectl get pods -n calico-system 2>/dev/null || true
-          kubectl get pods -n tigera-operator 2>/dev/null || true
-          kubectl logs -n tigera-operator -l k8s-app=tigera-operator --tail=50 2>/dev/null || true
-          exit 1
-        fi
-
-        # Wait for Calico pods to be ready.
-        # Use 300s timeout — CI runners can be slow pulling Calico images (~100-200MB each).
-        echo "Waiting for Calico pods to be ready..."
-        kubectl wait --for=condition=Ready pods --all -n calico-system --timeout=300s
-
-        echo "Calico CNI installed successfully"
-        kubectl get pods -n calico-system
-
-        # Wait for the node to become Ready. With disableDefaultCNI, the node stays
-        # NotReady until Calico is running. Without a Ready node, no application pods
-        # can be scheduled (they stay Pending indefinitely).
-        echo "Waiting for node to become Ready..."
-        kubectl wait --for=condition=Ready nodes --all --timeout=120s
-        echo "Node is Ready"
+        wait: 300s

@@ -120,6 +120,8 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `backend/src/config.ts` | Add `llm.{provider}.baseUrl` and `llm.{provider}.enabled` (typically `Boolean(baseUrl)`) with environment variable (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL`) |
 
+> **Don't forget:** Document `ARCHESTRA_{PROVIDER}_BASE_URL` and `ARCHESTRA_CHAT_{PROVIDER}_API_KEY` in `docs/pages/platform-deployment.md` under the Environment Variables section.
+
 ### Tokenizer
 
 > **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!

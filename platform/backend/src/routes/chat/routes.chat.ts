@@ -73,6 +73,7 @@ import {
 const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   anthropic: "claude-opus-4-1-20250805",
   openai: "gpt-4o",
+  openrouter: "openrouter/auto",
   gemini: "gemini-2.5-pro",
   cohere: "command-r-08-2024",
   groq: "llama-3.1-8b-instant",
@@ -82,6 +83,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   mistral: "mistral-large-latest",
   perplexity: "sonar-pro",
   zhipuai: "glm-4-plus",
+  deepseek: "deepseek-chat",
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
   minimax: "MiniMax-M2.5",
 };

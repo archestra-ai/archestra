@@ -21,11 +21,12 @@ import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
-import { ChannelTilesSection } from "../_components/channel-tiles-section";
+import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
+import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 const slackProviderConfig: ProviderConfig = {
   provider: "slack",
@@ -33,7 +34,7 @@ const slackProviderConfig: ProviderConfig = {
   providerIcon: "/icons/slack.png",
   webhookPath: "/api/webhooks/chatops/slack",
   docsUrl: "https://archestra.ai/docs/platform-slack",
-  slashCommand: "/select-agent",
+  slashCommand: "/archestra-select-agent",
   buildDeepLink: (binding) => {
     if (binding.workspaceId) {
       return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;
@@ -80,16 +81,10 @@ export default function SlackPage() {
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
     features?.isQuickstart || config.environment === "development";
-
-  // Socket mode doesn't require ngrok or a public URL
-  const allStepsCompleted = isSocket
-    ? !!slack?.configured
-    : isLocalDev
-      ? !!ngrokDomain && !!slack?.configured
-      : !!slack?.configured;
+  const { slack: allStepsCompleted } = useTriggerStatuses();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
@@ -234,9 +229,12 @@ export default function SlackPage() {
         </SetupStep>
       </CollapsibleSetupSection>
 
-      <Divider />
-
-      <ChannelTilesSection providerConfig={slackProviderConfig} />
+      {allStepsCompleted && (
+        <>
+          <Divider />
+          <ChannelsSection providerConfig={slackProviderConfig} />
+        </>
+      )}
 
       <SlackSetupDialog
         open={slackSetupOpen}

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@/test";
+import { SelectChatApiKeySchema } from "@/types";
 import ChatApiKeyModel from "./chat-api-key";
 
 describe("ChatApiKeyModel", () => {
@@ -139,6 +140,39 @@ describe("ChatApiKeyModel", () => {
 
       expect(anthropicKey.provider).toBe("anthropic");
       expect(openaiKey.provider).toBe("openai");
+    });
+
+    test("baseUrl is nullable and defaults to null", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      // Key without baseUrl should have null
+      const keyWithoutBaseUrl = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "No BaseUrl Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+      expect(keyWithoutBaseUrl.baseUrl).toBeNull();
+
+      // Key with baseUrl should store it
+      const keyWithBaseUrl = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Custom BaseUrl Key",
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        baseUrl: "https://custom-api.example.com",
+      });
+      expect(keyWithBaseUrl.baseUrl).toBe("https://custom-api.example.com");
+
+      // Verify via findById that nullable baseUrl round-trips correctly
+      const found = await ChatApiKeyModel.findById(keyWithoutBaseUrl.id);
+      expect(found?.baseUrl).toBeNull();
     });
   });
 
@@ -720,6 +754,28 @@ describe("ChatApiKeyModel", () => {
 
       expect(hasAnthropic).toBe(true);
       expect(hasOpenai).toBe(false);
+    });
+  });
+
+  describe("SelectChatApiKeySchema", () => {
+    test("accepts null baseUrl without validation error", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const key = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Test Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      // This would throw if baseUrl is not marked as nullable in the schema
+      const result = SelectChatApiKeySchema.safeParse(key);
+      expect(result.success).toBe(true);
     });
   });
 });

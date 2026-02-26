@@ -28,6 +28,19 @@ import {
   useReinstallMcpServer,
 } from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
+import {
+  clearInstallationCompleteCatalogId,
+  clearPendingAfterEnvVars,
+  getOAuthInstallationCompleteCatalogId,
+  getOAuthPendingAfterEnvVars,
+  setOAuthCatalogId,
+  setOAuthEnvironmentValues,
+  setOAuthIsFirstInstallation,
+  setOAuthPendingAfterEnvVars,
+  setOAuthServerType,
+  setOAuthState,
+  setOAuthTeamId,
+} from "@/lib/oauth-session";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
@@ -234,13 +247,10 @@ export function InternalMCPCatalog({
 
   // Check for OAuth installation completion and open assignments dialog
   useEffect(() => {
-    const oauthCatalogId = sessionStorage.getItem(
-      "oauth_installation_complete_catalog_id",
-    );
+    const oauthCatalogId = getOAuthInstallationCompleteCatalogId();
     if (oauthCatalogId) {
       setAutoOpenAssignmentsCatalogId(oauthCatalogId);
-      // Clear the flag after processing
-      sessionStorage.removeItem("oauth_installation_complete_catalog_id");
+      clearInstallationCompleteCatalogId();
     }
   }, []);
 
@@ -290,6 +300,30 @@ export function InternalMCPCatalog({
   };
 
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
+    // Check if this local server requires OAuth authentication
+    if (catalogItem.oauthConfig) {
+      // Check if there are prompted env vars that need collecting first
+      const promptedEnvVars =
+        catalogItem.localConfig?.environment?.filter(
+          (env) => env.promptOnInstallation === true,
+        ) || [];
+
+      if (promptedEnvVars.length > 0) {
+        // Has prompted env vars - open local install dialog first to collect them,
+        // then initiate OAuth after dialog confirm
+        setLocalServerCatalogItem(catalogItem);
+        setOAuthPendingAfterEnvVars(true);
+        openDialog("local-install");
+      } else {
+        // No env vars needed - go straight to OAuth flow
+        // Store server type so OAuth callback knows this is a local server
+        setOAuthServerType("local");
+        setSelectedCatalogItem(catalogItem);
+        openDialog("oauth");
+      }
+      return;
+    }
+
     setLocalServerCatalogItem(catalogItem);
     openDialog("local-install");
   };
@@ -347,6 +381,43 @@ export function InternalMCPCatalog({
     installResult: LocalServerInstallResult,
   ) => {
     if (!localServerCatalogItem) return;
+
+    // Check if OAuth is pending after env vars collection
+    if (getOAuthPendingAfterEnvVars() && localServerCatalogItem.oauthConfig) {
+      clearPendingAfterEnvVars();
+      // Store env vars and server type for use after OAuth callback
+      setOAuthServerType("local");
+      if (
+        installResult.environmentValues &&
+        Object.keys(installResult.environmentValues).length > 0
+      ) {
+        // Security: filter out secret-type env vars from sessionStorage.
+        // In BYOS mode values are vault references (safe). In non-BYOS mode
+        // actual secret values are excluded — they are handled server-side
+        // via secretId or re-prompted on install.
+        const secretKeys = new Set(
+          (localServerCatalogItem.localConfig?.environment ?? [])
+            .filter((e) => e.type === "secret")
+            .map((e) => e.key),
+        );
+        const safeValues = installResult.isByosVault
+          ? installResult.environmentValues
+          : Object.fromEntries(
+              Object.entries(installResult.environmentValues).filter(
+                ([key]) => !secretKeys.has(key),
+              ),
+            );
+        if (Object.keys(safeValues).length > 0) {
+          setOAuthEnvironmentValues(safeValues);
+        }
+      }
+      closeDialog("local-install");
+      // Now initiate OAuth flow
+      setSelectedCatalogItem(localServerCatalogItem);
+      setLocalServerCatalogItem(null);
+      openDialog("oauth");
+      return;
+    }
 
     // Check if this is a reinstall (updating existing server) vs new installation
     if (reinstallServerId) {
@@ -462,24 +533,15 @@ export function InternalMCPCatalog({
         });
 
       // Store state in session storage for the callback
-      sessionStorage.setItem("oauth_state", state);
-      sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
-      // Store teamId for use after OAuth callback
-      if (result.teamId) {
-        sessionStorage.setItem("oauth_team_id", result.teamId);
-      } else {
-        sessionStorage.removeItem("oauth_team_id");
-      }
+      setOAuthState(state);
+      setOAuthCatalogId(selectedCatalogItem.id);
+      setOAuthTeamId(result.teamId ?? null);
 
       // Store if this is a first installation (for auto-opening assignments dialog)
       const isFirstInstallation = !installedServers?.some(
         (s) => s.catalogId === selectedCatalogItem.id,
       );
-      if (isFirstInstallation) {
-        sessionStorage.setItem("oauth_is_first_installation", "true");
-      } else {
-        sessionStorage.removeItem("oauth_is_first_installation");
-      }
+      setOAuthIsFirstInstallation(isFirstInstallation);
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;

@@ -189,6 +189,41 @@ describe("UserTokenModel", () => {
       const updated = await UserTokenModel.findById(token.id);
       expect(updated?.lastUsedAt).not.toBeNull();
     });
+
+    test("validates correct token among multiple tokens (batch fetch)", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      // Create multiple users with tokens to exercise batch secret fetching
+      const org = await makeOrganization();
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const user3 = await makeUser();
+      await makeMember(user1.id, org.id);
+      await makeMember(user2.id, org.id);
+      await makeMember(user3.id, org.id);
+
+      await UserTokenModel.create(user1.id, org.id, "Token 1");
+      const { token: token2, value: value2 } = await UserTokenModel.create(
+        user2.id,
+        org.id,
+        "Token 2",
+      );
+      await UserTokenModel.create(user3.id, org.id, "Token 3");
+
+      // Validate the middle token to ensure batch lookup works correctly
+      const validated = await UserTokenModel.validateToken(value2);
+      expect(validated?.id).toBe(token2.id);
+      expect(validated?.userId).toBe(user2.id);
+    });
+
+    test("returns null when no tokens exist", async () => {
+      const validated = await UserTokenModel.validateToken(
+        "archestra_0000000000000000000000000000",
+      );
+      expect(validated).toBeNull();
+    });
   });
 
   describe("getTokenValue", () => {

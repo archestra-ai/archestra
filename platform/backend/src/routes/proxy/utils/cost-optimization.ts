@@ -12,11 +12,13 @@ import type {
   Anthropic,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
   Groq,
   Minimax,
   Mistral,
   OpenAi,
+  Openrouter,
   Perplexity,
   Vllm,
   Zhipuai,
@@ -28,6 +30,7 @@ type ProviderMessages = {
   cohere: Cohere.Types.ChatRequest["messages"];
   gemini: Gemini.Types.GenerateContentRequest["contents"];
   groq: Groq.Types.ChatCompletionsRequest["messages"];
+  openrouter: Openrouter.Types.ChatCompletionsRequest["messages"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];
   perplexity: Perplexity.Types.ChatCompletionsRequest["messages"];
   minimax: Minimax.Types.ChatCompletionsRequest["messages"];
@@ -35,6 +38,7 @@ type ProviderMessages = {
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

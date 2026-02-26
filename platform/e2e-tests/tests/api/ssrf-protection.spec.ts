@@ -240,8 +240,10 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
   test("should block SSRF to cluster-internal service (10.x range)", async ({
     request,
   }) => {
-    // Attempt to reach a typical cluster IP (Kubernetes API server is usually 10.96.0.1)
-    const result = await attemptSsrf(request, "http://10.96.0.1:443/");
+    // Attempt to reach a private 10.x IP. We use 10.0.0.1 (not a real service) rather than
+    // the Kubernetes API server ClusterIP (10.96.0.1) because kube-proxy DNAT-translates
+    // service ClusterIPs before the NetworkPolicy check, bypassing the egress block.
+    const result = await attemptSsrf(request, "http://10.0.0.1/");
     expect(result).toContain("SSRF_BLOCKED");
     expect(result).not.toContain("SSRF_SUCCESS");
   });

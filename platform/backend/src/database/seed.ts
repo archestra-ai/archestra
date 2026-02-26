@@ -371,6 +371,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
   const providerEnvVars: Record<SupportedProvider, string> = {
     anthropic: config.chat.anthropic.apiKey,
     openai: config.chat.openai.apiKey,
+    openrouter: config.chat.openrouter.apiKey,
     gemini: config.chat.gemini.apiKey,
     cerebras: config.chat.cerebras.apiKey,
     cohere: config.chat.cohere.apiKey,
@@ -380,6 +381,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     ollama: config.chat.ollama.apiKey,
     vllm: config.chat.vllm.apiKey,
     zhipuai: config.chat.zhipuai.apiKey,
+    deepseek: config.chat.deepseek.apiKey,
     bedrock: config.chat.bedrock.apiKey,
     minimax: config.chat.minimax.apiKey,
   };
@@ -462,6 +464,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
   const displayNames: Record<SupportedProvider, string> = {
     anthropic: "Anthropic",
     openai: "OpenAI",
+    openrouter: "OpenRouter",
     gemini: "Google",
     cerebras: "Cerebras",
     cohere: "Cohere",
@@ -471,6 +474,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     ollama: "Ollama",
     vllm: "vLLM",
     zhipuai: "ZhipuAI",
+    deepseek: "DeepSeek",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
   };

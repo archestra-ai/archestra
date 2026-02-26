@@ -3,7 +3,6 @@ import { TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
-import { agentFooter } from "@/agents/chatops/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import {
@@ -311,7 +310,7 @@ class SlackProvider implements ChatOpsProvider {
         elements: [
           {
             type: "plain_text",
-            text: agentFooter(options.footer),
+            text: `🤖 ${options.footer}`,
             emoji: true,
           },
         ],

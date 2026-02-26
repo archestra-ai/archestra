@@ -15,6 +15,7 @@ import {
   memberAuthFile,
   UI_BASE_URL,
 } from "./consts";
+import { expectAuthenticated } from "./utils";
 
 /**
  * Sleep for a given number of milliseconds
@@ -274,9 +275,7 @@ setup("authenticate as editor", async ({ page }) => {
   await page.waitForLoadState("domcontentloaded");
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
-    timeout: 30000,
-  });
+  await expectAuthenticated(page);
 
   // Save editor auth state
   await page.context().storageState({ path: editorAuthFile });
@@ -339,9 +338,7 @@ setup("authenticate as member", async ({ page }) => {
   await page.waitForLoadState("domcontentloaded");
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
-    timeout: 30000,
-  });
+  await expectAuthenticated(page);
 
   // Save member auth state
   await page.context().storageState({ path: memberAuthFile });

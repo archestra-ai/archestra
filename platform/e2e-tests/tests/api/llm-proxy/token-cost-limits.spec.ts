@@ -169,6 +169,33 @@ const zhipuaiConfig = makeOpenAiCompatibleCostConfig({
   provider: "zhipuai",
 });
 
+const deepseekConfig: TokenCostLimitTestConfig = {
+  providerName: "DeepSeek",
+
+  endpoint: (profileId) => `/v1/deepseek/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-deepseek-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-deepseek-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  customPricing: {
+    provider: "deepseek",
+    model: "test-deepseek-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
 
@@ -218,6 +245,33 @@ const groqConfig: TokenCostLimitTestConfig = {
   customPricing: {
     provider: "groq",
     model: "test-groq-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
+const openrouterConfig: TokenCostLimitTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (profileId) => `/v1/openrouter/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-openrouter-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-openrouter-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  customPricing: {
+    provider: "openrouter",
+    model: "test-openrouter-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -287,13 +341,15 @@ const testConfigsMap = {
   anthropic: anthropicConfig,
   gemini: geminiConfig,
   cohere: cohereConfig,
-  groq: groqConfig,
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
+  groq: groqConfig,
+  openrouter: openrouterConfig,
   perplexity: perplexityConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,
+  deepseek: deepseekConfig,
   minimax: minimaxConfig,
   bedrock: bedrockConfig,
 } satisfies Record<SupportedProvider, TokenCostLimitTestConfig>;

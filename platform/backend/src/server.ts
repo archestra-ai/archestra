@@ -62,12 +62,14 @@ import {
   ApiError,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
   Groq,
   Minimax,
   Mistral,
   Ollama,
   OpenAi,
+  Openrouter,
   Perplexity,
   Vllm,
   Zhipuai,
@@ -151,6 +153,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
     id: "GroqChatCompletionResponse",
   });
+  z.globalRegistry.add(Openrouter.API.ChatCompletionRequestSchema, {
+    id: "OpenrouterChatCompletionRequest",
+  });
+  z.globalRegistry.add(Openrouter.API.ChatCompletionResponseSchema, {
+    id: "OpenrouterChatCompletionResponse",
+  });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
   });
@@ -168,6 +176,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionRequestSchema, {
+    id: "DeepSeekChatCompletionRequest",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionResponseSchema, {
+    id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
     id: "MinimaxChatCompletionRequest",

@@ -52,6 +52,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.groq,
     originalUrl: "https://api.groq.com/openai/v1/",
   },
+  openrouter: {
+    label: providerDisplayNames.openrouter,
+    originalUrl: "https://openrouter.ai/api/v1/",
+  },
   cohere: {
     label: providerDisplayNames.cohere,
     originalUrl: "https://api.cohere.com/v2/",
@@ -67,6 +71,10 @@ const PROVIDER_CONFIG: Record<
   zhipuai: {
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
+  },
+  deepseek: {
+    label: providerDisplayNames.deepseek,
+    originalUrl: "https://api.deepseek.com/",
   },
   minimax: {
     label: providerDisplayNames.minimax,

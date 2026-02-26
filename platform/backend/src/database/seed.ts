@@ -329,6 +329,58 @@ async function seedTestMcpServer(): Promise<void> {
 }
 
 /**
+ * Seeds MCP Apps test servers (n8n-mcp and excalidraw-mcp) for development
+ * These servers demonstrate MCP Apps UI rendering capabilities
+ */
+async function seedMcpAppsTestServers(): Promise<void> {
+  // Only seed in development, or when ENABLE_MCP_APPS_TEST_SERVERS is explicitly set
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_MCP_APPS_TEST_SERVERS !== "true"
+  ) {
+    return;
+  }
+
+  // Seed n8n-mcp server
+  const existingN8n = await InternalMcpCatalogModel.findByName("n8n-mcp");
+  if (!existingN8n) {
+    await InternalMcpCatalogModel.create({
+      name: "n8n-mcp",
+      description:
+        "n8n workflow automation MCP server with interactive UI. Demonstrates MCP Apps support.",
+      serverType: "local",
+      localConfig: {
+        command: "npx",
+        arguments: ["-y", "@n8n/mcp-server"],
+        transportType: "stdio",
+        environment: [],
+      },
+    });
+    logger.info("Seeded n8n-mcp server for MCP Apps testing");
+  }
+
+  // Seed excalidraw-mcp server
+  const existingExcalidraw = await InternalMcpCatalogModel.findByName(
+    "excalidraw-mcp",
+  );
+  if (!existingExcalidraw) {
+    await InternalMcpCatalogModel.create({
+      name: "excalidraw-mcp",
+      description:
+        "Excalidraw diagramming MCP server with interactive UI. Demonstrates MCP Apps support.",
+      serverType: "local",
+      localConfig: {
+        command: "npx",
+        arguments: ["-y", "@excalidraw/mcp-server"],
+        transportType: "stdio",
+        environment: [],
+      },
+    });
+    logger.info("Seeded excalidraw-mcp server for MCP Apps testing");
+  }
+}
+
+/**
  * Creates team tokens for existing teams and organization
  * - Creates "Organization Token" if missing
  * - Creates team tokens for each team if missing

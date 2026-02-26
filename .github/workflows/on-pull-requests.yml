@@ -23,7 +23,7 @@ jobs:
   release-freeze-check:
     name: Release Freeze Check
     # Always run so it can be a required status check - passes immediately for non-release-please PRs and merge_group
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       pull-requests: write
@@ -88,7 +88,7 @@ jobs:
   lint-pr-title:
     name: PR Title Linter
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:
@@ -106,7 +106,7 @@ jobs:
 
   zizmor:
     name: Zizmor GitHub Actions static analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       security-events: write
     steps:
@@ -131,7 +131,7 @@ jobs:
 
   license-compliance-check:
     name: License Compliance Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
     defaults:
@@ -169,17 +169,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
 
-  # Automatic checks for special PR types:
-  # - Release-please PRs: auto-commit codegen changes (e.g. docs/openapi.json version bump)
-  # - Fork PRs: run automatically since maintainer already explicitly approves workflows to run
-  # Regular PRs from team members use workflow_dispatch on platform-linting-and-tests.yml for on-demand checks.
-  platform-linting-and-tests-pr:
-    name: Platform Linting and Tests (PR)
-    if: |
-      github.event_name == 'pull_request' && (
-        startsWith(github.head_ref, 'release-please--') ||
-        github.event.pull_request.head.repo.fork == true
-      )
+  platform-linting-and-tests:
+    name: Platform Linting and Tests (Required)
     permissions:
       contents: write
       packages: write # Required for pushing platform image to GHCR (non-fork PRs only)
@@ -188,13 +179,14 @@ jobs:
       pull-requests: write # Required for Docker Scout to write a comment to a PR
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
+      should-skip-running-and-always-succeed: false
       # Enable auto-commit of codegen changes for release-please PRs
       # This handles the case where release-please bumps the version in package.json,
       # causing generated files (like docs/openapi.json) to be out of date
-      is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
-      # On pull requests we don't skip running but in GH settings those are not required to succeed to hit Merge
-      should-skip-running-and-always-succeed: false
+      is-release-please-pr: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--') }}
       # Fork PRs use GitHub artifacts instead of GHCR (no packages:write permission for forks)
+      # In merge_group events, github.event.pull_request is not available, so this evaluates to false
+      # (merge_group runs in base repo context with full permissions, so GHCR works)
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
@@ -205,27 +197,3 @@ jobs:
       # that trigger workflow re-runs (pushes with GITHUB_TOKEN don't trigger workflows)
       ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-
-  platform-linting-and-tests-merge-queue:
-    name: Platform Linting and Tests (Required)
-    permissions:
-      contents: write
-      packages: write # Required for pushing platform image to GHCR (non-fork PRs only)
-      security-events: write
-      id-token: write # Required for Workload Identity Federation
-      pull-requests: write # Required for Docker Scout to write a comment to a PR
-    uses: ./.github/workflows/platform-linting-and-tests.yml
-    with:
-      # On pull requests those Required Checks must still run because they are required in GH settings
-      # They should always succeed quickly in pull requests
-      # while on merge queues they should run normally and fail if needed
-      should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
-      # Fork PRs use GitHub artifacts instead of GHCR (no packages:write permission for forks)
-      # In merge_group events, github.event.pull_request is not available, so this evaluates to false
-      # (merge_group runs in base repo context with full permissions, so GHCR works)
-      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
-    secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}

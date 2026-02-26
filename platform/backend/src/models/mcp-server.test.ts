@@ -70,6 +70,38 @@ describe("McpServerModel", () => {
     });
   });
 
+  describe("findByIdsBasic", () => {
+    test("returns basic MCP server records for given IDs", async ({
+      makeMcpServer,
+    }) => {
+      const server1 = await makeMcpServer();
+      const server2 = await makeMcpServer();
+      await makeMcpServer(); // not requested
+
+      const results = await McpServerModel.findByIdsBasic([
+        server1.id,
+        server2.id,
+      ]);
+
+      expect(results).toHaveLength(2);
+      expect(results.map((r) => r.id).sort()).toEqual(
+        [server1.id, server2.id].sort(),
+      );
+    });
+
+    test("returns empty array for empty input", async () => {
+      const results = await McpServerModel.findByIdsBasic([]);
+      expect(results).toEqual([]);
+    });
+
+    test("returns empty array for non-existent IDs", async () => {
+      const results = await McpServerModel.findByIdsBasic([
+        crypto.randomUUID(),
+      ]);
+      expect(results).toEqual([]);
+    });
+  });
+
   describe("findAll", () => {
     test("returns servers with user details from combined query", async ({
       makeMcpServer,

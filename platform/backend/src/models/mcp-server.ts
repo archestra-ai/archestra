@@ -302,6 +302,21 @@ class McpServerModel {
     };
   }
 
+  /**
+   * Find multiple MCP servers by IDs with a single query.
+   * Returns basic table records (no JOINs) for lightweight validation.
+   */
+  static async findByIdsBasic(
+    ids: string[],
+  ): Promise<(typeof schema.mcpServersTable.$inferSelect)[]> {
+    if (ids.length === 0) return [];
+
+    return db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(inArray(schema.mcpServersTable.id, ids));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
     return await db
       .select()

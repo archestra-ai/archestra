@@ -767,6 +767,10 @@ export function McpCatalogForm({
             )}
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-4">
+            <p className="text-sm text-muted-foreground pb-2">
+              Add labels to organize, filter, and search for this server in the
+              catalog.
+            </p>
             <ProfileLabels
               ref={labelsRef}
               labels={labels}

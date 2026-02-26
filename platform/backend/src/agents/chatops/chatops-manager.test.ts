@@ -384,7 +384,7 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
-  test("rejects when user email not found in Archestra", async ({
+  test("auto-provisions user when email not found in Archestra and denies access to team-restricted agent", async ({
     makeOrganization,
     makeUser,
     makeTeam,
@@ -430,13 +430,10 @@ describe("ChatOpsManager security validation", () => {
       provider: mockProvider,
     });
 
+    // User is auto-provisioned but has no team access to the team-restricted agent
     expect(result.success).toBe(false);
-    expect(result.error).toContain("not a registered Archestra user");
-    // Should send error reply with the email address
-    expect(sendReplySpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: expect.stringContaining("unknown@external.com"),
-      }),
+    expect(result.error).toContain(
+      "user does not have access to this agent",
     );
   });
 

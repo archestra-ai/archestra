@@ -43,6 +43,8 @@ vi.mock("@/agents/chatops/chatops-manager", async () => {
     getUserEmail: getUserEmailMock,
     sendReply: sendReplyMock,
     sendAgentSelectionCard: sendAgentSelectionCardMock,
+    sendEphemeralMessage: vi.fn().mockResolvedValue(undefined),
+    getUserName: vi.fn().mockResolvedValue("Test User"),
     eventHandler: null,
   };
   // Bind handleSlashCommand so `this` refers to mockProvider
@@ -64,6 +66,19 @@ vi.mock("@/agents/chatops/chatops-manager", async () => {
 
 vi.mock("@/agents/utils", () => ({
   isRateLimited: vi.fn(() => false),
+}));
+
+const autoProvisionUserMock = vi.fn().mockResolvedValue({
+  userId: "auto-provisioned-user-id",
+  invitationId: "auto-invitation-id",
+});
+
+vi.mock("@/agents/chatops/auto-provision", () => ({
+  autoProvisionUser: (...args: unknown[]) => autoProvisionUserMock(...args),
+  isSsoConfigured: vi.fn().mockResolvedValue(false),
+  buildWelcomeMessage: vi
+    .fn()
+    .mockReturnValue("Welcome! We created an Archestra account for you."),
 }));
 
 vi.mock("@/models", () => ({
@@ -229,8 +244,11 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
-  test("unregistered user gets ephemeral rejection", async () => {
-    findByEmailMock.mockResolvedValueOnce(undefined);
+  test("unregistered user is auto-provisioned and can use commands", async () => {
+    // First call returns undefined (user not found), second returns auto-provisioned user
+    findByEmailMock
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: "auto-user-id", email: "test@example.com" });
 
     const app = await createApp();
 
@@ -239,7 +257,9 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     expect(response.statusCode).toBe(200);
     const json = response.json();
     expect(json.response_type).toBe("ephemeral");
-    expect(json.text).toContain("not a registered Archestra user");
+    // Should get the help text, not a rejection
+    expect(json.text).toContain("Available commands");
+    expect(autoProvisionUserMock).toHaveBeenCalled();
 
     await app.close();
   });

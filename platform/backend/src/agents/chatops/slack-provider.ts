@@ -22,6 +22,11 @@ import type {
   ThreadHistoryParams,
 } from "@/types/chatops";
 import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "./auto-provision";
+import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
@@ -481,6 +486,26 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async getUserName(userId: string): Promise<string | null> {
+    if (!this.client) return null;
+
+    try {
+      const result = await this.client.users.info({ user: userId });
+      return (
+        result.user?.real_name ||
+        result.user?.profile?.display_name ||
+        result.user?.name ||
+        null
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), userId },
+        "[SlackProvider] Failed to get user name",
+      );
+      return null;
+    }
+  }
+
   async getChannelName(channelId: string): Promise<string | null> {
     if (!this.client) return null;
     try {
@@ -592,12 +617,38 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
     if (!user) {
-      return {
-        response_type: "ephemeral",
-        text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-      };
+      // Auto-provision: create user + member from slash command
+      const displayName =
+        (await this.getUserName(userId)) ||
+        body.user_name ||
+        "Unknown User";
+      const { invitationId } = await autoProvisionUser({
+        email: senderEmail,
+        name: displayName,
+        provider: "slack",
+      });
+      user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        return {
+          response_type: "ephemeral",
+          text: "Something went wrong while setting up your account. Please try again.",
+        };
+      }
+
+      // Send ephemeral welcome (fire-and-forget)
+      const sso = await isSsoConfigured();
+      const welcomeText = buildWelcomeMessage({
+        invitationId,
+        email: senderEmail,
+        isSso: sso,
+      });
+      this.sendEphemeralMessage({
+        channelId,
+        userId,
+        text: welcomeText,
+      }).catch(() => {});
     }
 
     switch (command) {
@@ -677,6 +728,28 @@ class SlackProvider implements ChatOpsProvider {
           response_type: "ephemeral",
           text: "Unknown command. Use `/archestra-help` to see available commands.",
         };
+    }
+  }
+
+  async sendEphemeralMessage(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.chat.postEphemeral({
+        channel: params.channelId,
+        user: params.userId,
+        text: params.text,
+        thread_ts: params.threadId,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to send ephemeral message",
+      );
     }
   }
 

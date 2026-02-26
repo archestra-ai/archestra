@@ -577,6 +577,23 @@ class MSTeamsProvider implements ChatOpsProvider {
       }));
   }
 
+  async sendEphemeralMessage(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void> {
+    // Teams doesn't have true ephemeral messages.
+    // Send a 1:1 DM to the user via proactive messaging if possible.
+    if (!this.adapter) return;
+    // For now, log a note — the welcome message is sent as part of the
+    // regular reply flow in the Teams route handler via context.sendActivity.
+    logger.debug(
+      { userId: params.userId },
+      "[MSTeamsProvider] Ephemeral message requested (sent via turn context in route handler)",
+    );
+  }
+
   async setTypingStatus(
     _channelId: string,
     _threadTs: string,

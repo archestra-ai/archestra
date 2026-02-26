@@ -24,6 +24,8 @@ export const organizationKeys = {
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
+  memberSignupStatus: () =>
+    [...organizationKeys.all, "member-signup-status"] as const,
 };
 
 /**
@@ -297,6 +299,56 @@ export function useUpdateOrganization(
       // Invalidate config cache since globalToolPolicy comes from organization record
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toast.success(onSuccessMessage);
+    },
+  });
+}
+
+export type PendingSignupMember = {
+  userId: string;
+  provider: string | null;
+};
+
+/**
+ * Get member signup status — returns members that haven't completed signup
+ */
+export function useMemberSignupStatus() {
+  return useQuery({
+    queryKey: organizationKeys.memberSignupStatus(),
+    queryFn: async () => {
+      const response = await fetch("/api/organization/members/signup-status");
+      if (!response.ok)
+        return { pendingSignupMembers: [] as PendingSignupMember[] };
+      return response.json() as Promise<{
+        pendingSignupMembers: PendingSignupMember[];
+      }>;
+    },
+  });
+}
+
+/**
+ * Delete a pending signup member (auto-provisioned, hasn't completed signup)
+ */
+export function useDeletePendingSignupMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(
+        `/api/organization/members/${userId}/pending-signup`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        handleApiError(data?.error);
+        return null;
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.memberSignupStatus(),
+      });
+      toast.success("Pending member removed");
     },
   });
 }

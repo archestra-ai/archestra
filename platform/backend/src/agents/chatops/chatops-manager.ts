@@ -19,6 +19,11 @@ import type {
   IncomingChatMessage,
 } from "@/types/chatops";
 import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "./auto-provision";
+import {
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -307,13 +312,34 @@ export class ChatOpsManager {
       return;
     }
 
-    const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
     if (!user) {
-      await provider.sendReply({
-        originalMessage: message,
-        text: `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+      // Resolve display name from provider (e.g., Slack real_name)
+      const displayName =
+        (await provider.getUserName?.(message.senderId)) ||
+        message.senderName;
+
+      // Auto-provision: create user + member from chat platform identity
+      const { invitationId } = await autoProvisionUser({
+        email: message.senderEmail,
+        name: displayName,
+        provider: provider.providerId,
       });
-      return;
+      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { email: message.senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        return;
+      }
+
+      // Send ephemeral welcome message (non-blocking)
+      this.sendAutoProvisionWelcome({
+        provider,
+        message,
+        invitationId,
+      }).catch(() => {});
     }
 
     // Check for existing binding
@@ -393,13 +419,25 @@ export class ChatOpsManager {
       logger.warn("[ChatOps] Could not resolve interactive user email");
       return;
     }
-    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
     if (!user) {
-      logger.warn(
-        { senderEmail },
-        "[ChatOps] Interactive user not registered in Archestra",
-      );
-      return;
+      // Auto-provision: create user + member from interactive payload
+      const displayName =
+        (await provider.getUserName?.(selection.userId)) ||
+        selection.userName;
+      await autoProvisionUser({
+        email: senderEmail,
+        name: displayName,
+        provider: provider.providerId,
+      });
+      user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        return;
+      }
     }
 
     // Verify agent exists
@@ -556,6 +594,46 @@ export class ChatOpsManager {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  /**
+   * Send an ephemeral welcome message to a newly auto-provisioned user.
+   * Non-fatal — failures are logged but do not block message processing.
+   */
+  private async sendAutoProvisionWelcome(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    invitationId: string;
+  }): Promise<void> {
+    const { provider, message, invitationId } = params;
+    try {
+      const sso = await isSsoConfigured();
+      const text = buildWelcomeMessage({
+        invitationId,
+        email: message.senderEmail || "",
+        isSso: sso,
+      });
+
+      if (provider.sendEphemeralMessage) {
+        await provider.sendEphemeralMessage({
+          channelId: message.channelId,
+          userId: message.senderId,
+          text,
+          threadId: message.threadId,
+        });
+      } else {
+        // Fallback: send as a regular reply
+        await provider.sendReply({
+          originalMessage: message,
+          text,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to send auto-provision welcome message",
+      );
+    }
+  }
 
   private async sendAgentSelectionCard(
     provider: ChatOpsProvider,
@@ -749,23 +827,36 @@ export class ChatOpsManager {
       };
     }
 
-    // Look up Archestra user by email
-    const user = await UserModel.findByEmail(userEmail.toLowerCase());
+    // Look up Archestra user by email — auto-provision if not found
+    let user = await UserModel.findByEmail(userEmail.toLowerCase());
 
     if (!user) {
-      logger.warn(
-        { senderEmail: userEmail },
-        "[ChatOps] User not registered in Archestra",
-      );
-      await this.sendSecurityErrorReply(
+      const displayName =
+        (await provider.getUserName?.(message.senderId)) ||
+        message.senderName;
+      const { invitationId } = await autoProvisionUser({
+        email: userEmail,
+        name: displayName,
+        provider: provider.providerId,
+      });
+      user = await UserModel.findByEmail(userEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail: userEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        return {
+          success: false,
+          error: "Failed to auto-provision user",
+        };
+      }
+
+      // Send ephemeral welcome message (non-blocking)
+      this.sendAutoProvisionWelcome({
         provider,
         message,
-        `You (${userEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-      );
-      return {
-        success: false,
-        error: `Unauthorized: ${userEmail} is not a registered Archestra user`,
-      };
+        invitationId,
+      }).catch(() => {});
     }
 
     // Check if user has access to this specific agent (via team membership or admin)

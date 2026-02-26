@@ -4,6 +4,11 @@ import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "@/agents/chatops/auto-provision";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
@@ -1576,17 +1581,50 @@ async function resolveAndVerifySender(
     return false;
   }
 
-  const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+  let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
-    logger.warn("[ChatOps] Sender is not a registered Archestra user");
-    logger.debug(
-      { senderEmail: message.senderEmail },
-      "[ChatOps] Unregistered sender email",
-    );
-    await context.sendActivity(
-      `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-    );
-    return false;
+    // Auto-provision: create user + member from Teams identity
+    try {
+      const { invitationId } = await autoProvisionUser({
+        email: message.senderEmail,
+        name: message.senderName,
+        provider: "ms-teams",
+      });
+      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail: message.senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        await context.sendActivity(
+          "Something went wrong while setting up your account. Please try again.",
+        );
+        return false;
+      }
+
+      // Send welcome message (Teams doesn't have true ephemeral, so send as activity)
+      const sso = await isSsoConfigured();
+      const welcomeText = buildWelcomeMessage({
+        invitationId,
+        email: message.senderEmail,
+        isSso: sso,
+      });
+      await context.sendActivity(welcomeText).catch(() => {});
+
+      logger.info(
+        { senderEmail: message.senderEmail },
+        "[ChatOps] Auto-provisioned user from Teams",
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[ChatOps] Failed to auto-provision user from Teams",
+      );
+      await context.sendActivity(
+        "Something went wrong while setting up your account. Please try again.",
+      );
+      return false;
+    }
   }
 
   return true;

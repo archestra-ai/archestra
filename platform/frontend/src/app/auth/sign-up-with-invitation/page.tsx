@@ -22,9 +22,13 @@ function SignUpWithInvitationContent() {
   const { data: invitationData, isLoading: isCheckingInvitation } =
     useInvitationCheck(invitationId);
 
-  // Redirect existing users to sign-in
+  // Redirect existing users to sign-in (unless auto-provisioned — they need to sign up)
   useEffect(() => {
-    if (invitationId && invitationData?.userExists) {
+    if (
+      invitationId &&
+      invitationData?.userExists &&
+      !invitationData.invitation?.status?.startsWith("auto-provisioned")
+    ) {
       router.push(`/auth/sign-in?invitationId=${invitationId}`);
     }
   }, [invitationId, invitationData, router]);

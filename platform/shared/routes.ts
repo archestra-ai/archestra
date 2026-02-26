@@ -263,6 +263,8 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
+  GetMemberSignupStatus: "getMemberSignupStatus",
+  DeletePendingSignupMember: "deletePendingSignupMember",
 
   // Appearance Routes (public/unauthenticated)
   GetPublicAppearance: "getPublicAppearance",

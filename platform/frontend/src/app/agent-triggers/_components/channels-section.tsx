@@ -103,11 +103,27 @@ export function ChannelsSection({
   const dmMutation = useCreateChatOpsDmBinding();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
 
-  const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(
+  const [selectedWorkspace, setSelectedWorkspaceRaw] = useState<string | null>(
     null,
   );
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQueryRaw] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const setSelectedWorkspace = useCallback(
+    (ws: string | null) => {
+      setSelectedWorkspaceRaw(ws);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+  const setSearchQuery = useCallback(
+    (q: string) => {
+      setSearchQueryRaw(q);
+      clearSelection();
+    },
+    [clearSelection],
+  );
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -227,32 +243,24 @@ export function ChannelsSection({
     dmMutation.mutate({ provider: providerConfig.provider, agentId });
   };
 
-  const handleBulkAssign = (agentId: string | null) => {
+  const handleBulkAssign = async (agentId: string | null) => {
     if (selectedIds.size === 0) return;
     const hasVirtualDm = selectedIds.has(VIRTUAL_DM_ID);
     const realIds = Array.from(selectedIds).filter(
       (id) => id !== VIRTUAL_DM_ID,
     );
-    const clearSelection = () => setSelectedIds(new Set());
 
-    if (realIds.length > 0 && hasVirtualDm) {
-      // Both real bindings and virtual DM selected
-      bulkMutation.mutate({ ids: realIds, agentId });
-      dmMutation.mutate(
-        { provider: providerConfig.provider, agentId },
-        { onSuccess: clearSelection },
-      );
-    } else if (realIds.length > 0) {
-      bulkMutation.mutate(
-        { ids: realIds, agentId },
-        { onSuccess: clearSelection },
-      );
-    } else if (hasVirtualDm) {
-      dmMutation.mutate(
-        { provider: providerConfig.provider, agentId },
-        { onSuccess: clearSelection },
+    const promises: Promise<unknown>[] = [];
+    if (realIds.length > 0) {
+      promises.push(bulkMutation.mutateAsync({ ids: realIds, agentId }));
+    }
+    if (hasVirtualDm) {
+      promises.push(
+        dmMutation.mutateAsync({ provider: providerConfig.provider, agentId }),
       );
     }
+    await Promise.all(promises);
+    clearSelection();
   };
 
   const hasAnyChannels = workspaceBindings.length > 0 || showVirtualDmRow;

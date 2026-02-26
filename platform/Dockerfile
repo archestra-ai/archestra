@@ -99,12 +99,14 @@ ENV VERSION=${VERSION}
 # https://turborepo.com/docs/guides/tools/docker#example
 #
 # SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
+# SENTRY_URL points to the EU region where the archestra org is hosted
 #
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 # https://docs.docker.com/build/building/secrets/#target
 RUN --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
     --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
+    SENTRY_URL=https://de.sentry.io/ \
     pnpm build
 
 # <----- Final unified stage ----->

@@ -27,7 +27,7 @@
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:openapi": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-openapi.ts",
     "codegen": "pnpm codegen:openapi && pnpm codegen:access-control-docs",
-    "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
+    "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli --url https://de.sentry.io/ sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli --url https://de.sentry.io/ sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.49",

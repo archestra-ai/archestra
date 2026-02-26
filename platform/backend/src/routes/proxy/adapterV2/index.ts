@@ -12,3 +12,4 @@ export { openaiAdapterFactory } from "./openai";
 export { perplexityAdapterFactory } from "./perplexity";
 export { vllmAdapterFactory } from "./vllm";
 export { zhipuaiAdapterFactory } from "./zhipuai";
+export { xaiAdapterFactory } from "./xai";

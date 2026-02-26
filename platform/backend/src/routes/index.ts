@@ -12,6 +12,7 @@ import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import perplexityProxyRoutesV2 from "./proxy/routesv2/perplexity";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
+import xaiProxyRoutesV2 from "./proxy/routesv2/xai";
 
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
 export { default as a2aRoutes } from "./a2a";
@@ -60,6 +61,8 @@ export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
 export const bedrockProxyRoutes = bedrockProxyRoutesV2;
 // MiniMax proxy routes - V2 only (new provider, no legacy v1)
 export const minimaxProxyRoutes = minimaxProxyRoutesV2;
+// x.ai (Grok) proxy routes
+export const xaiProxyRoutes = xaiProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

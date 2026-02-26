@@ -17,6 +17,7 @@ import {
   Perplexity,
   Vllm,
   Zhipuai,
+  Xai,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 

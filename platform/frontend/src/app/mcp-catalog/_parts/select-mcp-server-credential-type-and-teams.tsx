@@ -198,8 +198,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
         <AlertDescription>
           <span className="font-semibold">Insufficient permissions</span>
           <p className="mt-1">
-            MCP servers can only be installed at the team level and require
-            the{" "}
+            MCP servers can only be installed at the team level and require the{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
               mcpServer:update
             </code>{" "}

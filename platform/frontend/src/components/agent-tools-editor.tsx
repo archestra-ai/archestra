@@ -422,7 +422,7 @@ const AgentToolsEditorContent = forwardRef<
       const hasNoTools = totalCount === 0;
       const hasNoCredentials =
         catalog.serverType !== "builtin" &&
-        !(allCredentials?.[catalog.id]?.length);
+        !allCredentials?.[catalog.id]?.length;
       const isDisabled = hasNoTools || hasNoCredentials;
       return {
         id: catalog.id,

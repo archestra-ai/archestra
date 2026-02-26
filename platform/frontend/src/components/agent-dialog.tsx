@@ -1043,32 +1043,6 @@ export function AgentDialog({
               </Alert>
             )}
 
-            {/* Visibility / Scope */}
-            <AccessLevelSelector
-              scope={scope}
-              onScopeChange={(newScope) => {
-                setScope(newScope);
-                if (newScope === "org") {
-                  setAssignedTeamIds([]);
-                }
-              }}
-              isAdmin={!!isAdmin}
-              initialScope={
-                agent
-                  ? (((agent as Record<string, unknown>).scope as
-                      | "personal"
-                      | "team"
-                      | "org") ?? undefined)
-                  : undefined
-              }
-              agentType={agentType}
-              teams={teams}
-              assignedTeamIds={assignedTeamIds}
-              onTeamIdsChange={setAssignedTeamIds}
-              hasNoAvailableTeams={hasNoAvailableTeams}
-              showTeamRequired={!isAdmin && !isInternalAgent}
-            />
-
             <div className="rounded-lg border bg-card p-4 space-y-4">
               {/* Name */}
               <div className="space-y-2">
@@ -1099,6 +1073,32 @@ export function AgentDialog({
                   />
                 </div>
               )}
+
+              {/* Visibility / Scope */}
+              <AccessLevelSelector
+                scope={scope}
+                onScopeChange={(newScope) => {
+                  setScope(newScope);
+                  if (newScope === "org") {
+                    setAssignedTeamIds([]);
+                  }
+                }}
+                isAdmin={!!isAdmin}
+                initialScope={
+                  agent
+                    ? (((agent as Record<string, unknown>).scope as
+                        | "personal"
+                        | "team"
+                        | "org") ?? undefined)
+                    : undefined
+                }
+                agentType={agentType}
+                teams={teams}
+                assignedTeamIds={assignedTeamIds}
+                onTeamIdsChange={setAssignedTeamIds}
+                hasNoAvailableTeams={hasNoAvailableTeams}
+                showTeamRequired={!isAdmin && !isInternalAgent}
+              />
 
               {/* LLM Configuration (Agent only) */}
               {isInternalAgent && (

@@ -3,6 +3,7 @@ import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
 
@@ -198,12 +199,18 @@ class UserTokenModel {
   static async validateToken(
     tokenValue: string,
   ): Promise<SelectUserToken | null> {
-    // Get all user tokens (this is not ideal for scale, but matches team token pattern)
+    // Get all user tokens
     const allTokens = await db.select().from(schema.userTokensTable);
+    if (allTokens.length === 0) return null;
 
-    // Check each token's secret
+    // Batch-fetch all secrets in a single query (user tokens always use DB storage)
+    const secretIds = allTokens.map((t) => t.secretId);
+    const secrets = await SecretModel.findByIds(secretIds);
+    const secretMap = new Map(secrets.map((s) => [s.id, s]));
+
+    // Match the provided token value against stored secrets
     for (const token of allTokens) {
-      const secret = await secretManager().getSecret(token.secretId);
+      const secret = secretMap.get(token.secretId);
       if (
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue

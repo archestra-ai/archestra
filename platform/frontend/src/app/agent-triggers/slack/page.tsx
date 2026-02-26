@@ -34,7 +34,7 @@ const slackProviderConfig: ProviderConfig = {
   providerIcon: "/icons/slack.png",
   webhookPath: "/api/webhooks/chatops/slack",
   docsUrl: "https://archestra.ai/docs/platform-slack",
-  slashCommand: "/select-agent",
+  slashCommand: "/archestra-select-agent",
   buildDeepLink: (binding) => {
     if (binding.workspaceId) {
       return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;

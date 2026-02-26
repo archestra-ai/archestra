@@ -86,7 +86,7 @@ export function useCreateChatOpsDmBinding() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("DM agent updated");
+      toast.success("Direct message channel updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
   });

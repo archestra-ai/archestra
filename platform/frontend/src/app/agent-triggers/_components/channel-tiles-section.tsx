@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useProfiles } from "@/lib/agent.query";
+import { useSession } from "@/lib/auth.query";
 import {
   useBulkUpdateChatOpsBindings,
   useChatOpsBindings,
@@ -59,6 +60,7 @@ interface Agent {
 type SortField = "channel" | "agent";
 type SortDir = "asc" | "desc";
 
+const VIRTUAL_DM_ID = "__virtual-dm__";
 const STORAGE_PREFIX = "triggers:collapse:";
 
 function useCollapsed(key: string, defaultValue: boolean) {
@@ -226,12 +228,31 @@ export function ChannelTilesSection({
   };
 
   const handleBulkAssign = (agentId: string | null) => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    bulkMutation.mutate(
-      { ids, agentId },
-      { onSuccess: () => setSelectedIds(new Set()) },
+    if (selectedIds.size === 0) return;
+    const hasVirtualDm = selectedIds.has(VIRTUAL_DM_ID);
+    const realIds = Array.from(selectedIds).filter(
+      (id) => id !== VIRTUAL_DM_ID,
     );
+    const clearSelection = () => setSelectedIds(new Set());
+
+    if (realIds.length > 0 && hasVirtualDm) {
+      // Both real bindings and virtual DM selected
+      bulkMutation.mutate({ ids: realIds, agentId });
+      dmMutation.mutate(
+        { provider: providerConfig.provider, agentId },
+        { onSuccess: clearSelection },
+      );
+    } else if (realIds.length > 0) {
+      bulkMutation.mutate(
+        { ids: realIds, agentId },
+        { onSuccess: clearSelection },
+      );
+    } else if (hasVirtualDm) {
+      dmMutation.mutate(
+        { provider: providerConfig.provider, agentId },
+        { onSuccess: clearSelection },
+      );
+    }
   };
 
   const hasAnyChannels = workspaceBindings.length > 0 || showVirtualDmRow;
@@ -239,14 +260,37 @@ export function ChannelTilesSection({
   return (
     <section className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-semibold">Channels</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold">Channels</h2>
+          {!isLoading && hasAnyChannels && (
+            <div className="flex items-end gap-3 text-xs text-muted-foreground ml-1">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                Total: {configuredCount + notConfiguredCount + virtualDmCount}
+              </span>
+              |
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 opacity-90">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Configured: {configuredCount}
+              </span>
+              |
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 opacity-90">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Unassigned: {notConfiguredCount + virtualDmCount}
+              </span>
+            </div>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Assign a default agent to each channel. Use the picker or{" "}
+          New channels appear after adding the bot to a channel and the first
+          interaction with it.
+          <br />
+          Then, assign a default agent to each channel you want Archestra bot to
+          reply in. Use the Assign button below or{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             {providerConfig.slashCommand}
           </code>{" "}
-          in {providerConfig.providerLabel}. New channels appear after adding
-          the bot to a channel and the first interaction with it.
+          in {providerConfig.providerLabel}.{" "}
         </p>
       </div>
 
@@ -308,7 +352,6 @@ export function ChannelTilesSection({
           {(configured.length > 0 || (configuredCount > 0 && lowerSearch)) && (
             <CollapsibleChannelTable
               variant="configured"
-              count={configuredCount}
               storageKey={`${providerConfig.provider}:configured`}
               bindings={configured}
               agentList={agentList}
@@ -328,7 +371,6 @@ export function ChannelTilesSection({
             (notConfiguredCount > 0 && lowerSearch)) && (
             <CollapsibleChannelTable
               variant="not-configured"
-              count={notConfiguredCount + virtualDmCount}
               storageKey={`${providerConfig.provider}:not-configured`}
               bindings={notConfigured}
               agentList={agentList}
@@ -470,7 +512,6 @@ interface BindingRow {
 
 function CollapsibleChannelTable({
   variant,
-  count,
   storageKey,
   bindings,
   agentList,
@@ -485,7 +526,6 @@ function CollapsibleChannelTable({
   onToggleAll,
 }: {
   variant: "configured" | "not-configured";
-  count: number;
   storageKey: string;
   bindings: BindingRow[];
   agentList: Agent[];
@@ -505,6 +545,8 @@ function CollapsibleChannelTable({
   onToggleSelected: (id: string) => void;
   onToggleAll: (ids: string[], checked: boolean) => void;
 }) {
+  const { data: session } = useSession();
+  const user = session?.user;
   const [collapsed, setCollapsed] = useCollapsed(storageKey, false);
   const isConfigured = variant === "configured";
 
@@ -547,15 +589,16 @@ function CollapsibleChannelTable({
     });
   }, [bindings, sortField, sortDir, agentMap]);
 
-  const bindingIds = useMemo(
-    () => sortedBindings.map((b) => b.id),
-    [sortedBindings],
-  );
+  const selectableIds = useMemo(() => {
+    const ids = sortedBindings.map((b) => b.id);
+    if (virtualDm) ids.push(VIRTUAL_DM_ID);
+    return ids;
+  }, [sortedBindings, virtualDm]);
   const allChecked =
-    sortedBindings.length > 0 &&
-    sortedBindings.every((b) => selectedIds.has(b.id));
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.has(id));
   const someChecked =
-    !allChecked && sortedBindings.some((b) => selectedIds.has(b.id));
+    !allChecked && selectableIds.some((id) => selectedIds.has(id));
 
   return (
     <div className="flex flex-col gap-2">
@@ -563,7 +606,7 @@ function CollapsibleChannelTable({
         <Button
           variant="ghost"
           size="sm"
-          className="gap-2 px-2 hover:bg-transparent"
+          className="gap-2 !px-0 !bg-transparent"
           onClick={() => setCollapsed(!collapsed)}
         >
           <span
@@ -574,9 +617,9 @@ function CollapsibleChannelTable({
                 : "text-amber-600 dark:text-amber-400",
             )}
           >
-            {isConfigured ? "Configured" : "Not configured"}
+            {isConfigured ? "Configured" : "Unassigned"}
           </span>
-          <span
+          {/* <span
             className={cn(
               "text-xs px-1.5 py-0.5 rounded-full font-medium w-5 h-5 flex items-center justify-center border border-border",
               isConfigured
@@ -585,7 +628,7 @@ function CollapsibleChannelTable({
             )}
           >
             {count}
-          </span>
+          </span> */}
           {collapsed ? (
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           ) : (
@@ -605,7 +648,7 @@ function CollapsibleChannelTable({
                       allChecked ? true : someChecked ? "indeterminate" : false
                     }
                     onCheckedChange={(checked) =>
-                      onToggleAll(bindingIds, !!checked)
+                      onToggleAll(selectableIds, !!checked)
                     }
                     aria-label="Select all"
                   />
@@ -635,17 +678,23 @@ function CollapsibleChannelTable({
                   </Button>
                 </TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[90px] text-right pr-6">
-                  Actions
-                </TableHead>
+                <TableHead className="w-[80px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {virtualDm && (
                 <TableRow>
-                  <TableCell />
                   <TableCell>
-                    <span className="text-sm font-medium">Direct Message</span>
+                    <Checkbox
+                      checked={selectedIds.has(VIRTUAL_DM_ID)}
+                      onCheckedChange={() => onToggleSelected(VIRTUAL_DM_ID)}
+                      aria-label="Select Direct Message"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm font-medium">
+                      Direct Message ({user?.email})
+                    </span>
                   </TableCell>
                   <TableCell>
                     <AgentPicker
@@ -670,6 +719,7 @@ function CollapsibleChannelTable({
                           href={virtualDm.deepLink}
                           target="_blank"
                           rel="noopener noreferrer"
+                          className="!bg-transparent !px-0"
                         >
                           <Image
                             src={providerConfig.providerIcon}
@@ -717,7 +767,7 @@ function CollapsibleChannelTable({
                       <div className="flex items-center gap-1.5">
                         {binding.isDm ? (
                           <span className="text-sm font-medium">
-                            Direct Message
+                            Direct Message ({user?.email})
                           </span>
                         ) : (
                           <>
@@ -754,6 +804,7 @@ function CollapsibleChannelTable({
                             href={deepLink}
                             target="_blank"
                             rel="noopener noreferrer"
+                            className="!bg-transparent !px-0"
                           >
                             <Image
                               src={providerConfig.providerIcon}
@@ -797,7 +848,7 @@ function StatusBadge({ assigned }: { assigned: boolean }) {
           assigned ? "bg-emerald-500" : "bg-amber-500",
         )}
       />
-      {assigned ? "Active" : "Unassigned"}
+      {assigned ? "Active" : "Inactive"}
     </span>
   );
 }
@@ -826,7 +877,7 @@ function AgentPicker({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400"
+            className="h-7 gap-1.5 text-xs"
             disabled={isUpdating}
           >
             <Bot className="h-3.5 w-3.5 shrink-0" />

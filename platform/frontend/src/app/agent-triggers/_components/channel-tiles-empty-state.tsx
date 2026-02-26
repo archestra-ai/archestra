@@ -1,8 +1,15 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import type { ChatOpsProvider } from "./types";
 
 export function ChannelTilesEmptyState({
@@ -16,31 +23,35 @@ export function ChannelTilesEmptyState({
 }) {
   const message =
     provider === "slack"
-      ? "Add bot to channel, send a message, wait for reply"
-      : "Send a message to the bot, wait for reply";
+      ? "Add the bot to a channel, send a message, and wait for a reply."
+      : "Mention @archestra in a channel and wait for a reply.";
+
   return (
-    <Card>
-      <CardContent className="py-12 flex flex-col items-center gap-4">
-        <p className="text-lg font-semibold">No channels discovered yet</p>
-        <p className="text-muted-foreground text-center max-w-lg">
-          {message} and click{" "}
+    <Empty>
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Radio />
+        </EmptyMedia>
+        <EmptyTitle>No channels discovered yet</EmptyTitle>
+        <EmptyDescription>{message}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+        >
           {isRefreshing ? (
-            <span className="inline-flex items-center gap-1">
+            <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Refreshing…
-            </span>
+            </>
           ) : (
-            <Button
-              variant="link"
-              className="h-auto p-0 text-md"
-              onClick={onRefresh}
-            >
-              Refresh
-            </Button>
-          )}{" "}
-          to see them here.
-        </p>
-      </CardContent>
-    </Card>
+            "Refresh"
+          )}
+        </Button>
+      </EmptyContent>
+    </Empty>
   );
 }

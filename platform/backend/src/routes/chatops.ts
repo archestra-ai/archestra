@@ -1199,6 +1199,23 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Validate app-level token for socket mode by calling apps.connections.open()
+      if (
+        merged.enabled &&
+        merged.connectionMode === "socket" &&
+        merged.appLevelToken
+      ) {
+        try {
+          const client = new WebClient(merged.appLevelToken);
+          await client.apps.connections.open();
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Slack App-Level Token — could not open a Socket Mode connection. Please check your App-Level Token.",
+          );
+        }
+      }
+
       await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();
 

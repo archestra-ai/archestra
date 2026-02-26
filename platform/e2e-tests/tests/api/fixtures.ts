@@ -112,6 +112,7 @@ const createAgent = async (request: APIRequestContext, name: string) =>
     data: {
       name,
       teams: [],
+      scope: "personal",
     },
   });
 
@@ -128,6 +129,7 @@ const createLlmProxy = async (request: APIRequestContext, name: string) =>
       name,
       teams: [],
       agentType: "llm_proxy",
+      scope: "personal",
     },
   });
 

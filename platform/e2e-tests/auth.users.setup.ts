@@ -3,7 +3,7 @@ import {
   expect,
   test as setup,
 } from "@playwright/test";
-import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { E2eTestId, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -274,7 +274,7 @@ setup("authenticate as editor", async ({ page }) => {
   await page.waitForLoadState("domcontentloaded");
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
+  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
     timeout: 30000,
   });
 
@@ -339,7 +339,7 @@ setup("authenticate as member", async ({ page }) => {
   await page.waitForLoadState("domcontentloaded");
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
+  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
     timeout: 30000,
   });
 

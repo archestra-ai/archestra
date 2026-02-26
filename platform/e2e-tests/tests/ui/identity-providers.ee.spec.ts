@@ -358,7 +358,9 @@ test.describe("Identity Provider Team Sync E2E", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+      await expect(
+        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
+      ).toBeVisible({
         timeout: 15000,
       });
 
@@ -499,8 +501,10 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in by checking for authenticated UI elements
-      // Use text locator as fallback since getByRole can be flaky with complex UIs
-      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+      // Use data-testid to avoid flaky text-based selectors
+      await expect(
+        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
+      ).toBeVisible({
         timeout: 15000,
       });
 
@@ -593,7 +597,9 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+      await expect(
+        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
+      ).toBeVisible({
         timeout: 15000,
       });
 
@@ -721,7 +727,9 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       const loginSucceeded = await loginViaKeycloak(ssoPage);
       expect(loginSucceeded).toBe(true);
 
-      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+      await expect(
+        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
+      ).toBeVisible({
         timeout: 15000,
       });
 
@@ -827,7 +835,9 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+      await expect(
+        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
+      ).toBeVisible({
         timeout: 15000,
       });
 
@@ -964,8 +974,10 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in by checking for authenticated UI elements
-      // Use text locator as fallback since getByRole can be flaky with complex UIs
-      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+      // Use data-testid to avoid flaky text-based selectors
+      await expect(
+        ssoPage.getByTestId(E2eTestId.SidebarNavGuardrails),
+      ).toBeVisible({
         timeout: 15000,
       });
 

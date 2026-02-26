@@ -188,6 +188,10 @@ const NavPrimary = ({
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
 
+  // Generate a stable data-testid from the URL path, e.g. "/tool-policies" → "sidebar-nav-tool-policies"
+  const urlToTestId = (url: string) =>
+    `sidebar-nav-${url.replace(/^\//, "").replace(/\//g, "-")}`;
+
   const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
@@ -199,6 +203,7 @@ const NavPrimary = ({
       >
         <Link
           href={item.url}
+          data-testid={urlToTestId(item.url)}
           onClick={() => {
             if (isMobile) setOpenMobile(false);
           }}
@@ -221,6 +226,7 @@ const NavPrimary = ({
               >
                 <Link
                   href={sub.url}
+                  data-testid={urlToTestId(sub.url)}
                   onClick={() => {
                     if (isMobile) setOpenMobile(false);
                   }}

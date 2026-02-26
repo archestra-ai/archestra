@@ -1,4 +1,5 @@
 import { expect, test as setup } from "@playwright/test";
+import { E2eTestId } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -26,7 +27,7 @@ setup("authenticate as admin", async ({ page }) => {
   await page.reload({ waitUntil: "domcontentloaded" });
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
+  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
     timeout: 30000,
   });
 

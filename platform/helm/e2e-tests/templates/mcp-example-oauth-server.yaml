@@ -55,6 +55,10 @@ spec:
             # The e2e test rewrites authorization URLs to the external NodePort for the test runner.
             - name: BASE_URI
               value: "http://{{ .Release.Name }}-mcp-example-oauth:{{ .Values.mcpExampleOAuth.service.port }}"
+            # MCP SDK requires HTTPS for issuer URLs in non-localhost environments.
+            # In CI/test we use HTTP between K8s services, so allow insecure issuer.
+            - name: MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL
+              value: "true"
           ports:
             - containerPort: 3232
               name: http

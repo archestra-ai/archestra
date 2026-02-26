@@ -30,13 +30,30 @@ export function formatDate({
   return format(new Date(date), dateFormat);
 }
 
+/**
+ * Convert an API SDK error object into a proper Error instance.
+ * Use this instead of `throw error` to avoid Sentry's
+ * "Object captured as exception with keys: error" warning.
+ */
+export function toApiError(error: {
+  error: Partial<ApiError> | Error;
+}): Error {
+  if (error.error instanceof Error) return error.error;
+  return new Error(error.error?.message ?? "API request failed");
+}
+
 export function handleApiError(error: { error: Partial<ApiError> | Error }) {
   if (typeof window !== "undefined") {
     // we show toast only on the client side
     toast.error(error.error?.message ?? "API request failed");
   }
-  // capture exception on Sentry
-  Sentry.captureException(error);
+  // Wrap in a proper Error instance so Sentry gets a real stack trace instead
+  // of "Object captured as exception with keys: error"
+  const sentryError =
+    error.error instanceof Error
+      ? error.error
+      : new Error(error.error?.message ?? "API request failed");
+  Sentry.captureException(sentryError, { extra: { originalError: error } });
   // we log the error on the server side
   console.error(error);
 }

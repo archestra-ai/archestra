@@ -135,7 +135,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         organizationId: request.organizationId,
         agentType: agent.agentType,
-        action: "update",
+        action: agent.scope === "org" ? "admin" : "update",
       });
 
       const result = await assignToolToAgent(
@@ -209,18 +209,23 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
       const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
 
-      // Check agent-type-specific update permission for each unique agent
-      const checkedAgentTypes = new Set<string>();
+      // Check agent-type-specific permission for each unique agent
+      // Cache by agentType + action to avoid redundant checks
+      const checkedPermissions = new Set<string>();
       for (const agentId of uniqueAgentIds) {
         const agent = await AgentModel.findById(agentId);
-        if (agent && !checkedAgentTypes.has(agent.agentType)) {
-          checkedAgentTypes.add(agent.agentType);
-          await requireAgentTypePermission({
-            userId: request.user.id,
-            organizationId: request.organizationId,
-            agentType: agent.agentType,
-            action: "update",
-          });
+        if (agent) {
+          const action = agent.scope === "org" ? "admin" : "update";
+          const cacheKey = `${agent.agentType}:${action}`;
+          if (!checkedPermissions.has(cacheKey)) {
+            checkedPermissions.add(cacheKey);
+            await requireAgentTypePermission({
+              userId: request.user.id,
+              organizationId: request.organizationId,
+              agentType: agent.agentType,
+              action,
+            });
+          }
         }
       }
 
@@ -437,7 +442,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         agentType: agent.agentType,
-        action: "update",
+        action: agent.scope === "org" ? "admin" : "update",
       });
 
       const success = await AgentToolModel.delete(agentId, toolId);
@@ -533,7 +538,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           agentType: agentForPerm.agentType,
-          action: "update",
+          action: agentForPerm.scope === "org" ? "admin" : "update",
         });
       }
 

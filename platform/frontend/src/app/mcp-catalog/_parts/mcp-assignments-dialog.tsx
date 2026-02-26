@@ -28,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useProfiles } from "@/lib/agent.query";
+import { useAllPermissions } from "@/lib/auth.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
@@ -89,6 +90,11 @@ export function McpAssignmentsDialog({
   // Fetch all profiles
   const { data: allProfiles = [], isPending: isLoadingProfiles } =
     useProfiles();
+
+  // Fetch user permissions to determine admin status
+  const { data: permissions } = useAllPermissions();
+  const isAgentAdmin = permissions?.agent?.includes("admin") ?? false;
+  const isMcpGatewayAdmin = permissions?.mcpGateway?.includes("admin") ?? false;
 
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });
@@ -276,13 +282,16 @@ export function McpAssignmentsDialog({
   const isLoading = isLoadingTools || isLoadingAssignments || isLoadingProfiles;
 
   // Split profiles into two groups: Profiles (MCP) and Agents
+  // Hide org-scoped agents/gateways from non-admin users
   const { mcpProfiles, agents } = useMemo(() => {
     const mcp: Profile[] = [];
     const agent: Profile[] = [];
     for (const profile of allProfiles) {
       if (profile.agentType === "mcp_gateway") {
+        if (profile.scope === "org" && !isMcpGatewayAdmin) continue;
         mcp.push(profile);
       } else if (profile.agentType === "agent") {
+        if (profile.scope === "org" && !isAgentAdmin) continue;
         agent.push(profile);
       }
     }
@@ -295,7 +304,7 @@ export function McpAssignmentsDialog({
     mcp.sort(sortByAssignments);
     agent.sort(sortByAssignments);
     return { mcpProfiles: mcp, agents: agent };
-  }, [allProfiles, assignmentsByProfile]);
+  }, [allProfiles, assignmentsByProfile, isAgentAdmin, isMcpGatewayAdmin]);
 
   // Handle toggling a profile on/off from the combobox
   const handleProfileToggle = useCallback(

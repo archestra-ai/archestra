@@ -40,7 +40,7 @@ class AgentTeamModel {
       SELECT at.agent_id AS id
         FROM agent_team at
         INNER JOIN agents a ON at.agent_id = a.id
-        INNER JOIN team_members tm ON at.team_id = tm.team_id
+        INNER JOIN team_member tm ON at.team_id = tm.team_id
         WHERE tm.user_id = ${userId} AND a.scope = 'team'
     `);
 

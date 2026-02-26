@@ -428,6 +428,9 @@ jobs:
           echo "=== Vault Logs ==="
           kubectl logs -l app.kubernetes.io/name=vault --tail=200 2>/dev/null || true
 
+          echo "=== MCP Example OAuth Server Logs ==="
+          kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 2>/dev/null || true
+
   # Quickstart E2E tests - validates docker run quickstart instructions work correctly
   # Runs the mcp-install.spec.ts test against the platform started via docker run
   platform-quickstart-e2e-tests:

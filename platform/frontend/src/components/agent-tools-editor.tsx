@@ -374,23 +374,32 @@ const AgentToolsEditorContent = forwardRef<
         : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
       const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
       const hasNoTools = totalCount === 0;
+      const hasNoCredentials =
+        catalog.serverType !== "builtin" &&
+        !(allCredentials?.[catalog.id]?.length);
+      const isDisabled = hasNoTools || hasNoCredentials;
       return {
         id: catalog.id,
         name: catalog.name,
         description: catalog.description || undefined,
-        badge: hasNoTools
+        badge: isDisabled
           ? undefined
           : assignedCount > 0
             ? `${assignedCount}/${totalCount}`
             : `${totalCount} tools`,
-        disabled: hasNoTools,
-        disabledReason: hasNoTools ? "Not installed" : undefined,
+        disabled: isDisabled,
+        disabledReason: hasNoTools
+          ? "Not installed"
+          : hasNoCredentials
+            ? "Not installed"
+            : undefined,
       };
     });
   }, [
     sortedCatalogItems,
     assignedToolsByCatalog,
     toolCountByCatalog,
+    allCredentials,
     pendingVersion,
   ]);
 

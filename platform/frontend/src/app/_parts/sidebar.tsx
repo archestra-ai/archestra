@@ -98,6 +98,32 @@ const contentNavGroups: NavGroup[] = [
     ],
   },
   {
+    label: "MCP & Tools",
+    items: [
+      {
+        title: "MCPs",
+        url: "/mcp-catalog/registry",
+        icon: Route,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp-catalog"),
+        subItems: [
+          {
+            title: "Gateways",
+            url: "/mcp-gateways",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/mcp-gateways"),
+          },
+          {
+            title: "Guardrails",
+            url: "/tool-policies",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/tool-policies"),
+          },
+        ],
+      },
+    ],
+  },
+  {
     label: "LLM Proxies",
     items: [
       {
@@ -115,30 +141,6 @@ const contentNavGroups: NavGroup[] = [
           {
             title: "Cost & Limits",
             url: "/cost",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    label: "MCP & Tools",
-    items: [
-      {
-        title: "MCP Gateways",
-        url: "/mcp-gateways",
-        icon: Route,
-        subItems: [
-          {
-            title: "MCP Registry",
-            url: "/mcp-catalog/registry",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp-catalog"),
-          },
-          {
-            title: "Tool Policies",
-            url: "/tool-policies",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/tool-policies"),
           },
         ],
       },
@@ -386,7 +388,7 @@ export function AppSidebar() {
       </div>
     </div>
   ) : (
-    <div className="flex items-center gap-2 px-2">
+    <div className="flex items-center gap-2 pl-8">
       <Image
         src="/logo.png"
         alt="Logo"
@@ -400,7 +402,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader>
+      <SidebarHeader className="pt-4">
         {isLoadingAppearance ? <div className="h-[47px]" /> : logoToShow}
       </SidebarHeader>
       <SidebarContent>

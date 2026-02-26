@@ -2,9 +2,10 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Clone the official MCP example remote server
+# Clone the official MCP example remote server (pinned to a specific commit for reproducible builds)
 RUN apk add --no-cache git && \
-    git clone --depth 1 https://github.com/modelcontextprotocol/example-remote-server.git . && \
+    git clone https://github.com/modelcontextprotocol/example-remote-server.git . && \
+    git checkout da36d623edca13e4d14079041e680330d86bc27b && \
     rm -rf .git
 
 # Install dependencies and build

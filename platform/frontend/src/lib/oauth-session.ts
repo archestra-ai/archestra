@@ -71,9 +71,7 @@ export function setOAuthServerType(serverType: string) {
 }
 
 /** Store environment values collected before OAuth redirect (for local servers). */
-export function setOAuthEnvironmentValues(
-  values: Record<string, string>,
-) {
+export function setOAuthEnvironmentValues(values: Record<string, string>) {
   sessionStorage.setItem(OAUTH_ENVIRONMENT_VALUES, JSON.stringify(values));
 }
 
@@ -121,7 +119,11 @@ export function getOAuthServerType(): string | null {
 export function getOAuthEnvironmentValues(): Record<string, string> | null {
   const json = sessionStorage.getItem(OAUTH_ENVIRONMENT_VALUES);
   if (!json) return null;
-  return JSON.parse(json) as Record<string, string>;
+  try {
+    return JSON.parse(json) as Record<string, string>;
+  } catch {
+    return null;
+  }
 }
 
 export function getOAuthIsFirstInstallation(): boolean {
@@ -145,6 +147,8 @@ export function clearReauthContext() {
 
 /** Remove all install-flow context stored before the OAuth redirect. */
 export function clearInstallContext() {
+  sessionStorage.removeItem(OAUTH_STATE);
+  sessionStorage.removeItem(OAUTH_CATALOG_ID);
   sessionStorage.removeItem(OAUTH_TEAM_ID);
   sessionStorage.removeItem(OAUTH_IS_FIRST_INSTALLATION);
   sessionStorage.removeItem(OAUTH_SERVER_TYPE);

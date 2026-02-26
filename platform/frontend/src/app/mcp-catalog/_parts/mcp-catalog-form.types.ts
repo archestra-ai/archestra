@@ -13,6 +13,10 @@ export const oauthConfigSchema = z.object({
   oauthServerUrl: z
     .string()
     .url({ error: "Must be a valid URL" })
+    .refine(
+      (val) => !val || val.startsWith("http://") || val.startsWith("https://"),
+      { message: "Must be an HTTP or HTTPS URL" },
+    )
     .optional()
     .or(z.literal("")),
 });
@@ -75,7 +79,8 @@ export const formSchema = z
       return true;
     },
     {
-      message: "OAuth Server URL is required for self-hosted servers with OAuth.",
+      message:
+        "OAuth Server URL is required for self-hosted servers with OAuth.",
       path: ["oauthConfig", "oauthServerUrl"],
     },
   )

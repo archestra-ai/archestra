@@ -472,23 +472,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // For local servers with OAuth: inject access token as env var if access_token_env_var is configured
-        // This allows stdio-transport servers to receive the OAuth token via environment variable
+        // For local servers with OAuth: inject access token as env var if access_token_env_var is configured.
+        // This allows stdio-transport servers to receive the OAuth token via environment variable.
+        // NOTE: The token is injected at pod startup and won't be refreshed when it expires.
+        // Stdio servers with short-lived OAuth tokens may need pod restarts to get fresh tokens.
+        // Streamable-http servers don't need this — they get the token via Bearer header on each request.
         if (
           catalogItem.oauthConfig?.access_token_env_var &&
           secretId &&
           catalogItem.localConfig?.transportType !== "streamable-http"
         ) {
           const oauthSecret = await secretManager().getSecret(secretId);
-          const oauthAccessToken =
-            oauthSecret?.secret &&
-            typeof oauthSecret.secret === "object" &&
-            "access_token" in
-              (oauthSecret.secret as Record<string, unknown>) &&
-            typeof (oauthSecret.secret as Record<string, string>)
-              .access_token === "string"
-              ? (oauthSecret.secret as Record<string, string>).access_token
-              : undefined;
+          const tokenData = oauthSecret?.secret as
+            | { access_token?: string }
+            | undefined;
+          const oauthAccessToken = tokenData?.access_token;
 
           if (oauthAccessToken) {
             const envVarName = catalogItem.oauthConfig.access_token_env_var;

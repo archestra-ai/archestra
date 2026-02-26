@@ -5,8 +5,8 @@ import {
   MCP_EXAMPLE_OAUTH_EXTERNAL_URL,
   UI_BASE_URL,
 } from "../../consts";
-import { expect, test } from "./fixtures";
 import type { TestFixtures } from "./fixtures";
+import { expect, test } from "./fixtures";
 
 /**
  * OAuth for Self-Hosted MCP Servers
@@ -30,7 +30,7 @@ import type { TestFixtures } from "./fixtures";
 // External URL (accessible from test runner / browser)
 const MCP_EXAMPLE_SERVER_URL = IS_CI
   ? MCP_EXAMPLE_OAUTH_EXTERNAL_URL
-  : (process.env.MCP_EXAMPLE_OAUTH_URL || "http://localhost:3232");
+  : process.env.MCP_EXAMPLE_OAUTH_URL || "http://localhost:3232";
 // Backend URL (accessible from Archestra backend for token exchange)
 const MCP_EXAMPLE_SERVER_BACKEND_URL = IS_CI
   ? MCP_EXAMPLE_OAUTH_BACKEND_URL
@@ -48,7 +48,10 @@ const MCP_EXAMPLE_SERVER_MCP_URL = `${MCP_EXAMPLE_SERVER_BACKEND_URL}/mcp`;
  */
 function toExternalUrl(url: string): string {
   if (IS_CI) {
-    return url.replace(MCP_EXAMPLE_OAUTH_BACKEND_URL, MCP_EXAMPLE_OAUTH_EXTERNAL_URL);
+    return url.replace(
+      MCP_EXAMPLE_OAUTH_BACKEND_URL,
+      MCP_EXAMPLE_OAUTH_EXTERNAL_URL,
+    );
   }
   return url;
 }
@@ -60,7 +63,9 @@ function toExternalUrl(url: string): string {
  * 2. Call the mock IdP callback with state + mock code → get redirect to Archestra callback URL
  * 3. Extract code and state from the redirect URL
  */
-async function completeExampleServerOAuthFlow(authorizationUrl: string): Promise<{
+async function completeExampleServerOAuthFlow(
+  authorizationUrl: string,
+): Promise<{
   code: string;
   state: string;
 }> {
@@ -73,9 +78,7 @@ async function completeExampleServerOAuthFlow(authorizationUrl: string): Promise
     /mock-upstream-idp\/authorize\?redirect_uri=[^&]*&state=([a-f0-9]+)/,
   );
   if (!mockIdpStateMatch) {
-    throw new Error(
-      "Could not find mock IdP state in authorization page HTML",
-    );
+    throw new Error("Could not find mock IdP state in authorization page HTML");
   }
   const mockIdpState = mockIdpStateMatch[1];
 
@@ -97,9 +100,7 @@ async function completeExampleServerOAuthFlow(authorizationUrl: string): Promise
   const code = redirectUrl.searchParams.get("code");
   const state = redirectUrl.searchParams.get("state");
   if (!code || !state) {
-    throw new Error(
-      `Missing code or state in redirect URL: ${location}`,
-    );
+    throw new Error(`Missing code or state in redirect URL: ${location}`);
   }
 
   return { code, state };
@@ -142,8 +143,9 @@ async function performOAuthFlow(
 
   // 2. Complete OAuth flow programmatically through mock IdP
   // In CI, rewrite K8s internal URLs to external NodePort for the test runner
-  const { code, state: callbackState } =
-    await completeExampleServerOAuthFlow(toExternalUrl(authorizationUrl));
+  const { code, state: callbackState } = await completeExampleServerOAuthFlow(
+    toExternalUrl(authorizationUrl),
+  );
   expect(code).toBeTruthy();
   expect(callbackState).toBe(state);
 
@@ -224,7 +226,9 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
     try {
       // 2-4. Full OAuth flow
       const { secretId, accessToken } = await performOAuthFlow(
-        makeApiRequest, request, catalogItem.id,
+        makeApiRequest,
+        request,
+        catalogItem.id,
       );
 
       // 5. Install the MCP server with the OAuth secret
@@ -306,7 +310,9 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
     try {
       // 2-4. Full OAuth flow
       const { secretId } = await performOAuthFlow(
-        makeApiRequest, request, catalogItem.id,
+        makeApiRequest,
+        request,
+        catalogItem.id,
       );
 
       // 5. Install with secretId + environmentValues
@@ -347,7 +353,8 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
       urlSuffix: "/api/internal_mcp_catalog",
       data: {
         name: `oauth-local-stdio-test-${Date.now()}`,
-        description: "E2E test: self-hosted stdio server with OAuth token via env var",
+        description:
+          "E2E test: self-hosted stdio server with OAuth token via env var",
         serverType: "local",
         authMethod: "oauth",
         localConfig: {
@@ -364,13 +371,17 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
     expect(catalogItem.id).toBeTruthy();
     expect(catalogItem.serverType).toBe("local");
     expect(catalogItem.oauthConfig).toBeTruthy();
-    expect(catalogItem.oauthConfig.access_token_env_var).toBe("MCP_OAUTH_TOKEN");
+    expect(catalogItem.oauthConfig.access_token_env_var).toBe(
+      "MCP_OAUTH_TOKEN",
+    );
     expect(catalogItem.localConfig.transportType).toBe("stdio");
 
     try {
       // 2-4. Full OAuth flow (identical for all server types)
       const { secretId } = await performOAuthFlow(
-        makeApiRequest, request, catalogItem.id,
+        makeApiRequest,
+        request,
+        catalogItem.id,
       );
 
       // 5. Install the server - backend will inject access_token as MCP_OAUTH_TOKEN env var

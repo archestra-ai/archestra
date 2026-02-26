@@ -526,8 +526,8 @@ export default class K8sDeployment {
 
   /**
    * Create docker-registry Kubernetes Secrets from image pull secret credentials.
-   * Extracts __regcred_password:<server> entries from secretData and matches them with non-sensitive
-   * fields from localConfig.imagePullSecrets (credentials entries).
+   * Extracts __regcred_password:<server>:<username> entries from secretData and matches them with
+   * non-sensitive fields from localConfig.imagePullSecrets (credentials entries).
    *
    * @returns Array of created secret names to be used in pod spec imagePullSecrets
    */
@@ -542,17 +542,27 @@ export default class K8sDeployment {
     for (const [index, entry] of imagePullSecrets.entries()) {
       if (entry.source !== "credentials") continue;
 
-      const passwordKey = `__regcred_password:${entry.server}`;
+      const passwordKey = `__regcred_password:${entry.server}:${entry.username}`;
       const password = secretData[passwordKey];
       if (!password) {
         logger.warn(
-          { mcpServerId: this.mcpServer.id, server: entry.server },
+          {
+            mcpServerId: this.mcpServer.id,
+            server: entry.server,
+            username: entry.username,
+          },
           "Skipping regcred creation: password not found in secret data",
         );
         continue;
       }
 
-      const secretName = `mcp-server-${this.mcpServer.id}-regcred-${index}`;
+      // Use sanitized server hostname in secret name for kubectl traceability
+      const sanitizedServer = entry.server
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 40);
+      const secretName = `mcp-server-${this.mcpServer.id}-regcred-${sanitizedServer}`;
       const auth = Buffer.from(`${entry.username}:${password}`).toString(
         "base64",
       );

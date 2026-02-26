@@ -190,12 +190,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Extract image pull secret passwords from credentials entries
-        // Keyed by server hostname (stable across reorder/insert/delete)
+        // Keyed by server:username (stable across reorder, unique per account)
         if (restBody.localConfig.imagePullSecrets) {
           for (const entry of restBody.localConfig.imagePullSecrets) {
             if (entry.source === "credentials" && entry.password) {
-              secretEnvVars[`__regcred_password:${entry.server}`] =
-                entry.password;
+              secretEnvVars[
+                `__regcred_password:${entry.server}:${entry.username}`
+              ] = entry.password;
               delete entry.password; // Strip from catalog template
             }
           }
@@ -456,12 +457,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Extract image pull secret passwords from credentials entries
-        // Keyed by server hostname (stable across reorder/insert/delete)
+        // Keyed by server:username (stable across reorder, unique per account)
         // Preserve existing passwords for entries that don't provide a new one
         if (restBody.localConfig.imagePullSecrets) {
           for (const entry of restBody.localConfig.imagePullSecrets) {
             if (entry.source === "credentials") {
-              const regcredKey = `__regcred_password:${entry.server}`;
+              const regcredKey = `__regcred_password:${entry.server}:${entry.username}`;
               if (entry.password) {
                 // New password provided - use it
                 secretEnvVars[regcredKey] = entry.password;

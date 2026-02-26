@@ -1,8 +1,4 @@
-import {
-  archestraApiClient,
-  archestraApiSdk,
-  type archestraApiTypes,
-} from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -12,6 +8,7 @@ const {
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
   getInternalMcpCatalogTools,
+  getK8sImagePullSecrets,
   resetDeploymentYaml,
   updateInternalMcpCatalogItem,
   validateDeploymentYaml,
@@ -194,9 +191,7 @@ export function useK8sImagePullSecrets() {
   return useQuery({
     queryKey: ["k8s-image-pull-secrets"],
     queryFn: async () => {
-      const response = await archestraApiClient.get<Array<{ name: string }>>({
-        url: "/api/k8s/image-pull-secrets",
-      });
+      const response = await getK8sImagePullSecrets();
       return response.data ?? [];
     },
   });

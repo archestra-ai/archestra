@@ -81724,16 +81724,63 @@
                           "imagePullSecrets": {
                             "type": "array",
                             "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string"
+                              "anyOf": [
+                                {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "source": {
+                                          "type": "string",
+                                          "enum": [
+                                            "existing"
+                                          ]
+                                        },
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "source",
+                                        "name"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "source": {
+                                          "type": "string",
+                                          "enum": [
+                                            "credentials"
+                                          ]
+                                        },
+                                        "server": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "username": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "password": {
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "source",
+                                        "server",
+                                        "username"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
                                 }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
+                              ]
                             }
                           }
                         },
@@ -82365,15 +82412,56 @@
                       "imagePullSecrets": {
                         "type": "array",
                         "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "minLength": 1
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "existing"
+                                  ]
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "name"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "credentials"
+                                  ]
+                                },
+                                "server": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "username": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "password": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "server",
+                                "username"
+                              ]
                             }
-                          },
-                          "required": [
-                            "name"
                           ]
                         }
                       }
@@ -82768,16 +82856,63 @@
                         "imagePullSecrets": {
                           "type": "array",
                           "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string"
+                            "anyOf": [
+                              {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "enum": [
+                                          "existing"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "enum": [
+                                          "credentials"
+                                        ]
+                                      },
+                                      "server": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "username": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "password": {
+                                        "type": "string"
+                                      },
+                                      "email": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "server",
+                                      "username"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
+                            ]
                           }
                         }
                       },
@@ -83424,16 +83559,63 @@
                         "imagePullSecrets": {
                           "type": "array",
                           "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string"
+                            "anyOf": [
+                              {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "enum": [
+                                          "existing"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "enum": [
+                                          "credentials"
+                                        ]
+                                      },
+                                      "server": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "username": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "password": {
+                                        "type": "string"
+                                      },
+                                      "email": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "server",
+                                      "username"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
+                            ]
                           }
                         }
                       },
@@ -84059,15 +84241,56 @@
                       "imagePullSecrets": {
                         "type": "array",
                         "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "minLength": 1
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "existing"
+                                  ]
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "name"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "credentials"
+                                  ]
+                                },
+                                "server": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "username": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "password": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "server",
+                                "username"
+                              ]
                             }
-                          },
-                          "required": [
-                            "name"
                           ]
                         }
                       }
@@ -84469,16 +84692,63 @@
                         "imagePullSecrets": {
                           "type": "array",
                           "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string"
+                            "anyOf": [
+                              {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "enum": [
+                                          "existing"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "enum": [
+                                          "credentials"
+                                        ]
+                                      },
+                                      "server": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "username": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "password": {
+                                        "type": "string"
+                                      },
+                                      "email": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "server",
+                                      "username"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
+                            ]
                           }
                         }
                       },
@@ -86271,6 +86541,249 @@
                     "yaml"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/k8s/image-pull-secrets": {
+      "get": {
+        "operationId": "getK8sImagePullSecrets",
+        "tags": [
+          "MCP Catalog"
+        ],
+        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }
@@ -89370,17 +89883,59 @@
                                   "imagePullSecrets": {
                                     "type": "array",
                                     "items": {
-                                      "type": "object",
-                                      "properties": {
-                                        "name": {
-                                          "type": "string",
-                                          "minLength": 1
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": [
+                                                "existing"
+                                              ]
+                                            },
+                                            "name": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "source",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": [
+                                                "credentials"
+                                              ]
+                                            },
+                                            "server": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "username": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "password": {
+                                              "type": "string"
+                                            },
+                                            "email": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "source",
+                                            "server",
+                                            "username"
+                                          ],
+                                          "additionalProperties": false
                                         }
-                                      },
-                                      "required": [
-                                        "name"
-                                      ],
-                                      "additionalProperties": false
+                                      ]
                                     }
                                   }
                                 },
@@ -89945,15 +90500,56 @@
                               "imagePullSecrets": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "name": {
-                                      "type": "string",
-                                      "minLength": 1
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "source": {
+                                          "type": "string",
+                                          "enum": [
+                                            "existing"
+                                          ]
+                                        },
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "source",
+                                        "name"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "source": {
+                                          "type": "string",
+                                          "enum": [
+                                            "credentials"
+                                          ]
+                                        },
+                                        "server": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "username": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "password": {
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "source",
+                                        "server",
+                                        "username"
+                                      ]
                                     }
-                                  },
-                                  "required": [
-                                    "name"
                                   ]
                                 }
                               }
@@ -90250,17 +90846,59 @@
                                 "imagePullSecrets": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "existing"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "credentials"
+                                            ]
+                                          },
+                                          "server": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "username": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "password": {
+                                            "type": "string"
+                                          },
+                                          "email": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "server",
+                                          "username"
+                                        ],
+                                        "additionalProperties": false
                                       }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
+                                    ]
                                   }
                                 }
                               },
@@ -90854,17 +91492,59 @@
                                 "imagePullSecrets": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "existing"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "credentials"
+                                            ]
+                                          },
+                                          "server": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "username": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "password": {
+                                            "type": "string"
+                                          },
+                                          "email": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "server",
+                                          "username"
+                                        ],
+                                        "additionalProperties": false
                                       }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
+                                    ]
                                   }
                                 }
                               },
@@ -91432,15 +92112,56 @@
                               "imagePullSecrets": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "name": {
-                                      "type": "string",
-                                      "minLength": 1
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "source": {
+                                          "type": "string",
+                                          "enum": [
+                                            "existing"
+                                          ]
+                                        },
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "source",
+                                        "name"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "source": {
+                                          "type": "string",
+                                          "enum": [
+                                            "credentials"
+                                          ]
+                                        },
+                                        "server": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "username": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "password": {
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "source",
+                                        "server",
+                                        "username"
+                                      ]
                                     }
-                                  },
-                                  "required": [
-                                    "name"
                                   ]
                                 }
                               }
@@ -91787,17 +92508,59 @@
                                 "imagePullSecrets": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "existing"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "credentials"
+                                            ]
+                                          },
+                                          "server": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "username": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "password": {
+                                            "type": "string"
+                                          },
+                                          "email": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "server",
+                                          "username"
+                                        ],
+                                        "additionalProperties": false
                                       }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
+                                    ]
                                   }
                                 }
                               },
@@ -92655,17 +93418,59 @@
                                 "imagePullSecrets": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "existing"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "credentials"
+                                            ]
+                                          },
+                                          "server": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "username": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "password": {
+                                            "type": "string"
+                                          },
+                                          "email": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "server",
+                                          "username"
+                                        ],
+                                        "additionalProperties": false
                                       }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
+                                    ]
                                   }
                                 }
                               },
@@ -93273,17 +94078,59 @@
                                 "imagePullSecrets": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "existing"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "credentials"
+                                            ]
+                                          },
+                                          "server": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "username": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "password": {
+                                            "type": "string"
+                                          },
+                                          "email": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "server",
+                                          "username"
+                                        ],
+                                        "additionalProperties": false
                                       }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
+                                    ]
                                   }
                                 }
                               },
@@ -93896,17 +94743,59 @@
                                 "imagePullSecrets": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "existing"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "credentials"
+                                            ]
+                                          },
+                                          "server": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "username": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "password": {
+                                            "type": "string"
+                                          },
+                                          "email": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "source",
+                                          "server",
+                                          "username"
+                                        ],
+                                        "additionalProperties": false
                                       }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
+                                    ]
                                   }
                                 }
                               },

@@ -46,12 +46,12 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
-      imagePullSecrets: (values.localConfig.imagePullSecrets?.filter((s) => {
-        if (s.source === "existing") return s.name.trim().length > 0;
-        if (s.source === "credentials") return s.server.trim().length > 0;
-        return false;
-        // biome-ignore lint/suspicious/noExplicitAny: generated API types lag behind — backend Zod schema already accepts ImagePullSecretConfig
-      }) || undefined) as any,
+      imagePullSecrets:
+        values.localConfig.imagePullSecrets?.filter((s) => {
+          if (s.source === "existing") return s.name.trim().length > 0;
+          if (s.source === "credentials") return s.server.trim().length > 0;
+          return false;
+        }) || undefined,
     };
 
     // BYOS: Include local config vault path and key if set
@@ -278,7 +278,7 @@ export function transformCatalogItemToFormValues(
             return { source: "existing" as const, name: s.name };
           }
           if (s.source === "credentials" && localConfigSecret?.secret) {
-            const passwordKey = `__regcred_password:${s.server}`;
+            const passwordKey = `__regcred_password:${s.server}:${s.username}`;
             const password = localConfigSecret.secret[passwordKey];
             return {
               ...s,

@@ -16,24 +16,11 @@ const config: KnipConfig = {
     "postcss",
     // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
     "elkjs",
-    // Core React/Next.js deps - required at runtime
-    "react-dom",
-    // Testing peer dependency
-    "@testing-library/dom",
-    // Type definitions for react-dom
-    "@types/react-dom",
-    // Used by @tailwindcss/postcss at build time
-    "tailwindcss",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json
     "biome",
     "concurrently",
-    // Provided by devDependencies but knip doesn't resolve in pnpm monorepo
-    "next",
-    "tsc",
-    "vitest",
-    "knip",
   ],
   rules: {
     // shadcn/ui components export all variants for completeness - intentional pattern

@@ -167,7 +167,8 @@ describe("preserveNewlines", () => {
   });
 
   it("preserves text inside fenced code blocks with language specifier", () => {
-    const input = "before\n```python\nprint('hello')\nprint('world')\n```\nafter";
+    const input =
+      "before\n```python\nprint('hello')\nprint('world')\n```\nafter";
     const expected =
       "before  \n```python\nprint('hello')\nprint('world')\n```\nafter";
     expect(preserveNewlines(input)).toBe(expected);

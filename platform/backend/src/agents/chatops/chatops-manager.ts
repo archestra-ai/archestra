@@ -1067,7 +1067,7 @@ function stripThinkingBlocks(text: string): string {
  */
 function stripBotFooter(text: string): string {
   return text
-    .replace(/\n\n---\n_🤖 .+?_$/i, "")
+    .replace(/\n\n---\n+🤖 .+$/i, "")
     .replace(/\n🤖 .+$/, "")
     .trim();
 }

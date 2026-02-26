@@ -33,7 +33,7 @@ const msTeamsProviderConfig: ProviderConfig = {
   providerIcon: "/icons/ms-teams.png",
   webhookPath: "/api/webhooks/chatops/ms-teams",
   docsUrl: "https://archestra.ai/docs/platform-ms-teams",
-  slashCommand: "/archestra-select-agent",
+  slashCommand: "/select-agent",
   buildDeepLink: (binding) => {
     const channelName = encodeURIComponent(
       binding.channelName ?? binding.channelId,

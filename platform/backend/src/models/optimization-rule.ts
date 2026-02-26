@@ -289,6 +289,7 @@ class OptimizationRuleModel {
         deepseek: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
+        xai: [],
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

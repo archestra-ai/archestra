@@ -18,6 +18,7 @@ export const SupportedProvidersSchema = z.enum([
   "zhipuai",
   "deepseek",
   "minimax",
+  "xai",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -35,6 +36,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
+  "xai:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -58,6 +60,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
+  xai: "x.ai",
 };
 
 /**
@@ -71,6 +74,18 @@ export const PERPLEXITY_MODELS = [
   { id: "sonar-reasoning-pro", displayName: "Sonar Reasoning Pro" },
   { id: "sonar-reasoning", displayName: "Sonar Reasoning" },
   { id: "sonar-deep-research", displayName: "Sonar Deep Research" },
+] as const;
+
+/**
+ * x.ai (Grok) model definitions — single source of truth.
+ * x.ai does not provide a /v1/models endpoint that lists all models, so models are maintained here.
+ * @see https://docs.x.ai/api/
+ */
+export const XAI_MODELS = [
+  { id: "grok-2-latest", displayName: "Grok 2 Latest" },
+  { id: "grok-2-vision-1212", displayName: "Grok 2 Vision" },
+  { id: "grok-3-latest", displayName: "Grok 3 Latest" },
+  { id: "grok-3-mini-latest", displayName: "Grok 3 Mini Latest" },
 ] as const;
 
 /**
@@ -105,6 +120,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
+  xai: "https://api.x.ai/v1",
 };
 
 /**
@@ -180,5 +196,9 @@ export const MODEL_MARKER_PATTERNS: Record<
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
+  },
+  xai: {
+    fastest: ["grok-3-mini-latest", "grok-2-latest"],
+    best: ["grok-3-latest", "grok-2-vision-1212"],
   },
 };

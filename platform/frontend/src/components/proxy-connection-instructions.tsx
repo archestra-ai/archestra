@@ -76,6 +76,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.minimax,
     originalUrl: "https://api.minimax.io/v1/",
   },
+  xai: {
+    label: providerDisplayNames.xai,
+    originalUrl: "https://api.x.ai/v1/",
+  },
   bedrock: {
     label: providerDisplayNames.bedrock,
     originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",

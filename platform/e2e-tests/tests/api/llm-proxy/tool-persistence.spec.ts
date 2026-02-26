@@ -319,6 +319,30 @@ const deepseekConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const xaiConfig: ToolPersistenceTestConfig = {
+  providerName: "x.ai",
+
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "grok-2-latest",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const bedrockConfig: ToolPersistenceTestConfig = {
   providerName: "Bedrock",
 
@@ -362,6 +386,7 @@ const testConfigsMap = {
   zhipuai: zhipuaiConfig,
   minimax: minimaxConfig,
   deepseek: deepseekConfig,
+  xai: xaiConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, ToolPersistenceTestConfig | null>;

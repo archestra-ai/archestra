@@ -1,6 +1,7 @@
 import {
   MINIMAX_MODELS,
   PERPLEXITY_MODELS,
+  XAI_MODELS,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   type SupportedProvider,
@@ -587,6 +588,16 @@ async function fetchMinimaxModels(_apiKey: string): Promise<ModelInfo[]> {
   }));
 }
 
+async function fetchXaiModels(_apiKey: string): Promise<ModelInfo[]> {
+  // x.ai model list centralized in shared/model-constants.ts (XAI_MODELS).
+  // API key validation happens during actual chat completion requests.
+  return XAI_MODELS.map((m) => ({
+    id: m.id,
+    displayName: m.displayName,
+    provider: "xai" as const,
+  }));
+}
+
 /**
  * Fetch models from DeepSeek API
  */
@@ -859,6 +870,7 @@ async function getProviderApiKey({
     deepseek: () => config.chat.deepseek?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
     minimax: () => config.chat.minimax?.apiKey || null,
+    xai: () => config.chat.xai?.apiKey || null,
   };
 
   return envApiKeyFallbacks[provider]();
@@ -883,6 +895,7 @@ const modelFetchers: Record<
   zhipuai: fetchZhipuaiModels,
   minimax: fetchMinimaxModels,
   deepseek: fetchDeepSeekModels,
+  xai: fetchXaiModels,
 };
 
 // Register all model fetchers with the sync service

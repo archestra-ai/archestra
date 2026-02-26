@@ -259,6 +259,18 @@ const deepseekConfig: StreamingToolCallTestConfig = {
   expectedToolName: "read_file",
 };
 
+const xaiConfig: StreamingToolCallTestConfig = {
+  providerName: "x.ai",
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildStreamingRequest: (content, tools) =>
+    buildOpenAIStreamingRequest("grok-2-latest", content, tools),
+  expectedToolName: "read_file",
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -277,6 +289,7 @@ const testConfigsMap = {
   zhipuai: zhipuaiConfig,
   deepseek: deepseekConfig,
   minimax: minimaxConfig,
+  xai: xaiConfig,
   bedrock: null, // Bedrock uses binary AWS EventStream format which cannot be mocked via WireMock SSE
   perplexity: null, // Perplexity does not support tool calling
 } satisfies Record<SupportedProvider, StreamingToolCallTestConfig | null>;

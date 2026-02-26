@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/xai/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "grok-2-latest",
+          "created": 1700000000,
+          "owned_by": "xai"
+        },
+        {
+          "id": "xai-reasoner",
+          "created": 1700000000,
+          "owned_by": "xai"
+        }
+      ]
+    }
+  }
+}

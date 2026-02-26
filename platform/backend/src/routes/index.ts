@@ -6,6 +6,7 @@ import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import groqProxyRoutesV2 from "./proxy/routesv2/groq";
 import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
+import xaiProxyRoutesV2 from "./proxy/routesv2/xai";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -60,6 +61,8 @@ export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
 export const bedrockProxyRoutes = bedrockProxyRoutesV2;
 // MiniMax proxy routes - V2 only (new provider, no legacy v1)
 export const minimaxProxyRoutes = minimaxProxyRoutesV2;
+// x.ai (Grok) proxy routes - V2 only (new provider, no legacy v1)
+export const xaiProxyRoutes = xaiProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

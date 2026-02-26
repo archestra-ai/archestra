@@ -216,6 +216,22 @@ const deepseekConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const xaiConfig: ExecutionMetricsTestConfig = {
+  providerName: "x.ai",
+
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "grok-2-latest",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const bedrockConfig: ExecutionMetricsTestConfig = {
   providerName: "Bedrock",
 
@@ -250,6 +266,7 @@ const testConfigsMap = {
   zhipuai: zhipuaiConfig,
   deepseek: deepseekConfig,
   minimax: minimaxConfig,
+  xai: xaiConfig,
   bedrock: bedrockConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;

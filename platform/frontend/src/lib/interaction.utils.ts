@@ -14,6 +14,7 @@ import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
@@ -38,6 +39,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
+  "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
 };
 
 export interface CostSavingsInput {

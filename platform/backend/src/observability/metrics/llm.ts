@@ -44,6 +44,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
+  xai: getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };

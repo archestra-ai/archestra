@@ -75,6 +75,7 @@ export function RemoteServerInstallDialog({
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
     "personal",
   );
+  const [canInstall, setCanInstall] = useState(true);
 
   // BYOS (Bring Your Own Secrets) state - per-field vault references
   const [vaultSecrets, setVaultSecrets] = useState<
@@ -228,9 +229,10 @@ export function RemoteServerInstallDialog({
             onTeamChange={setSelectedTeamId}
             catalogId={catalogItem?.id}
             onCredentialTypeChange={setCredentialType}
+            onCanInstallChange={setCanInstall}
           />
 
-          {hasOAuth && (
+          {canInstall && hasOAuth && (
             <Alert>
               <Info className="h-4 w-4" />
               <AlertDescription>
@@ -241,7 +243,7 @@ export function RemoteServerInstallDialog({
           )}
 
           {/* Config fields - always show when config exists */}
-          {hasConfig && (
+          {canInstall && hasConfig && (
             <div className="space-y-4">
               {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
                 <div key={fieldName} className="grid gap-2">
@@ -334,7 +336,7 @@ export function RemoteServerInstallDialog({
             </div>
           )}
 
-          {catalogItem.serverUrl && (
+          {canInstall && catalogItem.serverUrl && (
             <div className="rounded-md bg-muted p-4">
               <h4 className="text-sm font-medium mb-2">Server Details:</h4>
               <div className="space-y-1">
@@ -361,16 +363,23 @@ export function RemoteServerInstallDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={!isValid || isInstalling}>
-            {isInstalling ? "Installing..." : "Install"}
-          </Button>
+          {canInstall && (
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+          )}
+          {canInstall && (
+            <Button
+              onClick={handleConfirm}
+              disabled={!isValid || isInstalling}
+            >
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

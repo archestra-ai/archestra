@@ -40,6 +40,7 @@ export function OAuthConfirmationDialog({
   catalogId,
 }: OAuthConfirmationDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [canInstall, setCanInstall] = useState(true);
   const byosEnabled = useFeatureFlag("byosEnabled");
 
   const handleConfirm = () => {
@@ -79,7 +80,7 @@ export function OAuthConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {byosEnabled && (
+        {canInstall && byosEnabled && (
           <Alert
             variant="default"
             className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
@@ -96,19 +97,24 @@ export function OAuthConfirmationDialog({
           <SelectMcpServerCredentialTypeAndTeams
             onTeamChange={setSelectedTeamId}
             catalogId={catalogId}
+            onCanInstallChange={setCanInstall}
           />
         </div>
 
         <DialogFooter className="gap-3 sm:gap-3">
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            Continue to Authorization...
-          </Button>
+          {canInstall && (
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+          )}
+          {canInstall && (
+            <Button
+              onClick={handleConfirm}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Continue to Authorization...
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

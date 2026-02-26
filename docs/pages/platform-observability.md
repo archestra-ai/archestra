@@ -206,7 +206,9 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `archestra.user.id` - The Archestra user ID (when available)
 - `archestra.user.email` - The Archestra user email (when available)
 - `archestra.user.name` - The Archestra user display name (when available)
-- `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution.
+- `mcp.blocked` - Whether the tool call was blocked by a tool invocation policy (`true`/`false`). When `true`, the tool was never executed — the span represents the policy decision. Blocked tool spans have span status ERROR with the blocked reason as the status message.
+- `mcp.blocked_reason` - Human-readable reason why the tool call was blocked (only present when `mcp.blocked=true`). Possible values include policy-specific reasons (e.g., "Tool invocation blocked: policy is configured to always block tool call"), untrusted context reasons, or custom reasons configured on individual policies.
+- `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution. Only present on executed (non-blocked) tool calls.
 - `error.type` - The error class name when an exception occurs during tool execution
 
 **Span Names:**

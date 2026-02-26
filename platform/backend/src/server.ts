@@ -13,7 +13,7 @@ const isMainModule =
  */
 if (isMainModule) {
   await import("./sentry");
-  await import("./observability/tracing");
+  await import("./observability/tracing/sdk");
 }
 
 import fastifyCors from "@fastify/cors";

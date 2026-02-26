@@ -43,7 +43,7 @@ import {
   TeamModel,
 } from "@/models";
 import ApiKeyModelModel from "@/models/api-key-model";
-import { startActiveChatSpan } from "@/routes/proxy/utils/tracing";
+import { startActiveChatSpan } from "@/observability/tracing";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,

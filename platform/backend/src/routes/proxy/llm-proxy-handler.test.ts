@@ -1,9 +1,9 @@
 /**
- * LLM Proxy Handler V2 Prometheus Metrics Tests
+ * LLM Proxy Handler V2 Tests
  *
- * Tests that verify Prometheus metrics are correctly incremented
- * for all LLM providers (OpenAI, Anthropic, Gemini) in both
- * streaming and non-streaming modes.
+ * Tests that verify:
+ * 1. Prometheus metrics are correctly incremented for all LLM providers
+ * 2. recordBlockedToolSpans is called when tool invocation policies block tool calls
  */
 
 import Fastify, { type FastifyInstance } from "fastify";
@@ -15,6 +15,7 @@ import {
 import { vi } from "vitest";
 import config from "@/config";
 import { ModelModel } from "@/models";
+import type { PolicyBlockResult } from "@/routes/proxy/utils/tool-invocation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
@@ -40,8 +41,39 @@ vi.mock("prom-client", () => ({
   },
 }));
 
-// Import after mock to ensure mock is applied
+// Mock tool-invocation to control policy evaluation results.
+// Defaults: evaluatePolicies → null (allow), getGlobalToolPolicy → "permissive".
+// These defaults match the real behavior when no policies exist in the DB.
+const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
+const mockGetGlobalToolPolicy = vi.fn<() => Promise<string>>();
+
+vi.mock("@/routes/proxy/utils/tool-invocation", async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import("@/routes/proxy/utils/tool-invocation")
+    >();
+  return {
+    ...original,
+    evaluatePolicies: (..._args: unknown[]) => mockEvaluatePolicies(),
+    getGlobalToolPolicy: (..._args: unknown[]) => mockGetGlobalToolPolicy(),
+  };
+});
+
+// Spy on recordBlockedToolSpans to verify it's called with the right args
+const mockRecordBlockedToolSpans = vi.fn();
+vi.mock("@/observability/tracing", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/observability/tracing")>();
+  return {
+    ...original,
+    recordBlockedToolSpans: (...args: unknown[]) =>
+      mockRecordBlockedToolSpans(...args),
+  };
+});
+
+// Import after mocks to ensure mocks are applied
 import { metrics } from "@/observability";
+import { MockAnthropicClient } from "./mock-anthropic-client";
 import anthropicProxyRoutesV2 from "./routesv2/anthropic";
 import geminiProxyRoutesV2 from "./routesv2/gemini";
 import openAiProxyRoutesV2 from "./routesv2/openai";
@@ -66,6 +98,10 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
 
     // Initialize metrics
     metrics.llm.initializeMetrics([]);
+
+    // Default: policies allow everything (matches real behavior when no policies exist)
+    mockEvaluatePolicies.mockResolvedValue(null);
+    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
   });
 
   afterEach(async () => {
@@ -493,6 +529,267 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
           value: expect.any(Number),
         }),
       );
+    });
+  });
+});
+
+describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    config.benchmark.mockMode = true;
+
+    testAgent = await makeAgent({ name: "Blocked Tools Agent" });
+
+    metrics.llm.initializeMetrics([]);
+
+    // Default: policies allow everything
+    mockEvaluatePolicies.mockResolvedValue(null);
+    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
+  });
+
+  afterEach(async () => {
+    config.benchmark.mockMode = false;
+    MockAnthropicClient.resetStreamOptions();
+    await app.close();
+  });
+
+  describe("non-streaming (OpenAI)", () => {
+    // MockOpenAIClient non-streaming always returns a "list_files" tool call
+    beforeEach(async () => {
+      await app.register(openAiProxyRoutesV2);
+
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "2.50",
+        customPricePerMillionOutput: "10.00",
+        lastSyncedAt: new Date(),
+      });
+    });
+
+    test("calls recordBlockedToolSpans when policy blocks tool calls", async () => {
+      const blockResult: PolicyBlockResult = {
+        refusalMessage: "Tool blocked by policy",
+        contentMessage: "Tool list_files was blocked",
+        reason: "Tool invocation blocked: policy is configured to always block",
+        blockedToolName: "list_files",
+        allToolCallNames: ["list_files"],
+      };
+      mockEvaluatePolicies.mockResolvedValue(blockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "List files" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      expect(mockRecordBlockedToolSpans).toHaveBeenCalledOnce();
+      expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolCallNames: ["list_files"],
+          blockedReason:
+            "Tool invocation blocked: policy is configured to always block",
+          agent: expect.objectContaining({
+            id: testAgent.id,
+            name: testAgent.name,
+          }),
+        }),
+      );
+    });
+
+    test("does not call recordBlockedToolSpans when policy allows tool calls", async () => {
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "List files" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecordBlockedToolSpans).not.toHaveBeenCalled();
+    });
+
+    test("passes agentType to recordBlockedToolSpans", async () => {
+      const blockResult: PolicyBlockResult = {
+        refusalMessage: "Tool blocked",
+        contentMessage: "Tool list_files was blocked",
+        reason: "blocked by policy",
+        blockedToolName: "list_files",
+        allToolCallNames: ["list_files"],
+      };
+      mockEvaluatePolicies.mockResolvedValue(blockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "List files" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      expect(mockRecordBlockedToolSpans).toHaveBeenCalledOnce();
+      const callArg = mockRecordBlockedToolSpans.mock.calls[0][0];
+      expect(callArg.agentType).toBeDefined();
+    });
+  });
+
+  describe("streaming (Anthropic)", () => {
+    // MockAnthropicClient.stream() supports includeToolUse option
+    // which emits a "get_weather" tool_use block
+    beforeEach(async () => {
+      await app.register(anthropicProxyRoutesV2);
+
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-3-5-sonnet-20241022",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet-20241022",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "3.00",
+        customPricePerMillionOutput: "15.00",
+        lastSyncedAt: new Date(),
+      });
+    });
+
+    test("calls recordBlockedToolSpans when streaming response contains blocked tool calls", async () => {
+      MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+
+      const blockResult: PolicyBlockResult = {
+        refusalMessage: "Tool blocked by policy",
+        contentMessage: "Tool get_weather was blocked",
+        reason: "Tool invocation blocked: always block",
+        blockedToolName: "get_weather",
+        allToolCallNames: ["get_weather"],
+      };
+      mockEvaluatePolicies.mockResolvedValue(blockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockRecordBlockedToolSpans).toHaveBeenCalledOnce();
+      expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolCallNames: ["get_weather"],
+          blockedReason: "Tool invocation blocked: always block",
+          agent: expect.objectContaining({
+            id: testAgent.id,
+            name: testAgent.name,
+          }),
+        }),
+      );
+    });
+
+    test("does not call recordBlockedToolSpans when streaming has no tool calls", async () => {
+      MockAnthropicClient.resetStreamOptions();
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockRecordBlockedToolSpans).not.toHaveBeenCalled();
+    });
+
+    test("does not call recordBlockedToolSpans when streaming tool calls are allowed", async () => {
+      MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockRecordBlockedToolSpans).not.toHaveBeenCalled();
     });
   });
 });

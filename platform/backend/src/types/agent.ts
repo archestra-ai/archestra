@@ -129,7 +129,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
   insertExtendedFields,
 )
   .extend({
-    teams: z.array(z.string()),
+    teams: z.array(z.string()).default([]),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),

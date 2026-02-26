@@ -196,14 +196,31 @@ export function SelectMcpServerCredentialTypeAndTeams({
       <Alert>
         <AlertTriangle className="!text-amber-500 h-4 w-4" />
         <AlertDescription>
-          <span className="font-semibold">Insufficient permissions</span>
-          <p className="mt-1">
-            MCP servers can only be installed at the team level and require the{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-              mcpServer:update
-            </code>{" "}
-            permission.
-          </p>
+          {isPersonalDisabled && byosEnabled ? (
+            <>
+              <span className="font-semibold">Insufficient permissions</span>
+              <p className="mt-1">
+                MCP servers can only be installed at the team level and require
+                the{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                  mcpServer:update
+                </code>{" "}
+                permission.
+              </p>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">Already installed</span>
+              <p className="mt-1">
+                You have already installed this MCP server for yourself. To
+                install for a team, you need the{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                  mcpServer:update
+                </code>{" "}
+                permission.
+              </p>
+            </>
+          )}
         </AlertDescription>
       </Alert>
     );

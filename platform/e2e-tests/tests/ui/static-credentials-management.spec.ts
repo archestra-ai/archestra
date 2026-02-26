@@ -120,29 +120,42 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         timeout: CONNECT_BUTTON_TIMEOUT,
       });
       await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
-      // And this time a team should be auto-selected (since personal installation already exists)
-      await expect(
-        page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
-      ).not.toContainText("Myself");
-      // open installation type dropdown to verify teams
-      await page.getByRole("combobox").click();
-      // Validate Admin sees all teams in dropdown, Editor and Member see only their own teams
-      const expectedTeams = {
-        Admin: [DEFAULT_TEAM_NAME, ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME],
-        Editor: [ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME],
-        Member: [MARKETING_TEAM_NAME],
-      };
-      for (const team of expectedTeams[user]) {
-        await expect(page.getByRole("option", { name: team })).toBeVisible();
-      }
-      // select first team from dropdown
-      await page.getByRole("option", { name: expectedTeams[user][0] }).click();
 
-      // Install credential for team
-      await clickButton({ page, options: { name: "Install" } });
+      if (user === "Member") {
+        // Members lack mcpServer:update permission — after personal install,
+        // they should see an "Already installed" banner instead of the install form
+        await expect(page.getByText("Already installed")).toBeVisible();
+        await closeOpenDialogs(page);
+      } else {
+        // Admin and Editor: a team should be auto-selected (since personal installation already exists)
+        await expect(
+          page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
+        ).not.toContainText("Myself");
+        // open installation type dropdown to verify teams
+        await page.getByRole("combobox").click();
+        // Validate Admin sees all teams in dropdown, Editor sees only their own teams
+        const expectedTeams = {
+          Admin: [
+            DEFAULT_TEAM_NAME,
+            ENGINEERING_TEAM_NAME,
+            MARKETING_TEAM_NAME,
+          ],
+          Editor: [ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME],
+        };
+        for (const team of expectedTeams[user]) {
+          await expect(
+            page.getByRole("option", { name: team }),
+          ).toBeVisible();
+        }
+        // select first team from dropdown
+        await page
+          .getByRole("option", { name: expectedTeams[user][0] })
+          .click();
 
-      // Credentials count should be 2 for Admin and Editor
-      if (user === "Admin" || user === "Editor") {
+        // Install credential for team
+        await clickButton({ page, options: { name: "Install" } });
+
+        // Credentials count should be 2 for Admin and Editor
         await expect(
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
         ).toHaveText("2");

@@ -26,6 +26,9 @@ nodes:
       - containerPort: 30082 # MCP Server JWKS
         hostPort: 30082
         protocol: TCP
+      - containerPort: 30083 # MCP Example OAuth Server
+        hostPort: 30083
+        protocol: TCP
       - containerPort: 30200 # Vault
         hostPort: 8200
         protocol: TCP

@@ -73,9 +73,15 @@ export function transformFormToApiData(
           .filter((scope) => scope.length > 0)
       : ["read", "write"];
 
+    // For local servers, use oauthServerUrl; for remote servers, use serverUrl
+    const oauthServerUrl =
+      values.serverType === "local"
+        ? values.oauthConfig.oauthServerUrl || ""
+        : values.serverUrl || "";
+
     data.oauthConfig = {
       name: values.name, // Use name as OAuth provider name
-      server_url: values.serverUrl || "", // Use serverUrl as OAuth server URL
+      server_url: oauthServerUrl, // OAuth server URL for discovery/authorization
       client_id: values.oauthConfig.client_id || "",
       // Only include client_secret if no BYOS vault path is set
       client_secret: values.oauthClientSecretVaultPath
@@ -178,6 +184,7 @@ export function transformCatalogItemToFormValues(
         redirect_uris: string;
         scopes: string;
         supports_resource_metadata: boolean;
+        oauthServerUrl?: string;
       }
     | undefined;
   if (item.oauthConfig) {
@@ -191,6 +198,11 @@ export function transformCatalogItemToFormValues(
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
+      // For local servers, populate oauthServerUrl from server_url
+      oauthServerUrl:
+        item.serverType === "local"
+          ? item.oauthConfig.server_url || ""
+          : undefined,
     };
   }
 

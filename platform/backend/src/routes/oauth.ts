@@ -12,14 +12,14 @@ import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 /**
  * Generate PKCE code verifier
  */
-function generateCodeVerifier(): string {
+export function generateCodeVerifier(): string {
   return randomBytes(32).toString("base64url");
 }
 
 /**
  * Generate PKCE code challenge from verifier
  */
-function generateCodeChallenge(verifier: string): string {
+export function generateCodeChallenge(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
@@ -60,7 +60,7 @@ async function discoverOAuthResourceMetadata(serverUrl: string) {
  * Discover OAuth scopes from server metadata
  * Tries multiple discovery methods like the desktop app does
  */
-async function discoverScopes(
+export async function discoverScopes(
   serverUrl: string,
   supportsResourceMetadata: boolean,
   defaultScopes: string[],
@@ -103,7 +103,7 @@ async function discoverScopes(
  * Build discovery URLs to try for authorization server metadata
  * Implements the same fallback strategy as MCP SDK
  */
-function buildDiscoveryUrls(serverUrl: string): string[] {
+export function buildDiscoveryUrls(serverUrl: string): string[] {
   const url = new URL(serverUrl);
   const hasPath = url.pathname !== "/" && url.pathname !== "";
   const urls: string[] = [];

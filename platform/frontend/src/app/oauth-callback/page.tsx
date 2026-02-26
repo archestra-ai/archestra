@@ -16,6 +16,19 @@ import {
   useReauthenticateMcpServer,
 } from "@/lib/mcp-server.query";
 import { useHandleOAuthCallback } from "@/lib/oauth.query";
+import {
+  clearCallbackProcessing,
+  clearInstallContext,
+  clearReauthContext,
+  getOAuthEnvironmentValues,
+  getOAuthIsFirstInstallation,
+  getOAuthMcpServerId,
+  getOAuthServerType,
+  getOAuthTeamId,
+  isCallbackProcessed,
+  markCallbackProcessing,
+  setOAuthInstallationCompleteCatalogId,
+} from "@/lib/oauth-session";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -31,38 +44,23 @@ function OAuthCallbackContent() {
       const error = searchParams.get("error");
       const state = searchParams.get("state");
 
-      // Create a unique key for this OAuth callback to prevent duplicate processing
-      // This persists across React Strict Mode unmount/remount cycles
-      const processKey = `oauth_processing_${code}_${state}`;
-
-      // Check if we've already processed this callback
-      if (sessionStorage.getItem(processKey)) {
-        return;
-      }
-
-      // Mark as processing immediately
-      sessionStorage.setItem(processKey, "true");
-
-      if (error) {
-        sessionStorage.removeItem(processKey);
-        toast.error(`OAuth error: ${error}`);
+      if (!code || !state) {
+        toast.error(
+          error
+            ? `OAuth error: ${error}`
+            : !code
+              ? "No authorization code received"
+              : "Missing OAuth state",
+        );
         router.push("/mcp-catalog");
         return;
       }
 
-      if (!code) {
-        sessionStorage.removeItem(processKey);
-        toast.error("No authorization code received");
-        router.push("/mcp-catalog");
+      // Prevent duplicate processing (persists across React Strict Mode remounts)
+      if (isCallbackProcessed(code, state)) {
         return;
       }
-
-      if (!state) {
-        sessionStorage.removeItem(processKey);
-        toast.error("Missing OAuth state");
-        router.push("/mcp-catalog");
-        return;
-      }
+      markCallbackProcessing(code, state);
 
       try {
         // Exchange authorization code for access token
@@ -70,7 +68,7 @@ function OAuthCallbackContent() {
           await callbackMutation.mutateAsync({ code, state });
 
         // Check if this is a re-authentication flow
-        const mcpServerId = sessionStorage.getItem("oauth_mcp_server_id");
+        const mcpServerId = getOAuthMcpServerId();
 
         if (mcpServerId) {
           // Re-authentication: update existing server with new secret
@@ -80,13 +78,13 @@ function OAuthCallbackContent() {
             name,
           });
 
-          // Clean up session storage
-          sessionStorage.removeItem(processKey);
-          sessionStorage.removeItem("oauth_mcp_server_id");
+          clearCallbackProcessing(code, state);
+          clearReauthContext();
         } else {
           // New installation flow
-          // Get teamId from session storage (stored before OAuth redirect)
-          const teamId = sessionStorage.getItem("oauth_team_id");
+          const teamId = getOAuthTeamId();
+          const serverType = getOAuthServerType();
+          const environmentValues = getOAuthEnvironmentValues();
 
           // Install the MCP server with the secret reference
           await installMutation.mutateAsync({
@@ -94,23 +92,19 @@ function OAuthCallbackContent() {
             catalogId,
             secretId,
             teamId: teamId || undefined,
+            // For local servers: include environment values collected before OAuth redirect
+            ...(serverType === "local" &&
+              environmentValues && { environmentValues }),
           });
 
-          // Check if this was a first installation
-          const isFirstInstallation =
-            sessionStorage.getItem("oauth_is_first_installation") === "true";
+          const isFirstInstallation = getOAuthIsFirstInstallation();
 
-          // Clean up the processing flag and teamId after successful installation
-          sessionStorage.removeItem(processKey);
-          sessionStorage.removeItem("oauth_team_id");
-          sessionStorage.removeItem("oauth_is_first_installation");
+          clearCallbackProcessing(code, state);
+          clearInstallContext();
 
           // Store flag to open assignments dialog after redirect (only for first installation)
           if (isFirstInstallation) {
-            sessionStorage.setItem(
-              "oauth_installation_complete_catalog_id",
-              catalogId,
-            );
+            setOAuthInstallationCompleteCatalogId(catalogId);
           }
         }
 

@@ -471,6 +471,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             createdSecretId = secret.id;
           }
         }
+
+        // For local servers with OAuth: inject access token as env var if access_token_env_var is configured
+        // This allows stdio-transport servers to receive the OAuth token via environment variable
+        if (
+          catalogItem.oauthConfig?.access_token_env_var &&
+          secretId &&
+          catalogItem.localConfig?.transportType !== "streamable-http"
+        ) {
+          const oauthSecret = await secretManager().getSecret(secretId);
+          const oauthAccessToken =
+            oauthSecret?.secret &&
+            typeof oauthSecret.secret === "object" &&
+            "access_token" in
+              (oauthSecret.secret as Record<string, unknown>) &&
+            typeof (oauthSecret.secret as Record<string, string>)
+              .access_token === "string"
+              ? (oauthSecret.secret as Record<string, string>).access_token
+              : undefined;
+
+          if (oauthAccessToken) {
+            const envVarName = catalogItem.oauthConfig.access_token_env_var;
+            environmentValues = {
+              ...environmentValues,
+              [envVarName]: oauthAccessToken,
+            };
+            logger.info(
+              { envVarName, catalogId: catalogItem.id },
+              "Injected OAuth access token as environment variable for local server",
+            );
+          }
+        }
       }
 
       // Create the MCP server with optional secret reference

@@ -120,11 +120,12 @@ describe("McpServerModel", () => {
       const found = allServers.find((s) => s.id === server.id);
 
       expect(found).toBeDefined();
-      expect(found!.users).toHaveLength(2);
-      expect(found!.users).toContain(user1.id);
-      expect(found!.users).toContain(user2.id);
-      expect(found!.userDetails).toHaveLength(2);
-      expect(found!.userDetails!.map((u) => u.userId).sort()).toEqual(
+      if (!found) return;
+      expect(found.users).toHaveLength(2);
+      expect(found.users).toContain(user1.id);
+      expect(found.users).toContain(user2.id);
+      expect(found.userDetails).toHaveLength(2);
+      expect(found.userDetails?.map((u) => u.userId).sort()).toEqual(
         [user1.id, user2.id].sort(),
       );
     });
@@ -138,8 +139,9 @@ describe("McpServerModel", () => {
       const found = allServers.find((s) => s.id === server.id);
 
       expect(found).toBeDefined();
-      expect(found!.users).toHaveLength(0);
-      expect(found!.userDetails).toHaveLength(0);
+      if (!found) return;
+      expect(found.users).toHaveLength(0);
+      expect(found.userDetails).toHaveLength(0);
     });
 
     test("does not duplicate servers when multiple users assigned", async ({

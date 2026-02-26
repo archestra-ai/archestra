@@ -185,7 +185,7 @@ describe("preserveNewlines", () => {
   });
 
   it("handles text with only newlines", () => {
-    expect(preserveNewlines("\n\n")).toBe("\n&nbsp;\n&nbsp;");
+    expect(preserveNewlines("\n\n")).toBe("\n\n");
   });
 
   it("handles text with indented code block fences", () => {
@@ -195,16 +195,10 @@ describe("preserveNewlines", () => {
   });
 
   it("handles a single newline", () => {
-    expect(preserveNewlines("\n")).toBe("\n&nbsp;");
+    expect(preserveNewlines("\n")).toBe("\n");
   });
 
-  it("preserves multiple consecutive blank lines with &nbsp;", () => {
-    expect(preserveNewlines("a\n\n\nb")).toBe("a  \n\n&nbsp;\nb");
-  });
-
-  it("preserves many consecutive blank lines", () => {
-    expect(preserveNewlines("a\n\n\n\n\nb")).toBe(
-      "a  \n\n&nbsp;\n&nbsp;\n&nbsp;\nb",
-    );
+  it("handles multiple empty lines between text", () => {
+    expect(preserveNewlines("a\n\n\nb")).toBe("a  \n\n\nb");
   });
 });

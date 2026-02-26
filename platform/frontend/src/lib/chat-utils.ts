@@ -10,10 +10,6 @@ const DEFAULT_SESSION_NAME = "New Chat Session";
  *
  * Lines inside fenced code blocks (``` or ~~~) are left untouched since
  * code blocks already preserve whitespace.
- *
- * Multiple consecutive blank lines are preserved using `&nbsp;` on the
- * extra lines, since markdown normally collapses them into a single
- * paragraph break.
  */
 export function preserveNewlines(text: string): string {
   if (!text) return text;
@@ -21,7 +17,6 @@ export function preserveNewlines(text: string): string {
   const lines = text.split("\n");
   const result: string[] = [];
   let inCodeBlock = false;
-  let consecutiveEmptyLines = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -30,7 +25,6 @@ export function preserveNewlines(text: string): string {
     // Toggle code block state on fenced code block delimiters
     if (trimmedLine.startsWith("```") || trimmedLine.startsWith("~~~")) {
       inCodeBlock = !inCodeBlock;
-      consecutiveEmptyLines = 0;
       result.push(line);
       continue;
     }
@@ -41,20 +35,6 @@ export function preserveNewlines(text: string): string {
       continue;
     }
 
-    // Track consecutive empty lines to prevent markdown from collapsing them
-    if (line === "") {
-      consecutiveEmptyLines++;
-      if (consecutiveEmptyLines > 1) {
-        // Extra empty lines: use &nbsp; so markdown doesn't collapse them
-        result.push("&nbsp;");
-      } else {
-        result.push(line);
-      }
-      continue;
-    }
-
-    consecutiveEmptyLines = 0;
-
     // For the last line, don't append trailing spaces
     if (i === lines.length - 1) {
       result.push(line);
@@ -63,7 +43,8 @@ export function preserveNewlines(text: string): string {
 
     // Append two trailing spaces for a markdown hard line break,
     // but only if the line doesn't already end with two+ spaces
-    if (line.endsWith("  ")) {
+    // and the line is not empty (empty lines already create paragraph breaks)
+    if (line === "" || line.endsWith("  ")) {
       result.push(line);
     } else {
       result.push(`${line}  `);

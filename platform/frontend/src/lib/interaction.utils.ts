@@ -9,6 +9,7 @@ import type {
   Interaction,
   InteractionUtils,
 } from "./llmProviders/common";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
@@ -35,6 +36,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "vllm:chatCompletions": (i) => new VllmChatCompletionInteraction(i),
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
+  "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
 };
 

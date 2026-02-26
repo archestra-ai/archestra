@@ -90,6 +90,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  xai: () => config.chat.xai.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   minimax: () => config.chat.minimax.apiKey,
   mistral: () => config.chat.mistral.apiKey,
@@ -223,6 +224,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
+  xai: "grok-4-1-fast-non-reasoning", // Xai's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
@@ -381,6 +383,20 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       baseURL: config.llm.groq.baseUrl,
     });
     return client(modelName);
+  },
+
+  xai: ({ apiKey, modelName, baseUrl }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Xai API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: baseUrl ?? config.llm.xai.baseUrl,
+    });
+    return client.chat(modelName);
   },
 
   vllm: ({ apiKey, modelName, baseUrl }) => {
@@ -634,6 +650,22 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         fetch: createTracedFetch(),
       });
       return client(modelName);
+    },
+
+    xai: ({ apiKey, agentId, modelName, headers }) => {
+      if (!apiKey) {
+        throw new ApiError(
+          400,
+          "Xai API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
+        );
+      }
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("xai", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client.chat(modelName);
     },
 
     vllm: ({ apiKey, agentId, modelName, headers }) => {

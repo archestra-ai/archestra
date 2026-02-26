@@ -10,6 +10,7 @@ export const SupportedProvidersSchema = z.enum([
   "bedrock",
   "cohere",
   "cerebras",
+  "xai",
   "mistral",
   "perplexity",
   "groq",
@@ -26,6 +27,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "bedrock:converse",
   "cohere:chat",
   "cerebras:chatCompletions",
+  "xai:chatCompletions",
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
   "groq:chatCompletions",
@@ -48,6 +50,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   gemini: "Gemini",
   cohere: "Cohere",
   cerebras: "Cerebras",
+  xai: "x.ai",
   mistral: "Mistral AI",
   perplexity: "Perplexity AI",
   groq: "Groq",
@@ -94,6 +97,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   bedrock: "",
   cohere: "https://api.cohere.ai",
   cerebras: "https://api.cerebras.ai/v1",
+  xai: "https://api.x.ai/v1",
   mistral: "https://api.mistral.ai/v1",
   perplexity: "https://api.perplexity.ai",
   groq: "https://api.groq.com/openai/v1",
@@ -136,6 +140,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   cerebras: {
     fastest: ["llama-3.3-70b"],
     best: ["llama-3.3-70b"],
+  },
+  xai: {
+    fastest: ["grok-4-1-fast-non-reasoning"],
+    best: ["grok-4"],
   },
   cohere: {
     fastest: ["command-light"],

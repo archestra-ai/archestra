@@ -51,6 +51,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
   deepseek: "openai",
+  xai: "openai",
   groq: "groq",
   "fireworks-ai": "openai",
   togetherai: "openai",
@@ -410,6 +411,7 @@ class ModelsDevClient {
       mistral: ["mistral/"],
       perplexity: ["perplexity/"],
       groq: ["groq/"],
+      xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],
       vllm: ["vllm/"],

@@ -134,6 +134,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.groq.com/keys",
     consoleName: "Groq Console",
   },
+  xai: {
+    name: "Xai",
+    icon: "/icons/xai.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://console.x.ai",
+    consoleName: "Xai Platform",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

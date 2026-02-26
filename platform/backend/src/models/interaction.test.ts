@@ -406,7 +406,11 @@ describe("InteractionModel", () => {
       const user = await makeUser();
 
       // Teamless agent is org-wide, visible to all members
-      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [], scope: "org" });
+      const agent1 = await AgentModel.create({
+        name: "Agent 1",
+        teams: [],
+        scope: "org",
+      });
 
       await InteractionModel.create({
         profileId: agent1.id,
@@ -507,7 +511,11 @@ describe("InteractionModel", () => {
       const user = await makeUser();
 
       // Teamless agent is org-wide
-      const agent = await AgentModel.create({ name: "Test Agent", teams: [], scope: "org" });
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+        scope: "org",
+      });
 
       const interaction = await InteractionModel.create({
         profileId: agent.id,

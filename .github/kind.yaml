@@ -3,6 +3,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 name: archestra-ci-cluster
 # Uses Kind's default CNI (kindnet) which has built-in NetworkPolicy enforcement
 # since Kind v0.24.0 via kubernetes-sigs/kube-network-policies.
+# https://kind.sigs.k8s.io/docs/user/configuration/#disable-default-cni
 nodes:
   - role: control-plane
     extraPortMappings:

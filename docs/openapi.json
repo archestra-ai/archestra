@@ -32182,6 +32182,7 @@
                     "type": "string"
                   },
                   "teams": {
+                    "default": [],
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -32217,8 +32218,7 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "teams"
+                  "name"
                 ]
               }
             }

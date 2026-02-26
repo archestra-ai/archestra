@@ -10164,7 +10164,7 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
-        teams: Array<string>;
+        teams?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;

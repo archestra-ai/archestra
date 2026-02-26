@@ -239,7 +239,7 @@ class TeamModel {
       membersByTeam.set(teamId, []);
     }
     for (const member of allMembers) {
-      membersByTeam.get(member.teamId)!.push(member);
+      membersByTeam.get(member.teamId)?.push(member);
     }
 
     return membersByTeam;
@@ -314,10 +314,7 @@ class TeamModel {
       .where(eq(schema.teamMembersTable.userId, userId));
 
     if (teamMemberships.length === 0) {
-      logger.debug(
-        { userId, count: 0 },
-        "TeamModel.getUserTeams: completed",
-      );
+      logger.debug({ userId, count: 0 }, "TeamModel.getUserTeams: completed");
       return [];
     }
 

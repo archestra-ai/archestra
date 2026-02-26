@@ -215,13 +215,13 @@ class McpServerModel {
 
       // Append assigned user if present (may be null from LEFT JOIN)
       if (row.assignedUserId) {
-        const server = serversMap.get(row.server.id)!;
-        if (!server.users!.includes(row.assignedUserId)) {
-          server.users!.push(row.assignedUserId);
-          server.userDetails!.push({
+        const server = serversMap.get(row.server.id);
+        if (server && !server.users?.includes(row.assignedUserId)) {
+          server.users?.push(row.assignedUserId);
+          server.userDetails?.push({
             userId: row.assignedUserId,
-            email: row.assignedUserEmail!,
-            createdAt: row.assignedUserCreatedAt!,
+            email: row.assignedUserEmail ?? "",
+            createdAt: row.assignedUserCreatedAt ?? new Date(),
           });
         }
       }

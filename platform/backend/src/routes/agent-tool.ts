@@ -260,8 +260,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         Awaited<ReturnType<typeof McpServerModel.findByIdsBasic>>[number]
       >();
       if (uniqueMcpServerIds.length > 0) {
-        const servers =
-          await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
+        const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
         for (const s of servers) {
           mcpServersBasicMap.set(s.id, s);
         }
@@ -1049,8 +1048,9 @@ export async function assignToolToAgent(
 
   // If a credential source is specified, validate it
   if (credentialSourceMcpServerId) {
-    const preFetchedServer =
-      preFetchedData?.mcpServersBasicMap?.get(credentialSourceMcpServerId);
+    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
+      credentialSourceMcpServerId,
+    );
     const validationError = await validateCredentialSource(
       agentId,
       credentialSourceMcpServerId,
@@ -1064,8 +1064,9 @@ export async function assignToolToAgent(
 
   // If an execution source is specified, validate it
   if (executionSourceMcpServerId) {
-    const preFetchedServer =
-      preFetchedData?.mcpServersBasicMap?.get(executionSourceMcpServerId);
+    const preFetchedServer = preFetchedData?.mcpServersBasicMap?.get(
+      executionSourceMcpServerId,
+    );
     const validationError = await validateExecutionSource(
       toolId,
       executionSourceMcpServerId,

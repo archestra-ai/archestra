@@ -133,9 +133,7 @@ describe("TeamModel", () => {
       expect(t1?.members).toHaveLength(2);
     });
 
-    test("returns empty array when user has no teams", async ({
-      makeUser,
-    }) => {
+    test("returns empty array when user has no teams", async ({ makeUser }) => {
       const user = await makeUser();
 
       const teams = await TeamModel.getUserTeams(user.id);
@@ -161,10 +159,7 @@ describe("TeamModel", () => {
       await TeamModel.addMember(team1.id, m2.id);
       await TeamModel.addMember(team2.id, m1.id);
 
-      const result = await TeamModel.getTeamMembersBatch([
-        team1.id,
-        team2.id,
-      ]);
+      const result = await TeamModel.getTeamMembersBatch([team1.id, team2.id]);
 
       expect(result.get(team1.id)).toHaveLength(2);
       expect(result.get(team2.id)).toHaveLength(1);

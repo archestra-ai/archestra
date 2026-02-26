@@ -199,17 +199,23 @@ class UserTokenModel {
   static async validateToken(
     tokenValue: string,
   ): Promise<SelectUserToken | null> {
-    // Get all user tokens
-    const allTokens = await db.select().from(schema.userTokensTable);
-    if (allTokens.length === 0) return null;
+    // Use tokenStart (first 14 chars) to narrow candidates instead of scanning all tokens.
+    // tokenStart has very low collision rate (archestra_ prefix + 4 hex chars), so this
+    // typically returns 0-1 candidates.
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates = await db
+      .select()
+      .from(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.tokenStart, tokenStart));
+    if (candidates.length === 0) return null;
 
-    // Batch-fetch all secrets in a single query (user tokens always use DB storage)
-    const secretIds = allTokens.map((t) => t.secretId);
+    // Batch-fetch secrets for candidates (user tokens always use DB storage)
+    const secretIds = candidates.map((t) => t.secretId);
     const secrets = await SecretModel.findByIds(secretIds);
     const secretMap = new Map(secrets.map((s) => [s.id, s]));
 
     // Match the provided token value against stored secrets
-    for (const token of allTokens) {
+    for (const token of candidates) {
       const secret = secretMap.get(token.secretId);
       if (
         secret?.secret &&

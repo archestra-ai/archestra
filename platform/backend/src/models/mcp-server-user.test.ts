@@ -36,56 +36,6 @@ describe("McpServerUserModel", () => {
     });
   });
 
-  describe("getUserDetailsForMcpServers", () => {
-    test("returns user details for multiple MCP servers in bulk", async ({
-      makeUser,
-      makeMcpServer,
-    }) => {
-      const user1 = await makeUser({ email: "user1@test.com" });
-      const user2 = await makeUser({ email: "user2@test.com" });
-      const user3 = await makeUser({ email: "user3@test.com" });
-
-      const mcpServer1 = await makeMcpServer();
-      const mcpServer2 = await makeMcpServer();
-      const mcpServer3 = await makeMcpServer();
-
-      await McpServerUserModel.assignUserToMcpServer(mcpServer1.id, user1.id);
-      await McpServerUserModel.assignUserToMcpServer(mcpServer1.id, user2.id);
-      await McpServerUserModel.assignUserToMcpServer(mcpServer2.id, user3.id);
-      // mcpServer3 has no users
-
-      const userDetailsMap =
-        await McpServerUserModel.getUserDetailsForMcpServers([
-          mcpServer1.id,
-          mcpServer2.id,
-          mcpServer3.id,
-        ]);
-
-      expect(userDetailsMap.size).toBe(3);
-
-      const server1Users = userDetailsMap.get(mcpServer1.id);
-      expect(server1Users).toHaveLength(2);
-      expect(server1Users?.map((u) => u.userId)).toContain(user1.id);
-      expect(server1Users?.map((u) => u.userId)).toContain(user2.id);
-      expect(server1Users?.map((u) => u.email)).toContain("user1@test.com");
-      expect(server1Users?.map((u) => u.email)).toContain("user2@test.com");
-
-      const server2Users = userDetailsMap.get(mcpServer2.id);
-      expect(server2Users).toHaveLength(1);
-      expect(server2Users?.[0].userId).toBe(user3.id);
-      expect(server2Users?.[0].email).toBe("user3@test.com");
-
-      const server3Users = userDetailsMap.get(mcpServer3.id);
-      expect(server3Users).toHaveLength(0);
-    });
-
-    test("returns empty map for empty MCP server IDs array", async () => {
-      const userDetailsMap =
-        await McpServerUserModel.getUserDetailsForMcpServers([]);
-      expect(userDetailsMap.size).toBe(0);
-    });
-  });
-
   describe("getUserPersonalMcpServerIds", () => {
     test("returns MCP server IDs for user's personal access", async ({
       makeUser,

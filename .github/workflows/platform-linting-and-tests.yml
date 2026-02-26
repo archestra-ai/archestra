@@ -290,15 +290,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # API tests — requires Calico CNI for SSRF protection (NetworkPolicy enforcement)
+          # API tests — requires NetworkPolicy enforcement for SSRF protection
+          # (provided by kindnet's built-in kube-network-policies since Kind v0.24.0)
           - name: API
             runner: blacksmith-16vcpu-ubuntu-2404
             projects: api
             shard: ""
             extra_args: ""
             artifact: blob-report-api
-            kind_config: .github/kind.yaml
-            install_calico: "true"
           # UI tests - sharded across 3 parallel jobs
           # Tests tagged @firefox/@webkit/@quickstart are excluded here:
           # - @firefox/@webkit run in dedicated sequential jobs
@@ -378,7 +377,7 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform
         with:
-          kind-config-path: ${{ matrix.kind_config || '.github/kind-no-calico.yaml' }}
+          kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
@@ -387,7 +386,6 @@ jobs:
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
           extra-helm-set: ${{ matrix.extra_helm_set }}
-          install-calico: ${{ matrix.install_calico || 'false' }}
 
       - name: Run E2E tests
         id: e2e
@@ -657,7 +655,7 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/install-kind-cluster
         with:
-          config: .github/kind-no-calico.yaml
+          config: .github/kind.yaml
 
       - name: Load Docker image into Kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

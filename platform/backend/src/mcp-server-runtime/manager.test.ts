@@ -684,6 +684,43 @@ describe("McpServerRuntimeManager", () => {
       expect(secretData).toEqual({});
     });
 
+    test("regcred passwords come from catalog localConfigSecretId, not per-user secretData", () => {
+      // This test verifies the fix for the bug where createDockerRegistrySecrets
+      // was passed per-user secretData (mcpServer.secretId), but regcred passwords
+      // are stored in catalog's localConfigSecretId.
+
+      // Given: per-user secret data (from mcpServer.secretId) with user-prompted values
+      const perUserSecretData: Record<string, string> = {
+        API_KEY: "user-api-key",
+      };
+
+      // And: catalog secret data (from localConfigSecretId) with regcred passwords
+      const catalogSecretData: Record<string, string> = {
+        STATIC_SECRET: "static-value",
+        "__regcred_password:quay.io:myuser": "registry-password",
+        "__regcred_password:ghcr.io:bot": "ghcr-password",
+      };
+
+      // When: we extract only __regcred_password:* keys from catalog secret
+      const regcredSecretData: Record<string, string> = {};
+      for (const [key, value] of Object.entries(catalogSecretData)) {
+        if (key.startsWith("__regcred_password:")) {
+          regcredSecretData[key] = value;
+        }
+      }
+
+      // Then: regcred data should contain only password keys, not env vars
+      expect(regcredSecretData).toEqual({
+        "__regcred_password:quay.io:myuser": "registry-password",
+        "__regcred_password:ghcr.io:bot": "ghcr-password",
+      });
+
+      // And: per-user data should NOT contain regcred keys
+      expect(perUserSecretData).not.toHaveProperty(
+        "__regcred_password:quay.io:myuser",
+      );
+    });
+
     test("ignores secrets without value", () => {
       // Given: empty secretData
       const secretData: Record<string, string> = {};

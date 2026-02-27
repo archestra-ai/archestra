@@ -563,8 +563,12 @@ export function McpCatalogForm({
                             <Label className="text-xs">Password</Label>
                             <Input
                               type="password"
-                              placeholder="password"
-                              value={watchField("password")}
+                              placeholder={
+                                mode === "edit" && !watchField("password")
+                                  ? "Saved — leave blank to keep"
+                                  : "password"
+                              }
+                              value={watchField("password") ?? ""}
                               onChange={(e) =>
                                 setField("password", e.target.value)
                               }

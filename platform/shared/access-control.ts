@@ -302,6 +302,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ResetDeploymentYaml]: {
     internalMcpCatalog: ["update"],
   },
+  [RouteId.GetK8sImagePullSecrets]: {
+    internalMcpCatalog: ["read"],
+  },
   [RouteId.GetMcpServers]: {
     mcpServer: ["read"],
   },

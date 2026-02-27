@@ -151,3 +151,9 @@ export const MCP_SERVER_JWKS_DOCKER_IMAGE =
 export const KEYCLOAK_K8S_INTERNAL_URL = IS_CI
   ? "http://e2e-tests-keycloak:8080"
   : "http://e2e-tests-keycloak.default.svc.cluster.local:8080";
+
+/**
+ * K8s namespace where MCP server pods are deployed by the orchestrator.
+ * CI uses the default namespace; local dev uses archestra-dev.
+ */
+export const MCP_SERVER_NAMESPACE = IS_CI ? "default" : "archestra-dev";

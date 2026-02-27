@@ -366,14 +366,28 @@ export class McpServerRuntimeManager {
       }
 
       // Create docker-registry secrets for imagePullSecrets with credentials
-      // and resolve all imagePullSecrets names for the pod spec
+      // and resolve all imagePullSecrets names for the pod spec.
+      // Regcred passwords are stored in the catalog's localConfigSecretId, not
+      // the per-user mcpServer.secretId, so fetch them separately.
       const imagePullSecrets = catalogItem?.localConfig?.imagePullSecrets;
-      const generatedRegcredNames = secretData
-        ? await k8sDeployment.createDockerRegistrySecrets(
-            secretData,
-            imagePullSecrets,
-          )
-        : [];
+      const regcredSecretData: Record<string, string> = {};
+      if (catalogItem?.localConfigSecretId && imagePullSecrets?.length) {
+        const catalogSecret = await secretManager().getSecret(
+          catalogItem.localConfigSecretId,
+        );
+        if (catalogSecret?.secret && typeof catalogSecret.secret === "object") {
+          for (const [key, value] of Object.entries(catalogSecret.secret)) {
+            if (key.startsWith("__regcred_password:")) {
+              regcredSecretData[key] = String(value);
+            }
+          }
+        }
+      }
+      const generatedRegcredNames =
+        await k8sDeployment.createDockerRegistrySecrets(
+          regcredSecretData,
+          imagePullSecrets,
+        );
       const resolvedImagePullSecretNames =
         K8sDeployment.collectImagePullSecretNames(
           imagePullSecrets,

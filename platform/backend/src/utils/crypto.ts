@@ -38,10 +38,21 @@ function fromBase64Url(str: string): Buffer {
   return Buffer.from(str, "base64url");
 }
 
-export function encryptSecretValue(plaintext: Record<string, unknown>): {
-  __encrypted: string;
-} {
-  const key = getEncryptionKey();
+/**
+ * Derive an encryption key from an arbitrary secret string.
+ * Used by the key rotation script to derive keys from both old and new secrets.
+ */
+export function deriveKeyFromSecret(secret: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", secret, SALT, INFO, KEY_LENGTH));
+}
+
+/**
+ * Encrypt a secret value using an explicit key.
+ */
+export function encryptSecretValueWithKey(
+  plaintext: Record<string, unknown>,
+  key: Buffer,
+): { __encrypted: string } {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv, {
     authTagLength: AUTH_TAG_LENGTH,
@@ -59,57 +70,8 @@ export function encryptSecretValue(plaintext: Record<string, unknown>): {
   };
 }
 
-export function decryptSecretValue(encrypted: {
-  __encrypted: string;
-}): Record<string, unknown> {
-  const parts = encrypted.__encrypted.split(":");
-  if (parts.length !== 4 || parts[0] !== VERSION_PREFIX) {
-    throw new Error("Invalid encrypted secret format");
-  }
-
-  const [, ivStr, authTagStr, ciphertextStr] = parts;
-  const key = getEncryptionKey();
-  const iv = fromBase64Url(ivStr);
-  const authTag = fromBase64Url(authTagStr);
-  const ciphertext = fromBase64Url(ciphertextStr);
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv, {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
-  decipher.setAuthTag(authTag);
-
-  const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final(),
-  ]);
-
-  return JSON.parse(decrypted.toString("utf8"));
-}
-
-export function isEncryptedSecret(
-  value: unknown,
-): value is { __encrypted: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "__encrypted" in value &&
-    typeof (value as Record<string, unknown>).__encrypted === "string" &&
-    (value as { __encrypted: string }).__encrypted.startsWith(
-      `${VERSION_PREFIX}:`,
-    )
-  );
-}
-
 /**
- * Derive an encryption key from an arbitrary secret string.
- * Used by the key rotation script to derive keys from both old and new secrets.
- */
-export function deriveKeyFromSecret(secret: string): Buffer {
-  return Buffer.from(hkdfSync("sha256", secret, SALT, INFO, KEY_LENGTH));
-}
-
-/**
- * Decrypt a secret value using an explicit key (instead of the cached key).
+ * Decrypt a secret value using an explicit key.
  */
 export function decryptSecretValueWithKey(
   encrypted: { __encrypted: string },
@@ -139,27 +101,35 @@ export function decryptSecretValueWithKey(
 }
 
 /**
- * Encrypt a secret value using an explicit key (instead of the cached key).
+ * Encrypt using the cached key derived from ARCHESTRA_AUTH_SECRET.
  */
-export function encryptSecretValueWithKey(
-  plaintext: Record<string, unknown>,
-  key: Buffer,
-): { __encrypted: string } {
-  const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv(ALGORITHM, key, iv, {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
+export function encryptSecretValue(plaintext: Record<string, unknown>): {
+  __encrypted: string;
+} {
+  return encryptSecretValueWithKey(plaintext, getEncryptionKey());
+}
 
-  const json = JSON.stringify(plaintext);
-  const encrypted = Buffer.concat([
-    cipher.update(json, "utf8"),
-    cipher.final(),
-  ]);
-  const authTag = cipher.getAuthTag();
+/**
+ * Decrypt using the cached key derived from ARCHESTRA_AUTH_SECRET.
+ */
+export function decryptSecretValue(encrypted: {
+  __encrypted: string;
+}): Record<string, unknown> {
+  return decryptSecretValueWithKey(encrypted, getEncryptionKey());
+}
 
-  return {
-    __encrypted: `${VERSION_PREFIX}:${toBase64Url(iv)}:${toBase64Url(authTag)}:${toBase64Url(encrypted)}`,
-  };
+export function isEncryptedSecret(
+  value: unknown,
+): value is { __encrypted: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "__encrypted" in value &&
+    typeof (value as Record<string, unknown>).__encrypted === "string" &&
+    (value as { __encrypted: string }).__encrypted.startsWith(
+      `${VERSION_PREFIX}:`,
+    )
+  );
 }
 
 /**

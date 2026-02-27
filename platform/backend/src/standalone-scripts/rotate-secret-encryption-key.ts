@@ -48,12 +48,12 @@ export async function rotateSecretEncryptionKey(opts: {
 
   if (dryRun) {
     for (const row of rows) {
-      if (!isEncryptedSecret(row.secret)) {
+      if (isEncryptedSecret(row.secret)) {
+        // Verify we can decrypt with the old key
+        decryptSecretValueWithKey(row.secret, oldKey);
+      } else {
         skippedPlaintext++;
-        continue;
       }
-      // Verify we can decrypt with the old key
-      decryptSecretValueWithKey(row.secret, oldKey);
       rotated++;
     }
 

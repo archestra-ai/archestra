@@ -47,7 +47,11 @@ async function readRawSecret(id: string) {
 describe("rotateSecretEncryptionKey", () => {
   it("re-encrypts secrets from old key to new key", async () => {
     const original = { apiKey: "sk-test-rotate-123" };
-    const row = await insertEncryptedSecret("rotate-test", original, OLD_SECRET);
+    const row = await insertEncryptedSecret(
+      "rotate-test",
+      original,
+      OLD_SECRET,
+    );
 
     await rotateSecretEncryptionKey({
       oldSecret: OLD_SECRET,
@@ -108,7 +112,11 @@ describe("rotateSecretEncryptionKey", () => {
 
   it("dry run does not modify secrets", async () => {
     const original = { apiKey: "sk-dry-run" };
-    const row = await insertEncryptedSecret("dry-run-test", original, OLD_SECRET);
+    const row = await insertEncryptedSecret(
+      "dry-run-test",
+      original,
+      OLD_SECRET,
+    );
     const before = await readRawSecret(row.id);
 
     const result = await rotateSecretEncryptionKey({

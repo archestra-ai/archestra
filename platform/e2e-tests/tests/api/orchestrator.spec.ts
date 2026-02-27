@@ -67,7 +67,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
-        await createAgent(request, "Orchestrator Test Agent - Remote", "personal");
+        await createAgent(
+          request,
+          "Orchestrator Test Agent - Remote",
+          "personal",
+        );
 
         // Get the Default Team (required for MCP server installation when Vault is enabled)
         const defaultTeam = await getTeamByName(request, "Default Team");
@@ -249,7 +253,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
-        await createAgent(request, "Orchestrator Test Agent - Docker", "personal");
+        await createAgent(
+          request,
+          "Orchestrator Test Agent - Docker",
+          "personal",
+        );
 
         // Get the Default Team (required for MCP server installation when Vault is enabled)
         const defaultTeam = await getTeamByName(request, "Default Team");

@@ -20,31 +20,16 @@ Archestra stores sensitive data like API keys, OAuth tokens, and MCP server cred
 
 > **Note:** Existing secrets are not migrated when you enable external storage. Recreate secrets after changing the secrets manager.
 
-## Database Encryption at Rest
+## Database Storage
 
-When secrets are stored in the database (the default), they are automatically encrypted at rest using AES-256-GCM. The encryption key is derived from your `ARCHESTRA_AUTH_SECRET` environment variable.
+Secrets are stored in the database by default. To explicitly configure database storage, set `ARCHESTRA_SECRETS_MANAGER` to `DB`.
+
+When secrets are stored in the database, they are automatically encrypted at rest using AES-256-GCM. The encryption key is derived from your `ARCHESTRA_AUTH_SECRET` environment variable.
 
 - Encryption and decryption are fully transparent — no configuration is needed beyond setting `ARCHESTRA_AUTH_SECRET`.
 - Existing plaintext secrets are automatically migrated to encrypted format on startup.
 
 See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) for more info.
-
-### Key Rotation
-
-If you need to change `ARCHESTRA_AUTH_SECRET`, you must re-encrypt all existing secrets with the new key. **Stop the application before running this script** to avoid race conditions with concurrent writes. A standalone script is provided for this:
-
-```bash
-OLD_ARCHESTRA_AUTH_SECRET=<old-secret> \
-ARCHESTRA_AUTH_SECRET=<new-secret> \
-ARCHESTRA_DATABASE_URL=postgresql://user:pass@host:5432/db \
-npx tsx src/standalone-scripts/rotate-secret-encryption-key.ts
-```
-
-Add `DRY_RUN=true` to preview what would change without writing to the database.
-
-The script decrypts all secrets with the old key and re-encrypts them with the new key in a single transaction. If any secret fails to decrypt, the entire operation is rolled back.
-
-See the [script source](https://github.com/archestra-ai/archestra/tree/main/platform/backend/src/standalone-scripts/rotate-secret-encryption-key.ts) for details.
 
 ## HashiCorp Vault
 
@@ -147,11 +132,6 @@ path "<mount>/<path>/*" {
   capabilities = ["read", "list"]
 }
 ```
-
-## Database Storage
-
-Secrets are stored in the database by default.
-To explicitly configure database storage, set `ARCHESTRA_SECRETS_MANAGER` to `DB`.
 
 ## Vault Authentication
 

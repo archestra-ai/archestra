@@ -38,18 +38,7 @@ function fromBase64Url(str: string): Buffer {
   return Buffer.from(str, "base64url");
 }
 
-/**
- * Derive an encryption key from an arbitrary secret string.
- * Used by the key rotation script to derive keys from both old and new secrets.
- */
-export function deriveKeyFromSecret(secret: string): Buffer {
-  return Buffer.from(hkdfSync("sha256", secret, SALT, INFO, KEY_LENGTH));
-}
-
-/**
- * Encrypt a secret value using an explicit key.
- */
-export function encryptSecretValueWithKey(
+function encryptSecretValueWithKey(
   plaintext: Record<string, unknown>,
   key: Buffer,
 ): { __encrypted: string } {
@@ -70,10 +59,7 @@ export function encryptSecretValueWithKey(
   };
 }
 
-/**
- * Decrypt a secret value using an explicit key.
- */
-export function decryptSecretValueWithKey(
+function decryptSecretValueWithKey(
   encrypted: { __encrypted: string },
   key: Buffer,
 ): Record<string, unknown> {

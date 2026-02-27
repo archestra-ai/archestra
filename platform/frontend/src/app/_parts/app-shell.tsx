@@ -15,6 +15,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
+  const isAuthPage = pathname.startsWith("/auth/");
 
   // Browser preview mode: render children directly without sidebar/header/version
   if (isBrowserPreview) {
@@ -23,6 +24,17 @@ export function AppShell({ children }: AppShellProps) {
         {children}
         <Toaster />
       </>
+    );
+  }
+
+  // Auth pages: render without sidebar, centered content with version at bottom
+  if (isAuthPage) {
+    return (
+      <main className="h-screen w-full flex flex-col bg-background">
+        <div className="flex-1 flex flex-col">{children}</div>
+        <Version />
+        <Toaster />
+      </main>
     );
   }
 

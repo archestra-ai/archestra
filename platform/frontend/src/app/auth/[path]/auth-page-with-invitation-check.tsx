@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
+import { useOrgTheme } from "@/lib/theme.hook";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
@@ -26,6 +28,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
 
   const isBasicAuthDisabled = config.disableBasicAuth;
+  const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");
@@ -102,6 +105,35 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
     <BackendConnectivityStatus>
       <main className="h-full flex items-center justify-center p-4">
         <div className="space-y-4 w-full max-w-md">
+          {!isLoadingAppearance && (
+            <div className="flex justify-center">
+              {logo ? (
+                <div className="flex flex-col items-center gap-1">
+                  <Image
+                    src={logo}
+                    alt="Organization logo"
+                    width={200}
+                    height={60}
+                    className="object-contain h-12 w-auto"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Powered by Archestra
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Image
+                    src="/logo.png"
+                    alt="Logo"
+                    width={28}
+                    height={28}
+                    className="h-auto w-auto"
+                  />
+                  <span className="text-base font-semibold">Archestra.AI</span>
+                </div>
+              )}
+            </div>
+          )}
           {showDefaultCredentialsWarning && (
             <div className="p-0 m-0 pb-4">
               <DefaultCredentialsWarning alwaysShow />

@@ -55,9 +55,10 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   groq: "groq",
   "fireworks-ai": "openai",
   togetherai: "openai",
+  // These providers use OpenAI-compatible API in Archestra
+  xai: "xai",
   // Explicitly unsupported providers (return null to skip)
   perplexity: null,
-  xai: null,
   nvidia: null,
   "amazon-bedrock": null,
   azure: null,

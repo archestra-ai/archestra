@@ -19,6 +19,7 @@ export const SupportedProvidersSchema = z.enum([
   "zhipuai",
   "deepseek",
   "minimax",
+  "xai",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -37,6 +38,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
+  "xai:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -61,6 +63,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
+  xai: "xAI (Grok)",
 };
 
 /**
@@ -109,6 +112,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
+  xai: "https://api.x.ai/v1",
 };
 
 /**
@@ -193,5 +197,9 @@ export const MODEL_MARKER_PATTERNS: Record<
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
+  },
+  xai: {
+    fastest: ["grok-4-1-fast-non-reasoning", "grok-code-fast-1"],
+    best: ["grok-4", "grok-4-1-fast-reasoning"],
   },
 };

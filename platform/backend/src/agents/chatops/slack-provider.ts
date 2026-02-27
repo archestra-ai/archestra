@@ -315,7 +315,7 @@ class SlackProvider implements ChatOpsProvider {
         elements: [
           {
             type: "plain_text",
-            text: `🤖 ${options.footer}`,
+            text: options.footer,
             emoji: true,
           },
         ],
@@ -404,13 +404,32 @@ class SlackProvider implements ChatOpsProvider {
           ...actionBlocks,
         ];
 
-    await this.client.chat.postMessage({
-      channel: params.message.channelId,
-      thread_ts: params.message.threadId,
-      text: params.isWelcome ? "Welcome to Archestra!" : "Change Default Agent",
-      // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-      blocks: blocks as any,
-    });
+    const isDM = params.message.metadata?.channelType === "im";
+    const fallbackText = params.isWelcome
+      ? "Welcome to Archestra!"
+      : "Change Default Agent";
+
+    if (isDM) {
+      // In DMs, thread the reply to the user's message so it appears in Chat tab.
+      // Top-level postMessage without thread_ts goes to History.
+      await this.client.chat.postMessage({
+        channel: params.message.channelId,
+        text: fallbackText,
+        // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+        blocks: blocks as any,
+        ...(params.message.threadId
+          ? { thread_ts: params.message.threadId }
+          : {}),
+      });
+    } else {
+      await this.client.chat.postEphemeral({
+        channel: params.message.channelId,
+        user: params.message.senderId,
+        text: fallbackText,
+        // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+        blocks: blocks as any,
+      });
+    }
   }
 
   async getThreadHistory(
@@ -621,9 +640,7 @@ class SlackProvider implements ChatOpsProvider {
     if (!user) {
       // Auto-provision: create user + member from slash command
       const displayName =
-        (await this.getUserName(userId)) ||
-        body.user_name ||
-        "Unknown User";
+        (await this.getUserName(userId)) || body.user_name || "Unknown User";
       const { invitationId } = await autoProvisionUser({
         email: senderEmail,
         name: displayName,
@@ -637,17 +654,19 @@ class SlackProvider implements ChatOpsProvider {
         };
       }
 
-      // Send ephemeral welcome (fire-and-forget)
+      // Send welcome DM (fire-and-forget)
       const sso = await isSsoConfigured();
-      const welcomeText = buildWelcomeMessage({
+      const welcome = buildWelcomeMessage({
         invitationId,
         email: senderEmail,
+        name: displayName,
         isSso: sso,
       });
-      this.sendEphemeralMessage({
-        channelId,
+      this.sendDirectMessage({
         userId,
-        text: welcomeText,
+        text: welcome.text,
+        actionUrl: welcome.actionUrl,
+        actionLabel: welcome.actionLabel,
       }).catch(() => {});
     }
 
@@ -751,6 +770,68 @@ class SlackProvider implements ChatOpsProvider {
         "[SlackProvider] Failed to send ephemeral message",
       );
     }
+  }
+
+  async sendDirectMessage(params: {
+    userId: string;
+    text: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    channelId?: string;
+    threadId?: string;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    let dmChannelId = params.channelId;
+    if (!dmChannelId) {
+      // Open a DM channel with the user
+      const dmResult = await this.client.conversations.open({
+        users: params.userId,
+      });
+      dmChannelId = dmResult.channel?.id;
+      if (!dmChannelId) {
+        logger.warn(
+          { userId: params.userId },
+          "[SlackProvider] Failed to open DM channel",
+        );
+        return;
+      }
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+    const blocks: any[] = [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: params.text },
+      },
+    ];
+
+    if (params.actionUrl && params.actionLabel) {
+      blocks.push({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: params.actionLabel, emoji: true },
+            url: params.actionUrl,
+            style: "primary",
+          },
+        ],
+      });
+      blocks.push({
+        type: "context",
+        elements: [
+          { type: "mrkdwn", text: `Link: ${params.actionUrl}` },
+        ],
+      });
+    }
+
+    await this.client.chat.postMessage({
+      channel: dmChannelId,
+      text: params.text,
+      blocks,
+      ...(params.threadId ? { thread_ts: params.threadId } : {}),
+    });
   }
 
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {

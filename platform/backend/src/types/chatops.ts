@@ -194,6 +194,27 @@ export interface ChatOpsProvider {
   }): Promise<void>;
 
   /**
+   * Send a direct message (DM) to a user.
+   * Used for welcome messages to auto-provisioned users.
+   * @param params.userId - The user's ID in the provider's system
+   * @param params.text - The message text (markdown)
+   * @param params.actionUrl - Optional URL for an action button
+   * @param params.actionLabel - Optional label for the action button
+   */
+  sendDirectMessage?(params: {
+    userId: string;
+    text: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    /** When provided, post to this channel instead of opening a new DM via conversations.open.
+     *  Useful for replying inside an existing DM without routing to the History tab. */
+    channelId?: string;
+    /** When provided, thread the message as a reply to this timestamp.
+     *  Required in DMs so the reply appears in Chat tab instead of History. */
+    threadId?: string;
+  }): Promise<void>;
+
+  /**
    * Set a typing/loading status indicator (optional, provider-specific).
    * For Slack: shows "App is thinking..." in the assistant thread.
    * For Teams: sends a typing activity indicator in DMs/group chats,

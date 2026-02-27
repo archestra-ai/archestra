@@ -41,9 +41,14 @@ function InviteByLinkCardContent({
 
   const handleGenerateLink = useCallback(async () => {
     const data = await createMutation.mutateAsync({ email, role });
+    const initialName = email
+      .split("@")[0]
+      .split(".")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
 
     if (data) {
-      const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${data.id}&email=${encodeURIComponent(email)}`;
+      const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${data.id}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(initialName)}`;
       setInvitationLink(link);
       onInvitationCreated?.();
     }

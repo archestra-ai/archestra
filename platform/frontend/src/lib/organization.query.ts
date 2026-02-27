@@ -306,6 +306,7 @@ export function useUpdateOrganization(
 export type PendingSignupMember = {
   userId: string;
   provider: string | null;
+  invitationId: string | null;
 };
 
 /**

@@ -432,9 +432,7 @@ describe("ChatOpsManager security validation", () => {
 
     // User is auto-provisioned but has no team access to the team-restricted agent
     expect(result.success).toBe(false);
-    expect(result.error).toContain(
-      "user does not have access to this agent",
-    );
+    expect(result.error).toContain("user does not have access to this agent");
   });
 
   test("rejects when user lacks team access to agent", async ({

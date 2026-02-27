@@ -316,8 +316,7 @@ export class ChatOpsManager {
     if (!user) {
       // Resolve display name from provider (e.g., Slack real_name)
       const displayName =
-        (await provider.getUserName?.(message.senderId)) ||
-        message.senderName;
+        (await provider.getUserName?.(message.senderId)) || message.senderName;
 
       // Auto-provision: create user + member from chat platform identity
       const { invitationId } = await autoProvisionUser({
@@ -339,6 +338,7 @@ export class ChatOpsManager {
         provider,
         message,
         invitationId,
+        displayName,
       }).catch(() => {});
     }
 
@@ -423,8 +423,7 @@ export class ChatOpsManager {
     if (!user) {
       // Auto-provision: create user + member from interactive payload
       const displayName =
-        (await provider.getUserName?.(selection.userId)) ||
-        selection.userName;
+        (await provider.getUserName?.(selection.userId)) || selection.userName;
       await autoProvisionUser({
         email: senderEmail,
         name: displayName,
@@ -596,35 +595,52 @@ export class ChatOpsManager {
   // ===========================================================================
 
   /**
-   * Send an ephemeral welcome message to a newly auto-provisioned user.
+   * Send a welcome DM to a newly auto-provisioned user.
    * Non-fatal — failures are logged but do not block message processing.
    */
   private async sendAutoProvisionWelcome(params: {
     provider: ChatOpsProvider;
     message: IncomingChatMessage;
     invitationId: string;
+    displayName: string;
   }): Promise<void> {
-    const { provider, message, invitationId } = params;
+    const { provider, message, invitationId, displayName } = params;
     try {
       const sso = await isSsoConfigured();
-      const text = buildWelcomeMessage({
+      const welcome = buildWelcomeMessage({
         invitationId,
         email: message.senderEmail || "",
+        name: displayName,
         isSso: sso,
       });
 
-      if (provider.sendEphemeralMessage) {
-        await provider.sendEphemeralMessage({
-          channelId: message.channelId,
+      const isDM = message.metadata?.channelType === "im";
+
+      if (isDM && provider.sendDirectMessage) {
+        // In DMs, reply in the user's thread so it appears in Chat tab.
+        // Pass channelId to skip conversations.open (which routes to History).
+        // Pass threadId to thread the reply to the user's original message.
+        await provider.sendDirectMessage({
           userId: message.senderId,
-          text,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+          channelId: message.channelId,
           threadId: message.threadId,
         });
+      } else if (provider.sendDirectMessage) {
+        // In channels, send a separate DM to the user
+        await provider.sendDirectMessage({
+          userId: message.senderId,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+        });
       } else {
-        // Fallback: send as a regular reply
+        // Fallback: send as a regular reply with the URL inline
         await provider.sendReply({
           originalMessage: message,
-          text,
+          text: `${welcome.text}\n${welcome.actionUrl}`,
         });
       }
     } catch (error) {
@@ -832,8 +848,7 @@ export class ChatOpsManager {
 
     if (!user) {
       const displayName =
-        (await provider.getUserName?.(message.senderId)) ||
-        message.senderName;
+        (await provider.getUserName?.(message.senderId)) || message.senderName;
       const { invitationId } = await autoProvisionUser({
         email: userEmail,
         name: displayName,
@@ -856,6 +871,7 @@ export class ChatOpsManager {
         provider,
         message,
         invitationId,
+        displayName,
       }).catch(() => {});
     }
 
@@ -1084,7 +1100,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: agent.name,
+          footer: `🤖 ${agent.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       } else if (
@@ -1113,9 +1129,14 @@ export class ChatOpsManager {
       );
 
       if (sendReply) {
+        const errMsg = errorMessage(error);
+        // Show truncated error details as a subtle footer (max 500 chars)
+        const errorDetail =
+          errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
         await provider.sendReply({
           originalMessage: message,
           text: "Sorry, I encountered an error processing your request.",
+          footer: errorDetail,
           conversationReference: message.metadata?.conversationReference,
         });
       }

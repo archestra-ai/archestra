@@ -44,6 +44,7 @@ vi.mock("@/agents/chatops/chatops-manager", async () => {
     sendReply: sendReplyMock,
     sendAgentSelectionCard: sendAgentSelectionCardMock,
     sendEphemeralMessage: vi.fn().mockResolvedValue(undefined),
+    sendDirectMessage: vi.fn().mockResolvedValue(undefined),
     getUserName: vi.fn().mockResolvedValue("Test User"),
     eventHandler: null,
   };
@@ -76,9 +77,12 @@ const autoProvisionUserMock = vi.fn().mockResolvedValue({
 vi.mock("@/agents/chatops/auto-provision", () => ({
   autoProvisionUser: (...args: unknown[]) => autoProvisionUserMock(...args),
   isSsoConfigured: vi.fn().mockResolvedValue(false),
-  buildWelcomeMessage: vi
-    .fn()
-    .mockReturnValue("Welcome! We created an Archestra account for you."),
+  buildWelcomeMessage: vi.fn().mockReturnValue({
+    text: "Hey there 👋 We created an Archestra account for you.",
+    actionUrl:
+      "http://localhost:3000/auth/sign-up-with-invitation?invitationId=test",
+    actionLabel: "Finish Signup",
+  }),
 }));
 
 vi.mock("@/models", () => ({

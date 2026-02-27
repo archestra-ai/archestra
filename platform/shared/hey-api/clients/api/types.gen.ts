@@ -24263,7 +24263,7 @@ export type CheckInvitationResponses = {
             id: string;
             email: string;
             organizationId: string;
-            status: 'pending' | 'accepted' | 'canceled';
+            status: string;
             expiresAt: string | null;
         };
         userExists: boolean;
@@ -29214,11 +29214,94 @@ export type GetMemberSignupStatusResponses = {
      * Default Response
      */
     200: {
-        pendingSignupUserIds: Array<string>;
+        pendingSignupMembers: Array<{
+            userId: string;
+            provider: string | null;
+            invitationId: string | null;
+        }>;
     };
 };
 
 export type GetMemberSignupStatusResponse = GetMemberSignupStatusResponses[keyof GetMemberSignupStatusResponses];
+
+export type DeletePendingSignupMemberData = {
+    body?: never;
+    path: {
+        userId: string;
+    };
+    query?: never;
+    url: '/api/organization/members/{userId}/pending-signup';
+};
+
+export type DeletePendingSignupMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeletePendingSignupMemberError = DeletePendingSignupMemberErrors[keyof DeletePendingSignupMemberErrors];
+
+export type DeletePendingSignupMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeletePendingSignupMemberResponse = DeletePendingSignupMemberResponses[keyof DeletePendingSignupMemberResponses];
 
 export type GetPublicAppearanceData = {
     body?: never;

@@ -1,7 +1,8 @@
 "use client";
 
-import { Trash2, UserPlus } from "lucide-react";
+import { Copy, Trash2 } from "lucide-react";
 import Image from "next/image";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -11,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   type PendingSignupMember,
   useActiveOrganization,
@@ -44,8 +46,19 @@ export function PendingSignupMembers({
   const providerByUserId = new Map(
     pendingSignupMembers
       .filter((m) => m.provider)
-      .map((m) => [m.userId, m.provider!]),
+      .map((m) => [m.userId, m.provider as string]),
   );
+  const invitationByUserId = new Map(
+    pendingSignupMembers
+      .filter((m) => m.invitationId)
+      .map((m) => [m.userId, m.invitationId as string]),
+  );
+
+  const handleCopy = async (invitationId: string, email: string) => {
+    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}`;
+    await navigator.clipboard.writeText(link);
+    toast.success("Link copied to clipboard");
+  };
 
   const pendingMembers = members.filter((m) => pendingUserIdSet.has(m.userId));
 
@@ -55,8 +68,7 @@ export function PendingSignupMembers({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <UserPlus className="h-4 w-4" />
-          Pending Account Setup
+          Auto-provisioned Members
         </CardTitle>
         <CardDescription>
           Members auto-provisioned from Slack or Microsoft Teams who
@@ -85,16 +97,36 @@ export function PendingSignupMembers({
                     />
                   )}
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">
-                      {member.user.name || "Unknown"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {member.user.name || "Unknown"}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="text-xs text-muted-foreground"
+                      >
+                        {member.role}
+                      </Badge>
+                    </div>
                     <span className="text-xs text-muted-foreground">
                       {member.user.email}
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Pending signup</Badge>
+                  {invitationByUserId.has(member.userId) && (
+                    <TooltipButton
+                      tooltip="Copy invitation link"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        const invId = invitationByUserId.get(member.userId);
+                        if (invId) handleCopy(invId, member.user.email);
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </TooltipButton>
+                  )}
                   <PermissionButton
                     permissions={{ member: ["delete"] }}
                     tooltip="Remove pending member"

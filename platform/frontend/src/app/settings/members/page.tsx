@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import {
   organizationKeys,
@@ -34,6 +35,8 @@ function MembersSettingsContent() {
   const queryClient = useQueryClient();
   const { data: activeOrg, isPending } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
+  const { data: chatOpsProviders } = useChatOpsStatus();
+  const hasChatOps = chatOpsProviders?.some((p) => p.configured);
   const { data: signupStatus } = useMemberSignupStatus();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -82,7 +85,9 @@ function MembersSettingsContent() {
             : undefined
         }
       />
-      <PendingSignupMembers pendingSignupMembers={pendingSignupMembers} />
+      {hasChatOps && (
+        <PendingSignupMembers pendingSignupMembers={pendingSignupMembers} />
+      )}
       {invitationsEnabled && (
         <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
       )}

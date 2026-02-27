@@ -110,6 +110,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 userId: z.string(),
                 provider: z.string().nullable(),
+                invitationId: z.string().nullable(),
               }),
             ),
           }),
@@ -144,22 +145,27 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({ pendingSignupMembers: [] });
       }
 
-      // Look up auto-provisioned invitations to get provider info
+      // Look up auto-provisioned invitations to get provider and invitation ID
       const invitations = await db
         .select({
+          id: schema.invitationsTable.id,
           email: schema.invitationsTable.email,
           status: schema.invitationsTable.status,
         })
         .from(schema.invitationsTable)
         .where(like(schema.invitationsTable.status, "auto-provisioned%"));
 
-      // Build email → provider map from invitation status ("auto-provisioned:slack" → "slack")
-      const emailToProvider = new Map<string, string>();
+      // Build email → { provider, invitationId } map
+      const emailToInvitation = new Map<
+        string,
+        { provider: string | null; invitationId: string }
+      >();
       for (const inv of invitations) {
         const parts = inv.status.split(":");
-        if (parts.length === 2) {
-          emailToProvider.set(inv.email, parts[1]);
-        }
+        emailToInvitation.set(inv.email, {
+          provider: parts.length === 2 ? parts[1] : null,
+          invitationId: inv.id,
+        });
       }
 
       // Get emails for pending users
@@ -168,10 +174,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .from(schema.usersTable)
         .where(inArray(schema.usersTable.id, pendingUserIds));
 
-      const pendingSignupMembers = pendingUsers.map((u) => ({
-        userId: u.id,
-        provider: emailToProvider.get(u.email) ?? null,
-      }));
+      const pendingSignupMembers = pendingUsers.map((u) => {
+        const inv = emailToInvitation.get(u.email);
+        return {
+          userId: u.id,
+          provider: inv?.provider ?? null,
+          invitationId: inv?.invitationId ?? null,
+        };
+      });
 
       return reply.send({ pendingSignupMembers });
     },
@@ -190,9 +200,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Delete an auto-provisioned member who hasn't completed signup",
         tags: ["Organization"],
         params: z.object({ userId: z.string() }),
-        response: constructResponseSchema(
-          z.object({ success: z.boolean() }),
-        ),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ organizationId, params }, reply) => {

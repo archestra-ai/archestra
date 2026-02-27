@@ -1602,14 +1602,19 @@ async function resolveAndVerifySender(
         return false;
       }
 
-      // Send welcome message (Teams doesn't have true ephemeral, so send as activity)
+      // Send welcome message as activity with inline link
       const sso = await isSsoConfigured();
-      const welcomeText = buildWelcomeMessage({
+      const welcome = buildWelcomeMessage({
         invitationId,
         email: message.senderEmail,
+        name: message.senderName,
         isSso: sso,
       });
-      await context.sendActivity(welcomeText).catch(() => {});
+      await context
+        .sendActivity(
+          `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})\n\nLink: ${welcome.actionUrl}`,
+        )
+        .catch(() => {});
 
       logger.info(
         { senderEmail: message.senderEmail },

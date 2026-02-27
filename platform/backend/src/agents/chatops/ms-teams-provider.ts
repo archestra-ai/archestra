@@ -273,7 +273,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     let replyText = options.text;
     if (options.footer) {
-      replyText += `\n\n---\n\n🤖 ${options.footer}`;
+      replyText += `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),

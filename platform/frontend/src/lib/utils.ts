@@ -35,9 +35,7 @@ export function formatDate({
  * Use this instead of `throw error` to avoid Sentry's
  * "Object captured as exception with keys: error" warning.
  */
-export function toApiError(error: {
-  error: Partial<ApiError> | Error;
-}): Error {
+export function toApiError(error: { error: Partial<ApiError> | Error }): Error {
   if (error.error instanceof Error) return error.error;
   return new Error(error.error?.message ?? "API request failed");
 }

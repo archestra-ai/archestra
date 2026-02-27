@@ -94,28 +94,35 @@ export async function isSsoConfigured(): Promise<boolean> {
   return !!idp;
 }
 
+export interface WelcomeMessage {
+  text: string;
+  actionUrl: string;
+  actionLabel: string;
+}
+
 /**
- * Build the ephemeral welcome message sent to auto-provisioned users.
+ * Build the welcome message sent to auto-provisioned users via DM.
  */
 export function buildWelcomeMessage(params: {
   invitationId: string;
   email: string;
+  name: string;
   isSso: boolean;
-}): string {
-  const { invitationId, email, isSso } = params;
+}): WelcomeMessage {
+  const { invitationId, email, name, isSso } = params;
   const baseUrl = config.frontendBaseUrl;
 
   if (isSso) {
-    const signInUrl = `${baseUrl}/auth/sign-in`;
-    return (
-      `Welcome! We created an Archestra account for you (${email}). ` +
-      `To access the full web app, sign in at: ${signInUrl}`
-    );
+    return {
+      text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,
+      actionUrl: `${baseUrl}/auth/sign-in`,
+      actionLabel: "Sign In",
+    };
   }
 
-  const signUpUrl = `${baseUrl}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}`;
-  return (
-    `Welcome! We created an Archestra account for you (${email}). ` +
-    `To set up your password and access the full web app, visit: ${signUpUrl}`
-  );
+  return {
+    text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,
+    actionUrl: `${baseUrl}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
+    actionLabel: "Finish Signup",
+  };
 }

@@ -18,6 +18,11 @@ export function useUpdateChatOpsConfigInQuickstart() {
         handleApiError(error);
         return null;
       }
+      if (data?.success) {
+        await archestraApiSdk
+          .refreshChatOpsChannelDiscovery({ body: { provider: "ms-teams" } })
+          .catch(() => {});
+      }
       return data ?? null;
     },
     onSuccess: (data) => {
@@ -26,6 +31,7 @@ export function useUpdateChatOpsConfigInQuickstart() {
       }
       toast.success("MS Teams configuration updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
     onError: (error) => {
       // Keep a defensive fallback for unexpected runtime errors.
@@ -54,6 +60,13 @@ export function useUpdateSlackChatOpsConfig() {
         handleApiError(error);
         return null;
       }
+      if (data?.success) {
+        // Trigger channel discovery (awaits completion on backend)
+        // so channels are available when the UI refreshes bindings
+        await archestraApiSdk
+          .refreshChatOpsChannelDiscovery({ body: { provider: "slack" } })
+          .catch(() => {});
+      }
       return data ?? null;
     },
     onSuccess: (data) => {
@@ -62,6 +75,7 @@ export function useUpdateSlackChatOpsConfig() {
       }
       toast.success("Slack configuration updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
     onError: (error) => {
       console.error("Slack config update error:", error);

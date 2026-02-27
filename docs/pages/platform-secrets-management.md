@@ -29,6 +29,8 @@ When secrets are stored in the database, they are automatically encrypted at res
 - Encryption and decryption are fully transparent — no configuration is needed beyond setting `ARCHESTRA_AUTH_SECRET`.
 - Existing plaintext secrets are automatically migrated to encrypted format on startup.
 
+> **Warning:** Do not change `ARCHESTRA_AUTH_SECRET` after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+
 See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) for more info.
 
 ## HashiCorp Vault

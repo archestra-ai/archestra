@@ -139,6 +139,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
       const profileResponse = await createAgent(
         request,
         `SSRF Test Profile ${uniqueSuffix}`,
+        "personal",
       );
       const profile = await profileResponse.json();
       profileId = profile.id;

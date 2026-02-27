@@ -635,6 +635,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization Short Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;
@@ -679,6 +680,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization Long Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;
@@ -723,6 +725,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization WithTools Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;
@@ -767,6 +770,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization NoTools Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;

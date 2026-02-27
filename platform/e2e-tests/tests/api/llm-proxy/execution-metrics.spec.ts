@@ -298,6 +298,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `Execution Metrics Test - ${config.providerName}`,
+        "personal",
       );
       const agent = await createResponse.json();
       agentId = agent.id;
@@ -345,6 +346,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `Execution Dedup Test - ${config.providerName}`,
+        "personal",
       );
       const agent = await createResponse.json();
       agentId = agent.id;
@@ -399,6 +401,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `Execution Separate Count Test - ${config.providerName}`,
+        "personal",
       );
       const agent = await createResponse.json();
       agentId = agent.id;

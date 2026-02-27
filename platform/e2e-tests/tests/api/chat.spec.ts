@@ -155,7 +155,7 @@ test.describe("Chat message persistence on provider error", () => {
     deleteAgent,
   }) => {
     // 1. Create an agent for the conversation
-    const agentResponse = await createAgent(request, "Chat Error Test Agent");
+    const agentResponse = await createAgent(request, "Chat Error Test Agent", "personal");
     const agent = await agentResponse.json();
 
     try {

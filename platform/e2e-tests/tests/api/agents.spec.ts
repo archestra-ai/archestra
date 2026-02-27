@@ -20,7 +20,7 @@ test.describe("Agents API CRUD", () => {
       teams: [],
     };
 
-    const response = await createAgent(request, newAgent.name);
+    const response = await createAgent(request, newAgent.name, "personal");
     const agent = await response.json();
 
     expect(agent).toHaveProperty("id");
@@ -38,7 +38,7 @@ test.describe("Agents API CRUD", () => {
     // Create an agent first
     const uniqueSuffix = crypto.randomUUID().slice(0, 8);
     const agentName = `Agent for Get By ID Test ${uniqueSuffix}`;
-    const createResponse = await createAgent(request, agentName);
+    const createResponse = await createAgent(request, agentName, "personal");
     const createdAgent = await createResponse.json();
 
     const response = await makeApiRequest({
@@ -64,6 +64,7 @@ test.describe("Agents API CRUD", () => {
     const createResponse = await createAgent(
       request,
       `Agent for Update Test ${uniqueSuffix}`,
+      "personal",
     );
     const createdAgent = await createResponse.json();
 
@@ -95,6 +96,7 @@ test.describe("Agents API CRUD", () => {
     const createResponse = await createAgent(
       request,
       `Agent for Delete Test ${uniqueSuffix}`,
+      "personal",
     );
     const createdAgent = await createResponse.json();
 

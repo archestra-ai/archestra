@@ -7,6 +7,7 @@ import {
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MEMBER_EMAIL,
 } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
@@ -14,6 +15,7 @@ import {
   assignEngineeringTeamToDefaultProfileViaApi,
   clickButton,
   closeOpenDialogs,
+  createTeamMcpGatewayViaApi,
   getVisibleCredentials,
   getVisibleStaticCredentials,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
@@ -92,11 +94,11 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
         ).toHaveText("1");
       }
-      // Member cannot see credentials count
+      // Member can see credentials count
       if (user === "Member") {
         await expect(
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
-        ).not.toBeVisible();
+        ).toHaveText("1");
       }
 
       // After adding a server, the install dialog opens automatically.
@@ -120,61 +122,80 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         timeout: CONNECT_BUTTON_TIMEOUT,
       });
       await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
-      // And this time a team should be auto-selected (since personal installation already exists)
-      await expect(
-        page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
-      ).not.toContainText("Myself");
-      // open installation type dropdown to verify teams
-      await page.getByRole("combobox").click();
-      // Validate Admin sees all teams in dropdown, Editor and Member see only their own teams
-      const expectedTeams = {
-        Admin: [DEFAULT_TEAM_NAME, ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME],
-        Editor: [ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME],
-        Member: [MARKETING_TEAM_NAME],
-      };
-      for (const team of expectedTeams[user]) {
-        await expect(page.getByRole("option", { name: team })).toBeVisible();
-      }
-      // select first team from dropdown
-      await page.getByRole("option", { name: expectedTeams[user][0] }).click();
 
-      // Install credential for team
-      await clickButton({ page, options: { name: "Install" } });
+      if (user === "Member") {
+        // Members lack mcpServer:update permission — after personal install,
+        // they should see an "Already installed" banner instead of the install form
+        await expect(page.getByText("Already installed", { exact: true })).toBeVisible();
+        await closeOpenDialogs(page);
+      } else {
+        // Admin and Editor: a team should be auto-selected (since personal installation already exists)
+        await expect(
+          page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
+        ).not.toContainText("Myself");
+        // open installation type dropdown to verify teams
+        await page.getByRole("combobox").click();
+        // Validate Admin sees all teams in dropdown, Editor sees only their own teams
+        const expectedTeams = {
+          Admin: [
+            DEFAULT_TEAM_NAME,
+            ENGINEERING_TEAM_NAME,
+            MARKETING_TEAM_NAME,
+          ],
+          Editor: [ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME],
+        };
+        for (const team of expectedTeams[user]) {
+          await expect(
+            page.getByRole("option", { name: team }),
+          ).toBeVisible();
+        }
+        // select first team from dropdown
+        await page
+          .getByRole("option", { name: expectedTeams[user][0] })
+          .click();
 
-      // Credentials count should be 2 for Admin and Editor
-      if (user === "Admin" || user === "Editor") {
+        // Install credential for team
+        await clickButton({ page, options: { name: "Install" } });
+
+        // Credentials count should be 2 for Admin and Editor
         await expect(
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
         ).toHaveText("2");
       }
 
       // Check Manage Credentials dialog
-      // Member cannot see Manage Credentials button
-      if (user === "Member") {
-        await expect(
-          page.getByTestId(
-            `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`,
-          ),
-        ).not.toBeVisible();
-      } else {
-        // Admin and Editor opens Manage Credentials dialog and sees credentials
-        const expectedCredentials = {
-          Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
-          Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
-        };
-        await openManageCredentialsDialog(page, catalogItemName);
-        const visibleCredentials = await getVisibleCredentials(page);
-        for (const credential of expectedCredentials[user]) {
-          await expect(visibleCredentials).toContain(credential);
-          await expect(visibleCredentials).toHaveLength(
-            expectedCredentials[user].length,
-          );
+      // All users can see Manage Credentials button and open the dialog
+      // Members see only their personal and team credentials they have access to
+      const expectedCredentials = {
+        Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
+        Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
+        Member: [MEMBER_EMAIL],
+      };
+      await openManageCredentialsDialog(page, catalogItemName);
+      const visibleCredentials = await getVisibleCredentials(page);
+      for (const credential of expectedCredentials[user]) {
+        await expect(visibleCredentials).toContain(credential);
+        await expect(visibleCredentials).toHaveLength(
+          expectedCredentials[user].length,
+        );
+      }
+
+      if (user !== "Member") {
+        // Editor can't see org-scoped gateways, so create a team-scoped one
+        let teamGateway: { id: string; name: string } | undefined;
+        if (user === "Editor") {
+          teamGateway = await createTeamMcpGatewayViaApi({
+            cookieHeaders,
+            teamName: ENGINEERING_TEAM_NAME,
+            gatewayName: makeRandomString(10, "gw"),
+          });
         }
 
         // Check TokenSelect shows correct credentials
         await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
           page,
           catalogItemName,
+          gatewayName: teamGateway?.name,
         });
         const visibleStaticCredentials =
           await getVisibleStaticCredentials(page);
@@ -210,6 +231,14 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             expectedLengthAfterRevoke,
           );
         }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
+
+        // Cleanup team gateway
+        if (teamGateway) {
+          await archestraApiSdk.deleteAgent({
+            path: { id: teamGateway.id },
+            headers: { Cookie: cookieHeaders },
+          });
+        }
       }
 
       // CLEANUP: Delete created catalog items and mcp servers
@@ -311,11 +340,8 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     const expectedCredentialsCount = {
       Admin: 4, // admin sees all credentials (3 personal + 1 DEFAULT team)
       Editor: 2, // editor sees their own credentials (personal + DEFAULT team)
+      Member: 2, // member sees their personal credential + DEFAULT team credential (member is in Default Team)
     };
-    // Member cannot see credentials count
-    if (user === "Member") {
-      return;
-    }
     await expect(
       page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
     ).toHaveText(expectedCredentialsCount[user].toString());
@@ -343,6 +369,12 @@ test("Verify tool calling using different static credentials", async ({
   const cookieHeaders = await extractCookieHeaders(adminPage);
   // Assign engineering team to default profile
   await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
+  // Create a team-scoped MCP gateway for editor (editor can't see org-scoped gateways)
+  const teamGateway = await createTeamMcpGatewayViaApi({
+    cookieHeaders,
+    teamName: ENGINEERING_TEAM_NAME,
+    gatewayName: makeRandomString(10, "gw"),
+  });
   // Create catalog item as Admin
   // Editor and Member cannot add items to MCP Registry
   const newCatalogItem = await addCustomSelfHostedCatalogItem({
@@ -405,6 +437,7 @@ test("Verify tool calling using different static credentials", async ({
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
+    gatewayName: teamGateway.name,
   });
   // Select editor static credential from dropdown
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
@@ -421,11 +454,16 @@ test("Verify tool calling using different static credentials", async ({
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     cookieHeaders,
+    profileId: teamGateway.id,
   });
 
   // CLEANUP: Delete existing created MCP servers / installations
   await archestraApiSdk.deleteInternalMcpCatalogItem({
     path: { id: newCatalogItem.id },
+    headers: { Cookie: cookieHeaders },
+  });
+  await archestraApiSdk.deleteAgent({
+    path: { id: teamGateway.id },
     headers: { Cookie: cookieHeaders },
   });
 });

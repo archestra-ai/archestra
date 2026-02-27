@@ -4,14 +4,23 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AgentHistoryEntry, AgentType } from "@/types/agent";
+
+export const agentScopeEnum = pgEnum("agent_scope", [
+  "personal",
+  "team",
+  "org",
+]);
+
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
+import usersTable from "./user";
 
 /**
  * Unified agents table supporting both external profiles and internal agents.
@@ -38,6 +47,10 @@ const agentsTable = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
+    authorId: text("author_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    scope: agentScopeEnum("scope").notNull().default("personal"),
     name: text("name").notNull(),
     isDemo: boolean("is_demo").notNull().default(false),
     isDefault: boolean("is_default").notNull().default(false),
@@ -96,6 +109,8 @@ const agentsTable = pgTable(
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
+    index("agents_author_id_idx").on(table.authorId),
+    index("agents_scope_idx").on(table.scope),
   ],
 );
 

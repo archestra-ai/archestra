@@ -74,7 +74,11 @@ describe("McpClient", () => {
 
   beforeEach(async () => {
     // Create test agent
-    const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
+    const agent = await AgentModel.create({
+      name: "Test Agent",
+      scope: "org",
+      teams: [],
+    });
     agentId = agent.id;
 
     // Create secret with access token

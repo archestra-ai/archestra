@@ -104,6 +104,7 @@ function getActionDescription(action: Action): string {
     read: "View and list",
     update: "Modify existing",
     delete: "Remove existing",
+    "team-admin": "Team-level administrative control over the resource",
     admin: "Administrative control over",
     cancel: "Cancel",
   };

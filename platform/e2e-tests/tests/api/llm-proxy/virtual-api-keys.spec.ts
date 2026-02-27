@@ -372,7 +372,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     deleteAgent,
   }) => {
     // Setup: create LLM proxy + chat API key + virtual key
-    const proxyResp = await createLlmProxy(request, "e2e-vk-proxy");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-proxy", "personal");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
@@ -404,7 +404,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-expired");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-expired", "personal");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
@@ -444,7 +444,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-wrong-provider");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-wrong-provider", "personal");
     const proxy = await proxyResp.json();
 
     // Create an OpenAI key but call the Anthropic proxy
@@ -487,7 +487,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-invalid");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-invalid", "personal");
     const proxy = await proxyResp.json();
 
     try {
@@ -510,7 +510,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-raw-key");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-raw-key", "personal");
     const proxy = await proxyResp.json();
 
     try {
@@ -542,7 +542,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-no-expiry");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-no-expiry", "personal");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
@@ -574,7 +574,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-deleted");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-deleted", "personal");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
@@ -613,7 +613,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     createLlmProxy,
     deleteAgent,
   }) => {
-    const proxyResp = await createLlmProxy(request, "e2e-vk-parent-deleted");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-parent-deleted", "personal");
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
@@ -651,7 +651,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
   }) => {
     // Uses the static WireMock mapping at /custom-base-url-test/v1/chat/completions
     // which returns a distinct response ID ("chatcmpl-custom-base-url")
-    const proxyResp = await createLlmProxy(request, "e2e-vk-custom-base");
+    const proxyResp = await createLlmProxy(request, "e2e-vk-custom-base", "personal");
     const proxy = await proxyResp.json();
 
     // Create a chat API key with a custom base URL pointing to the static WireMock mapping path

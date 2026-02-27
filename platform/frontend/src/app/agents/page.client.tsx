@@ -4,7 +4,15 @@ import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  Plus,
+  Search,
+  User,
+  Users,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -42,6 +50,7 @@ import {
   useProfilesPaginated,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
@@ -86,14 +95,47 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-function TeamsBadges({
+function VisibilityBadge({
+  scope,
   teams,
+  authorId,
+  authorName,
+  currentUserId,
 }: {
+  scope: string | undefined;
   teams: Array<{ id: string; name: string }> | undefined;
+  authorId: string | null | undefined;
+  authorName: string | null | undefined;
+  currentUserId: string | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
-  if (!teams || teams.length === 0) {
-    return <span className="text-sm text-muted-foreground">None</span>;
+
+  if (scope === "org") {
+    return (
+      <Badge variant="secondary" className="text-xs gap-1">
+        <Globe className="h-3 w-3" />
+        Organization
+      </Badge>
+    );
+  }
+
+  if (scope === "personal") {
+    const displayName =
+      currentUserId && authorId === currentUserId ? "Me" : authorName;
+    if (!displayName) return <span className="text-muted-foreground">-</span>;
+    return (
+      <Badge variant="secondary" className="text-xs gap-1">
+        <User className="h-3 w-3" />
+        {displayName}
+      </Badge>
+    );
+  }
+
+  // scope === "team" or undefined
+  const hasTeams = teams && teams.length > 0;
+
+  if (!hasTeams) {
+    return <span className="text-muted-foreground">-</span>;
   }
 
   const visibleTeams = teams.slice(0, MAX_TEAMS_TO_SHOW);
@@ -102,7 +144,8 @@ function TeamsBadges({
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs">
+        <Badge key={team.id} variant="secondary" className="text-xs gap-1">
+          <Users className="h-3 w-3" />
           {team.name}
         </Badge>
       ))}
@@ -168,7 +211,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     agentTypes: ["agent"],
   });
 
-  const { data: teams } = useQuery({
+  // Keep teams cache warm for AgentDialog
+  useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
@@ -177,16 +221,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     initialData: initialData?.teams,
   });
 
-  const { data: isAgentAdmin } = useHasPermissions({
-    agent: ["admin"],
-  });
-  const { data: canCreateAgent } = useHasPermissions({
-    agent: ["create"],
-  });
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
 
-  // Non-admin users with no teams cannot create agents
-  const cannotCreateDueToNoTeams =
-    !isAgentAdmin && (!teams || teams.length === 0);
+  // Users can always create personal agents, no team requirement needed
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
@@ -291,10 +330,27 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ),
       cell: ({ row }) => {
         const agent = row.original;
+        const scope = (agent as unknown as Record<string, unknown>)
+          .scope as string;
         return (
           <div className="font-medium">
             <div className="flex items-start gap-2">
               <span className="break-words min-w-0">{agent.name}</span>
+              {scope === "personal" ? (
+                <Badge
+                  variant="outline"
+                  className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs shrink-0"
+                >
+                  Personal
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="bg-green-500/10 text-green-600 border-green-500/30 text-xs shrink-0"
+                >
+                  Shared
+                </Badge>
+              )}
               {agent.labels && agent.labels.length > 0 && (
                 <LabelTags labels={agent.labels} />
               )}
@@ -352,29 +408,38 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return <div>{subagentsCount}</div>;
       },
     },
-    {
-      id: "team",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Teams
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <TeamsBadges
-          teams={
-            row.original.teams as unknown as Array<{
-              id: string;
-              name: string;
-            }>
-          }
-        />
-      ),
-    },
+    ...(isAgentAdmin
+      ? [
+          {
+            id: "team",
+            header: "Accessible to:",
+            enableSorting: false,
+            cell: ({ row }: { row: { original: AgentData } }) => (
+              <VisibilityBadge
+                scope={
+                  (row.original as unknown as Record<string, unknown>)
+                    .scope as string
+                }
+                teams={
+                  row.original.teams as unknown as Array<{
+                    id: string;
+                    name: string;
+                  }>
+                }
+                authorId={
+                  (row.original as unknown as Record<string, unknown>)
+                    .authorId as string | null
+                }
+                authorName={
+                  (row.original as unknown as Record<string, unknown>)
+                    .authorName as string | null
+                }
+                currentUserId={currentUserId}
+              />
+            ),
+          } satisfies ColumnDef<AgentData>,
+        ]
+      : []),
     {
       id: "actions",
       header: "Actions",
@@ -382,9 +447,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const scope = (agent as unknown as Record<string, unknown>).scope as
+          | string
+          | undefined;
+        const authorId = (agent as unknown as Record<string, unknown>)
+          .authorId as string | null | undefined;
+        const isPersonal = scope === "personal";
+        const isOwner = !!currentUserId && authorId === currentUserId;
+        const canModify = !!isAgentAdmin || (isPersonal && isOwner);
         return (
           <AgentActions
             agent={agent}
+            canModify={canModify}
             onConnect={setConnectingAgent}
             onEdit={(agentData) => {
               setEditingAgent(agentData);
@@ -422,12 +496,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             permissions={{ agent: ["create"] }}
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
-            disabled={cannotCreateDueToNoTeams}
-            tooltip={
-              canCreateAgent && cannotCreateDueToNoTeams
-                ? "You need to be a member of at least one team to create agents"
-                : undefined
-            }
           >
             <Plus className="mr-2 h-4 w-4" />
             Create Agent

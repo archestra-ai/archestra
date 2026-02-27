@@ -16,9 +16,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Start with better-auth defaults
   ...defaultStatements,
   // Override with Archestra-specific actions
-  agent: ["create", "read", "update", "delete", "admin"],
-  mcpGateway: ["create", "read", "update", "delete", "admin"],
-  llmProxy: ["create", "read", "update", "delete", "admin"],
+  agent: ["create", "read", "update", "delete", "team-admin", "admin"],
+  mcpGateway: ["create", "read", "update", "delete", "team-admin", "admin"],
+  llmProxy: ["create", "read", "update", "delete", "team-admin", "admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   dualLlmConfig: ["create", "read", "update", "delete"],
@@ -48,9 +48,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {
-  agent: ["create", "read", "update", "delete"],
-  mcpGateway: ["create", "read", "update", "delete"],
-  llmProxy: ["create", "read", "update", "delete"],
+  agent: ["create", "read", "update", "delete", "team-admin"],
+  mcpGateway: ["create", "read", "update", "delete", "team-admin"],
+  llmProxy: ["create", "read", "update", "delete", "team-admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
@@ -74,9 +74,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  agent: ["read"],
-  mcpGateway: ["read"],
-  llmProxy: ["read"],
+  agent: ["create", "read", "update", "delete"],
+  mcpGateway: ["create", "read", "update", "delete"],
+  llmProxy: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["read"],
   interaction: ["create", "read", "update", "delete"],

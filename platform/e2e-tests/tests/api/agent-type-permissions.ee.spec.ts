@@ -8,6 +8,9 @@ import { expect, test } from "./fixtures";
  * correctly enforces access control. A user with permissions on one resource
  * should NOT be able to access the other two.
  *
+ * Also verifies scope-based access: members/editors can only CRUD personal
+ * agents, while admins can CRUD both personal and shared (team/org) agents.
+ *
  * These tests temporarily change the member user's role to a custom role,
  * then restore it after each test.
  */
@@ -20,15 +23,13 @@ test.describe("Agent Type Permission Isolation", () => {
     makeApiRequest,
     createRole,
     deleteRole,
+    createMcpGateway,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
-    getTeamByName,
   }) => {
     const organizationId = await getActiveOrganizationId(request);
     const timestamp = Date.now();
-
-    // Get the marketing team (member user belongs to it)
-    const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
 
     // Create a custom role with only mcpGateway permissions
     const roleResponse = await createRole(request, {
@@ -94,19 +95,12 @@ test.describe("Agent Type Permission Isolation", () => {
       });
       expect(llmProxyResponse.status()).toBe(403);
 
-      // Member should be able to create an MCP gateway (non-admin must specify team)
-      const createGwResponse = await makeApiRequest({
-        request: memberRequest,
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: {
-          name: `test-gw-${timestamp}`,
-          agentType: "mcp_gateway",
-          teams: [marketingTeam.id],
-        },
-        ignoreStatusCheck: true,
-      });
-      expect(createGwResponse.status()).toBe(200);
+      // Member should be able to create a personal MCP gateway
+      const createGwResponse = await createMcpGateway(
+        memberRequest,
+        `test-gw-${timestamp}`,
+        "personal",
+      );
       const createdGw = await createGwResponse.json();
 
       // Member should be FORBIDDEN from creating an agent
@@ -117,7 +111,7 @@ test.describe("Agent Type Permission Isolation", () => {
         data: {
           name: `test-agent-${timestamp}`,
           agentType: "agent",
-          teams: [marketingTeam.id],
+          scope: "personal",
         },
         ignoreStatusCheck: true,
       });
@@ -131,19 +125,14 @@ test.describe("Agent Type Permission Isolation", () => {
         data: {
           name: `test-proxy-${timestamp}`,
           agentType: "llm_proxy",
-          teams: [marketingTeam.id],
+          scope: "personal",
         },
         ignoreStatusCheck: true,
       });
       expect(createProxyResponse.status()).toBe(403);
 
       // Clean up the created gateway
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/agents/${createdGw.id}`,
-        ignoreStatusCheck: true,
-      });
+      await deleteAgent(request, createdGw.id);
     } finally {
       // Restore original role
       await makeApiRequest({
@@ -166,15 +155,13 @@ test.describe("Agent Type Permission Isolation", () => {
     makeApiRequest,
     createRole,
     deleteRole,
+    createLlmProxy,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
-    getTeamByName,
   }) => {
     const organizationId = await getActiveOrganizationId(request);
     const timestamp = Date.now();
-
-    // Get the marketing team (member user belongs to it)
-    const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
 
     // Create a custom role with only llmProxy permissions
     const roleResponse = await createRole(request, {
@@ -237,28 +224,16 @@ test.describe("Agent Type Permission Isolation", () => {
       });
       expect(mcpGwResponse.status()).toBe(403);
 
-      // Member should be able to create an LLM proxy (non-admin must specify team)
-      const createProxyResponse = await makeApiRequest({
-        request: memberRequest,
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: {
-          name: `test-proxy-${timestamp}`,
-          agentType: "llm_proxy",
-          teams: [marketingTeam.id],
-        },
-        ignoreStatusCheck: true,
-      });
-      expect(createProxyResponse.status()).toBe(200);
+      // Member should be able to create a personal LLM proxy
+      const createProxyResponse = await createLlmProxy(
+        memberRequest,
+        `test-proxy-${timestamp}`,
+        "personal",
+      );
       const createdProxy = await createProxyResponse.json();
 
       // Clean up the created proxy
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/agents/${createdProxy.id}`,
-        ignoreStatusCheck: true,
-      });
+      await deleteAgent(request, createdProxy.id);
     } finally {
       // Restore original role
       await makeApiRequest({
@@ -455,6 +430,9 @@ test.describe("Agent Type Permission Isolation", () => {
     makeApiRequest,
     createRole,
     deleteRole,
+    createLlmProxy,
+    createMcpGateway,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
   }) => {
@@ -462,28 +440,18 @@ test.describe("Agent Type Permission Isolation", () => {
     const timestamp = Date.now();
 
     // Admin creates an LLM proxy and an MCP gateway for testing
-    const proxyResponse = await makeApiRequest({
+    const proxyResponse = await createLlmProxy(
       request,
-      method: "post",
-      urlSuffix: "/api/agents",
-      data: {
-        name: `perm-test-proxy-${timestamp}`,
-        agentType: "llm_proxy",
-        teams: [],
-      },
-    });
+      `perm-test-proxy-${timestamp}`,
+      "personal",
+    );
     const proxy = await proxyResponse.json();
 
-    const gwResponse = await makeApiRequest({
+    const gwResponse = await createMcpGateway(
       request,
-      method: "post",
-      urlSuffix: "/api/agents",
-      data: {
-        name: `perm-test-gw-${timestamp}`,
-        agentType: "mcp_gateway",
-        teams: [],
-      },
-    });
+      `perm-test-gw-${timestamp}`,
+      "personal",
+    );
     const gateway = await gwResponse.json();
 
     // Create a custom role with only mcpGateway permissions
@@ -588,18 +556,284 @@ test.describe("Agent Type Permission Isolation", () => {
         },
       });
       // Clean up (admin context)
+      await deleteAgent(request, proxy.id).catch(() => {});
+      await deleteAgent(request, gateway.id).catch(() => {});
+      await deleteRole(request, customRole.id);
+    }
+  });
+
+  test("admin can create shared agents with teams for all agent types", async ({
+    request,
+    makeApiRequest,
+    deleteAgent,
+    getTeamByName,
+  }) => {
+    const timestamp = Date.now();
+    const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
+
+    const agentTypes = ["agent", "mcp_gateway", "llm_proxy"] as const;
+    const createdIds: string[] = [];
+
+    try {
+      for (const agentType of agentTypes) {
+        const response = await makeApiRequest({
+          request,
+          method: "post",
+          urlSuffix: "/api/agents",
+          data: {
+            name: `admin-team-${agentType}-${timestamp}`,
+            agentType,
+            teams: [marketingTeam.id],
+            scope: "team",
+          },
+        });
+        const created = await response.json();
+        createdIds.push(created.id);
+
+        // Verify the agent was created with team assignment
+        const getResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: `/api/agents/${created.id}`,
+        });
+        const agent = await getResponse.json();
+        expect(agent.teams).toContainEqual(
+          expect.objectContaining({ id: marketingTeam.id }),
+        );
+        expect(agent.scope).toBe("team");
+      }
+    } finally {
+      for (const id of createdIds) {
+        await deleteAgent(request, id).catch(() => {});
+      }
+    }
+  });
+
+  test("user with team-admin can create and manage team-scoped agents", async ({
+    request,
+    makeApiRequest,
+    createRole,
+    deleteRole,
+    deleteAgent,
+    memberRequest,
+    getActiveOrganizationId,
+    getTeamByName,
+  }) => {
+    const organizationId = await getActiveOrganizationId(request);
+    const timestamp = Date.now();
+    const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
+
+    // Create a role with CRUD + team-admin but no admin
+    const roleResponse = await createRole(request, {
+      name: `team_admin_${timestamp}`,
+      permission: {
+        agent: ["read", "create", "update", "delete", "team-admin"],
+        mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+        llmProxy: ["read", "create", "update", "delete", "team-admin"],
+      },
+    });
+    const customRole = await roleResponse.json();
+
+    const membersResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/auth/organization/list-members",
+    });
+    const membersData = await membersResponse.json();
+    const memberMembership = membersData.members.find(
+      (m: { user: { email: string } }) => m.user.email === MEMBER_EMAIL,
+    );
+    const originalRole = memberMembership.role;
+    const createdIds: string[] = [];
+
+    try {
       await makeApiRequest({
         request,
-        method: "delete",
-        urlSuffix: `/api/agents/${proxy.id}`,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: customRole.role,
+          organizationId,
+        },
+      });
+
+      // User with team-admin should be able to create team-scoped agents
+      for (const agentType of ["agent", "mcp_gateway", "llm_proxy"]) {
+        const resp = await makeApiRequest({
+          request: memberRequest,
+          method: "post",
+          urlSuffix: "/api/agents",
+          data: {
+            name: `team-admin-${agentType}-${timestamp}`,
+            agentType,
+            teams: [marketingTeam.id],
+            scope: "team",
+          },
+          ignoreStatusCheck: true,
+        });
+        expect(resp.status()).toBe(200);
+        const created = await resp.json();
+        createdIds.push(created.id);
+
+        // User with team-admin should be able to update team-scoped agents
+        const updateResp = await makeApiRequest({
+          request: memberRequest,
+          method: "put",
+          urlSuffix: `/api/agents/${created.id}`,
+          data: { name: `updated-team-admin-${agentType}-${timestamp}` },
+          ignoreStatusCheck: true,
+        });
+        expect(updateResp.status()).toBe(200);
+      }
+
+      // User with team-admin should be FORBIDDEN from creating org-scoped agents
+      const orgResp = await makeApiRequest({
+        request: memberRequest,
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `team-admin-org-agent-${timestamp}`,
+          agentType: "agent",
+          scope: "org",
+        },
         ignoreStatusCheck: true,
       });
+      expect(orgResp.status()).toBe(403);
+
+      // User with team-admin should be able to delete team-scoped agents
+      for (const id of createdIds) {
+        const deleteResp = await makeApiRequest({
+          request: memberRequest,
+          method: "delete",
+          urlSuffix: `/api/agents/${id}`,
+          ignoreStatusCheck: true,
+        });
+        expect(deleteResp.status()).toBe(200);
+      }
+      createdIds.length = 0;
+    } finally {
       await makeApiRequest({
         request,
-        method: "delete",
-        urlSuffix: `/api/agents/${gateway.id}`,
-        ignoreStatusCheck: true,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: originalRole,
+          organizationId,
+        },
       });
+      for (const id of createdIds) {
+        await deleteAgent(request, id).catch(() => {});
+      }
+      await deleteRole(request, customRole.id);
+    }
+  });
+
+  test("non-admin user can only create personal agents, not shared", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    createLlmProxy,
+    createMcpGateway,
+    createRole,
+    deleteRole,
+    deleteAgent,
+    memberRequest,
+    getActiveOrganizationId,
+    getTeamByName,
+  }) => {
+    const organizationId = await getActiveOrganizationId(request);
+    const timestamp = Date.now();
+    const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
+
+    // Create a role with create+read on all types but no admin
+    const roleResponse = await createRole(request, {
+      name: `no_admin_${timestamp}`,
+      permission: {
+        agent: ["read", "create"],
+        mcpGateway: ["read", "create"],
+        llmProxy: ["read", "create"],
+      },
+    });
+    const customRole = await roleResponse.json();
+
+    const membersResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/auth/organization/list-members",
+    });
+    const membersData = await membersResponse.json();
+    const memberMembership = membersData.members.find(
+      (m: { user: { email: string } }) => m.user.email === MEMBER_EMAIL,
+    );
+    const originalRole = memberMembership.role;
+    const createdIds: string[] = [];
+
+    try {
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: customRole.role,
+          organizationId,
+        },
+      });
+
+      // Member should be FORBIDDEN from creating shared (team-scoped) agents
+      for (const agentType of ["agent", "mcp_gateway", "llm_proxy"]) {
+        const withTeams = await makeApiRequest({
+          request: memberRequest,
+          method: "post",
+          urlSuffix: "/api/agents",
+          data: {
+            name: `non-admin-team-${agentType}-${timestamp}`,
+            agentType,
+            teams: [marketingTeam.id],
+            scope: "team",
+          },
+          ignoreStatusCheck: true,
+        });
+        expect(withTeams.status()).toBe(403);
+      }
+
+      // Member should be able to create personal agents for all types
+      const agentResp = await createAgent(
+        memberRequest,
+        `non-admin-personal-agent-${timestamp}`,
+        "personal",
+      );
+      createdIds.push((await agentResp.json()).id);
+
+      const gwResp = await createMcpGateway(
+        memberRequest,
+        `non-admin-personal-gw-${timestamp}`,
+        "personal",
+      );
+      createdIds.push((await gwResp.json()).id);
+
+      const proxyResp = await createLlmProxy(
+        memberRequest,
+        `non-admin-personal-proxy-${timestamp}`,
+        "personal",
+      );
+      createdIds.push((await proxyResp.json()).id);
+    } finally {
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: originalRole,
+          organizationId,
+        },
+      });
+      for (const id of createdIds) {
+        await deleteAgent(request, id).catch(() => {});
+      }
       await deleteRole(request, customRole.id);
     }
   });

@@ -52,6 +52,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       const agentResponse = await createAgent(
         request,
         `JWKS E2E Test ${Date.now()}`,
+        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;
@@ -144,6 +145,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       const agentResponse = await createAgent(
         request,
         `JWKS Reject Test ${Date.now()}`,
+        "personal",
       );
       const agent = await agentResponse.json();
       profileId = agent.id;
@@ -190,6 +192,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     const agentResponse = await createAgent(
       request,
       `No IdP Test ${Date.now()}`,
+      "personal",
     );
     const agent = await agentResponse.json();
     const profileId = agent.id;

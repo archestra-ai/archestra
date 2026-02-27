@@ -9,10 +9,13 @@ import {
   ChevronUp,
   DollarSign,
   Eye,
+  Globe,
   Plus,
   Route,
   Search,
   Server,
+  User,
+  Users,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -46,6 +49,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
@@ -90,23 +95,60 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-function TeamsBadges({
+function VisibilityBadge({
+  scope,
   teams,
+  authorId,
+  authorName,
+  currentUserId,
 }: {
+  scope: string | undefined;
   teams: Array<{ id: string; name: string }> | undefined;
+  authorId: string | null | undefined;
+  authorName: string | null | undefined;
+  currentUserId: string | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
-  if (!teams || teams.length === 0) {
-    return <span className="text-sm text-muted-foreground">None</span>;
+
+  const scopeBadge =
+    scope === "org" ? (
+      <Badge variant="secondary" className="text-xs gap-1">
+        <Globe className="h-3 w-3" />
+        Organization
+      </Badge>
+    ) : scope === "personal" ? (
+      (() => {
+        const displayName =
+          currentUserId && authorId === currentUserId ? "Me" : authorName;
+        return displayName ? (
+          <Badge variant="secondary" className="text-xs gap-1">
+            <User className="h-3 w-3" />
+            {displayName}
+          </Badge>
+        ) : null;
+      })()
+    ) : null;
+
+  const hasTeams = teams && teams.length > 0;
+
+  if (!scopeBadge && !hasTeams) {
+    return (
+      <Badge variant="secondary" className="text-xs gap-1">
+        <Users className="h-3 w-3" />
+        Team
+      </Badge>
+    );
   }
 
-  const visibleTeams = teams.slice(0, MAX_TEAMS_TO_SHOW);
-  const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
+  const visibleTeams = hasTeams ? teams.slice(0, MAX_TEAMS_TO_SHOW) : [];
+  const remainingTeams = hasTeams ? teams.slice(MAX_TEAMS_TO_SHOW) : [];
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
+      {scopeBadge}
       {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs">
+        <Badge key={team.id} variant="secondary" className="text-xs gap-1">
+          <Users className="h-3 w-3" />
           {team.name}
         </Badge>
       ))}
@@ -184,6 +226,10 @@ function McpGateways({
     },
     initialData: initialData?.teams,
   });
+
+  const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
@@ -282,10 +328,27 @@ function McpGateways({
       ),
       cell: ({ row }) => {
         const agent = row.original;
+        const scope = (agent as unknown as Record<string, unknown>)
+          .scope as string;
         return (
           <div className="font-medium">
             <div className="flex items-center gap-2">
               {agent.name}
+              {scope === "personal" ? (
+                <Badge
+                  variant="outline"
+                  className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs shrink-0"
+                >
+                  Personal
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="bg-green-500/10 text-green-600 border-green-500/30 text-xs shrink-0"
+                >
+                  Shared
+                </Badge>
+              )}
               {agent.agentType === "profile" && (
                 <TooltipProvider>
                   <Tooltip>
@@ -361,29 +424,38 @@ function McpGateways({
         return <div>{subagentsCount}</div>;
       },
     },
-    {
-      id: "team",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Teams
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <TeamsBadges
-          teams={
-            row.original.teams as unknown as Array<{
-              id: string;
-              name: string;
-            }>
-          }
-        />
-      ),
-    },
+    ...(isAdmin
+      ? [
+          {
+            id: "team",
+            header: "Accessible to:",
+            enableSorting: false,
+            cell: ({ row }: { row: { original: GatewayData } }) => (
+              <VisibilityBadge
+                scope={
+                  (row.original as unknown as Record<string, unknown>)
+                    .scope as string
+                }
+                teams={
+                  row.original.teams as unknown as Array<{
+                    id: string;
+                    name: string;
+                  }>
+                }
+                authorId={
+                  (row.original as unknown as Record<string, unknown>)
+                    .authorId as string | null
+                }
+                authorName={
+                  (row.original as unknown as Record<string, unknown>)
+                    .authorName as string | null
+                }
+                currentUserId={currentUserId}
+              />
+            ),
+          } satisfies ColumnDef<GatewayData>,
+        ]
+      : []),
     {
       id: "actions",
       header: "Actions",

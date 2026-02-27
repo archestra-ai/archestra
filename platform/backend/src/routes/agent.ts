@@ -4,8 +4,9 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
+  requireAgentModifyPermission,
 } from "@/auth";
-import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
+import { AgentLabelModel, AgentModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   AgentVersionsResponseSchema,
@@ -246,33 +247,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       checker.require(agentType, "create");
 
-      // Validate team assignment for non-admin users
+      // Validate scope-based permissions for agent creation
       if (!checker.isAdmin(agentType)) {
-        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-        if (body.teams.length === 0) {
-          // Non-admin users must select at least one team they're a member of
-          if (userTeamIds.length === 0) {
+        const scope = body.scope ?? "personal";
+        if (scope === "org") {
+          throw new ApiError(403, "Only admins can create org-scoped agents");
+        }
+        if (scope === "team" || body.teams.length > 0) {
+          if (!checker.isTeamAdmin(agentType)) {
             throw new ApiError(
               403,
-              "You must be a member of at least one team to create an agent",
+              "You need team-admin permission to create team-scoped agents",
             );
           }
-          throw new ApiError(400, "You must assign at least one team");
-        }
-
-        // Verify user is a member of all specified teams
-        const userTeamIdSet = new Set(userTeamIds);
-        const invalidTeams = body.teams.filter((id) => !userTeamIdSet.has(id));
-        if (invalidTeams.length > 0) {
-          throw new ApiError(
-            403,
-            "You can only assign teams you are a member of",
-          );
         }
       }
 
-      const agent = await AgentModel.create(body);
+      // Omit teams if scope is not 'team' — scope takes precedence
+      const createData = {
+        ...body,
+        ...(body.scope !== "team" && { teams: [] }),
+      };
+      const agent = await AgentModel.create(createData, user.id);
       const labelKeys = await AgentLabelModel.getAllKeys();
 
       // We need to re-init metrics with the new label keys in case label keys changed.
@@ -367,31 +363,43 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Validate team assignment for non-admin users if teams are being updated
-      if (body.teams !== undefined) {
-        if (!checker.isAdmin(existingAgent.agentType)) {
-          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      // Enforce scope-based modify permissions on the existing agent
+      requireAgentModifyPermission({
+        checker,
+        agentType: existingAgent.agentType,
+        agentScope: existingAgent.scope,
+        agentAuthorId: existingAgent.authorId,
+        userId: user.id,
+      });
 
-          if (body.teams.length === 0) {
-            // Non-admin users must assign at least one team
-            throw new ApiError(400, "You must assign at least one team");
-          }
-
-          // Verify user is a member of all specified teams
-          const userTeamIdSet = new Set(userTeamIds);
-          const invalidTeams = body.teams.filter(
-            (teamId) => !userTeamIdSet.has(teamId),
-          );
-          if (invalidTeams.length > 0) {
+      // Validate scope escalation for non-admin users
+      if (!checker.isAdmin(existingAgent.agentType)) {
+        if (body.scope === "org") {
+          throw new ApiError(403, "Only admins can set scope to org");
+        }
+        if (body.scope === "team" || (body.teams && body.teams.length > 0)) {
+          if (!checker.isTeamAdmin(existingAgent.agentType)) {
             throw new ApiError(
               403,
-              "You can only assign teams you are a member of",
+              "You need team-admin permission to set scope to team",
             );
           }
         }
       }
 
-      const agent = await AgentModel.update(id, body);
+      // Prevent downgrading shared agents to personal
+      if (body.scope === "personal" && existingAgent.scope !== "personal") {
+        throw new ApiError(400, "Shared agents cannot be made personal");
+      }
+
+      // Omit teams if scope is not 'team' — scope takes precedence
+      const updateData = {
+        ...body,
+        ...((body.scope ?? existingAgent.scope) !== "team" &&
+          body.teams !== undefined && { teams: [] }),
+      };
+
+      const agent = await AgentModel.update(id, updateData);
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");
@@ -438,6 +446,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
+
+      // Enforce scope-based modify permissions
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        userId: user.id,
+      });
 
       const success = await AgentModel.delete(id);
 

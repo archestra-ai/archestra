@@ -35,6 +35,7 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useAllPermissions } from "@/lib/auth.query";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,11 @@ export function McpAssignmentsDialog({
   // Fetch all profiles
   const { data: allProfiles = [], isPending: isLoadingProfiles } =
     useProfiles();
+
+  // Fetch user permissions to determine admin/editor status
+  const { data: permissions } = useAllPermissions();
+  const isAgentAdmin = permissions?.agent?.includes("admin") ?? false;
+  const isMcpGatewayAdmin = permissions?.mcpGateway?.includes("admin") ?? false;
 
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });
@@ -276,13 +282,16 @@ export function McpAssignmentsDialog({
   const isLoading = isLoadingTools || isLoadingAssignments || isLoadingProfiles;
 
   // Split profiles into two groups: Profiles (MCP) and Agents
+  // Hide org-scoped agents/gateways from member users (admins and editors can see them)
   const { mcpProfiles, agents } = useMemo(() => {
     const mcp: Profile[] = [];
     const agent: Profile[] = [];
     for (const profile of allProfiles) {
       if (profile.agentType === "mcp_gateway") {
+        if (profile.scope === "org" && !isMcpGatewayAdmin) continue;
         mcp.push(profile);
       } else if (profile.agentType === "agent") {
+        if (profile.scope === "org" && !isAgentAdmin) continue;
         agent.push(profile);
       }
     }
@@ -295,7 +304,7 @@ export function McpAssignmentsDialog({
     mcp.sort(sortByAssignments);
     agent.sort(sortByAssignments);
     return { mcpProfiles: mcp, agents: agent };
-  }, [allProfiles, assignmentsByProfile]);
+  }, [allProfiles, assignmentsByProfile, isAgentAdmin, isMcpGatewayAdmin]);
 
   // Handle toggling a profile on/off from the combobox
   const handleProfileToggle = useCallback(

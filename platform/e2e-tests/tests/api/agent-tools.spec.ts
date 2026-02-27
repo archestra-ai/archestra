@@ -34,6 +34,7 @@ test.describe("Agent Tools API", () => {
       const agentResponse = await createAgent(
         request,
         "Test Agent for Filtering",
+        "personal",
       );
       const agent = await agentResponse.json();
 
@@ -66,6 +67,7 @@ test.describe("Agent Tools API", () => {
       const agentResponse = await createAgent(
         request,
         "Test Agent for Skip Pagination",
+        "personal",
       );
       const agent = await agentResponse.json();
 
@@ -102,10 +104,10 @@ test.describe("Agent Tools API", () => {
       makeApiRequest,
     }) => {
       // Create two agents
-      const agent1Response = await createAgent(request, "Test Agent 1");
+      const agent1Response = await createAgent(request, "Test Agent 1", "personal");
       const agent1 = await agent1Response.json();
 
-      const agent2Response = await createAgent(request, "Test Agent 2");
+      const agent2Response = await createAgent(request, "Test Agent 2", "personal");
       const agent2 = await agent2Response.json();
 
       // Query with skipPagination for agent1 only

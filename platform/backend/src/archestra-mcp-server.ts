@@ -426,8 +426,12 @@ export async function executeArchestraTool(
       }
 
       // Build create params - only agents get prompt fields
+      const scope =
+        (args?.scope as "team" | "personal" | "org") ??
+        (teams.length > 0 ? "team" : "org");
       const createParams: Parameters<typeof AgentModel.create>[0] = {
         name,
+        scope,
         teams,
         labels,
         agentType: targetAgentType as "agent" | "llm_proxy" | "mcp_gateway",
@@ -2203,6 +2207,12 @@ export function getArchestraMcpTools(): Tool[] {
             type: "string",
             description: "The name of the agent (required)",
           },
+          scope: {
+            type: "string",
+            enum: ["team", "personal", "org"],
+            description:
+              "The scope of the agent: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams)",
+          },
           labels: {
             type: "array",
             items: {
@@ -2249,6 +2259,12 @@ export function getArchestraMcpTools(): Tool[] {
             type: "string",
             description: "The name of the LLM proxy (required)",
           },
+          scope: {
+            type: "string",
+            enum: ["team", "personal", "org"],
+            description:
+              "The scope of the LLM proxy: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams)",
+          },
           labels: {
             type: "array",
             items: {
@@ -2282,6 +2298,12 @@ export function getArchestraMcpTools(): Tool[] {
           name: {
             type: "string",
             description: "The name of the MCP gateway (required)",
+          },
+          scope: {
+            type: "string",
+            enum: ["team", "personal", "org"],
+            description:
+              "The scope of the MCP gateway: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams)",
           },
           labels: {
             type: "array",

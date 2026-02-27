@@ -46,6 +46,7 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
           teams: [],
           agentType: "llm_proxy",
           identityProviderId,
+          scope: "personal",
         },
       });
       const proxy = (await proxyResponse.json()) as { id: string };
@@ -119,6 +120,7 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
           teams: [],
           agentType: "llm_proxy",
           identityProviderId,
+          scope: "personal",
         },
       });
       const proxy = (await proxyResponse.json()) as { id: string };
@@ -162,6 +164,7 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
     const proxyResponse = await createLlmProxy(
       request,
       `No IdP LLM Proxy ${Date.now()}`,
+      "personal",
     );
     const proxy = await proxyResponse.json();
     const proxyId = proxy.id;

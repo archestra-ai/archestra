@@ -414,6 +414,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `Tool Persistence Test - ${config.providerName}`,
+        "personal",
       );
       const agent = await createResponse.json();
       agentId = agent.id;
@@ -482,6 +483,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `Tool Persistence Idempotency Test - ${config.providerName}`,
+        "personal",
       );
       const agent = await createResponse.json();
       agentId = agent.id;

@@ -10892,6 +10892,8 @@ export type GetAgentsResponses = {
         data: Array<{
             id: string;
             organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             isDemo: boolean;
             isDefault: boolean;
@@ -10951,6 +10953,7 @@ export type GetAgentsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            authorName?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -10968,6 +10971,7 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
@@ -10982,7 +10986,7 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
-        teams: Array<string>;
+        teams?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -11061,6 +11065,8 @@ export type CreateAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -11120,6 +11126,7 @@ export type CreateAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -11207,6 +11214,8 @@ export type GetAllAgentsResponses = {
     200: Array<{
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -11266,6 +11275,7 @@ export type GetAllAgentsResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     }>;
 };
 
@@ -11344,6 +11354,8 @@ export type GetDefaultMcpGatewayResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -11403,6 +11415,7 @@ export type GetDefaultMcpGatewayResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -11481,6 +11494,8 @@ export type GetDefaultLlmProxyResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -11540,6 +11555,7 @@ export type GetDefaultLlmProxyResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -11699,6 +11715,8 @@ export type GetAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -11758,6 +11776,7 @@ export type GetAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -11766,6 +11785,7 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body?: {
         organizationId?: string;
+        scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
@@ -11861,6 +11881,8 @@ export type UpdateAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -11920,6 +11942,7 @@ export type UpdateAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -12001,6 +12024,8 @@ export type GetAgentVersionsResponses = {
         current: {
             id: string;
             organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             isDemo: boolean;
             isDefault: boolean;
@@ -12060,6 +12085,7 @@ export type GetAgentVersionsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            authorName?: string | null;
         };
         history: Array<{
             version: number;
@@ -12152,6 +12178,8 @@ export type RollbackAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo: boolean;
         isDefault: boolean;
@@ -12211,6 +12239,7 @@ export type RollbackAgentResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        authorName?: string | null;
     };
 };
 
@@ -29728,7 +29757,7 @@ export type GetRolesResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -29742,7 +29771,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
     };
     path?: never;
@@ -29819,7 +29848,7 @@ export type CreateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -29992,7 +30021,7 @@ export type GetRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -30006,7 +30035,7 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
     };
     path: {
@@ -30088,7 +30117,7 @@ export type UpdateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -32997,7 +33026,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
     };
 };
 

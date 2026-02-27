@@ -57,6 +57,7 @@ const actionLabels: Record<Action, string> = {
   read: "Read",
   update: "Update",
   delete: "Delete",
+  "team-admin": "Team Admin",
   admin: "Admin",
   cancel: "Cancel",
 };

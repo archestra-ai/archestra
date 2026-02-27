@@ -654,6 +654,7 @@ for (const config of testConfigs) {
       const createResponse = await createAgent(
         request,
         `${config.providerName} Compression Enabled Test Profile`,
+        "personal",
       );
       const profile = await createResponse.json();
       profileId = profile.id;
@@ -689,6 +690,7 @@ for (const config of testConfigs) {
       const createResponse = await createAgent(
         request,
         `${config.providerName} Compression Disabled Test Profile`,
+        "personal",
       );
       const profile = await createResponse.json();
       profileId = profile.id;

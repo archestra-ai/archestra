@@ -176,12 +176,15 @@ export async function closeOpenDialogs(
 export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   page,
   catalogItemName,
+  gatewayName,
   timeoutMs,
 }: {
   page: Page;
   catalogItemName: string;
+  gatewayName?: string;
   timeoutMs?: number;
 }) {
+  const effectiveGatewayName = gatewayName ?? DEFAULT_MCP_GATEWAY_NAME;
   const waitTimeoutMs = timeoutMs ?? 60_000;
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("domcontentloaded");
@@ -225,7 +228,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   // via the "Add" combobox, which pre-selects all tools and creates the pill.
   const dialog = page.getByRole("dialog");
   const profilePill = dialog.getByRole("button", {
-    name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
+    name: new RegExp(`${effectiveGatewayName}.*\\(\\d+/\\d+\\)`),
   });
 
   const showMoreButton = dialog.getByRole("button", {
@@ -250,9 +253,9 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
         if (await addButton.isVisible().catch(() => false)) {
           await addButton.click();
           await page.waitForTimeout(300);
-          // Find and check the "Default MCP Gateway" checkbox item in the dropdown
+          // Find and check the gateway checkbox item in the dropdown
           const gatewayItem = page.getByRole("menuitemcheckbox", {
-            name: new RegExp(DEFAULT_MCP_GATEWAY_NAME),
+            name: new RegExp(effectiveGatewayName),
           });
           if (await gatewayItem.isVisible().catch(() => false)) {
             await gatewayItem.click();
@@ -285,6 +288,7 @@ export async function verifyToolCallResultViaApi({
   tokenToUse,
   toolName,
   cookieHeaders,
+  profileId,
 }: {
   request: APIRequestContext;
   expectedResult:
@@ -303,21 +307,28 @@ export async function verifyToolCallResultViaApi({
     | "org-token";
   toolName: string;
   cookieHeaders: string;
+  profileId?: string;
 }) {
-  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
-    headers: { Cookie: cookieHeaders },
-  });
-  if (defaultMcpGatewayResponse.error) {
-    throw new Error(
-      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
-    );
+  let effectiveProfileId: string;
+  if (profileId) {
+    effectiveProfileId = profileId;
+  } else {
+    const defaultMcpGatewayResponse =
+      await archestraApiSdk.getDefaultMcpGateway({
+        headers: { Cookie: cookieHeaders },
+      });
+    if (defaultMcpGatewayResponse.error) {
+      throw new Error(
+        `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
+      );
+    }
+    if (!defaultMcpGatewayResponse.data) {
+      throw new Error(
+        `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
+      );
+    }
+    effectiveProfileId = defaultMcpGatewayResponse.data.id;
   }
-  if (!defaultMcpGatewayResponse.data) {
-    throw new Error(
-      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
-    );
-  }
-  const defaultProfile = defaultMcpGatewayResponse.data;
 
   let token: string;
   if (tokenToUse === "default-team") {
@@ -334,7 +345,7 @@ export async function verifyToolCallResultViaApi({
 
   try {
     toolResult = await callMcpTool(request, {
-      profileId: defaultProfile.id,
+      profileId: effectiveProfileId,
       token,
       toolName,
       timeoutMs: 60_000,
@@ -477,6 +488,57 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
       `Failed to update agent: ${JSON.stringify(updateResponse.error)}`,
     );
   }
+}
+
+/**
+ * Create a team-scoped MCP Gateway via API.
+ * Requires admin cookieHeaders since only admins can create agents.
+ */
+export async function createTeamMcpGatewayViaApi({
+  cookieHeaders,
+  teamName,
+  gatewayName,
+}: {
+  cookieHeaders: string;
+  teamName: string;
+  gatewayName: string;
+}): Promise<{ id: string; name: string }> {
+  const teamsResponse = await archestraApiSdk.getTeams({
+    headers: { Cookie: cookieHeaders },
+  });
+  if (teamsResponse.error) {
+    throw new Error(
+      `Failed to get teams: ${JSON.stringify(teamsResponse.error)}`,
+    );
+  }
+  const team = teamsResponse.data?.find((t) => t.name === teamName);
+  if (!team) {
+    const teamNames = teamsResponse.data?.map((t) => t.name).join(", ");
+    throw new Error(
+      `Team "${teamName}" not found. Available teams: [${teamNames}]`,
+    );
+  }
+
+  const createResponse = await archestraApiSdk.createAgent({
+    headers: { Cookie: cookieHeaders },
+    body: {
+      name: gatewayName,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [team.id],
+    },
+  });
+  if (createResponse.error) {
+    throw new Error(
+      `Failed to create team MCP gateway: ${JSON.stringify(createResponse.error)}`,
+    );
+  }
+  if (!createResponse.data) {
+    throw new Error(
+      `No data returned from createAgent. Response: ${JSON.stringify(createResponse)}`,
+    );
+  }
+  return { id: createResponse.data.id, name: createResponse.data.name };
 }
 
 /**

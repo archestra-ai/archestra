@@ -15,6 +15,7 @@ import {
   assignEngineeringTeamToDefaultProfileViaApi,
   clickButton,
   closeOpenDialogs,
+  createTeamMcpGatewayViaApi,
   getVisibleCredentials,
   getVisibleStaticCredentials,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
@@ -180,10 +181,21 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       }
 
       if (user !== "Member") {
+        // Editor can't see org-scoped gateways, so create a team-scoped one
+        let teamGateway: { id: string; name: string } | undefined;
+        if (user === "Editor") {
+          teamGateway = await createTeamMcpGatewayViaApi({
+            cookieHeaders,
+            teamName: ENGINEERING_TEAM_NAME,
+            gatewayName: makeRandomString(10, "gw"),
+          });
+        }
+
         // Check TokenSelect shows correct credentials
         await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
           page,
           catalogItemName,
+          gatewayName: teamGateway?.name,
         });
         const visibleStaticCredentials =
           await getVisibleStaticCredentials(page);
@@ -219,6 +231,14 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             expectedLengthAfterRevoke,
           );
         }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
+
+        // Cleanup team gateway
+        if (teamGateway) {
+          await archestraApiSdk.deleteAgent({
+            path: { id: teamGateway.id },
+            headers: { Cookie: cookieHeaders },
+          });
+        }
       }
 
       // CLEANUP: Delete created catalog items and mcp servers
@@ -349,6 +369,12 @@ test("Verify tool calling using different static credentials", async ({
   const cookieHeaders = await extractCookieHeaders(adminPage);
   // Assign engineering team to default profile
   await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
+  // Create a team-scoped MCP gateway for editor (editor can't see org-scoped gateways)
+  const teamGateway = await createTeamMcpGatewayViaApi({
+    cookieHeaders,
+    teamName: ENGINEERING_TEAM_NAME,
+    gatewayName: makeRandomString(10, "gw"),
+  });
   // Create catalog item as Admin
   // Editor and Member cannot add items to MCP Registry
   const newCatalogItem = await addCustomSelfHostedCatalogItem({
@@ -411,6 +437,7 @@ test("Verify tool calling using different static credentials", async ({
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
+    gatewayName: teamGateway.name,
   });
   // Select editor static credential from dropdown
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
@@ -427,11 +454,16 @@ test("Verify tool calling using different static credentials", async ({
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     cookieHeaders,
+    profileId: teamGateway.id,
   });
 
   // CLEANUP: Delete existing created MCP servers / installations
   await archestraApiSdk.deleteInternalMcpCatalogItem({
     path: { id: newCatalogItem.id },
+    headers: { Cookie: cookieHeaders },
+  });
+  await archestraApiSdk.deleteAgent({
+    path: { id: teamGateway.id },
     headers: { Cookie: cookieHeaders },
   });
 });

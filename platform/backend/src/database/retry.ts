@@ -1,3 +1,12 @@
+/**
+ * Automatic retry logic for transient database connection errors.
+ *
+ * Drizzle ORM has no middleware/plugin system for query retry, and pg/pg-pool
+ * have no built-in retry support, so we implement it here at the pool level.
+ *
+ * @see https://github.com/brianc/node-postgres/issues/434
+ * @see https://neon.com/guides/building-resilient-applications-with-postgres
+ */
 import logger from "@/logging";
 
 /**

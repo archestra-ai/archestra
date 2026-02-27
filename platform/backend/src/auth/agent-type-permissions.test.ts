@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import {
@@ -6,6 +6,7 @@ import {
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
   isAgentTypeAdmin,
+  requireAgentModifyPermission,
   requireAgentTypePermission,
 } from "./agent-type-permissions";
 
@@ -508,6 +509,236 @@ describe("getAgentTypePermissionChecker", () => {
     checker.isAdmin("agent");
     checker.isAdmin("mcp_gateway");
     checker.isAdmin("llm_proxy");
+    checker.isTeamAdmin("agent");
     // If this reached here without issues, the synchronous pattern works
+  });
+
+  test("isTeamAdmin() returns correct values per agent type", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeCustomRole(org.id, {
+      role: "partial_team_admin",
+      permission: {
+        agent: ["read", "team-admin"],
+        mcpGateway: ["read"],
+        llmProxy: ["read", "team-admin"],
+      },
+    });
+    await makeMember(user.id, org.id, { role: "partial_team_admin" });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(checker.isTeamAdmin("agent")).toBe(true);
+    expect(checker.isTeamAdmin("profile")).toBe(true); // alias for agent
+    expect(checker.isTeamAdmin("mcp_gateway")).toBe(false);
+    expect(checker.isTeamAdmin("llm_proxy")).toBe(true);
+  });
+
+  test("editor role has team-admin permission", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: EDITOR_ROLE_NAME });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(checker.isTeamAdmin("agent")).toBe(true);
+    expect(checker.isTeamAdmin("mcp_gateway")).toBe(true);
+    expect(checker.isTeamAdmin("llm_proxy")).toBe(true);
+    expect(checker.isAdmin("agent")).toBe(false);
+  });
+
+  test("member role does not have team-admin permission", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(checker.isTeamAdmin("agent")).toBe(false);
+    expect(checker.isTeamAdmin("mcp_gateway")).toBe(false);
+    expect(checker.isTeamAdmin("llm_proxy")).toBe(false);
+  });
+});
+
+describe("requireAgentModifyPermission", () => {
+  test("admin bypasses all scope checks", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    // Admin can manage org-scoped agents
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "org",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).not.toThrow();
+
+    // Admin can manage team-scoped agents
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).not.toThrow();
+
+    // Admin can manage personal agents of other users
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "personal",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).not.toThrow();
+  });
+
+  test("team-admin can manage team-scoped agents but not org-scoped", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: EDITOR_ROLE_NAME });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    // Editor (team-admin) can manage team-scoped agents
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).not.toThrow();
+
+    // Editor cannot manage org-scoped agents
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "org",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
+  });
+
+  test("member cannot manage team-scoped or org-scoped agents", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    // Member cannot manage team-scoped agents
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
+
+    // Member cannot manage org-scoped agents
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "org",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
+  });
+
+  test("member can manage own personal agent but not others' personal agents", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
+
+    const checker = await getAgentTypePermissionChecker({
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    // Member can manage own personal agent
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "personal",
+        agentAuthorId: user.id,
+        userId: user.id,
+      }),
+    ).not.toThrow();
+
+    // Member cannot manage another user's personal agent
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "personal",
+        agentAuthorId: "other-user-id",
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
   });
 });

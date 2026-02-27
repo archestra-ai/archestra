@@ -609,6 +609,127 @@ test.describe("Agent Type Permission Isolation", () => {
     }
   });
 
+  test("user with team-admin can create and manage team-scoped agents", async ({
+    request,
+    makeApiRequest,
+    createRole,
+    deleteRole,
+    deleteAgent,
+    memberRequest,
+    getActiveOrganizationId,
+    getTeamByName,
+  }) => {
+    const organizationId = await getActiveOrganizationId(request);
+    const timestamp = Date.now();
+    const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
+
+    // Create a role with CRUD + team-admin but no admin
+    const roleResponse = await createRole(request, {
+      name: `team_admin_${timestamp}`,
+      permission: {
+        agent: ["read", "create", "update", "delete", "team-admin"],
+        mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+        llmProxy: ["read", "create", "update", "delete", "team-admin"],
+      },
+    });
+    const customRole = await roleResponse.json();
+
+    const membersResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/auth/organization/list-members",
+    });
+    const membersData = await membersResponse.json();
+    const memberMembership = membersData.members.find(
+      (m: { user: { email: string } }) => m.user.email === MEMBER_EMAIL,
+    );
+    const originalRole = memberMembership.role;
+    const createdIds: string[] = [];
+
+    try {
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: customRole.role,
+          organizationId,
+        },
+      });
+
+      // User with team-admin should be able to create team-scoped agents
+      for (const agentType of ["agent", "mcp_gateway", "llm_proxy"]) {
+        const resp = await makeApiRequest({
+          request: memberRequest,
+          method: "post",
+          urlSuffix: "/api/agents",
+          data: {
+            name: `team-admin-${agentType}-${timestamp}`,
+            agentType,
+            teams: [marketingTeam.id],
+            scope: "team",
+          },
+          ignoreStatusCheck: true,
+        });
+        expect(resp.status()).toBe(200);
+        const created = await resp.json();
+        createdIds.push(created.id);
+
+        // User with team-admin should be able to update team-scoped agents
+        const updateResp = await makeApiRequest({
+          request: memberRequest,
+          method: "put",
+          urlSuffix: `/api/agents/${created.id}`,
+          data: { name: `updated-team-admin-${agentType}-${timestamp}` },
+          ignoreStatusCheck: true,
+        });
+        expect(updateResp.status()).toBe(200);
+      }
+
+      // User with team-admin should be FORBIDDEN from creating org-scoped agents
+      const orgResp = await makeApiRequest({
+        request: memberRequest,
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `team-admin-org-agent-${timestamp}`,
+          agentType: "agent",
+          scope: "org",
+        },
+        ignoreStatusCheck: true,
+      });
+      expect(orgResp.status()).toBe(403);
+
+      // User with team-admin should be able to delete team-scoped agents
+      for (const id of createdIds) {
+        const deleteResp = await makeApiRequest({
+          request: memberRequest,
+          method: "delete",
+          urlSuffix: `/api/agents/${id}`,
+          ignoreStatusCheck: true,
+        });
+        expect(deleteResp.status()).toBe(200);
+      }
+      createdIds.length = 0;
+    } finally {
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: originalRole,
+          organizationId,
+        },
+      });
+      for (const id of createdIds) {
+        await deleteAgent(request, id).catch(() => {});
+      }
+      await deleteRole(request, customRole.id);
+    }
+  });
+
   test("non-admin user can only create personal agents, not shared", async ({
     request,
     makeApiRequest,

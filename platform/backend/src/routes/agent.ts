@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
+  requireAgentModifyPermission,
 } from "@/auth";
 import { AgentLabelModel, AgentModel } from "@/models";
 import { metrics } from "@/observability";
@@ -246,15 +247,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       checker.require(agentType, "create");
 
-      // Validate scope and team assignment for non-admin users
+      // Validate scope-based permissions for agent creation
       if (!checker.isAdmin(agentType)) {
-        // Only admins can set scope to 'org' or 'team'
-        if (
-          body.scope === "org" ||
-          body.scope === "team" ||
-          body.teams.length > 0
-        ) {
-          throw new ApiError(403, "Only admins can create shared agents");
+        const scope = body.scope ?? "personal";
+        if (scope === "org") {
+          throw new ApiError(403, "Only admins can create org-scoped agents");
+        }
+        if (scope === "team" || body.teams.length > 0) {
+          if (!checker.isTeamAdmin(agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to create team-scoped agents",
+            );
+          }
         }
       }
 
@@ -358,22 +363,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Validate scope and team assignment for non-admin users
+      // Enforce scope-based modify permissions on the existing agent
+      requireAgentModifyPermission({
+        checker,
+        agentType: existingAgent.agentType,
+        agentScope: existingAgent.scope,
+        agentAuthorId: existingAgent.authorId,
+        userId: user.id,
+      });
+
+      // Validate scope escalation for non-admin users
       if (!checker.isAdmin(existingAgent.agentType)) {
-        // Non-admins can only edit their own personal agents
-        if (
-          existingAgent.authorId !== user.id ||
-          existingAgent.scope !== "personal"
-        ) {
-          throw new ApiError(403, "You can only edit your own personal agents");
+        if (body.scope === "org") {
+          throw new ApiError(403, "Only admins can set scope to org");
         }
-        // Only admins can set scope to 'org' or 'team'
         if (
-          body.scope === "org" ||
           body.scope === "team" ||
           (body.teams && body.teams.length > 0)
         ) {
-          throw new ApiError(403, "Only admins can manage shared agents");
+          if (!checker.isTeamAdmin(existingAgent.agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to set scope to team",
+            );
+          }
         }
       }
 
@@ -437,15 +450,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Non-admins can only delete their own personal agents
-      if (!checker.isAdmin(agent.agentType)) {
-        if (agent.authorId !== user.id || agent.scope !== "personal") {
-          throw new ApiError(
-            403,
-            "You can only delete your own personal agents",
-          );
-        }
-      }
+      // Enforce scope-based modify permissions
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        userId: user.id,
+      });
 
       const success = await AgentModel.delete(id);
 

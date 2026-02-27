@@ -64,7 +64,7 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
       }
 
       for (const action of actions) {
-        if (!userActions.includes(action)) {
+        if (!(userActions as readonly string[]).includes(action)) {
           return false;
         }
       }
@@ -105,7 +105,9 @@ export function useMissingPermissions(
 
   for (const [resource, actions] of Object.entries(requiredPermissions)) {
     const userActions = userPermissions[resource as keyof Permissions] ?? [];
-    const missingActions = actions.filter((a) => !userActions.includes(a));
+    const missingActions = actions.filter(
+      (a) => !(userActions as readonly string[]).includes(a),
+    );
     if (missingActions.length > 0) {
       missing[resource as keyof Permissions] = missingActions;
     }
@@ -175,7 +177,7 @@ export function usePermissionMap<Key extends string>(
       }
 
       for (const action of actions) {
-        if (!userActions.includes(action)) {
+        if (!(userActions as readonly string[]).includes(action)) {
           hasAllPermissions = false;
           break;
         }

@@ -91,7 +91,7 @@ export function McpAssignmentsDialog({
   const { data: allProfiles = [], isPending: isLoadingProfiles } =
     useProfiles();
 
-  // Fetch user permissions to determine admin status
+  // Fetch user permissions to determine admin/editor status
   const { data: permissions } = useAllPermissions();
   const isAgentAdmin = permissions?.agent?.includes("admin") ?? false;
   const isMcpGatewayAdmin = permissions?.mcpGateway?.includes("admin") ?? false;
@@ -282,7 +282,7 @@ export function McpAssignmentsDialog({
   const isLoading = isLoadingTools || isLoadingAssignments || isLoadingProfiles;
 
   // Split profiles into two groups: Profiles (MCP) and Agents
-  // Hide org-scoped agents/gateways from non-admin users
+  // Hide org-scoped agents/gateways from member users (admins and editors can see them)
   const { mcpProfiles, agents } = useMemo(() => {
     const mcp: Profile[] = [];
     const agent: Profile[] = [];

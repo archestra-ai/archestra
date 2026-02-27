@@ -14,6 +14,7 @@ export const actions = [
   "read",
   "update",
   "delete",
+  "team-admin",
   "admin",
   "cancel",
 ] as const;

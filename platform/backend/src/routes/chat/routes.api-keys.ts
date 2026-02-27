@@ -439,10 +439,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Test the API key before saving
         try {
           await testProviderApiKey(apiKeyFromDB.provider, apiKeyValue);
-        } catch (_error) {
+        } catch (error) {
           throw new ApiError(
             400,
-            `Invalid API key: Failed to connect to ${capitalize(apiKeyFromDB.provider)}`,
+            `Invalid API key: Failed to connect to ${capitalize(apiKeyFromDB.provider)}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
 

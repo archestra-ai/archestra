@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.52](https://github.com/archestra-ai/archestra/compare/platform-v1.0.51...platform-v1.0.52) (2026-02-27)
+
+
+### Features
+
+* Introduce personal agents ([#3024](https://github.com/archestra-ai/archestra/issues/3024)) ([e63f4d4](https://github.com/archestra-ai/archestra/commit/e63f4d4211653fdc009b8e47bf4ca7ebf87f0f63))
+* refactor imagePullSecrets with existing secrets and registry credentials ([#3013](https://github.com/archestra-ai/archestra/issues/3013)) ([d3a5236](https://github.com/archestra-ai/archestra/commit/d3a5236ac515ab554726d9472e4784f66ba48d3c))
+* support OAuth for self-hosted MCP servers ([#3041](https://github.com/archestra-ai/archestra/issues/3041)) ([e6cefe4](https://github.com/archestra-ai/archestra/commit/e6cefe4fa1cae5e33bf257856793c7392937ebdb))
+
+
+### Miscellaneous Chores
+
+* **ci:** configure Sentry EU region URL for source map uploads ([#3040](https://github.com/archestra-ai/archestra/issues/3040)) ([a1d5bfd](https://github.com/archestra-ai/archestra/commit/a1d5bfd1dc934d7a212fcff6c00d3fdde85867f9))
+
 ## [1.0.51](https://github.com/archestra-ai/archestra/compare/platform-v1.0.50...platform-v1.0.51) (2026-02-26)
 
 

@@ -31,7 +31,7 @@ See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) fo
 
 ### Key Rotation
 
-If you need to change `ARCHESTRA_AUTH_SECRET`, you must re-encrypt all existing secrets with the new key. A standalone script is provided for this:
+If you need to change `ARCHESTRA_AUTH_SECRET`, you must re-encrypt all existing secrets with the new key. **Stop the application before running this script** to avoid race conditions with concurrent writes. A standalone script is provided for this:
 
 ```bash
 OLD_ARCHESTRA_AUTH_SECRET=<old-secret> \

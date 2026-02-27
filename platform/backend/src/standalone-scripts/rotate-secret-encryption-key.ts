@@ -10,6 +10,9 @@
  *   ARCHESTRA_DATABASE_URL=postgresql://user:pass@host:5432/db \
  *   npx tsx src/standalone-scripts/rotate-secret-encryption-key.ts
  *
+ * IMPORTANT: Stop the application before running this script to avoid race
+ * conditions with concurrent secret writes.
+ *
  * The script will:
  *   1. Derive encryption keys from both the old and new secrets
  *   2. Read all rows from the secret table

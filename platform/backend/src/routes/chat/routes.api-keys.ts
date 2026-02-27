@@ -194,7 +194,11 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         // then test the API key
         try {
-          await testProviderApiKey(body.provider, actualApiKeyValue);
+          await testProviderApiKey(
+            body.provider,
+            actualApiKeyValue,
+            body.baseUrl,
+          );
         } catch (_error) {
           throw new ApiError(
             400,
@@ -215,7 +219,11 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actualApiKeyValue = body.apiKey;
         // Test the API key before saving
         try {
-          await testProviderApiKey(body.provider, actualApiKeyValue);
+          await testProviderApiKey(
+            body.provider,
+            actualApiKeyValue,
+            body.baseUrl,
+          );
         } catch (_error) {
           throw new ApiError(
             400,
@@ -437,8 +445,16 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Test the API key before saving
+        // Use user-provided baseUrl if present, otherwise fall back to
+        // the existing baseUrl stored on the API key record.
+        const testBaseUrl =
+          body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
         try {
-          await testProviderApiKey(apiKeyFromDB.provider, apiKeyValue);
+          await testProviderApiKey(
+            apiKeyFromDB.provider,
+            apiKeyValue,
+            testBaseUrl,
+          );
         } catch (_error) {
           throw new ApiError(
             400,

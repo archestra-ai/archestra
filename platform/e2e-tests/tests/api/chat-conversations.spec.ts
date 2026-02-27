@@ -7,7 +7,7 @@ test.describe("Chat Conversations - Pin/Unpin", () => {
     createAgent,
     deleteAgent,
   }) => {
-    const agentResponse = await createAgent(request, "Pin Test Agent");
+    const agentResponse = await createAgent(request, "Pin Test Agent", "personal");
     const agent = await agentResponse.json();
 
     try {

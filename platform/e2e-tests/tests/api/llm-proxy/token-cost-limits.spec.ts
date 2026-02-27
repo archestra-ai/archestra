@@ -384,6 +384,7 @@ for (const config of testConfigs) {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Token Limit Test Profile`,
+          "personal",
         );
         const profile = await createResponse.json();
         profileId = profile.id;
@@ -551,6 +552,7 @@ for (const config of testConfigs) {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Token Limit OK Test Profile`,
+          "personal",
         );
         const profile = await createResponse.json();
         profileId = profile.id;

@@ -8,6 +8,9 @@ import { expect, test } from "./fixtures";
  * correctly enforces access control. A user with permissions on one resource
  * should NOT be able to access the other two.
  *
+ * Also verifies scope-based access: members/editors can only CRUD personal
+ * agents, while admins can CRUD both personal and shared (team/org) agents.
+ *
  * These tests temporarily change the member user's role to a custom role,
  * then restore it after each test.
  */
@@ -20,6 +23,8 @@ test.describe("Agent Type Permission Isolation", () => {
     makeApiRequest,
     createRole,
     deleteRole,
+    createMcpGateway,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
   }) => {
@@ -91,17 +96,11 @@ test.describe("Agent Type Permission Isolation", () => {
       expect(llmProxyResponse.status()).toBe(403);
 
       // Member should be able to create a personal MCP gateway
-      const createGwResponse = await makeApiRequest({
-        request: memberRequest,
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: {
-          name: `test-gw-${timestamp}`,
-          agentType: "mcp_gateway",
-        },
-        ignoreStatusCheck: true,
-      });
-      expect(createGwResponse.status()).toBe(200);
+      const createGwResponse = await createMcpGateway(
+        memberRequest,
+        `test-gw-${timestamp}`,
+        "personal",
+      );
       const createdGw = await createGwResponse.json();
 
       // Member should be FORBIDDEN from creating an agent
@@ -112,6 +111,7 @@ test.describe("Agent Type Permission Isolation", () => {
         data: {
           name: `test-agent-${timestamp}`,
           agentType: "agent",
+          scope: "personal",
         },
         ignoreStatusCheck: true,
       });
@@ -125,18 +125,14 @@ test.describe("Agent Type Permission Isolation", () => {
         data: {
           name: `test-proxy-${timestamp}`,
           agentType: "llm_proxy",
+          scope: "personal",
         },
         ignoreStatusCheck: true,
       });
       expect(createProxyResponse.status()).toBe(403);
 
       // Clean up the created gateway
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/agents/${createdGw.id}`,
-        ignoreStatusCheck: true,
-      });
+      await deleteAgent(request, createdGw.id);
     } finally {
       // Restore original role
       await makeApiRequest({
@@ -159,6 +155,8 @@ test.describe("Agent Type Permission Isolation", () => {
     makeApiRequest,
     createRole,
     deleteRole,
+    createLlmProxy,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
   }) => {
@@ -227,26 +225,15 @@ test.describe("Agent Type Permission Isolation", () => {
       expect(mcpGwResponse.status()).toBe(403);
 
       // Member should be able to create a personal LLM proxy
-      const createProxyResponse = await makeApiRequest({
-        request: memberRequest,
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: {
-          name: `test-proxy-${timestamp}`,
-          agentType: "llm_proxy",
-        },
-        ignoreStatusCheck: true,
-      });
-      expect(createProxyResponse.status()).toBe(200);
+      const createProxyResponse = await createLlmProxy(
+        memberRequest,
+        `test-proxy-${timestamp}`,
+        "personal",
+      );
       const createdProxy = await createProxyResponse.json();
 
       // Clean up the created proxy
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/agents/${createdProxy.id}`,
-        ignoreStatusCheck: true,
-      });
+      await deleteAgent(request, createdProxy.id);
     } finally {
       // Restore original role
       await makeApiRequest({
@@ -443,6 +430,9 @@ test.describe("Agent Type Permission Isolation", () => {
     makeApiRequest,
     createRole,
     deleteRole,
+    createLlmProxy,
+    createMcpGateway,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
   }) => {
@@ -450,28 +440,18 @@ test.describe("Agent Type Permission Isolation", () => {
     const timestamp = Date.now();
 
     // Admin creates an LLM proxy and an MCP gateway for testing
-    const proxyResponse = await makeApiRequest({
+    const proxyResponse = await createLlmProxy(
       request,
-      method: "post",
-      urlSuffix: "/api/agents",
-      data: {
-        name: `perm-test-proxy-${timestamp}`,
-        agentType: "llm_proxy",
-        teams: [],
-      },
-    });
+      `perm-test-proxy-${timestamp}`,
+      "personal",
+    );
     const proxy = await proxyResponse.json();
 
-    const gwResponse = await makeApiRequest({
+    const gwResponse = await createMcpGateway(
       request,
-      method: "post",
-      urlSuffix: "/api/agents",
-      data: {
-        name: `perm-test-gw-${timestamp}`,
-        agentType: "mcp_gateway",
-        teams: [],
-      },
-    });
+      `perm-test-gw-${timestamp}`,
+      "personal",
+    );
     const gateway = await gwResponse.json();
 
     // Create a custom role with only mcpGateway permissions
@@ -576,18 +556,8 @@ test.describe("Agent Type Permission Isolation", () => {
         },
       });
       // Clean up (admin context)
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/agents/${proxy.id}`,
-        ignoreStatusCheck: true,
-      });
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/agents/${gateway.id}`,
-        ignoreStatusCheck: true,
-      });
+      await deleteAgent(request, proxy.id).catch(() => {});
+      await deleteAgent(request, gateway.id).catch(() => {});
       await deleteRole(request, customRole.id);
     }
   });
@@ -595,6 +565,7 @@ test.describe("Agent Type Permission Isolation", () => {
   test("admin can create shared agents with teams for all agent types", async ({
     request,
     makeApiRequest,
+    deleteAgent,
     getTeamByName,
   }) => {
     const timestamp = Date.now();
@@ -613,14 +584,13 @@ test.describe("Agent Type Permission Isolation", () => {
             name: `admin-team-${agentType}-${timestamp}`,
             agentType,
             teams: [marketingTeam.id],
+            scope: "team",
           },
-          ignoreStatusCheck: true,
         });
-        expect(response.status()).toBe(200);
         const created = await response.json();
         createdIds.push(created.id);
 
-        // Verify the agent was created with team scope
+        // Verify the agent was created with team assignment
         const getResponse = await makeApiRequest({
           request,
           method: "get",
@@ -630,24 +600,24 @@ test.describe("Agent Type Permission Isolation", () => {
         expect(agent.teams).toContainEqual(
           expect.objectContaining({ id: marketingTeam.id }),
         );
+        expect(agent.scope).toBe("team");
       }
     } finally {
       for (const id of createdIds) {
-        await makeApiRequest({
-          request,
-          method: "delete",
-          urlSuffix: `/api/agents/${id}`,
-          ignoreStatusCheck: true,
-        });
+        await deleteAgent(request, id).catch(() => {});
       }
     }
   });
 
-  test("non-admin user cannot create shared agents with teams", async ({
+  test("non-admin user can only create personal agents, not shared", async ({
     request,
     makeApiRequest,
+    createAgent,
+    createLlmProxy,
+    createMcpGateway,
     createRole,
     deleteRole,
+    deleteAgent,
     memberRequest,
     getActiveOrganizationId,
     getTeamByName,
@@ -677,6 +647,7 @@ test.describe("Agent Type Permission Isolation", () => {
       (m: { user: { email: string } }) => m.user.email === MEMBER_EMAIL,
     );
     const originalRole = memberMembership.role;
+    const createdIds: string[] = [];
 
     try {
       await makeApiRequest({
@@ -690,8 +661,8 @@ test.describe("Agent Type Permission Isolation", () => {
         },
       });
 
+      // Member should be FORBIDDEN from creating shared (team-scoped) agents
       for (const agentType of ["agent", "mcp_gateway", "llm_proxy"]) {
-        // With teams → 403
         const withTeams = await makeApiRequest({
           request: memberRequest,
           method: "post",
@@ -700,33 +671,34 @@ test.describe("Agent Type Permission Isolation", () => {
             name: `non-admin-team-${agentType}-${timestamp}`,
             agentType,
             teams: [marketingTeam.id],
+            scope: "team",
           },
           ignoreStatusCheck: true,
         });
         expect(withTeams.status()).toBe(403);
-
-        // Without teams → 200 (personal agent)
-        const personal = await makeApiRequest({
-          request: memberRequest,
-          method: "post",
-          urlSuffix: "/api/agents",
-          data: {
-            name: `non-admin-personal-${agentType}-${timestamp}`,
-            agentType,
-          },
-          ignoreStatusCheck: true,
-        });
-        expect(personal.status()).toBe(200);
-
-        // Clean up the personal agent
-        const created = await personal.json();
-        await makeApiRequest({
-          request,
-          method: "delete",
-          urlSuffix: `/api/agents/${created.id}`,
-          ignoreStatusCheck: true,
-        });
       }
+
+      // Member should be able to create personal agents for all types
+      const agentResp = await createAgent(
+        memberRequest,
+        `non-admin-personal-agent-${timestamp}`,
+        "personal",
+      );
+      createdIds.push((await agentResp.json()).id);
+
+      const gwResp = await createMcpGateway(
+        memberRequest,
+        `non-admin-personal-gw-${timestamp}`,
+        "personal",
+      );
+      createdIds.push((await gwResp.json()).id);
+
+      const proxyResp = await createLlmProxy(
+        memberRequest,
+        `non-admin-personal-proxy-${timestamp}`,
+        "personal",
+      );
+      createdIds.push((await proxyResp.json()).id);
     } finally {
       await makeApiRequest({
         request,
@@ -738,6 +710,9 @@ test.describe("Agent Type Permission Isolation", () => {
           organizationId,
         },
       });
+      for (const id of createdIds) {
+        await deleteAgent(request, id).catch(() => {});
+      }
       await deleteRole(request, customRole.id);
     }
   });

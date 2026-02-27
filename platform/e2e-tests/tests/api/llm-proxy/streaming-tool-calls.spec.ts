@@ -324,6 +324,7 @@ for (const config of testConfigs) {
       const createResponse = await createAgent(
         request,
         `Streaming Tool Calls Test - ${config.providerName}`,
+        "personal",
       );
       const agent = await createResponse.json();
       agentId = agent.id;

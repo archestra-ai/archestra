@@ -690,6 +690,7 @@ for (const config of testConfigs) {
           teams: [],
           considerContextUntrusted: true,
           agentType: "llm_proxy",
+          scope: "personal",
         },
       });
       const agent = await createResponse.json();
@@ -809,6 +810,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `${config.providerName} Archestra Test Agent ${uniqueSuffix}`,
+        "personal",
       );
       const agent = await createResponse.json();
       const agentId = agent.id;
@@ -875,6 +877,7 @@ for (const config of testConfigs) {
       const createResponse = await createLlmProxy(
         request,
         `${config.providerName} Archestra Sequence Test Agent ${uniqueSuffix}`,
+        "personal",
       );
       const agent = await createResponse.json();
       const agentId = agent.id;

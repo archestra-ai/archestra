@@ -38,6 +38,7 @@ test.describe("MCP Gateway - Authentication", () => {
     const createResponse = await createAgent(
       request,
       `MCP Gateway Auth Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
@@ -243,6 +244,7 @@ test.describe("MCP Gateway - OAuth 2.1 Discovery", () => {
     const createResponse = await createAgent(
       request,
       `MCP Gateway OAuth Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
@@ -632,6 +634,7 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
     const createResponse = await createAgent(
       request,
       `OAuth Full Flow Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
@@ -1395,6 +1398,7 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
     const createResponse = await createAgent(
       request,
       `CIMD OAuth Flow Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;

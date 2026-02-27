@@ -120,11 +120,13 @@ const SSO_ERROR_MESSAGES: Record<string, { title: string; message: string }> = {
 interface AuthViewWithErrorHandlingProps {
   path: string;
   callbackURL?: string;
+  cardHeader?: React.ReactNode;
 }
 
 export function AuthViewWithErrorHandling({
   path,
   callbackURL,
+  cardHeader,
 }: AuthViewWithErrorHandlingProps) {
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState(false);
@@ -421,6 +423,7 @@ export function AuthViewWithErrorHandling({
           <AuthView
             path={path}
             callbackURL={callbackURL}
+            cardHeader={cardHeader}
             classNames={{
               base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
               footer: "hidden",

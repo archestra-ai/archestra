@@ -10,6 +10,7 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
+const SALT = "archestra-hkdf-salt-v1";
 const INFO = "archestra-secret-encryption-v1";
 const VERSION_PREFIX = "v1";
 
@@ -23,7 +24,9 @@ function getEncryptionKey(): Buffer {
     throw new Error("ARCHESTRA_AUTH_SECRET is required for secret encryption");
   }
 
-  cachedKey = Buffer.from(hkdfSync("sha256", authSecret, "", INFO, KEY_LENGTH));
+  cachedKey = Buffer.from(
+    hkdfSync("sha256", authSecret, SALT, INFO, KEY_LENGTH),
+  );
   return cachedKey;
 }
 
@@ -95,6 +98,14 @@ export function isEncryptedSecret(
       `${VERSION_PREFIX}:`,
     )
   );
+}
+
+/**
+ * Eagerly validate that the encryption key can be derived.
+ * Call at startup to fail fast if ARCHESTRA_AUTH_SECRET is missing.
+ */
+export function ensureEncryptionKeyAvailable(): void {
+  getEncryptionKey();
 }
 
 /**

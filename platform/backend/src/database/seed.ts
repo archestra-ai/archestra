@@ -27,7 +27,11 @@ import {
 import { secretManager } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
 import type { InsertDualLlmConfig } from "@/types";
-import { encryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
+import {
+  encryptSecretValue,
+  ensureEncryptionKeyAvailable,
+  isEncryptedSecret,
+} from "@/utils/crypto";
 
 /**
  * Seeds admin user
@@ -525,28 +529,31 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
 }
 
 async function migrateSecretsToEncrypted(): Promise<void> {
-  const rows = await db.select().from(schema.secretsTable);
-  let migrated = 0;
+  await db.transaction(async (tx) => {
+    const rows = await tx.select().from(schema.secretsTable);
+    let migrated = 0;
 
-  for (const row of rows) {
-    if (isEncryptedSecret(row.secret)) continue;
+    for (const row of rows) {
+      if (isEncryptedSecret(row.secret)) continue;
 
-    await db
-      .update(schema.secretsTable)
-      .set({ secret: encryptSecretValue(row.secret) })
-      .where(eq(schema.secretsTable.id, row.id));
-    migrated++;
-  }
+      await tx
+        .update(schema.secretsTable)
+        .set({ secret: encryptSecretValue(row.secret) })
+        .where(eq(schema.secretsTable.id, row.id));
+      migrated++;
+    }
 
-  if (migrated > 0) {
-    logger.info(
-      { migratedCount: migrated },
-      "Migrated plaintext secrets to encrypted format",
-    );
-  }
+    if (migrated > 0) {
+      logger.info(
+        { migratedCount: migrated },
+        "Migrated plaintext secrets to encrypted format",
+      );
+    }
+  });
 }
 
 export async function seedRequiredStartingData(): Promise<void> {
+  ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();

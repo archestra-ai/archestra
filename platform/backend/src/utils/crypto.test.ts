@@ -106,9 +106,8 @@ describe("isEncryptedSecret", () => {
   });
 });
 
-describe("missing ARCHESTRA_AUTH_SECRET", () => {
+describe("key management", () => {
   test("throws when auth secret is not set", () => {
-    // Reset the cached key so it re-derives on next call
     _resetCachedKey();
 
     const original = config.auth.secret;
@@ -118,6 +117,22 @@ describe("missing ARCHESTRA_AUTH_SECRET", () => {
       expect(() => encryptSecretValue({ key: "value" })).toThrow(
         "ARCHESTRA_AUTH_SECRET is required",
       );
+    } finally {
+      config.auth.secret = original;
+      _resetCachedKey();
+    }
+  });
+
+  test("decryption fails with a different key", () => {
+    const encrypted = encryptSecretValue({ key: "value" });
+
+    // Change the secret to simulate key rotation without re-encryption
+    _resetCachedKey();
+    const original = config.auth.secret;
+    config.auth.secret = "a-completely-different-secret-key-value-here";
+
+    try {
+      expect(() => decryptSecretValue(encrypted)).toThrow();
     } finally {
       config.auth.secret = original;
       _resetCachedKey();

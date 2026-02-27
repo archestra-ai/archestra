@@ -6,6 +6,7 @@ describe("InsertAgentSchema", () => {
     it("accepts valid domain when internal mode and email enabled", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -17,6 +18,7 @@ describe("InsertAgentSchema", () => {
     it("accepts subdomain when internal mode and email enabled", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -28,6 +30,7 @@ describe("InsertAgentSchema", () => {
     it("rejects missing domain when internal mode and email enabled", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -44,6 +47,7 @@ describe("InsertAgentSchema", () => {
     it("rejects invalid domain format when internal mode and email enabled", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -58,6 +62,7 @@ describe("InsertAgentSchema", () => {
     it("rejects domain with protocol prefix", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -72,6 +77,7 @@ describe("InsertAgentSchema", () => {
     it("rejects domain with trailing slash", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -86,6 +92,7 @@ describe("InsertAgentSchema", () => {
     it("allows empty domain when security mode is private", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "private",
@@ -97,6 +104,7 @@ describe("InsertAgentSchema", () => {
     it("allows empty domain when security mode is public", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "public",
@@ -108,6 +116,7 @@ describe("InsertAgentSchema", () => {
     it("allows empty domain when email is disabled", () => {
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: false,
         incomingEmailSecurityMode: "internal",
@@ -120,6 +129,7 @@ describe("InsertAgentSchema", () => {
       const longDomain = `${"a".repeat(250)}.com`;
       const result = InsertAgentSchema.safeParse({
         name: "Test Agent",
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -137,6 +147,7 @@ describe("UpdateAgentSchema", () => {
   describe("incomingEmailAllowedDomain validation", () => {
     it("accepts valid domain when internal mode and email enabled", () => {
       const result = UpdateAgentSchema.safeParse({
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -147,6 +158,7 @@ describe("UpdateAgentSchema", () => {
 
     it("rejects invalid domain when internal mode and email enabled", () => {
       const result = UpdateAgentSchema.safeParse({
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
@@ -160,6 +172,7 @@ describe("UpdateAgentSchema", () => {
 
     it("allows partial updates without triggering validation", () => {
       const result = UpdateAgentSchema.safeParse({
+        scope: "personal",
         teams: [],
         name: "Updated Name",
       });
@@ -168,6 +181,7 @@ describe("UpdateAgentSchema", () => {
 
     it("allows updating email enabled without domain when mode is not internal", () => {
       const result = UpdateAgentSchema.safeParse({
+        scope: "personal",
         teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "public",

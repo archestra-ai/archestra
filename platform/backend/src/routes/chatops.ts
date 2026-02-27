@@ -431,8 +431,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (!binding || !binding.agentId) {
               const isTeamsDm =
-                context.activity.conversation?.conversationType ===
-                "personal";
+                context.activity.conversation?.conversationType === "personal";
 
               // Create binding early (without agent) so the DM/channel appears in the UI
               if (!binding) {
@@ -1622,7 +1621,7 @@ async function resolveAndVerifySenderForMSTeams(
   if (!user) {
     // Auto-provision: create user + member from Teams identity
     try {
-      const { invitationId } = await autoProvisionUser({
+      await autoProvisionUser({
         email: message.senderEmail,
         name: message.senderName,
         provider: "ms-teams",

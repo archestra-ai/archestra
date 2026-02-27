@@ -121,7 +121,9 @@ class ChatApiKeyModel {
       }
     }
 
-    // Query with team, user, and secrets table joins
+    // Query with team, user, and secrets table joins.
+    // NOTE: secretsTable.secret is encrypted at rest — decrypt via
+    // parseVaultReferenceFromSecret() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.chatApiKeysTable.id,
@@ -240,7 +242,9 @@ class ChatApiKeyModel {
       conditions.push(secretOrSystemCondition);
     }
 
-    // Query with team, user, and secrets table joins
+    // Query with team, user, and secrets table joins.
+    // NOTE: secretsTable.secret is encrypted at rest — decrypt via
+    // parseVaultReferenceFromSecret() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.chatApiKeysTable.id,

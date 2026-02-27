@@ -40,7 +40,11 @@ export async function rotateSecretEncryptionKey(opts: {
   oldSecret: string;
   newSecret: string;
   dryRun?: boolean;
-}): Promise<{ total: number; rotated: number; skippedPlaintext: number }> {
+}): Promise<{
+  total: number;
+  reEncrypted: number;
+  newlyEncrypted: number;
+}> {
   const { oldSecret, newSecret, dryRun = false } = opts;
 
   if (oldSecret === newSecret) {
@@ -51,27 +55,24 @@ export async function rotateSecretEncryptionKey(opts: {
   const newKey = deriveKeyFromSecret(newSecret);
 
   const rows = await db.select().from(schema.secretsTable);
-  let rotated = 0;
-  let skippedPlaintext = 0;
+  let reEncrypted = 0;
+  let newlyEncrypted = 0;
 
   if (dryRun) {
     for (const row of rows) {
       if (isEncryptedSecret(row.secret)) {
         // Verify we can decrypt with the old key
         decryptSecretValueWithKey(row.secret, oldKey);
+        reEncrypted++;
       } else {
-        skippedPlaintext++;
+        newlyEncrypted++;
       }
-      rotated++;
     }
 
-    console.log(`[DRY RUN] Would rotate ${rotated} of ${rows.length} secrets`);
-    if (skippedPlaintext > 0) {
-      console.log(
-        `[DRY RUN] ${skippedPlaintext} plaintext secrets would be encrypted with the new key`,
-      );
-    }
-    return { total: rows.length, rotated, skippedPlaintext };
+    console.log(
+      `[DRY RUN] Would re-encrypt ${reEncrypted} secrets, newly encrypt ${newlyEncrypted} plaintext secrets (${rows.length} total)`,
+    );
+    return { total: rows.length, reEncrypted, newlyEncrypted };
   }
 
   await db.transaction(async (tx) => {
@@ -80,30 +81,26 @@ export async function rotateSecretEncryptionKey(opts: {
 
       if (isEncryptedSecret(row.secret)) {
         plaintext = decryptSecretValueWithKey(row.secret, oldKey);
+        reEncrypted++;
       } else {
-        // Plaintext row — encrypt it with the new key
         plaintext = row.secret;
-        skippedPlaintext++;
+        newlyEncrypted++;
       }
 
-      const reEncrypted = encryptSecretValueWithKey(plaintext, newKey);
+      const encrypted = encryptSecretValueWithKey(plaintext, newKey);
 
       await tx
         .update(schema.secretsTable)
-        .set({ secret: reEncrypted })
+        .set({ secret: encrypted })
         .where(eq(schema.secretsTable.id, row.id));
-      rotated++;
     }
   });
 
-  console.log(`Rotated ${rotated} of ${rows.length} secrets`);
-  if (skippedPlaintext > 0) {
-    console.log(
-      `${skippedPlaintext} were plaintext and have been encrypted with the new key`,
-    );
-  }
+  console.log(
+    `Re-encrypted ${reEncrypted} secrets, newly encrypted ${newlyEncrypted} plaintext secrets (${rows.length} total)`,
+  );
 
-  return { total: rows.length, rotated, skippedPlaintext };
+  return { total: rows.length, reEncrypted, newlyEncrypted };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

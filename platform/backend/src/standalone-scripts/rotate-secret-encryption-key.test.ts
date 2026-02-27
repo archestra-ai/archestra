@@ -88,7 +88,7 @@ describe("rotateSecretEncryptionKey", () => {
       newSecret: NEW_SECRET,
     });
 
-    expect(result.skippedPlaintext).toBeGreaterThanOrEqual(1);
+    expect(result.newlyEncrypted).toBeGreaterThanOrEqual(1);
 
     const updated = await readRawSecret(row.id);
     expect(isEncryptedSecret(updated.secret)).toBe(true);
@@ -125,7 +125,7 @@ describe("rotateSecretEncryptionKey", () => {
       dryRun: true,
     });
 
-    expect(result.rotated).toBeGreaterThanOrEqual(1);
+    expect(result.reEncrypted).toBeGreaterThanOrEqual(1);
 
     const after = await readRawSecret(row.id);
     expect(after.secret).toEqual(before.secret);

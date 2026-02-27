@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
+import { wrapPoolWithRetry } from "./retry";
 import * as schema from "./schemas";
 import {
   DATABASE_URL_VAULT_REF_ENV,
@@ -115,6 +116,7 @@ export default new Proxy({} as ReturnType<typeof getDb>, {
   },
 });
 
+export { withDbRetry } from "./retry";
 export { schema };
 
 /**
@@ -177,6 +179,16 @@ function createPool(connectionString: string): pg.Pool {
   newPool.on("error", (err) => {
     logger.error({ err }, "Unexpected error on idle database client");
   });
+
+  /**
+   * Wrap pool.query() with automatic retry for transient connection errors
+   * (ECONNREFUSED, connection timeout, connection terminated, etc.).
+   *
+   * This is safe because pool.query() checks out a fresh connection for each
+   * call, so retries will get a new connection from the pool.
+   * Transaction queries (via a checked-out PoolClient) are NOT affected.
+   */
+  wrapPoolWithRetry(newPool);
 
   return newPool;
 }

@@ -69,6 +69,7 @@ import {
   Mistral,
   Ollama,
   OpenAi,
+  Openrouter,
   Perplexity,
   Vllm,
   Zhipuai,
@@ -151,6 +152,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
     id: "GroqChatCompletionResponse",
+  });
+  z.globalRegistry.add(Openrouter.API.ChatCompletionRequestSchema, {
+    id: "OpenrouterChatCompletionRequest",
+  });
+  z.globalRegistry.add(Openrouter.API.ChatCompletionResponseSchema, {
+    id: "OpenrouterChatCompletionResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",

@@ -1,4 +1,8 @@
-import { LocalConfigSchema, OAuthConfigSchema } from "@shared";
+import {
+  ImagePullSecretConfigSchema,
+  LocalConfigSchema,
+  OAuthConfigSchema,
+} from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -62,7 +66,20 @@ const LocalConfigSelectSchema = z.object({
   httpPort: z.number().optional(),
   httpPath: z.string().optional(),
   nodePort: z.number().optional(),
-  imagePullSecrets: z.array(z.object({ name: z.string() })).optional(),
+  // Accept both legacy { name } format and new ImagePullSecretConfigSchema
+  // Legacy entries are normalized to { source: "existing", name } on read
+  imagePullSecrets: z
+    .array(
+      z.union([
+        ImagePullSecretConfigSchema,
+        // Legacy format: { name: string } → normalize to { source: "existing", name }
+        z.object({ name: z.string() }).transform((val) => ({
+          source: "existing" as const,
+          name: val.name,
+        })),
+      ]),
+    )
+    .optional(),
 });
 
 const CatalogLabelSchema = z.object({

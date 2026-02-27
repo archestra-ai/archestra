@@ -162,6 +162,8 @@ describe("McpCatalogLabelModel", () => {
   });
 
   describe("cross-entity pruning", () => {
+    // Pruning is fire-and-forget inside sync methods, so tests call it explicitly.
+
     test("does not prune key/value used by catalog item when removed from agent", async ({
       makeAgent,
       makeInternalMcpCatalog,
@@ -180,6 +182,7 @@ describe("McpCatalogLabelModel", () => {
 
       // Remove from agent - should NOT prune since catalog still uses it
       await AgentLabelModel.syncAgentLabels(agent.id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       const keys = await AgentLabelModel.getAllKeys();
       const values = await AgentLabelModel.getAllValues();
@@ -212,6 +215,7 @@ describe("McpCatalogLabelModel", () => {
 
       // Remove from catalog - should NOT prune since agent still uses it
       await McpCatalogLabelModel.syncCatalogLabels(catalog.id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       const keys = await AgentLabelModel.getAllKeys();
       const values = await AgentLabelModel.getAllValues();
@@ -238,11 +242,55 @@ describe("McpCatalogLabelModel", () => {
       // Remove from both
       await AgentLabelModel.syncAgentLabels(agent.id, []);
       await McpCatalogLabelModel.syncCatalogLabels(catalog.id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       const keys = await AgentLabelModel.getAllKeys();
       const values = await AgentLabelModel.getAllValues();
       expect(keys).not.toContain("orphan-key");
       expect(values).not.toContain("orphan-value");
+    });
+  });
+
+  describe("concurrent syncCatalogLabels", () => {
+    test("handles concurrent syncs with overlapping keys", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog1 = await makeInternalMcpCatalog();
+      const catalog2 = await makeInternalMcpCatalog();
+      const catalog3 = await makeInternalMcpCatalog();
+
+      // Sync all three catalog items concurrently with overlapping keys
+      await Promise.all([
+        McpCatalogLabelModel.syncCatalogLabels(catalog1.id, [
+          { key: "category", value: "database" },
+        ]),
+        McpCatalogLabelModel.syncCatalogLabels(catalog2.id, [
+          { key: "category", value: "ai" },
+        ]),
+        McpCatalogLabelModel.syncCatalogLabels(catalog3.id, [
+          { key: "category", value: "database" },
+        ]),
+      ]);
+
+      const labels1 = await McpCatalogLabelModel.getLabelsForCatalogItem(
+        catalog1.id,
+      );
+      const labels2 = await McpCatalogLabelModel.getLabelsForCatalogItem(
+        catalog2.id,
+      );
+      const labels3 = await McpCatalogLabelModel.getLabelsForCatalogItem(
+        catalog3.id,
+      );
+
+      expect(labels1).toHaveLength(1);
+      expect(labels1[0].key).toBe("category");
+      expect(labels1[0].value).toBe("database");
+      expect(labels2).toHaveLength(1);
+      expect(labels2[0].key).toBe("category");
+      expect(labels2[0].value).toBe("ai");
+      expect(labels3).toHaveLength(1);
+      expect(labels3[0].key).toBe("category");
+      expect(labels3[0].value).toBe("database");
     });
   });
 });

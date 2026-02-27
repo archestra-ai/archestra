@@ -207,6 +207,7 @@ export interface ModelCapabilities {
  */
 const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   openai: "openai",
+  openrouter: "openrouter",
   anthropic: "anthropic",
   google: "gemini",
   "google-vertex": "gemini",

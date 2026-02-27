@@ -73,6 +73,7 @@ import {
 const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   anthropic: "claude-opus-4-1-20250805",
   openai: "gpt-4o",
+  openrouter: "openrouter/auto",
   gemini: "gemini-2.5-pro",
   cohere: "command-r-08-2024",
   groq: "llama-3.1-8b-instant",

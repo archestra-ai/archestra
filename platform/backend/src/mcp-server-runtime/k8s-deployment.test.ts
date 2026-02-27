@@ -1880,7 +1880,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "node",
       arguments: ["server.js"],
-      imagePullSecrets: [{ name: "my-registry-secret" }],
+      imagePullSecrets: [{ source: "existing", name: "my-registry-secret" }],
     };
 
     const deploymentSpec = k8sDeployment.generateDeploymentSpec(
@@ -1888,6 +1888,9 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       localConfig,
       false,
       8080,
+      undefined,
+      undefined,
+      [{ name: "my-registry-secret" }],
     );
 
     expect(deploymentSpec.spec?.template.spec?.imagePullSecrets).toEqual([
@@ -1910,8 +1913,8 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       command: "node",
       arguments: ["server.js"],
       imagePullSecrets: [
-        { name: "registry-secret-1" },
-        { name: "registry-secret-2" },
+        { source: "existing", name: "registry-secret-1" },
+        { source: "existing", name: "registry-secret-2" },
       ],
     };
 
@@ -1920,6 +1923,9 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       localConfig,
       false,
       8080,
+      undefined,
+      undefined,
+      [{ name: "registry-secret-1" }, { name: "registry-secret-2" }],
     );
 
     expect(deploymentSpec.spec?.template.spec?.imagePullSecrets).toEqual([
@@ -3409,10 +3415,12 @@ describe("K8sDeployment.removeDeployment", () => {
     const mockDeleteDeployment = vi.fn().mockResolvedValue({});
     const mockDeleteService = vi.fn().mockResolvedValue({});
     const mockDeleteSecret = vi.fn().mockResolvedValue({});
+    const mockListSecret = vi.fn().mockResolvedValue({ items: [] });
 
     const mockK8sApi = {
       deleteNamespacedService: mockDeleteService,
       deleteNamespacedSecret: mockDeleteSecret,
+      listNamespacedSecret: mockListSecret,
     };
     const mockK8sAppsApi = {
       deleteNamespacedDeployment: mockDeleteDeployment,
@@ -3444,10 +3452,12 @@ describe("K8sDeployment.removeDeployment", () => {
     const mockDeleteDeployment = vi.fn().mockResolvedValue({});
     const mockDeleteService = vi.fn().mockRejectedValue(notFoundError);
     const mockDeleteSecret = vi.fn().mockRejectedValue(notFoundError);
+    const mockListSecret = vi.fn().mockResolvedValue({ items: [] });
 
     const mockK8sApi = {
       deleteNamespacedService: mockDeleteService,
       deleteNamespacedSecret: mockDeleteSecret,
+      listNamespacedSecret: mockListSecret,
     };
     const mockK8sAppsApi = {
       deleteNamespacedDeployment: mockDeleteDeployment,
@@ -4182,6 +4192,271 @@ describe("K8sDeployment.getRecentLogs", () => {
     const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
 
     await expect(k8sDeployment.getRecentLogs()).rejects.toEqual(serverError);
+  });
+});
+
+describe("K8sDeployment.createDockerRegistrySecrets", () => {
+  function createDeploymentWithMockedK8sApi(
+    mcpServerId: string,
+    mockCreateSecret: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({}),
+    mockReplaceSecret: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({}),
+  ): K8sDeployment {
+    const mcpServer = {
+      id: mcpServerId,
+      name: "test-server",
+      catalogId: "catalog-id",
+    } as McpServer;
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    } as unknown as k8s.CoreV1Api;
+
+    return new K8sDeployment(
+      mcpServer,
+      mockK8sApi,
+      {} as k8s.AppsV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+    );
+  }
+
+  test("returns empty array when imagePullSecrets is undefined", async () => {
+    const deployment = createDeploymentWithMockedK8sApi("srv-1");
+    const result = await deployment.createDockerRegistrySecrets({}, undefined);
+    expect(result).toEqual([]);
+  });
+
+  test("skips existing-source entries", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-2", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets({}, [
+      { source: "existing", name: "my-secret" },
+    ]);
+    expect(result).toEqual([]);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  test("creates secret with server and username in name", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-3", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:quay.io:myuser": "secret123" },
+      [
+        {
+          source: "credentials",
+          server: "quay.io",
+          username: "myuser",
+          email: "a@b.com",
+        },
+      ],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe("mcp-server-srv-3-regcred-quay.io-myuser");
+    expect(mockCreate).toHaveBeenCalledOnce();
+
+    // Verify the secret body
+    const body = mockCreate.mock.calls[0][0].body;
+    expect(body.type).toBe("kubernetes.io/dockerconfigjson");
+    expect(body.metadata.name).toBe("mcp-server-srv-3-regcred-quay.io-myuser");
+
+    // Verify dockerconfigjson content
+    const decoded = JSON.parse(
+      Buffer.from(body.data[".dockerconfigjson"], "base64").toString(),
+    );
+    expect(decoded.auths["quay.io"].username).toBe("myuser");
+    expect(decoded.auths["quay.io"].password).toBe("secret123");
+    expect(decoded.auths["quay.io"].email).toBe("a@b.com");
+  });
+
+  test("creates unique secrets for same server with different usernames", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-4", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets(
+      {
+        "__regcred_password:ghcr.io:alice": "pass-alice",
+        "__regcred_password:ghcr.io:bob": "pass-bob",
+      },
+      [
+        {
+          source: "credentials",
+          server: "ghcr.io",
+          username: "alice",
+        },
+        {
+          source: "credentials",
+          server: "ghcr.io",
+          username: "bob",
+        },
+      ],
+    );
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe("mcp-server-srv-4-regcred-ghcr.io-alice");
+    expect(result[1]).toBe("mcp-server-srv-4-regcred-ghcr.io-bob");
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+  });
+
+  test("skips entry when password is missing from secret data", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-5", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets(
+      {}, // No passwords in secret data
+      [
+        {
+          source: "credentials",
+          server: "quay.io",
+          username: "myuser",
+        },
+      ],
+    );
+    expect(result).toEqual([]);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  test("lowercases and sanitizes server and username in secret name", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-6", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:Quay.IO:MyUser@Corp": "pass" },
+      [
+        {
+          source: "credentials",
+          server: "Quay.IO",
+          username: "MyUser@Corp",
+        },
+      ],
+    );
+    expect(result).toHaveLength(1);
+    // Quay.IO → quay.io (lowercase, periods preserved by RFC 1123)
+    // MyUser@Corp → myusercorp (lowercase, @ stripped)
+    expect(result[0]).toBe("mcp-server-srv-6-regcred-quay.io-myusercorp");
+  });
+
+  test("secret name is DNS-1123 compliant (no trailing non-alphanumeric)", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-7", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:registry.example.com:user-": "pass" },
+      [
+        {
+          source: "credentials",
+          server: "registry.example.com",
+          username: "user-",
+        },
+      ],
+    );
+    expect(result).toHaveLength(1);
+    // Verify no trailing non-alphanumeric characters
+    expect(result[0]).toMatch(/[a-z0-9]$/);
+  });
+
+  test("replaces secret on 409 conflict (upsert)", async () => {
+    const mockCreate = vi.fn().mockRejectedValue({ statusCode: 409 });
+    const mockReplace = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi(
+      "srv-8",
+      mockCreate,
+      mockReplace,
+    );
+    const result = await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:quay.io:user": "pass" },
+      [
+        {
+          source: "credentials",
+          server: "quay.io",
+          username: "user",
+        },
+      ],
+    );
+    expect(result).toHaveLength(1);
+    expect(mockCreate).toHaveBeenCalledOnce();
+    expect(mockReplace).toHaveBeenCalledOnce();
+  });
+
+  test("handles mixed existing and credentials entries", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi("srv-9", mockCreate);
+    const result = await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:docker.io:ci-bot": "docker-pass" },
+      [
+        { source: "existing", name: "pre-existing-secret" },
+        {
+          source: "credentials",
+          server: "docker.io",
+          username: "ci-bot",
+          email: "ci@example.com",
+        },
+        { source: "existing", name: "another-secret" },
+      ],
+    );
+    // Only the credentials entry should produce a secret
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain("docker.io");
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+});
+
+describe("K8sDeployment.collectImagePullSecretNames", () => {
+  test("returns empty array when no secrets provided", () => {
+    expect(K8sDeployment.collectImagePullSecretNames(undefined, [])).toEqual(
+      [],
+    );
+  });
+
+  test("collects existing secret names", () => {
+    const result = K8sDeployment.collectImagePullSecretNames(
+      [
+        { source: "existing", name: "secret-a" },
+        { source: "existing", name: "secret-b" },
+      ],
+      [],
+    );
+    expect(result).toEqual([{ name: "secret-a" }, { name: "secret-b" }]);
+  });
+
+  test("skips credentials entries (they come from generatedRegcredNames)", () => {
+    const result = K8sDeployment.collectImagePullSecretNames(
+      [
+        { source: "existing", name: "existing-one" },
+        {
+          source: "credentials",
+          server: "quay.io",
+          username: "user",
+        },
+      ],
+      [],
+    );
+    expect(result).toEqual([{ name: "existing-one" }]);
+  });
+
+  test("merges existing names with generated regcred names", () => {
+    const result = K8sDeployment.collectImagePullSecretNames(
+      [{ source: "existing", name: "pre-existing" }],
+      ["mcp-server-x-regcred-quay.io-user"],
+    );
+    expect(result).toEqual([
+      { name: "pre-existing" },
+      { name: "mcp-server-x-regcred-quay.io-user" },
+    ]);
+  });
+
+  test("returns only generated names when no existing entries", () => {
+    const result = K8sDeployment.collectImagePullSecretNames(
+      [
+        {
+          source: "credentials",
+          server: "ghcr.io",
+          username: "bot",
+        },
+      ],
+      ["generated-secret-1", "generated-secret-2"],
+    );
+    expect(result).toEqual([
+      { name: "generated-secret-1" },
+      { name: "generated-secret-2" },
+    ]);
   });
 });
 

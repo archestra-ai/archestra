@@ -52,6 +52,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.groq,
     originalUrl: "https://api.groq.com/openai/v1/",
   },
+  openrouter: {
+    label: providerDisplayNames.openrouter,
+    originalUrl: "https://openrouter.ai/api/v1/",
+  },
   cohere: {
     label: providerDisplayNames.cohere,
     originalUrl: "https://api.cohere.com/v2/",

@@ -1,7 +1,9 @@
 "use client";
 
 import { E2eTestId } from "@shared";
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -32,6 +34,8 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   existingTeamId?: string | null;
   /** When true, only personal installation is allowed (teams are disabled) */
   personalOnly?: boolean;
+  /** Callback when install availability changes (false when user lacks all options) */
+  onCanInstallChange?: (canInstall: boolean) => void;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -41,6 +45,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   isReinstall = false,
   existingTeamId,
   personalOnly = false,
+  onCanInstallChange,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const byosEnabled = useFeatureFlag("byosEnabled");
@@ -99,14 +104,19 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // WHY: Team options are disabled if:
   // 1. personalOnly mode (e.g. Playwright - only personal installs allowed)
   // 2. Reinstalling a personal server (can't switch to team)
-  // 3. User lacks mcpServer:update permission AND personal is still available.
-  //    When personal is unavailable (already installed or BYOS), teams must stay
-  //    enabled since they are the only option
+  // 3. User lacks mcpServer:update permission (members can never create team installations)
   const areTeamsDisabled = personalOnly
     ? true
     : isReinstall
       ? !existingTeamId // Reinstalling personal server - can't switch to team
-      : !hasMcpServerUpdate && !isPersonalDisabled;
+      : !hasMcpServerUpdate;
+
+  // When both personal and team options are unavailable, user cannot install at all
+  const canInstall = !isPersonalDisabled || !areTeamsDisabled;
+
+  useEffect(() => {
+    onCanInstallChange?.(canInstall);
+  }, [canInstall, onCanInstallChange]);
 
   // Compute the initial dropdown value
   const initialValue = useMemo(() => {
@@ -180,6 +190,41 @@ export function SelectMcpServerCredentialTypeAndTeams({
       onTeamChange(value);
     }
   };
+
+  if (!canInstall) {
+    return (
+      <Alert>
+        <AlertTriangle className="!text-amber-500 h-4 w-4" />
+        <AlertDescription>
+          {isPersonalDisabled && byosEnabled ? (
+            <>
+              <span className="font-semibold">Insufficient permissions</span>
+              <p className="mt-1">
+                MCP servers can only be installed at the team level and require
+                the{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                  mcpServer:update
+                </code>{" "}
+                permission.
+              </p>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">Already installed</span>
+              <p className="mt-1">
+                You have already installed this MCP server for yourself. To
+                install for a team, you need the{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                  mcpServer:update
+                </code>{" "}
+                permission.
+              </p>
+            </>
+          )}
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="space-y-2">

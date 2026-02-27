@@ -69,6 +69,13 @@ test("Verify tool calling using dynamic credentials", async ({
     // Install using personal credential
     await clickButton({ page, options: { name: "Install" } });
 
+    // Members lack mcpServer:update permission and cannot create team installations.
+    // After personal install, they see an "Already installed" banner.
+    if (user === "Member") {
+      await page.waitForLoadState("domcontentloaded");
+      return;
+    }
+
     // After adding a server, the install dialog may open automatically.
     // If it does, close it so the calling test can control when to open it.
     const assignmentsDialog = page
@@ -81,6 +88,12 @@ test("Verify tool calling using dynamic credentials", async ({
     } catch {
       // Dialog didn't appear - that's fine, continue
     }
+
+    // Wait for any dialog overlay to fully disappear before proceeding
+    await page
+      .locator('[data-slot="dialog-overlay"]')
+      .waitFor({ state: "hidden", timeout: 10_000 })
+      .catch(() => {});
 
     // Wait for dialog to close and button to be visible and enabled again
     const connectButton = page.getByTestId(
@@ -128,7 +141,7 @@ test("Verify tool calling using dynamic credentials", async ({
    * Credentials we have:
    * Admin personal credential, Default team credential
    * Editor personal credential, Engineering team credential
-   * Member personal credential, Marketing team credential
+   * Member personal credential only (Members lack mcpServer:update, cannot create team installations)
    *
    * Team membership:
    * Admin: Default team

@@ -39,6 +39,7 @@ export function NoAuthInstallDialog({
   isInstalling,
 }: NoAuthInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [canInstall, setCanInstall] = useState(true);
 
   const handleInstall = useCallback(async () => {
     await onInstall({ teamId: selectedTeamId });
@@ -72,21 +73,26 @@ export function NoAuthInstallDialog({
             <SelectMcpServerCredentialTypeAndTeams
               onTeamChange={setSelectedTeamId}
               catalogId={catalogItem?.id}
+              onCanInstallChange={setCanInstall}
             />
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isInstalling}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isInstalling}>
-              {isInstalling ? "Installing..." : "Install"}
-            </Button>
+            {canInstall && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={isInstalling}
+              >
+                Cancel
+              </Button>
+            )}
+            {canInstall && (
+              <Button type="submit" disabled={isInstalling}>
+                {isInstalling ? "Installing..." : "Install"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogForm>
       </DialogContent>

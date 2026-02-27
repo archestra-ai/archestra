@@ -10,6 +10,7 @@ import {
   AgentToolModel,
   ChatApiKeyModel,
   InternalMcpCatalogModel,
+  SecretModel,
   SessionModel,
   TeamModel,
   ToolInvocationPolicyModel,
@@ -190,6 +191,7 @@ async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
+    scope: "org",
     teams: [],
     labels: [],
   };
@@ -631,17 +633,13 @@ async function makeInteraction(
 async function makeSecret(
   overrides: Partial<{ name: string; secret: Record<string, unknown> }> = {},
 ) {
-  const [secret] = await db
-    .insert(schema.secretsTable)
-    .values({
-      name: `testsecret`,
-      secret: {
-        access_token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
-      },
-      ...overrides,
-    })
-    .returning();
-  return secret;
+  return SecretModel.create({
+    name: `testsecret`,
+    secret: {
+      access_token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
+    },
+    ...overrides,
+  });
 }
 
 /**

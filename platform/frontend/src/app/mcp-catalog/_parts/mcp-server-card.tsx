@@ -505,19 +505,19 @@ export function McpServerCard({
 
   const remoteCardContent = (
     <>
-      <WithPermissions
-        permissions={{ tool: ["update"], agent: ["update"] }}
-        noPermissionHandle="hide"
-      >
-        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {usersAuthenticated}
-          </div>
+      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+          {usersAuthenticated}
+        </div>
+        <WithPermissions
+          permissions={{ tool: ["update"], agent: ["update"] }}
+          noPermissionHandle="hide"
+        >
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
-        </div>
-      </WithPermissions>
+        </WithPermissions>
+      </div>
       {errorBanner}
       {/* Show reconnect button only when NOT installing */}
       {isCurrentUserAuthenticated &&
@@ -572,19 +572,19 @@ export function McpServerCard({
 
   const localCardContent = (
     <>
-      <WithPermissions
-        permissions={{ tool: ["update"], agent: ["update"] }}
-        noPermissionHandle="hide"
-      >
-        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {localServersInstalled}
-          </div>
+      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+          {localServersInstalled}
+        </div>
+        <WithPermissions
+          permissions={{ tool: ["update"], agent: ["update"] }}
+          noPermissionHandle="hide"
+        >
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
-        </div>
-      </WithPermissions>
+        </WithPermissions>
+      </div>
       {errorBanner}
       {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
       {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
@@ -656,19 +656,19 @@ export function McpServerCard({
 
   const playwrightCardContent = (
     <>
-      <WithPermissions
-        permissions={{ tool: ["update"], agent: ["update"] }}
-        noPermissionHandle="hide"
-      >
-        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {localServersInstalled}
-          </div>
+      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+          {localServersInstalled}
+        </div>
+        <WithPermissions
+          permissions={{ tool: ["update"], agent: ["update"] }}
+          noPermissionHandle="hide"
+        >
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
-        </div>
-      </WithPermissions>
+        </WithPermissions>
+      </div>
       {errorBanner}
       {/* Show reinstall button only when NOT installing */}
       {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (

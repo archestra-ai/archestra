@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { AlertCircle, ChevronRight, Plus, X } from "lucide-react";
+import { AlertCircle, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import {
@@ -31,8 +31,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
+import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import {
   formSchema,
@@ -138,11 +147,14 @@ export function McpCatalogForm({
     fields: imagePullSecretFields,
     append: appendImagePullSecret,
     remove: removeImagePullSecret,
+    update: updateImagePullSecret,
   } = useFieldArray({
     control: form.control,
     name: "localConfig.imagePullSecrets",
   });
-  const imagePullSecretInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch available k8s docker-registry secrets for the "existing" dropdown
+  const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
 
   // Update form values when BYOS paths/keys change
   useEffect(() => {
@@ -436,7 +448,7 @@ export function McpCatalogForm({
                 </>
               )}
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label>Image Pull Secrets</Label>
                 <p className="text-sm text-muted-foreground">
                   Kubernetes secrets for pulling container images from private
@@ -450,73 +462,157 @@ export function McpCatalogForm({
                     Learn more
                   </a>
                 </p>
-                {imagePullSecretFields.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {imagePullSecretFields.map((field, index) => (
-                      <div
-                        key={field.id}
-                        className="flex items-center gap-1 bg-muted rounded-md px-2 py-1 text-sm"
-                      >
-                        <span className="font-mono">{field.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeImagePullSecret(index)}
-                          className="text-muted-foreground hover:text-destructive"
+
+                {imagePullSecretFields.map((field, index) => {
+                  const watchField = (key: string) =>
+                    form.watch(
+                      // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                      `localConfig.imagePullSecrets.${index}.${key}` as any,
+                    ) ?? "";
+                  const setField = (key: string, value: string) =>
+                    form.setValue(
+                      // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                      `localConfig.imagePullSecrets.${index}.${key}` as any,
+                      value,
+                    );
+                  const source = watchField("source");
+
+                  return (
+                    <div
+                      key={field.id}
+                      className="border rounded-lg p-3 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Select
+                          value={source}
+                          onValueChange={(val) => {
+                            if (val === "existing") {
+                              updateImagePullSecret(index, {
+                                source: "existing",
+                                name: "",
+                              });
+                            } else {
+                              updateImagePullSecret(index, {
+                                source: "credentials",
+                                server: "",
+                                username: "",
+                                email: "",
+                              });
+                            }
+                          }}
                         >
-                          <X className="h-3 w-3" />
-                        </button>
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="existing">
+                              Existing Secret
+                            </SelectItem>
+                            <SelectItem value="credentials">
+                              Registry Credentials
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeImagePullSecret(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Input
-                    ref={imagePullSecretInputRef}
-                    placeholder="secret-name"
-                    className="font-mono"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const input = e.currentTarget;
-                        const value = input.value.trim();
-                        if (
-                          value &&
-                          !imagePullSecretFields.some((f) => f.name === value)
-                        ) {
-                          appendImagePullSecret({ name: value });
-                          input.value = "";
-                        }
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const input = imagePullSecretInputRef.current;
-                      const value = input?.value.trim();
-                      if (
-                        value &&
-                        !imagePullSecretFields.some((f) => f.name === value)
-                      ) {
-                        appendImagePullSecret({ name: value });
-                        if (input) input.value = "";
-                      }
-                    }}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
-                </div>
+
+                      {source === "existing" ? (
+                        <SearchableSelect
+                          value={watchField("name")}
+                          onValueChange={(val) => setField("name", val)}
+                          items={k8sSecrets.map((s) => ({
+                            value: s.name,
+                            label: s.name,
+                          }))}
+                          placeholder="Select a secret..."
+                          searchPlaceholder="Search secrets..."
+                          allowCustom
+                          className="w-full"
+                        />
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Server</Label>
+                            <Input
+                              placeholder="e.g. quay.io"
+                              className="font-mono"
+                              value={watchField("server")}
+                              onChange={(e) =>
+                                setField("server", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Username</Label>
+                            <Input
+                              placeholder="username"
+                              value={watchField("username")}
+                              onChange={(e) =>
+                                setField("username", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Password</Label>
+                            <Input
+                              type="password"
+                              placeholder={
+                                mode === "edit" && !watchField("password")
+                                  ? "Saved — leave blank to keep"
+                                  : "password"
+                              }
+                              value={watchField("password") ?? ""}
+                              onChange={(e) =>
+                                setField("password", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Email (optional)</Label>
+                            <Input
+                              placeholder="email@example.com"
+                              value={watchField("email")}
+                              onChange={(e) =>
+                                setField("email", e.target.value)
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    appendImagePullSecret({ source: "existing", name: "" })
+                  }
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add
+                </Button>
               </div>
             </>
           )}
         </div>
 
-        {currentServerType === "remote" && (
+        {(currentServerType === "remote" || currentServerType === "local") && (
           <div className="space-y-4 pt-4 border-t">
             <FormLabel>Authentication</FormLabel>
+            <p className="text-sm text-muted-foreground">
+              Configure how users authenticate with this MCP server. OAuth is
+              recommended for servers that support it.
+            </p>
 
             <FormField
               control={form.control}
@@ -538,24 +634,31 @@ export function McpCatalogForm({
                           No authorization
                         </FormLabel>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="bearer" id="auth-bearer" />
-                        <FormLabel
-                          htmlFor="auth-bearer"
-                          className="font-normal cursor-pointer"
-                        >
-                          "Authorization: Bearer &lt;your token&gt;" header
-                        </FormLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="raw_token" id="auth-raw-token" />
-                        <FormLabel
-                          htmlFor="auth-raw-token"
-                          className="font-normal cursor-pointer"
-                        >
-                          "Authorization: &lt;your token&gt;" header
-                        </FormLabel>
-                      </div>
+                      {currentServerType === "remote" && (
+                        <>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="bearer" id="auth-bearer" />
+                            <FormLabel
+                              htmlFor="auth-bearer"
+                              className="font-normal cursor-pointer"
+                            >
+                              "Authorization: Bearer &lt;your token&gt;" header
+                            </FormLabel>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="raw_token"
+                              id="auth-raw-token"
+                            />
+                            <FormLabel
+                              htmlFor="auth-raw-token"
+                              className="font-normal cursor-pointer"
+                            >
+                              "Authorization: &lt;your token&gt;" header
+                            </FormLabel>
+                          </div>
+                        </>
+                      )}
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="oauth" id="auth-oauth" />
                         <FormLabel
@@ -583,6 +686,34 @@ export function McpCatalogForm({
 
             {authMethod === "oauth" && (
               <div className="space-y-4 pl-6 border-l-2">
+                {currentServerType === "local" && (
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.oauthServerUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          OAuth Server URL{" "}
+                          <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://auth.example.com"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          The OAuth server endpoint used for authorization and
+                          token exchange. This is separate from the K8s-deployed
+                          server.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 <FormField
                   control={form.control}
                   name="oauthConfig.client_id"
@@ -728,6 +859,10 @@ export function McpCatalogForm({
             )}
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-4">
+            <p className="text-sm text-muted-foreground pb-2">
+              Add labels to organize, filter, and search for this server in the
+              catalog.
+            </p>
             <ProfileLabels
               ref={labelsRef}
               labels={labels}

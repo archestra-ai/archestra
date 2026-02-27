@@ -8,6 +8,7 @@ const {
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
   getInternalMcpCatalogTools,
+  getK8sImagePullSecrets,
   resetDeploymentYaml,
   updateInternalMcpCatalogItem,
   validateDeploymentYaml,
@@ -179,6 +180,19 @@ export function useResetDeploymentYaml() {
     onError: (error) => {
       console.error("Reset deployment YAML error:", error);
       toast.error("Failed to reset deployment YAML");
+    },
+  });
+}
+
+/**
+ * Fetch Kubernetes docker-registry secrets available for imagePullSecrets.
+ */
+export function useK8sImagePullSecrets() {
+  return useQuery({
+    queryKey: ["k8s-image-pull-secrets"],
+    queryFn: async () => {
+      const response = await getK8sImagePullSecrets();
+      return response.data ?? [];
     },
   });
 }

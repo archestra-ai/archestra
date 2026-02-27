@@ -710,10 +710,12 @@ describe("AgentToolModel.findAll", () => {
       const agent1 = await makeAgent({
         name: "Agent 1",
         teams: [team1.id],
+        scope: "team",
       });
       const agent2 = await makeAgent({
         name: "Agent 2",
         teams: [team2.id],
+        scope: "team",
       });
 
       // Add user to team1 via team membership

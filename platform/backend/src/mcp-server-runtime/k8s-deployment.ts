@@ -2,6 +2,7 @@ import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
 import {
+  type ImagePullSecretConfig,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
@@ -524,6 +525,191 @@ export default class K8sDeployment {
   }
 
   /**
+   * Create docker-registry Kubernetes Secrets from image pull secret credentials.
+   * Extracts __regcred_password:<server>:<username> entries from secretData and matches them with
+   * non-sensitive fields from localConfig.imagePullSecrets (credentials entries).
+   *
+   * @returns Array of created secret names to be used in pod spec imagePullSecrets
+   */
+  async createDockerRegistrySecrets(
+    secretData: Record<string, string>,
+    imagePullSecrets?: ImagePullSecretConfig[],
+  ): Promise<string[]> {
+    if (!imagePullSecrets) return [];
+
+    const createdSecretNames: string[] = [];
+
+    for (const entry of imagePullSecrets) {
+      if (entry.source !== "credentials") continue;
+
+      const passwordKey = `__regcred_password:${entry.server}:${entry.username}`;
+      const password = secretData[passwordKey];
+      if (!password) {
+        logger.warn(
+          {
+            mcpServerId: this.mcpServer.id,
+            server: entry.server,
+            username: entry.username,
+          },
+          "Skipping regcred creation: password not found in secret data",
+        );
+        continue;
+      }
+
+      // Use sanitized server + username in secret name for kubectl traceability and uniqueness
+      // K8s secret names must be DNS-1123 subdomain: max 253 chars, [a-z0-9.-], start/end alphanumeric
+      const sanitizedServer = K8sDeployment.ensureStringIsRfc1123Compliant(
+        entry.server,
+      ).slice(0, 40);
+      const sanitizedUsername = K8sDeployment.ensureStringIsRfc1123Compliant(
+        entry.username,
+      ).slice(0, 20);
+      const secretName =
+        `mcp-server-${this.mcpServer.id}-regcred-${sanitizedServer}-${sanitizedUsername}`
+          .replace(/[^a-z0-9]+$/, "")
+          .substring(0, 253);
+      const auth = Buffer.from(`${entry.username}:${password}`).toString(
+        "base64",
+      );
+
+      const dockerConfigJson = JSON.stringify({
+        auths: {
+          [entry.server]: {
+            username: entry.username,
+            password,
+            email: entry.email || "",
+            auth,
+          },
+        },
+      });
+
+      const k8sSecret: k8s.V1Secret = {
+        metadata: {
+          name: secretName,
+          labels: K8sDeployment.sanitizeMetadataLabels({
+            app: "mcp-server",
+            "mcp-server-id": this.mcpServer.id,
+            type: "regcred",
+          }),
+        },
+        type: "kubernetes.io/dockerconfigjson",
+        data: {
+          ".dockerconfigjson": Buffer.from(dockerConfigJson).toString("base64"),
+        },
+      };
+
+      try {
+        try {
+          await this.k8sApi.createNamespacedSecret({
+            namespace: this.namespace,
+            body: k8sSecret,
+          });
+        } catch (createError: unknown) {
+          const isConflict =
+            createError &&
+            typeof createError === "object" &&
+            (("statusCode" in createError && createError.statusCode === 409) ||
+              ("code" in createError && createError.code === 409));
+
+          if (isConflict) {
+            await this.k8sApi.replaceNamespacedSecret({
+              name: secretName,
+              namespace: this.namespace,
+              body: k8sSecret,
+            });
+          } else {
+            throw createError;
+          }
+        }
+
+        createdSecretNames.push(secretName);
+        logger.info(
+          {
+            mcpServerId: this.mcpServer.id,
+            secretName,
+            server: entry.server,
+          },
+          "Created docker-registry K8s Secret for MCP server",
+        );
+      } catch (error) {
+        logger.error(
+          { err: error, mcpServerId: this.mcpServer.id, secretName },
+          "Failed to create docker-registry K8s Secret",
+        );
+        throw error;
+      }
+    }
+
+    return createdSecretNames;
+  }
+
+  /**
+   * Delete docker-registry Kubernetes Secrets created for this MCP server.
+   * Uses label selector to find and delete all regcred secrets.
+   */
+  async deleteDockerRegistrySecrets(): Promise<void> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const labelSelector = `mcp-server-id=${sanitizedId},type=regcred`;
+
+      const secrets = await this.k8sApi.listNamespacedSecret({
+        namespace: this.namespace,
+        labelSelector,
+      });
+
+      for (const secret of secrets.items) {
+        if (secret.metadata?.name) {
+          await this.k8sApi.deleteNamespacedSecret({
+            name: secret.metadata.name,
+            namespace: this.namespace,
+          });
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: secret.metadata.name,
+            },
+            "Deleted docker-registry K8s Secret",
+          );
+        }
+      }
+    } catch (error: unknown) {
+      if (isK8s404Error(error)) {
+        return;
+      }
+      logger.error(
+        { err: error, mcpServerId: this.mcpServer.id },
+        "Failed to delete docker-registry K8s Secrets",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Collect all imagePullSecrets names for pod spec: existing secret names +
+   * generated docker-registry secret names from credentials entries.
+   */
+  static collectImagePullSecretNames(
+    imagePullSecrets: ImagePullSecretConfig[] | undefined,
+    generatedRegcredNames: string[],
+  ): Array<{ name: string }> {
+    const names: Array<{ name: string }> = [];
+
+    if (imagePullSecrets) {
+      for (const entry of imagePullSecrets) {
+        if (entry.source === "existing") {
+          names.push({ name: entry.name });
+        }
+      }
+    }
+
+    for (const name of generatedRegcredNames) {
+      names.push({ name });
+    }
+
+    return names;
+  }
+
+  /**
    * Returns the system-managed labels that must always be present on deployments.
    * These labels are used for identification and cannot be overridden by user configuration.
    */
@@ -553,6 +739,7 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment {
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
@@ -564,6 +751,7 @@ export default class K8sDeployment {
         httpPort,
         nodeSelector,
         tolerations,
+        resolvedImagePullSecretNames,
       );
       if (yamlDeployment) {
         logger.info(
@@ -625,8 +813,8 @@ export default class K8sDeployment {
       // Apply tolerations if provided (e.g., inherited from archestra-platform pod)
       ...(tolerations?.length ? { tolerations } : {}),
       // Apply imagePullSecrets for pulling from private registries
-      ...(localConfig.imagePullSecrets?.length
-        ? { imagePullSecrets: localConfig.imagePullSecrets }
+      ...(resolvedImagePullSecretNames?.length
+        ? { imagePullSecrets: resolvedImagePullSecretNames }
         : {}),
       // Add volumes for secrets mounted as files
       ...(volumes.length > 0 ? { volumes } : {}),
@@ -737,6 +925,7 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
     tolerations?: k8s.V1Toleration[] | null,
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment | null {
     const k8sSecretName = K8sDeployment.constructK8sSecretName(
       this.mcpServer.id,
@@ -836,15 +1025,15 @@ export default class K8sDeployment {
       deployment.spec.template.spec.tolerations = tolerations;
     }
 
-    // 3. Apply imagePullSecrets if provided
+    // 3. Apply imagePullSecrets if provided (resolved names: existing + generated regcred)
     if (
-      localConfig.imagePullSecrets?.length &&
+      resolvedImagePullSecretNames?.length &&
       deployment.spec?.template?.spec
     ) {
       const existingSecrets =
         deployment.spec.template.spec.imagePullSecrets || [];
       const existingNames = new Set(existingSecrets.map((s) => s.name));
-      const newSecrets = localConfig.imagePullSecrets.filter(
+      const newSecrets = resolvedImagePullSecretNames.filter(
         (s) => !existingNames.has(s.name),
       );
       deployment.spec.template.spec.imagePullSecrets = [
@@ -1255,7 +1444,9 @@ export default class K8sDeployment {
   /**
    * Create or start the deployment for this MCP server
    */
-  async startOrCreateDeployment(): Promise<void> {
+  async startOrCreateDeployment(
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
+  ): Promise<void> {
     try {
       /**
        * MIGRATION STEP:
@@ -1385,6 +1576,7 @@ export default class K8sDeployment {
           httpPort,
           platformNodeSelector,
           platformTolerations,
+          resolvedImagePullSecretNames,
         ),
       });
 
@@ -1995,6 +2187,7 @@ export default class K8sDeployment {
     await this.stopDeployment();
     await this.deleteK8sService();
     await this.deleteK8sSecret();
+    await this.deleteDockerRegistrySecrets();
   }
 
   /**

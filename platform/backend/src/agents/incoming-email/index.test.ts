@@ -34,6 +34,7 @@ async function createTestInternalAgent(
     incomingEmailEnabled?: boolean;
     incomingEmailSecurityMode?: IncomingEmailSecurityMode;
     incomingEmailAllowedDomain?: string;
+    scope?: "org" | "team" | "personal";
   },
 ) {
   const [agent] = await db
@@ -45,6 +46,7 @@ async function createTestInternalAgent(
       agentType: "agent",
       userPrompt: null,
       systemPrompt: "You are a helpful assistant",
+      scope: options?.scope ?? "org",
       incomingEmailEnabled: options?.incomingEmailEnabled ?? false,
       incomingEmailSecurityMode:
         options?.incomingEmailSecurityMode ?? "private",
@@ -1112,6 +1114,7 @@ describe("processIncomingEmail security modes", () => {
     const agent = await createTestInternalAgent(org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: "private",
+      scope: "team",
     });
     const agentId = agent.id;
 
@@ -1165,6 +1168,7 @@ describe("processIncomingEmail security modes", () => {
     const agent = await createTestInternalAgent(org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: "private",
+      scope: "team",
     });
     const agentId = agent.id;
 
@@ -1220,6 +1224,7 @@ describe("processIncomingEmail security modes", () => {
     const agent = await createTestInternalAgent(org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: "private",
+      scope: "team",
     });
     const agentId = agent.id;
 
@@ -1273,6 +1278,7 @@ describe("processIncomingEmail security modes", () => {
     const agent = await createTestInternalAgent(org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: "private",
+      scope: "team",
     });
     const agentId = agent.id;
 

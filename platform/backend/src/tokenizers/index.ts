@@ -19,6 +19,7 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   mistral: () => new TiktokenTokenizer(),
   perplexity: () => new TiktokenTokenizer(),
   groq: () => new TiktokenTokenizer(),
+  openrouter: () => new TiktokenTokenizer(),
   vllm: () => new TiktokenTokenizer(),
   ollama: () => new TiktokenTokenizer(),
   zhipuai: () => new TiktokenTokenizer(),

@@ -21,6 +21,7 @@ export interface TestFixtures {
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
   createLlmProxy: typeof createLlmProxy;
+  createMcpGateway: typeof createMcpGateway;
   deleteAgent: typeof deleteAgent;
   createApiKey: typeof createApiKey;
   deleteApiKey: typeof deleteApiKey;
@@ -104,7 +105,11 @@ const makeApiRequest = async ({
  * Create an agent
  * (authnz is handled by the authenticated session)
  */
-const createAgent = async (request: APIRequestContext, name: string) =>
+const createAgent = async (
+  request: APIRequestContext,
+  name: string,
+  scope: "personal" | "team" | "org",
+) =>
   makeApiRequest({
     request,
     method: "post",
@@ -112,6 +117,7 @@ const createAgent = async (request: APIRequestContext, name: string) =>
     data: {
       name,
       teams: [],
+      scope,
     },
   });
 
@@ -119,7 +125,11 @@ const createAgent = async (request: APIRequestContext, name: string) =>
  * Create an LLM Proxy
  * (authnz is handled by the authenticated session)
  */
-const createLlmProxy = async (request: APIRequestContext, name: string) =>
+const createLlmProxy = async (
+  request: APIRequestContext,
+  name: string,
+  scope: "personal" | "team" | "org",
+) =>
   makeApiRequest({
     request,
     method: "post",
@@ -128,6 +138,28 @@ const createLlmProxy = async (request: APIRequestContext, name: string) =>
       name,
       teams: [],
       agentType: "llm_proxy",
+      scope,
+    },
+  });
+
+/**
+ * Create an MCP Gateway
+ * (authnz is handled by the authenticated session)
+ */
+const createMcpGateway = async (
+  request: APIRequestContext,
+  name: string,
+  scope: "personal" | "team" | "org",
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/agents",
+    data: {
+      name,
+      teams: [],
+      agentType: "mcp_gateway",
+      scope,
     },
   });
 
@@ -919,6 +951,9 @@ export const test = base.extend<TestFixtures>({
   },
   createLlmProxy: async ({}, use) => {
     await use(createLlmProxy);
+  },
+  createMcpGateway: async ({}, use) => {
+    await use(createMcpGateway);
   },
   deleteAgent: async ({}, use) => {
     await use(deleteAgent);

@@ -44,6 +44,70 @@ export interface DualLlmClient {
 }
 
 /**
+ * OpenRouter implementation of DualLlmClient (OpenAI-compatible)
+ */
+export class OpenrouterDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "openrouter/auto") {
+    logger.debug({ model }, "[dualLlmClient] OpenRouter: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.openrouter.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] OpenRouter: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+    return response.choices[0].message.content?.trim() || "";
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] OpenRouter: starting chat with schema",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+    return JSON.parse(response.choices[0].message.content || "") as T;
+  }
+}
+
+/**
  * OpenAI implementation of DualLlmClient
  */
 export class OpenAiDualLlmClient implements DualLlmClient {
@@ -1400,6 +1464,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     openai: (apiKey) => {
       if (!apiKey) throw new Error("API key required for OpenAI dual LLM");
       return new OpenAiDualLlmClient(apiKey);
+    },
+    openrouter: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for OpenRouter dual LLM");
+      return new OpenrouterDualLlmClient(apiKey, model);
     },
     vllm: (apiKey, model) => {
       if (!model) throw new Error("Model name required for vLLM dual LLM");

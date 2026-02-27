@@ -54,16 +54,20 @@ export function DeploymentStatusBanner({
   const state = status.state as DeploymentState;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 flex-shrink-0">
+    <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 flex-shrink-0 min-w-0">
       <DeploymentStatusDot state={state} />
-      <span className="text-sm font-medium">{getDeploymentLabel(state)}</span>
+      <span className="text-sm font-medium shrink-0">
+        {getDeploymentLabel(state)}
+      </span>
       {status.message && (
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-muted-foreground shrink-0">
           — {status.message}
         </span>
       )}
       {status.error && (
-        <span className="text-sm text-destructive">— {status.error}</span>
+        <span className="text-sm text-destructive truncate min-w-0">
+          — {status.error}
+        </span>
       )}
     </div>
   );

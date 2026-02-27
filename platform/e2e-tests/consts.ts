@@ -128,6 +128,11 @@ export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 // MCP Server JWKS (example server for JWT propagation testing)
 // =============================================================================
 
+export const MCP_EXAMPLE_OAUTH_EXTERNAL_URL = "http://localhost:30083";
+export const MCP_EXAMPLE_OAUTH_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-mcp-example-oauth:3232"
+  : "http://localhost:30083";
+
 export const MCP_SERVER_JWKS_EXTERNAL_URL = "http://localhost:30082";
 export const MCP_SERVER_JWKS_BACKEND_URL = IS_CI
   ? "http://e2e-tests-mcp-server-jwks:3456"
@@ -146,3 +151,9 @@ export const MCP_SERVER_JWKS_DOCKER_IMAGE =
 export const KEYCLOAK_K8S_INTERNAL_URL = IS_CI
   ? "http://e2e-tests-keycloak:8080"
   : "http://e2e-tests-keycloak.default.svc.cluster.local:8080";
+
+/**
+ * K8s namespace where MCP server pods are deployed by the orchestrator.
+ * CI uses the default namespace; local dev uses archestra-dev.
+ */
+export const MCP_SERVER_NAMESPACE = IS_CI ? "default" : "archestra-dev";

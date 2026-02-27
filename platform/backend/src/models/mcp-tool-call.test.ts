@@ -62,7 +62,11 @@ describe("McpToolCallModel", () => {
   describe("date range filtering", () => {
     test("filters by startDate", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       // Create an MCP tool call
       await McpToolCallModel.create({
@@ -88,7 +92,11 @@ describe("McpToolCallModel", () => {
 
     test("filters by endDate", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       // Create an MCP tool call
       await McpToolCallModel.create({
@@ -121,7 +129,11 @@ describe("McpToolCallModel", () => {
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       // Create an MCP tool call
       await McpToolCallModel.create({
@@ -158,7 +170,11 @@ describe("McpToolCallModel", () => {
 
   describe("getAllMcpToolCallsForAgentPaginated with date filtering", () => {
     test("filters by date range for specific agent", async () => {
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       // Create an MCP tool call
       await McpToolCallModel.create({
@@ -192,7 +208,11 @@ describe("McpToolCallModel", () => {
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -225,7 +245,11 @@ describe("McpToolCallModel", () => {
 
     test("searches by tool name (case insensitive)", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -258,7 +282,11 @@ describe("McpToolCallModel", () => {
 
     test("searches by tool arguments", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -301,7 +329,11 @@ describe("McpToolCallModel", () => {
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -344,7 +376,11 @@ describe("McpToolCallModel", () => {
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -382,7 +418,11 @@ describe("McpToolCallModel", () => {
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -422,7 +462,11 @@ describe("McpToolCallModel", () => {
 
     test("search returns multiple matches", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -462,7 +506,11 @@ describe("McpToolCallModel", () => {
 
     test("search with no matches returns empty", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -484,7 +532,11 @@ describe("McpToolCallModel", () => {
     });
 
     test("search works with getAllMcpToolCallsForAgentPaginated", async () => {
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -517,7 +569,11 @@ describe("McpToolCallModel", () => {
 
     test("search combined with date filter", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        scope: "org",
+        teams: [],
+      });
 
       await McpToolCallModel.create({
         agentId: agent.id,
@@ -550,6 +606,7 @@ describe("McpToolCallModel", () => {
       const admin = await makeAdmin();
       const agent = await AgentModel.create({
         name: "Agent To Delete",
+        scope: "org",
         teams: [],
       });
 
@@ -596,6 +653,7 @@ describe("McpToolCallModel", () => {
       const agent = await AgentModel.create({
         name: "Agent To Delete",
         teams: [team.id],
+        scope: "team",
       });
 
       // Create an MCP tool call for the agent
@@ -642,10 +700,12 @@ describe("McpToolCallModel", () => {
       const admin = await makeAdmin();
       const agentToDelete = await AgentModel.create({
         name: "Agent To Delete",
+        scope: "org",
         teams: [],
       });
       const agentToKeep = await AgentModel.create({
         name: "Agent To Keep",
+        scope: "org",
         teams: [],
       });
 

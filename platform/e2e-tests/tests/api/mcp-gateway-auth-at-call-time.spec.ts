@@ -90,7 +90,11 @@ test.describe("MCP Gateway - Auth at Call Time", () => {
       const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
 
       // 5. Create profile and assign Marketing Team so the team token can access it
-      const profileResponse = await createAgent(request, `Auth Call Time Test`);
+      const profileResponse = await createAgent(
+        request,
+        `Auth Call Time Test`,
+        "team",
+      );
       const profile = await profileResponse.json();
       profileId = profile.id;
 

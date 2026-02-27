@@ -41,6 +41,7 @@ const RETRY_CONFIG = {
  */
 const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   openai: "openai",
+  openrouter: "openrouter",
   anthropic: "anthropic",
   google: "gemini",
   "google-vertex": "gemini",
@@ -404,6 +405,7 @@ class ModelsDevClient {
     const preferredSourcePrefixes: Record<SupportedProvider, string[]> = {
       gemini: ["google/"], // Prefer google over google-vertex
       openai: ["openai/"], // Prefer direct providers over aggregators
+      openrouter: ["openrouter/"],
       anthropic: ["anthropic/"],
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],

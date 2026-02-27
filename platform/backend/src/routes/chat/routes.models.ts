@@ -736,6 +736,42 @@ export async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from OpenRouter API (OpenAI-compatible)
+ */
+async function fetchOpenrouterModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.openrouter.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch OpenRouter models",
+    );
+    throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{ id: string; created?: number }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "openrouter" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -852,6 +888,7 @@ async function getProviderApiKey({
     mistral: () => config.chat.mistral.apiKey || null,
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
+    openrouter: () => config.chat.openrouter?.apiKey || null,
     perplexity: () => config.chat.perplexity?.apiKey || null,
     groq: () => config.chat.groq?.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
@@ -875,6 +912,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
+  openrouter: fetchOpenrouterModels,
   perplexity: fetchPerplexityModels,
   groq: fetchGroqModels,
   vllm: fetchVllmModels,

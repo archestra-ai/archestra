@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { AgentLabelWithDetails } from "@/types";
 
 class AgentLabelModel {
@@ -37,86 +37,87 @@ class AgentLabelModel {
   }
 
   /**
-   * Get or create a label key
+   * Get or create a label key. Uses INSERT ON CONFLICT DO NOTHING + SELECT
+   * to handle concurrent inserts atomically.
    */
-  static async getOrCreateKey(key: string): Promise<string> {
-    // Try to find existing key
-    const [existing] = await db
-      .select()
+  static async getOrCreateKey(
+    key: string,
+    txOrDb: Transaction | typeof db = db,
+  ): Promise<string> {
+    await txOrDb
+      .insert(schema.labelKeysTable)
+      .values({ key })
+      .onConflictDoNothing({ target: schema.labelKeysTable.key });
+
+    const [result] = await txOrDb
+      .select({ id: schema.labelKeysTable.id })
       .from(schema.labelKeysTable)
       .where(eq(schema.labelKeysTable.key, key))
       .limit(1);
 
-    if (existing) {
-      return existing.id;
-    }
-
-    // Create new key
-    const [created] = await db
-      .insert(schema.labelKeysTable)
-      .values({ key })
-      .returning();
-
-    return created.id;
+    return result.id;
   }
 
   /**
-   * Get or create a label value
+   * Get or create a label value. Uses INSERT ON CONFLICT DO NOTHING + SELECT
+   * to handle concurrent inserts atomically.
    */
-  static async getOrCreateValue(value: string): Promise<string> {
-    // Try to find existing value
-    const [existing] = await db
-      .select()
+  static async getOrCreateValue(
+    value: string,
+    txOrDb: Transaction | typeof db = db,
+  ): Promise<string> {
+    await txOrDb
+      .insert(schema.labelValuesTable)
+      .values({ value })
+      .onConflictDoNothing({ target: schema.labelValuesTable.value });
+
+    const [result] = await txOrDb
+      .select({ id: schema.labelValuesTable.id })
       .from(schema.labelValuesTable)
       .where(eq(schema.labelValuesTable.value, value))
       .limit(1);
 
-    if (existing) {
-      return existing.id;
-    }
-
-    // Create new value
-    const [created] = await db
-      .insert(schema.labelValuesTable)
-      .values({ value })
-      .returning();
-
-    return created.id;
+    return result.id;
   }
 
   /**
-   * Sync labels for an agent (replaces all existing labels)
+   * Sync labels for an agent (replaces all existing labels).
+   * All operations run inside a single transaction to prevent race conditions
+   * where concurrent pruning could delete keys/values between creation and use.
    */
   static async syncAgentLabels(
     agentId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    // Process labels outside of transaction to avoid deadlocks
-    const labelInserts: { agentId: string; keyId: string; valueId: string }[] =
-      [];
-
-    if (labels.length > 0) {
-      // Process each label to get or create keys/values
-      for (const label of labels) {
-        const keyId = await AgentLabelModel.getOrCreateKey(label.key);
-        const valueId = await AgentLabelModel.getOrCreateValue(label.value);
-        labelInserts.push({ agentId, keyId, valueId });
-      }
-    }
-
     await db.transaction(async (tx) => {
       // Delete all existing labels for this agent
       await tx
         .delete(schema.agentLabelsTable)
         .where(eq(schema.agentLabelsTable.agentId, agentId));
 
-      // Insert new labels (if any provided)
-      if (labelInserts.length > 0) {
+      // Get or create keys/values and insert new labels within the same transaction
+      if (labels.length > 0) {
+        const labelInserts: {
+          agentId: string;
+          keyId: string;
+          valueId: string;
+        }[] = [];
+
+        for (const label of labels) {
+          const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
+          const valueId = await AgentLabelModel.getOrCreateValue(
+            label.value,
+            tx,
+          );
+          labelInserts.push({ agentId, keyId, valueId });
+        }
+
         await tx.insert(schema.agentLabelsTable).values(labelInserts);
       }
     });
 
-    await AgentLabelModel.pruneKeysAndValues();
+    // Fire-and-forget pruning to avoid race conditions with concurrent operations
+    AgentLabelModel.pruneKeysAndValues().catch(() => {});
   }
 
   /**

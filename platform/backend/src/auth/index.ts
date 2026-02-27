@@ -5,6 +5,7 @@ export {
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
   isAgentTypeAdmin,
+  requireAgentModifyPermission,
   requireAgentTypePermission,
 } from "./agent-type-permissions";
 export { auth as betterAuth } from "./better-auth";

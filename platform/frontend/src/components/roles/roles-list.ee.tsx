@@ -68,7 +68,10 @@ export function RolesList() {
     }
 
     createMutation.mutate(
-      { name: roleName, permission },
+      // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
+      { name: roleName, permission } as Parameters<
+        typeof createMutation.mutate
+      >[0],
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
@@ -97,10 +100,11 @@ export function RolesList() {
     }
 
     updateMutation.mutate(
+      // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
       {
         roleId: selectedRole.id,
         data: { name: roleName, permission },
-      },
+      } as Parameters<typeof updateMutation.mutate>[0],
       {
         onSuccess: () => {
           setEditDialogOpen(false);

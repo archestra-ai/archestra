@@ -1,5 +1,6 @@
 import {
   type archestraApiTypes,
+  type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
 } from "@shared";
@@ -46,9 +47,11 @@ export function transformFormToApiData(
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
       imagePullSecrets:
-        values.localConfig.imagePullSecrets?.filter(
-          (s) => s.name.trim().length > 0,
-        ) || undefined,
+        values.localConfig.imagePullSecrets?.filter((s) => {
+          if (s.source === "existing") return s.name.trim().length > 0;
+          if (s.source === "credentials") return s.server.trim().length > 0;
+          return false;
+        }) || undefined,
     };
 
     // BYOS: Include local config vault path and key if set
@@ -73,9 +76,15 @@ export function transformFormToApiData(
           .filter((scope) => scope.length > 0)
       : ["read", "write"];
 
+    // For local servers, use oauthServerUrl; for remote servers, use serverUrl
+    const oauthServerUrl =
+      values.serverType === "local"
+        ? values.oauthConfig.oauthServerUrl || ""
+        : values.serverUrl || "";
+
     data.oauthConfig = {
       name: values.name, // Use name as OAuth provider name
-      server_url: values.serverUrl || "", // Use serverUrl as OAuth server URL
+      server_url: oauthServerUrl, // OAuth server URL for discovery/authorization
       client_id: values.oauthConfig.client_id || "",
       // Only include client_secret if no BYOS vault path is set
       client_secret: values.oauthClientSecretVaultPath
@@ -178,6 +187,7 @@ export function transformCatalogItemToFormValues(
         redirect_uris: string;
         scopes: string;
         supports_resource_metadata: boolean;
+        oauthServerUrl?: string;
       }
     | undefined;
   if (item.oauthConfig) {
@@ -191,6 +201,11 @@ export function transformCatalogItemToFormValues(
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
+      // For local servers, populate oauthServerUrl from server_url
+      oauthServerUrl:
+        item.serverType === "local"
+          ? item.oauthConfig.server_url || ""
+          : undefined,
     };
   }
 
@@ -212,7 +227,7 @@ export function transformCatalogItemToFormValues(
         httpPort?: string;
         httpPath?: string;
         serviceAccount?: string;
-        imagePullSecrets?: Array<{ name: string }>;
+        imagePullSecrets?: ImagePullSecretConfig[];
       }
     | undefined;
   if (item.localConfig) {
@@ -255,7 +270,24 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
-      imagePullSecrets: item.localConfig.imagePullSecrets || [],
+      // Normalize imagePullSecrets: legacy { name } → { source: "existing", name }
+      // Also hydrate passwords from localConfigSecret for credentials entries
+      imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(
+        (s: ImagePullSecretConfig | { name: string }) => {
+          if (!("source" in s)) {
+            return { source: "existing" as const, name: s.name };
+          }
+          if (s.source === "credentials" && localConfigSecret?.secret) {
+            const passwordKey = `__regcred_password:${s.server}:${s.username}`;
+            const password = localConfigSecret.secret[passwordKey];
+            return {
+              ...s,
+              password: password != null ? String(password) : undefined,
+            };
+          }
+          return s;
+        },
+      ),
     };
   }
 

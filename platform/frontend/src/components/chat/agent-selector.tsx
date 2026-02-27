@@ -13,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/popover";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useCreateConversation } from "@/lib/chat.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { cn } from "@/lib/utils";
 
 interface AgentSelectorProps {
@@ -43,8 +45,19 @@ export function AgentSelector({
   currentModel,
 }: AgentSelectorProps) {
   const router = useRouter();
-  const { data: agents = [] } = useInternalAgents();
+  const { data: allAgents = [] } = useInternalAgents();
+  const { data: session } = authClient.useSession();
   const createConversationMutation = useCreateConversation();
+
+  // Filter out other users' personal agents
+  const agents = useMemo(() => {
+    const userId = session?.user?.id;
+    return allAgents.filter(
+      (a) =>
+        (a as unknown as Record<string, unknown>).scope !== "personal" ||
+        (a as unknown as Record<string, unknown>).authorId === userId,
+    );
+  }, [allAgents, session?.user?.id]);
   const [open, setOpen] = useState(false);
   const [pendingAgent, setPendingAgent] = useState<{
     id: string | null;
@@ -118,10 +131,26 @@ export function AgentSelector({
                     value={agent.name}
                     onSelect={() => handleAgentSelect(agent.id, agent.name)}
                   >
-                    {agent.name}
+                    <span className="truncate">{agent.name}</span>
+                    {(agent as unknown as Record<string, unknown>).scope ===
+                    "personal" ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-[10px] px-1 py-0 shrink-0"
+                      >
+                        Personal
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-green-500/10 text-green-600 border-green-500/30 text-[10px] px-1 py-0 shrink-0"
+                      >
+                        Shared
+                      </Badge>
+                    )}
                     <Check
                       className={cn(
-                        "ml-auto h-4 w-4",
+                        "ml-auto h-4 w-4 shrink-0",
                         currentPromptId === agent.id
                           ? "opacity-100"
                           : "opacity-0",

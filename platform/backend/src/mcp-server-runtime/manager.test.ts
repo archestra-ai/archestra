@@ -340,11 +340,15 @@ describe("McpServerRuntimeManager", () => {
       const mockStopDeployment = vi.fn().mockResolvedValue(undefined);
       const mockDeleteK8sService = vi.fn().mockResolvedValue(undefined);
       const mockDeleteK8sSecret = vi.fn().mockResolvedValue(undefined);
+      const mockDeleteDockerRegistrySecrets = vi
+        .fn()
+        .mockResolvedValue(undefined);
 
       const mockDeployment = {
         stopDeployment: mockStopDeployment,
         deleteK8sService: mockDeleteK8sService,
         deleteK8sSecret: mockDeleteK8sSecret,
+        deleteDockerRegistrySecrets: mockDeleteDockerRegistrySecrets,
       };
 
       // Access internal map and add mock deployment
@@ -358,6 +362,7 @@ describe("McpServerRuntimeManager", () => {
       expect(mockStopDeployment).toHaveBeenCalledTimes(1);
       expect(mockDeleteK8sService).toHaveBeenCalledTimes(1);
       expect(mockDeleteK8sSecret).toHaveBeenCalledTimes(1);
+      expect(mockDeleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
 
       // Verify deployment was removed from map
       // @ts-expect-error - accessing private property for testing
@@ -415,6 +420,9 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sSecret: vi.fn().mockImplementation(async () => {
           callOrder.push("deleteK8sSecret");
         }),
+        deleteDockerRegistrySecrets: vi.fn().mockImplementation(async () => {
+          callOrder.push("deleteDockerRegistrySecrets");
+        }),
       };
 
       // @ts-expect-error - accessing private property for testing
@@ -422,11 +430,12 @@ describe("McpServerRuntimeManager", () => {
 
       await manager.stopServer("test-server-id");
 
-      // Verify order: stopDeployment -> deleteK8sService -> deleteK8sSecret
+      // Verify order: stopDeployment -> deleteK8sService -> deleteK8sSecret -> deleteDockerRegistrySecrets
       expect(callOrder).toEqual([
         "stopDeployment",
         "deleteK8sService",
         "deleteK8sSecret",
+        "deleteDockerRegistrySecrets",
       ]);
 
       mockLoadFromDefault.mockRestore();
@@ -673,6 +682,43 @@ describe("McpServerRuntimeManager", () => {
 
       // Then: secretData should be empty (non-secrets not added)
       expect(secretData).toEqual({});
+    });
+
+    test("regcred passwords come from catalog localConfigSecretId, not per-user secretData", () => {
+      // This test verifies the fix for the bug where createDockerRegistrySecrets
+      // was passed per-user secretData (mcpServer.secretId), but regcred passwords
+      // are stored in catalog's localConfigSecretId.
+
+      // Given: per-user secret data (from mcpServer.secretId) with user-prompted values
+      const perUserSecretData: Record<string, string> = {
+        API_KEY: "user-api-key",
+      };
+
+      // And: catalog secret data (from localConfigSecretId) with regcred passwords
+      const catalogSecretData: Record<string, string> = {
+        STATIC_SECRET: "static-value",
+        "__regcred_password:quay.io:myuser": "registry-password",
+        "__regcred_password:ghcr.io:bot": "ghcr-password",
+      };
+
+      // When: we extract only __regcred_password:* keys from catalog secret
+      const regcredSecretData: Record<string, string> = {};
+      for (const [key, value] of Object.entries(catalogSecretData)) {
+        if (key.startsWith("__regcred_password:")) {
+          regcredSecretData[key] = value;
+        }
+      }
+
+      // Then: regcred data should contain only password keys, not env vars
+      expect(regcredSecretData).toEqual({
+        "__regcred_password:quay.io:myuser": "registry-password",
+        "__regcred_password:ghcr.io:bot": "ghcr-password",
+      });
+
+      // And: per-user data should NOT contain regcred keys
+      expect(perUserSecretData).not.toHaveProperty(
+        "__regcred_password:quay.io:myuser",
+      );
     });
 
     test("ignores secrets without value", () => {

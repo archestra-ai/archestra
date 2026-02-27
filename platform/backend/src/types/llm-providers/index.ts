@@ -9,6 +9,7 @@ export { default as Minimax } from "./minimax";
 export { default as Mistral } from "./mistral";
 export { default as Ollama } from "./ollama";
 export { default as OpenAi } from "./openai";
+export { default as Openrouter } from "./openrouter";
 export { default as Perplexity } from "./perplexity";
 export { default as Vllm } from "./vllm";
 export { default as Zhipuai } from "./zhipuai";

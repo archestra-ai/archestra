@@ -33,6 +33,11 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
+import {
+  setOAuthCatalogId,
+  setOAuthMcpServerId,
+  setOAuthState,
+} from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
 
 interface ManageUsersDialogProps {
@@ -112,6 +117,30 @@ export function ManageUsersDialog({
     return "You can only re-authenticate connections for teams you are a member of";
   };
 
+  // Check if user can revoke (delete) a credential
+  // Personal: owner OR mcpServer:update. Team: team:admin OR (mcpServer:update AND membership)
+  const canRevoke = (mcpServer: (typeof allServers)[number]) => {
+    if (!mcpServer.teamId) {
+      return (
+        mcpServer.ownerId === currentUserId || !!hasMcpServerUpdatePermission
+      );
+    }
+    if (hasTeamAdminPermission) return true;
+    if (!hasMcpServerUpdatePermission) return false;
+    return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
+  };
+
+  // Get tooltip message for disabled revoke button
+  const getRevokeTooltip = (mcpServer: (typeof allServers)[number]): string => {
+    if (!mcpServer.teamId) {
+      return "Only the connection owner or an editor/admin can revoke";
+    }
+    if (!hasMcpServerUpdatePermission) {
+      return "You don't have permission to revoke team connections";
+    }
+    return "You can only revoke connections for teams you are a member of";
+  };
+
   const deleteMcpServerMutation = useDeleteMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
 
@@ -132,7 +161,7 @@ export function ManageUsersDialog({
 
     try {
       // Store the MCP server ID in session storage for re-authentication flow
-      sessionStorage.setItem("oauth_mcp_server_id", mcpServer.id);
+      setOAuthMcpServerId(mcpServer.id);
 
       // Call backend to initiate OAuth flow
       const { authorizationUrl, state } =
@@ -141,13 +170,13 @@ export function ManageUsersDialog({
         });
 
       // Store state in session storage for the callback
-      sessionStorage.setItem("oauth_state", state);
-      sessionStorage.setItem("oauth_catalog_id", catalogItem.id);
+      setOAuthState(state);
+      setOAuthCatalogId(catalogItem.id);
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
     } catch {
-      sessionStorage.removeItem("oauth_mcp_server_id");
+      setOAuthMcpServerId(null);
       toast.error("Failed to initiate re-authentication");
     }
   };
@@ -274,17 +303,33 @@ export function ManageUsersDialog({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          <Button
-                            onClick={() => handleRevoke(mcpServer)}
-                            disabled={deleteMcpServerMutation.isPending}
-                            size="sm"
-                            variant="outline"
-                            className="h-7 w-full text-xs"
-                            data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
-                          >
-                            <Trash className="mr-1 h-3 w-3" />
-                            Revoke
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="w-full">
+                                  <Button
+                                    onClick={() => handleRevoke(mcpServer)}
+                                    disabled={
+                                      deleteMcpServerMutation.isPending ||
+                                      !canRevoke(mcpServer)
+                                    }
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 w-full text-xs"
+                                    data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
+                                  >
+                                    <Trash className="mr-1 h-3 w-3" />
+                                    Revoke
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {!canRevoke(mcpServer) && (
+                                <TooltipContent>
+                                  {getRevokeTooltip(mcpServer)}
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </TableCell>
                     </TableRow>

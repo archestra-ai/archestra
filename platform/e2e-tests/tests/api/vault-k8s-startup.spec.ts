@@ -19,7 +19,7 @@ test.describe("Vault K8s startup - DB URL from Vault", () => {
     const uniqueSuffix = crypto.randomUUID().slice(0, 8);
     const agentName = `vault-k8s-test-agent-${uniqueSuffix}`;
 
-    const createResponse = await createAgent(request, agentName);
+    const createResponse = await createAgent(request, agentName, "personal");
     const agent = await createResponse.json();
 
     expect(agent).toHaveProperty("id");

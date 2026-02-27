@@ -5,7 +5,7 @@ import {
   type Resource,
 } from "@shared";
 import { UserModel } from "@/models";
-import { ApiError } from "@/types";
+import { type AgentScope, ApiError } from "@/types";
 import { userHasPermission } from "./utils";
 
 export { getResourceForAgentType };
@@ -96,6 +96,10 @@ export async function getAgentTypePermissionChecker(params: {
       const resource = getResourceForAgentType(agentType);
       return permissions[resource]?.includes("admin") ?? false;
     },
+    isTeamAdmin(agentType: AgentType): boolean {
+      const resource = getResourceForAgentType(agentType);
+      return permissions[resource]?.includes("team-admin") ?? false;
+    },
     hasAnyReadPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
         (r) => permissions[r]?.includes("read") ?? false,
@@ -109,6 +113,52 @@ export async function getAgentTypePermissionChecker(params: {
   };
 }
 
+/**
+ * Enforces 3-tier scope-based authorization for agent modifications (create/update/delete).
+ *
+ * - Admin (`agent:admin`) → always allowed
+ * - `scope=org` → requires `admin`
+ * - `scope=team` → requires `team-admin`
+ * - `scope=personal` → requires authorship (authorId === userId)
+ *
+ * Throws ApiError(403) if the user lacks permission.
+ */
+export function requireAgentModifyPermission(params: {
+  checker: AgentTypePermissionChecker;
+  agentType: AgentType;
+  agentScope: AgentScope;
+  agentAuthorId: string | null;
+  userId: string;
+}): void {
+  const { checker, agentType, agentScope, agentAuthorId, userId } = params;
+
+  // Admins bypass all checks
+  if (checker.isAdmin(agentType)) {
+    return;
+  }
+
+  switch (agentScope) {
+    case "org":
+      // Only admins can manage org-scoped agents (already checked above)
+      throw new ApiError(403, "Only admins can manage org-scoped agents");
+
+    case "team":
+      if (!checker.isTeamAdmin(agentType)) {
+        throw new ApiError(
+          403,
+          "You need team-admin permission to manage team-scoped agents",
+        );
+      }
+      return;
+
+    case "personal":
+      if (agentAuthorId !== userId) {
+        throw new ApiError(403, "You can only manage your own personal agents");
+      }
+      return;
+  }
+}
+
 // ===== Types =====
 
 export interface AgentTypePermissionChecker {
@@ -116,6 +166,8 @@ export interface AgentTypePermissionChecker {
   require(agentType: AgentType, action: Action): void;
   /** Returns true if the user has admin on the agent type's resource. */
   isAdmin(agentType: AgentType): boolean;
+  /** Returns true if the user has team-admin on the agent type's resource. */
+  isTeamAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has read on any of the three agent-type resources. */
   hasAnyReadPermission(): boolean;
   /** Returns true if the user has admin on any of the three agent-type resources. */

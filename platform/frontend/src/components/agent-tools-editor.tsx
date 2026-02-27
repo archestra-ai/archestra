@@ -34,6 +34,7 @@ import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useAssignTool,
+  useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import {
@@ -96,6 +97,7 @@ const AgentToolsEditorContent = forwardRef<
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
+  const patchTool = useProfileToolPatchMutation();
 
   // Fetch catalog items (MCP servers in registry)
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
@@ -300,6 +302,34 @@ const AgentToolsEditorContent = forwardRef<
             skipInvalidation: true,
           });
         }
+
+        // Update credential on tools that remain assigned but whose credential changed
+        const toKeep = currentAssigned.filter((at) =>
+          changes.selectedToolIds.has(at.tool.id),
+        );
+        for (const agentTool of toKeep) {
+          const currentCred = agentTool.useDynamicTeamCredential
+            ? DYNAMIC_CREDENTIAL_VALUE
+            : (agentTool.credentialSourceMcpServerId ??
+              agentTool.executionSourceMcpServerId ??
+              null);
+          if (currentCred !== changes.credentialSourceId) {
+            hasChanges = true;
+            await patchTool.mutateAsync({
+              id: agentTool.id,
+              credentialSourceMcpServerId:
+                !isLocal && !useDynamicCredential
+                  ? (changes.credentialSourceId ?? undefined)
+                  : null,
+              executionSourceMcpServerId:
+                isLocal && !useDynamicCredential
+                  ? (changes.credentialSourceId ?? undefined)
+                  : null,
+              useDynamicTeamCredential: useDynamicCredential,
+              skipInvalidation: true,
+            });
+          }
+        }
       }
 
       // Invalidate all queries once at the end
@@ -390,23 +420,32 @@ const AgentToolsEditorContent = forwardRef<
         : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
       const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
       const hasNoTools = totalCount === 0;
+      const hasNoCredentials =
+        catalog.serverType !== "builtin" &&
+        !allCredentials?.[catalog.id]?.length;
+      const isDisabled = hasNoTools || hasNoCredentials;
       return {
         id: catalog.id,
         name: catalog.name,
         description: catalog.description || undefined,
-        badge: hasNoTools
+        badge: isDisabled
           ? undefined
           : assignedCount > 0
             ? `${assignedCount}/${totalCount}`
             : `${totalCount} tools`,
-        disabled: hasNoTools,
-        disabledReason: hasNoTools ? "Not installed" : undefined,
+        disabled: isDisabled,
+        disabledReason: hasNoTools
+          ? "Not installed"
+          : hasNoCredentials
+            ? "Not installed"
+            : undefined,
       };
     });
   }, [
     sortedCatalogItems,
     assignedToolsByCatalog,
     toolCountByCatalog,
+    allCredentials,
     pendingVersion,
   ]);
 

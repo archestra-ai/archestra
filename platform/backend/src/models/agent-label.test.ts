@@ -101,6 +101,9 @@ describe("AgentLabelModel", () => {
   });
 
   describe("pruneKeysAndValues", () => {
+    // Pruning is fire-and-forget inside syncAgentLabels / syncCatalogLabels,
+    // so tests call pruneKeysAndValues() explicitly to verify pruning logic.
+
     test("removes orphaned keys and values", async ({ makeAgent }) => {
       const agent = await makeAgent();
 
@@ -120,6 +123,7 @@ describe("AgentLabelModel", () => {
 
       // Remove all labels, which should make keys and values orphaned
       await AgentLabelModel.syncAgentLabels(agent.id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       // Verify orphaned keys and values were pruned
       keys = await AgentLabelModel.getAllKeys();
@@ -147,6 +151,7 @@ describe("AgentLabelModel", () => {
 
       // Remove labels from agent1
       await AgentLabelModel.syncAgentLabels(agent1Id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       // Verify "environment" key is still present (used by agent2)
       const keys = await AgentLabelModel.getAllKeys();
@@ -175,6 +180,7 @@ describe("AgentLabelModel", () => {
 
       // Remove from agent — catalog still references it
       await AgentLabelModel.syncAgentLabels(agent.id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       const keys = await AgentLabelModel.getAllKeys();
       const values = await AgentLabelModel.getAllValues();
@@ -197,11 +203,78 @@ describe("AgentLabelModel", () => {
       ]);
 
       await AgentLabelModel.syncAgentLabels(agent.id, []);
+      await AgentLabelModel.pruneKeysAndValues();
 
       const keys = await AgentLabelModel.getAllKeys();
       const values = await AgentLabelModel.getAllValues();
       expect(keys).not.toContain("agent-only-key");
       expect(values).not.toContain("agent-only-val");
+    });
+  });
+
+  describe("concurrent getOrCreate", () => {
+    test("handles concurrent getOrCreateKey calls for the same key", async () => {
+      const results = await Promise.all([
+        AgentLabelModel.getOrCreateKey("concurrent-key"),
+        AgentLabelModel.getOrCreateKey("concurrent-key"),
+        AgentLabelModel.getOrCreateKey("concurrent-key"),
+      ]);
+
+      // All should return the same ID
+      expect(results[0]).toBe(results[1]);
+      expect(results[1]).toBe(results[2]);
+
+      // Should only create one key
+      const keys = await AgentLabelModel.getAllKeys();
+      expect(keys.filter((k) => k === "concurrent-key")).toHaveLength(1);
+    });
+
+    test("handles concurrent getOrCreateValue calls for the same value", async () => {
+      const results = await Promise.all([
+        AgentLabelModel.getOrCreateValue("concurrent-value"),
+        AgentLabelModel.getOrCreateValue("concurrent-value"),
+        AgentLabelModel.getOrCreateValue("concurrent-value"),
+      ]);
+
+      // All should return the same ID
+      expect(results[0]).toBe(results[1]);
+      expect(results[1]).toBe(results[2]);
+
+      // Should only create one value
+      const values = await AgentLabelModel.getAllValues();
+      expect(values.filter((v) => v === "concurrent-value")).toHaveLength(1);
+    });
+
+    test("handles concurrent syncAgentLabels with shared keys", async ({
+      makeAgent,
+    }) => {
+      const agent1 = await makeAgent();
+      const agent2 = await makeAgent();
+      const agent3 = await makeAgent();
+
+      // Sync all three agents concurrently with overlapping keys
+      await Promise.all([
+        AgentLabelModel.syncAgentLabels(agent1.id, [
+          { key: "shared", value: "val-a", keyId: "", valueId: "" },
+        ]),
+        AgentLabelModel.syncAgentLabels(agent2.id, [
+          { key: "shared", value: "val-b", keyId: "", valueId: "" },
+        ]),
+        AgentLabelModel.syncAgentLabels(agent3.id, [
+          { key: "shared", value: "val-a", keyId: "", valueId: "" },
+        ]),
+      ]);
+
+      const labels1 = await AgentLabelModel.getLabelsForAgent(agent1.id);
+      const labels2 = await AgentLabelModel.getLabelsForAgent(agent2.id);
+      const labels3 = await AgentLabelModel.getLabelsForAgent(agent3.id);
+
+      expect(labels1).toHaveLength(1);
+      expect(labels1[0].key).toBe("shared");
+      expect(labels2).toHaveLength(1);
+      expect(labels2[0].key).toBe("shared");
+      expect(labels3).toHaveLength(1);
+      expect(labels3[0].key).toBe("shared");
     });
   });
 

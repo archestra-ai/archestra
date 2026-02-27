@@ -1,9 +1,6 @@
 import { expect, test } from "./fixtures";
 
 test.describe("MCP Catalog Labels", () => {
-  // Retry to handle transient DB insert race conditions in CI
-  test.describe.configure({ retries: 1 });
-
   test("create catalog item with labels", async ({
     request,
     createMcpCatalogItem,

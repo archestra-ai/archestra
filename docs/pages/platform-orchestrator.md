@@ -67,6 +67,15 @@ MCP servers can be configured in two ways:
 
 For advanced use cases, you can directly edit the Kubernetes deployment YAML for a self-hosted MCP server, giving you full control over the pod spec.
 
+#### Image Pull Secrets
+
+If your self-hosted MCP server uses a Docker image from a private container registry, you'll need to configure image pull secrets so Kubernetes can authenticate when pulling the image. There are two options:
+
+- **Use an existing Kubernetes secret** — Select a pre-existing `kubernetes.io/dockerconfigjson` secret from the Archestra platform namespace (the same namespace where MCP server deployments run). Useful when your cluster already has registry credentials managed externally (e.g., via Helm or a secrets operator).
+- **Provide registry credentials** — Enter the registry server, username, and password directly. Archestra creates the docker-registry secret automatically and references it in the pod spec. The password is stored securely in the secrets manager and never saved in the catalog template.
+
+You can configure multiple image pull secrets per server (e.g., if the image and init containers pull from different registries).
+
 #### Scheduling Defaults
 
 If `tolerations` or `nodeSelector` are configured in the Helm values for the Archestra platform pod, those values are automatically inherited as defaults by all self-hosted MCP server deployments. This ensures MCP servers are scheduled on the same node pool as the platform without additional configuration.

@@ -41,7 +41,7 @@ on:
 
 jobs:
   run-claude:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: ${{ inputs.timeout_minutes }}
 
     steps:

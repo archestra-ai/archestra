@@ -28,6 +28,9 @@ export const AgentTypeSchema = z.enum([
 ]);
 export type AgentType = z.infer<typeof AgentTypeSchema>;
 
+export const AgentScopeSchema = z.enum(["personal", "team", "org"]);
+export type AgentScope = z.infer<typeof AgentScopeSchema>;
+
 /**
  * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
  * Only used when agent_type is 'agent'.
@@ -51,11 +54,13 @@ export const AgentTeamInfoSchema = z.object({
 const selectExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   agentType: AgentTypeSchema,
+  scope: AgentScopeSchema,
 };
 
 const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
   agentType: AgentTypeSchema.optional(),
+  scope: AgentScopeSchema.optional(),
 };
 
 /**
@@ -115,6 +120,7 @@ export const SelectAgentSchema = createSelectSchema(
   tools: z.array(SelectToolSchema),
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
+  authorName: z.string().nullable().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -123,10 +129,11 @@ export const InsertAgentSchemaBase = createInsertSchema(
   insertExtendedFields,
 )
   .extend({
-    teams: z.array(z.string()),
+    teams: z.array(z.string()).default([]),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
+    scope: AgentScopeSchema,
   })
   .omit({
     id: true,
@@ -134,6 +141,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     promptHistory: true,
     promptVersion: true,
+    authorId: true,
   });
 
 // Full schema with validation refinement
@@ -149,6 +157,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   .extend({
     teams: z.array(z.string()),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
+    scope: AgentScopeSchema,
   })
   .omit({
     id: true,
@@ -156,6 +165,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     promptVersion: true,
     promptHistory: true,
+    authorId: true,
   });
 
 // Full schema with validation refinement

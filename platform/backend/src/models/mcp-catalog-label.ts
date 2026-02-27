@@ -90,36 +90,40 @@ class McpCatalogLabelModel {
   /**
    * Sync labels for a catalog item (replaces all existing labels).
    * Reuses AgentLabelModel.getOrCreateKey/Value for shared label_keys/label_values tables.
+   * All operations run inside a single transaction to prevent race conditions
+   * where concurrent pruning could delete keys/values between creation and use.
    */
   static async syncCatalogLabels(
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    const labelInserts: {
-      catalogId: string;
-      keyId: string;
-      valueId: string;
-    }[] = [];
-
-    if (labels.length > 0) {
-      for (const label of labels) {
-        const keyId = await AgentLabelModel.getOrCreateKey(label.key);
-        const valueId = await AgentLabelModel.getOrCreateValue(label.value);
-        labelInserts.push({ catalogId, keyId, valueId });
-      }
-    }
-
     await db.transaction(async (tx) => {
       await tx
         .delete(schema.mcpCatalogLabelsTable)
         .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
 
-      if (labelInserts.length > 0) {
+      if (labels.length > 0) {
+        const labelInserts: {
+          catalogId: string;
+          keyId: string;
+          valueId: string;
+        }[] = [];
+
+        for (const label of labels) {
+          const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
+          const valueId = await AgentLabelModel.getOrCreateValue(
+            label.value,
+            tx,
+          );
+          labelInserts.push({ catalogId, keyId, valueId });
+        }
+
         await tx.insert(schema.mcpCatalogLabelsTable).values(labelInserts);
       }
     });
 
-    await AgentLabelModel.pruneKeysAndValues();
+    // Fire-and-forget pruning to avoid race conditions with concurrent operations
+    AgentLabelModel.pruneKeysAndValues().catch(() => {});
   }
 
   /**

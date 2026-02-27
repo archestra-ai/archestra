@@ -7,6 +7,7 @@ import type {
   Minimax,
   Ollama,
   OpenAi,
+  Openrouter,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -17,6 +18,7 @@ export type ProviderMessage =
   | Cohere.Types.ChatRequest["messages"][number]
   | Gemini.Types.GenerateContentRequest["contents"][number]
   | Groq.Types.ChatCompletionsRequest["messages"][number]
+  | Openrouter.Types.ChatCompletionsRequest["messages"][number]
   | Vllm.Types.ChatCompletionsRequest["messages"][number]
   | Ollama.Types.ChatCompletionsRequest["messages"][number]
   | Zhipuai.Types.ChatCompletionsRequest["messages"][number]

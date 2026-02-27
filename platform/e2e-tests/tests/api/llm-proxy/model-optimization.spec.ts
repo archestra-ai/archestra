@@ -483,6 +483,41 @@ const minimaxConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const openrouterConfig: ModelOptimizationTestConfig = {
+  providerName: "OpenRouter",
+  provider: "openrouter",
+
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "test-openrouter-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "test-openrouter-baseline",
+  optimizedModel: "test-openrouter-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 const deepseekConfig: ModelOptimizationTestConfig = {
   providerName: "DeepSeek",
   provider: "deepseek",
@@ -558,6 +593,7 @@ const testConfigsMap = {
   minimax: minimaxConfig,
   deepseek: deepseekConfig,
   bedrock: null, // Bedrock messages use nested content arrays that the tokenizer doesn't count correctly
+  openrouter: openrouterConfig,
 } satisfies Record<SupportedProvider, ModelOptimizationTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(
@@ -599,6 +635,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization Short Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;
@@ -643,6 +680,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization Long Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;
@@ -687,6 +725,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization WithTools Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;
@@ -731,6 +770,7 @@ test.describe("LLMProxy-ModelOptimization", () => {
         const createResponse = await createAgent(
           request,
           `${config.providerName} Model Optimization NoTools Test`,
+          "personal",
         );
         const agent = await createResponse.json();
         agentId = agent.id;

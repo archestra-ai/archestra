@@ -99,6 +99,7 @@ const envApiKeyGetters: Record<
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
+  openrouter: () => config.chat.openrouter?.apiKey || undefined,
   perplexity: () => config.chat.perplexity.apiKey,
   groq: () => config.chat.groq.apiKey,
   vllm: () => config.chat.vllm.apiKey,
@@ -225,6 +226,7 @@ export function isApiKeyRequired(
 export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   anthropic: "claude-haiku-4-5-20251001",
   openai: "gpt-4o-mini",
+  openrouter: "openrouter/auto",
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
@@ -286,6 +288,22 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       baseURL: baseUrl ?? config.llm.openai.baseUrl,
     });
     return client(modelName);
+  },
+
+  openrouter: ({ apiKey, modelName, baseUrl }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+      );
+    }
+    // OpenRouter uses OpenAI-compatible API
+    // Use client.chat() to force Chat Completions API (not Responses API)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: baseUrl ?? config.llm.openrouter.baseUrl,
+    });
+    return client.chat(modelName);
   },
 
   gemini: ({ apiKey, modelName, baseUrl }) => {
@@ -591,6 +609,22 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       });
       // Use .chat() to force Chat Completions API (not Responses API)
       // so our proxy's tool policy evaluation is applied
+      return client.chat(modelName);
+    },
+
+    openrouter: ({ apiKey, agentId, modelName, headers }) => {
+      if (!apiKey) {
+        throw new ApiError(
+          400,
+          "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+        );
+      }
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("openrouter", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
       return client.chat(modelName);
     },
 

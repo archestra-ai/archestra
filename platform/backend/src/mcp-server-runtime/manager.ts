@@ -365,7 +365,36 @@ export class McpServerRuntimeManager {
         );
       }
 
-      await k8sDeployment.startOrCreateDeployment();
+      // Create docker-registry secrets for imagePullSecrets with credentials
+      // and resolve all imagePullSecrets names for the pod spec.
+      // Regcred passwords are stored in the catalog's localConfigSecretId, not
+      // the per-user mcpServer.secretId, so fetch them separately.
+      const imagePullSecrets = catalogItem?.localConfig?.imagePullSecrets;
+      const regcredSecretData: Record<string, string> = {};
+      if (catalogItem?.localConfigSecretId && imagePullSecrets?.length) {
+        const catalogSecret = await secretManager().getSecret(
+          catalogItem.localConfigSecretId,
+        );
+        if (catalogSecret?.secret && typeof catalogSecret.secret === "object") {
+          for (const [key, value] of Object.entries(catalogSecret.secret)) {
+            if (key.startsWith("__regcred_password:")) {
+              regcredSecretData[key] = String(value);
+            }
+          }
+        }
+      }
+      const generatedRegcredNames =
+        await k8sDeployment.createDockerRegistrySecrets(
+          regcredSecretData,
+          imagePullSecrets,
+        );
+      const resolvedImagePullSecretNames =
+        K8sDeployment.collectImagePullSecretNames(
+          imagePullSecrets,
+          generatedRegcredNames,
+        );
+
+      await k8sDeployment.startOrCreateDeployment(resolvedImagePullSecretNames);
       logger.info(`Successfully started MCP server deployment ${id} (${name})`);
     } catch (error) {
       logger.error(
@@ -397,6 +426,9 @@ export class McpServerRuntimeManager {
 
       // Delete K8s Secret (if it exists)
       await k8sDeployment.deleteK8sSecret();
+
+      // Delete docker-registry secrets (if any were created for imagePullSecrets)
+      await k8sDeployment.deleteDockerRegistrySecrets();
 
       this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
@@ -720,6 +752,32 @@ export class McpServerRuntimeManager {
 
     await Promise.allSettled(stopPromises);
     logger.info("MCP Server Runtime shutdown complete");
+  }
+
+  /**
+   * List Kubernetes secrets of type kubernetes.io/dockerconfigjson in the namespace.
+   * Used to populate the "existing secret" dropdown in the UI.
+   */
+  async listDockerRegistrySecrets(): Promise<Array<{ name: string }>> {
+    if (!this.k8sApi) {
+      return [];
+    }
+
+    try {
+      const secrets = await this.k8sApi.listNamespacedSecret({
+        namespace: this.namespace,
+        fieldSelector: "type=kubernetes.io/dockerconfigjson",
+      });
+      return secrets.items
+        .map((s) => ({ name: s.metadata?.name ?? "" }))
+        .filter((s) => s.name.length > 0);
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "Failed to list docker-registry secrets in namespace",
+      );
+      return [];
+    }
   }
 
   private writeLogsUnavailableMessage(

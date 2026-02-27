@@ -38,6 +38,7 @@ test.describe("MCP Gateway - Authentication", () => {
     const createResponse = await createAgent(
       request,
       `MCP Gateway Auth Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
@@ -243,6 +244,7 @@ test.describe("MCP Gateway - OAuth 2.1 Discovery", () => {
     const createResponse = await createAgent(
       request,
       `MCP Gateway OAuth Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
@@ -404,6 +406,10 @@ test.describe("MCP Gateway - OAuth 2.1 Discovery", () => {
 });
 
 test.describe("MCP Gateway - External MCP Server Tests", () => {
+  // Increase timeout for this group — the beforeAll installs a K8s-hosted MCP
+  // server and waits for tool discovery, which can easily exceed 60 s in CI.
+  test.describe.configure({ timeout: 120_000 });
+
   let profileId: string;
   let archestraToken: string;
 
@@ -632,6 +638,7 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
     const createResponse = await createAgent(
       request,
       `OAuth Full Flow Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
@@ -1395,6 +1402,7 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
     const createResponse = await createAgent(
       request,
       `CIMD OAuth Flow Test ${uniqueSuffix}`,
+      "personal",
     );
     const profile = await createResponse.json();
     profileId = profile.id;

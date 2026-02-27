@@ -900,3 +900,206 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
     expect(result).toEqual([]);
   });
 });
+
+describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
+  async function createManagerWithMockK8s(mockK8sApi: Record<string, unknown>) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = mockK8sApi;
+    return manager;
+  }
+
+  function callBackfill(
+    manager: unknown,
+    servers: Array<{ id: string; teamId: string | null }>,
+  ) {
+    const castServers = servers.map((s) => ({
+      ...s,
+      name: "test",
+      catalogId: "cat-1",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+    }));
+    return (
+      manager as { backfillRegcredTeamLabels: (s: unknown[]) => Promise<void> }
+    ).backfillRegcredTeamLabels(castServers);
+  }
+
+  test("patches secrets that lack team-id label", async () => {
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-1",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "mcp-server-id": "srv-1",
+            },
+          },
+        },
+      ],
+    });
+
+    const manager = await createManagerWithMockK8s({
+      listNamespacedSecret: mockList,
+      patchNamespacedSecret: mockPatch,
+    });
+
+    await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+
+    expect(mockPatch).toHaveBeenCalledOnce();
+    expect(mockPatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "regcred-1",
+        body: {
+          metadata: { labels: { "team-id": "team-x" } },
+        },
+      }),
+    );
+  });
+
+  test("skips secrets that already have team-id label", async () => {
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-1",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "mcp-server-id": "srv-1",
+              "team-id": "existing-team",
+            },
+          },
+        },
+      ],
+    });
+
+    const manager = await createManagerWithMockK8s({
+      listNamespacedSecret: mockList,
+      patchNamespacedSecret: mockPatch,
+    });
+
+    await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  test("skips secrets with no matching mcp-server-id", async () => {
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-orphan",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "mcp-server-id": "unknown-srv",
+            },
+          },
+        },
+      ],
+    });
+
+    const manager = await createManagerWithMockK8s({
+      listNamespacedSecret: mockList,
+      patchNamespacedSecret: mockPatch,
+    });
+
+    await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  test("patch failure on one secret does not prevent patching others", async () => {
+    const mockPatch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("patch failed"))
+      .mockResolvedValueOnce({});
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-fail",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "mcp-server-id": "srv-1",
+            },
+          },
+        },
+        {
+          metadata: {
+            name: "regcred-ok",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "mcp-server-id": "srv-2",
+            },
+          },
+        },
+      ],
+    });
+
+    const manager = await createManagerWithMockK8s({
+      listNamespacedSecret: mockList,
+      patchNamespacedSecret: mockPatch,
+    });
+
+    await callBackfill(manager, [
+      { id: "srv-1", teamId: "team-a" },
+      { id: "srv-2", teamId: "team-b" },
+    ]);
+
+    expect(mockPatch).toHaveBeenCalledTimes(2);
+    expect(mockPatch).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "regcred-ok" }),
+    );
+  });
+
+  test("skips servers with no teamId", async () => {
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-personal",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "mcp-server-id": "srv-personal",
+            },
+          },
+        },
+      ],
+    });
+
+    const manager = await createManagerWithMockK8s({
+      listNamespacedSecret: mockList,
+      patchNamespacedSecret: mockPatch,
+    });
+
+    await callBackfill(manager, [{ id: "srv-personal", teamId: null }]);
+
+    // No servers with teamId → early return, no K8s calls
+    expect(mockList).not.toHaveBeenCalled();
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  test("does nothing when k8sApi is not initialized", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    // k8sApi is undefined — should return without error
+    await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+  });
+});

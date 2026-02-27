@@ -101,6 +101,68 @@ export function isEncryptedSecret(
 }
 
 /**
+ * Derive an encryption key from an arbitrary secret string.
+ * Used by the key rotation script to derive keys from both old and new secrets.
+ */
+export function deriveKeyFromSecret(secret: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", secret, SALT, INFO, KEY_LENGTH));
+}
+
+/**
+ * Decrypt a secret value using an explicit key (instead of the cached key).
+ */
+export function decryptSecretValueWithKey(
+  encrypted: { __encrypted: string },
+  key: Buffer,
+): Record<string, unknown> {
+  const parts = encrypted.__encrypted.split(":");
+  if (parts.length !== 4 || parts[0] !== VERSION_PREFIX) {
+    throw new Error("Invalid encrypted secret format");
+  }
+
+  const [, ivStr, authTagStr, ciphertextStr] = parts;
+  const iv = fromBase64Url(ivStr);
+  const authTag = fromBase64Url(authTagStr);
+  const ciphertext = fromBase64Url(ciphertextStr);
+
+  const decipher = createDecipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  decipher.setAuthTag(authTag);
+
+  const decrypted = Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]);
+
+  return JSON.parse(decrypted.toString("utf8"));
+}
+
+/**
+ * Encrypt a secret value using an explicit key (instead of the cached key).
+ */
+export function encryptSecretValueWithKey(
+  plaintext: Record<string, unknown>,
+  key: Buffer,
+): { __encrypted: string } {
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+
+  const json = JSON.stringify(plaintext);
+  const encrypted = Buffer.concat([
+    cipher.update(json, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  return {
+    __encrypted: `${VERSION_PREFIX}:${toBase64Url(iv)}:${toBase64Url(authTag)}:${toBase64Url(encrypted)}`,
+  };
+}
+
+/**
  * Eagerly validate that the encryption key can be derived.
  * Call at startup to fail fast if ARCHESTRA_AUTH_SECRET is missing.
  */

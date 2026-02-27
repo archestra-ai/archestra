@@ -626,7 +626,7 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, passwords, and encrypting secrets stored in the database.
   - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
   - Example: `something-really-really-secret-12345`
-  - **Warning:** Changing this value after secrets have been stored will make existing encrypted secrets unreadable. If you need to rotate this value, you must decrypt and re-encrypt secrets as part of the rotation process.
+  - **Warning:** Changing this value after secrets have been stored will make existing encrypted secrets unreadable. Use the [key rotation script](/docs/platform-secrets-management#key-rotation) to re-encrypt secrets when rotating this value.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@localhost.ai`

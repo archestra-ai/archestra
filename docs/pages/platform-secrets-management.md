@@ -29,6 +29,23 @@ When secrets are stored in the database (the default), they are automatically en
 
 See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) for more info.
 
+### Key Rotation
+
+If you need to change `ARCHESTRA_AUTH_SECRET`, you must re-encrypt all existing secrets with the new key. A standalone script is provided for this:
+
+```bash
+OLD_ARCHESTRA_AUTH_SECRET=<old-secret> \
+ARCHESTRA_AUTH_SECRET=<new-secret> \
+ARCHESTRA_DATABASE_URL=postgresql://user:pass@host:5432/db \
+npx tsx src/standalone-scripts/rotate-secret-encryption-key.ts
+```
+
+Add `DRY_RUN=true` to preview what would change without writing to the database.
+
+The script decrypts all secrets with the old key and re-encrypts them with the new key in a single transaction. If any secret fails to decrypt, the entire operation is rolled back.
+
+See the [script source](https://github.com/archestra-ai/archestra/tree/main/platform/backend/src/standalone-scripts/rotate-secret-encryption-key.ts) for details.
+
 ## HashiCorp Vault
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.

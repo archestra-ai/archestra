@@ -377,10 +377,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (body.scope === "org") {
           throw new ApiError(403, "Only admins can set scope to org");
         }
-        if (
-          body.scope === "team" ||
-          (body.teams && body.teams.length > 0)
-        ) {
+        if (body.scope === "team" || (body.teams && body.teams.length > 0)) {
           if (!checker.isTeamAdmin(existingAgent.agentType)) {
             throw new ApiError(
               403,

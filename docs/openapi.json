@@ -102931,6 +102931,7 @@
                               "read",
                               "update",
                               "delete",
+                              "team-admin",
                               "admin",
                               "cancel"
                             ]
@@ -103205,6 +103206,7 @@
                           "read",
                           "update",
                           "delete",
+                          "team-admin",
                           "admin",
                           "cancel"
                         ]
@@ -103252,6 +103254,7 @@
                             "read",
                             "update",
                             "delete",
+                            "team-admin",
                             "admin",
                             "cancel"
                           ]
@@ -103561,6 +103564,7 @@
                             "read",
                             "update",
                             "delete",
+                            "team-admin",
                             "admin",
                             "cancel"
                           ]
@@ -103834,6 +103838,7 @@
                           "read",
                           "update",
                           "delete",
+                          "team-admin",
                           "admin",
                           "cancel"
                         ]
@@ -103901,6 +103906,7 @@
                             "read",
                             "update",
                             "delete",
+                            "team-admin",
                             "admin",
                             "cancel"
                           ]
@@ -113954,6 +113960,7 @@
                         "read",
                         "update",
                         "delete",
+                        "team-admin",
                         "admin",
                         "cancel"
                       ]

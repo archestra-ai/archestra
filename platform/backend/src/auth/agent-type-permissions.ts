@@ -153,10 +153,7 @@ export function requireAgentModifyPermission(params: {
 
     case "personal":
       if (agentAuthorId !== userId) {
-        throw new ApiError(
-          403,
-          "You can only manage your own personal agents",
-        );
+        throw new ApiError(403, "You can only manage your own personal agents");
       }
       return;
   }

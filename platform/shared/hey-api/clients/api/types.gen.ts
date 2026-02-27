@@ -29575,7 +29575,7 @@ export type GetRolesResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -29589,7 +29589,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
     };
     path?: never;
@@ -29666,7 +29666,7 @@ export type CreateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -29839,7 +29839,7 @@ export type GetRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -29853,7 +29853,7 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
     };
     path: {
@@ -29935,7 +29935,7 @@ export type UpdateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -32844,7 +32844,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
     };
 };
 

@@ -866,17 +866,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      let secrets;
-      if (isMcpServerAdmin) {
-        secrets = await mcpServerRuntimeManager.listDockerRegistrySecrets({
-          isAdmin: true,
-        });
-      } else {
-        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-        secrets = await mcpServerRuntimeManager.listDockerRegistrySecrets({
-          teamIds: userTeamIds,
-        });
-      }
+      const secrets = isMcpServerAdmin
+        ? await mcpServerRuntimeManager.listDockerRegistrySecrets({
+            isAdmin: true,
+          })
+        : await mcpServerRuntimeManager.listDockerRegistrySecrets({
+            teamIds: await TeamModel.getUserTeamIds(user.id),
+          });
 
       return reply.send(secrets);
     },

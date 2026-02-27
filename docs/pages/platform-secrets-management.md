@@ -20,6 +20,15 @@ Archestra supports external secrets storage. When enabled, sensitive data like A
 
 > **Note:** Existing secrets are not migrated when you enable external storage. Recreate secrets after changing the secrets manager.
 
+## Database Encryption at Rest
+
+When secrets are stored in the database (the default), they are automatically encrypted at rest using AES-256-GCM. The encryption key is derived from your `ARCHESTRA_AUTH_SECRET` environment variable.
+
+- Encryption and decryption are fully transparent — no configuration is needed beyond setting `ARCHESTRA_AUTH_SECRET`.
+- Existing plaintext secrets are automatically migrated to encrypted format on startup.
+
+See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) for more info.
+
 ## HashiCorp Vault
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.

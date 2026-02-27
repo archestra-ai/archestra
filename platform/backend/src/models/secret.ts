@@ -1,6 +1,21 @@
 import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
+import {
+  decryptSecretValue,
+  encryptSecretValue,
+  isEncryptedSecret,
+} from "@/utils/crypto";
+
+function decryptSecretRow<T extends SelectSecret | null | undefined>(
+  row: T,
+): T {
+  if (!row) return row;
+  if (isEncryptedSecret(row.secret)) {
+    return { ...row, secret: decryptSecretValue(row.secret) };
+  }
+  return row;
+}
 
 class SecretModel {
   /**
@@ -9,10 +24,10 @@ class SecretModel {
   static async create(input: InsertSecret): Promise<SelectSecret> {
     const [secret] = await db
       .insert(schema.secretsTable)
-      .values(input)
+      .values({ ...input, secret: encryptSecretValue(input.secret) })
       .returning();
 
-    return secret;
+    return decryptSecretRow(secret);
   }
 
   /**
@@ -24,7 +39,7 @@ class SecretModel {
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.id, id));
 
-    return secret ?? null;
+    return decryptSecretRow(secret ?? null);
   }
 
   /**
@@ -36,7 +51,7 @@ class SecretModel {
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.name, name));
 
-    return secret ?? null;
+    return decryptSecretRow(secret ?? null);
   }
 
   /**
@@ -44,10 +59,11 @@ class SecretModel {
    */
   static async findByIds(ids: string[]): Promise<SelectSecret[]> {
     if (ids.length === 0) return [];
-    return db
+    const rows = await db
       .select()
       .from(schema.secretsTable)
       .where(inArray(schema.secretsTable.id, ids));
+    return rows.map((row) => decryptSecretRow(row));
   }
 
   /**
@@ -57,13 +73,17 @@ class SecretModel {
     id: string,
     input: UpdateSecret,
   ): Promise<SelectSecret | null> {
+    const values = input.secret
+      ? { ...input, secret: encryptSecretValue(input.secret) }
+      : input;
+
     const [updatedSecret] = await db
       .update(schema.secretsTable)
-      .set(input)
+      .set(values)
       .where(eq(schema.secretsTable.id, id))
       .returning();
 
-    return updatedSecret;
+    return decryptSecretRow(updatedSecret);
   }
 
   /**

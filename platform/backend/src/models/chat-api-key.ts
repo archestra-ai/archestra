@@ -15,6 +15,7 @@ import type {
   SupportedChatProvider,
   UpdateChatApiKey,
 } from "@/types";
+import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
 import ConversationModel from "./conversation";
 
 class ChatApiKeyModel {
@@ -671,7 +672,10 @@ function parseVaultReferenceFromSecret(
   secret: SecretValue | null,
 ): { vaultSecretPath: string; vaultSecretKey: string } | null {
   if (!secret || typeof secret !== "object") return null;
-  const apiKeyValue = (secret as Record<string, unknown>).apiKey;
+  const decrypted = isEncryptedSecret(secret)
+    ? decryptSecretValue(secret)
+    : secret;
+  const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
   if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
     const parsed = parseVaultReference(apiKeyValue);
     return {

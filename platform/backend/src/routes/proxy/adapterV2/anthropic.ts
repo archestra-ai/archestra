@@ -141,11 +141,13 @@ class AnthropicRequestAdapter
           name: string;
           input_schema: Record<string, unknown>;
           description?: string;
+          _meta?: Record<string, unknown>;
         };
         result.push({
           name: customTool.name,
           description: customTool.description,
           inputSchema: customTool.input_schema,
+          ...(customTool._meta && { meta: customTool._meta }),
         });
       }
     }

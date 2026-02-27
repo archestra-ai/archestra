@@ -49,6 +49,8 @@ interface ChatSession {
   ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
+  /** MCP Apps UI metadata keyed by tool name (from `data-tool-ui-meta` stream). */
+  toolUiMeta: Record<string, { resourceUri?: string; visibility?: string[] }>;
 }
 
 interface ChatContextValue {
@@ -224,6 +226,9 @@ function ChatSessionHook({
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [toolUiMeta, setToolUiMeta] = useState<
+    Record<string, { resourceUri?: string; visibility?: string[] }>
+  >({});
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
@@ -285,6 +290,15 @@ function ChatSessionHook({
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
       }
+      // Handle MCP Apps UI metadata
+      if (dataPart.type === "data-tool-ui-meta") {
+        setToolUiMeta(
+          dataPart.data as Record<
+            string,
+            { resourceUri?: string; visibility?: string[] }
+          >,
+        );
+      }
     },
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   } as Parameters<typeof useChat>[0]);
@@ -337,6 +351,7 @@ function ChatSessionHook({
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
       tokenUsage,
+      toolUiMeta,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -354,6 +369,7 @@ function ChatSessionHook({
     addToolApprovalResponse,
     pendingCustomServerToolCall,
     tokenUsage,
+    toolUiMeta,
     sessionsRef,
     notifySessionUpdate,
   ]);

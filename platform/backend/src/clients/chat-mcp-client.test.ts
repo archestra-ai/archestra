@@ -272,7 +272,7 @@ describe("chat-mcp-client health check", () => {
     // listTools should NOT have been called on the dead client
     expect(deadClient.listTools).not.toHaveBeenCalled();
     // Tools will be empty since we can't create a real client in tests
-    expect(tools).toEqual({});
+    expect(tools).toEqual({ tools: {}, toolUiMeta: {} });
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
@@ -333,7 +333,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       userIsAgentAdmin: false,
     });
-    expect(Object.keys(first)).toEqual(["lookup_email"]);
+    expect(Object.keys(first.tools)).toEqual(["lookup_email"]);
 
     const second = await chatClient.getChatMcpTools({
       agentName: agent.name,
@@ -346,9 +346,9 @@ describe("chat-mcp-client tool caching", () => {
     // Check that second call returns the same tool names
     // Note: With cacheManager, functions and symbols cannot be serialized,
     // so we compare the tool names and descriptions rather than full equality
-    expect(Object.keys(second)).toEqual(["lookup_email"]);
-    expect(second.lookup_email.description).toEqual(
-      first.lookup_email.description,
+    expect(Object.keys(second.tools)).toEqual(["lookup_email"]);
+    expect(second.tools.lookup_email.description).toEqual(
+      first.tools.lookup_email.description,
     );
     // Most importantly, listTools should only be called once due to caching
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);

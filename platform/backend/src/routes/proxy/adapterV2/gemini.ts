@@ -191,10 +191,17 @@ class GeminiRequestAdapter
     for (const tool of toolArray) {
       if (tool.functionDeclarations) {
         for (const fd of tool.functionDeclarations) {
+          const decl = fd as {
+            name: string;
+            description?: string;
+            parameters?: Record<string, unknown>;
+            _meta?: Record<string, unknown>;
+          };
           result.push({
-            name: fd.name,
-            description: fd.description,
-            inputSchema: fd.parameters as Record<string, unknown>,
+            name: decl.name,
+            description: decl.description,
+            inputSchema: decl.parameters as Record<string, unknown>,
+            ...(decl._meta && { meta: decl._meta }),
           });
         }
       }

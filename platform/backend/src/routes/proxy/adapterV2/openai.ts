@@ -142,10 +142,17 @@ export class OpenAIRequestAdapter
     const result: CommonMcpToolDefinition[] = [];
     for (const tool of this.request.tools) {
       if (tool.type === "function") {
+        const fn = tool.function as {
+          name: string;
+          description?: string;
+          parameters?: Record<string, unknown>;
+          _meta?: Record<string, unknown>;
+        };
         result.push({
-          name: tool.function.name,
-          description: tool.function.description,
-          inputSchema: tool.function.parameters as Record<string, unknown>,
+          name: fn.name,
+          description: fn.description,
+          inputSchema: fn.parameters as Record<string, unknown>,
+          ...(fn._meta && { meta: fn._meta }),
         });
       }
     }

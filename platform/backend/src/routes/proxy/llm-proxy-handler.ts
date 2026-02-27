@@ -302,6 +302,7 @@ export async function handleLLMProxy<
             toolName: t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,
+            toolMeta: t.meta,
           })),
           resolvedAgentId,
         );

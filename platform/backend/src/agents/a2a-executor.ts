@@ -149,7 +149,7 @@ export async function executeA2AMessage(
   try {
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and conversationId for browser tab isolation
-    const mcpTools = await getChatMcpTools({
+    const { tools: mcpTools } = await getChatMcpTools({
       agentName: agent.name,
       agentId: agent.id,
       userId,

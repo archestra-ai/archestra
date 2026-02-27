@@ -601,6 +601,7 @@ export default function ChatPage() {
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+  const toolUiMeta = chatSession?.toolUiMeta;
 
   // Use actual token usage when available from the stream (no fallback to estimation)
   const tokensUsed = tokenUsage?.totalTokens;
@@ -1446,6 +1447,7 @@ export default function ChatPage() {
                     }
               }
               hideArrow={isPlaywrightSetupVisible}
+              toolUiMeta={toolUiMeta}
               messages={messages}
               status={status}
               isLoadingConversation={isLoadingConversation}

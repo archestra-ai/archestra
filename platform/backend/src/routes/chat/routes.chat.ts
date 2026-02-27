@@ -260,7 +260,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch MCP tools with enabled tool filtering
       // Pass undefined if no custom selection (use all tools)
       // Pass the actual array (even if empty) if there is custom selection
-      const mcpTools = await getChatMcpTools({
+      const { tools: mcpTools, toolUiMeta } = await getChatMcpTools({
         agentName: agent.name,
         agentId,
         userId: user.id,
@@ -425,6 +425,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             stream: createUIMessageStream({
               execute: async ({ writer }) => {
+                // Send MCP Apps UI metadata before the stream begins
+                // so the frontend can prepare iframes for tools with ui:// resources
+                if (Object.keys(toolUiMeta).length > 0) {
+                  writer.write({
+                    type: "data-tool-ui-meta",
+                    data: toolUiMeta,
+                  });
+                }
+
                 const result = streamText(streamTextConfig);
 
                 // Merge the stream text result into the UI message stream
@@ -687,7 +696,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
-      const mcpTools = await getChatMcpTools({
+      const { tools: mcpTools } = await getChatMcpTools({
         agentName: agent.name,
         agentId,
         userId: user.id,

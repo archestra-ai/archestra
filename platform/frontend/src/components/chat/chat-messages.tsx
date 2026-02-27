@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
+import { McpAppIframe } from "@/components/chat/mcp-app-iframe";
 import Image from "next/image";
 import {
   Fragment,
@@ -67,6 +68,8 @@ interface ChatMessagesProps {
   onSuggestedPromptClick?: () => void;
   /** Hide the decorative arrow pointing to agent selector (e.g., when an overlay is shown) */
   hideArrow?: boolean;
+  /** MCP Apps UI metadata keyed by tool name. */
+  toolUiMeta?: Record<string, { resourceUri?: string; visibility?: string[] }>;
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -108,6 +111,7 @@ export function ChatMessages({
   onUserMessageEdit,
   error = null,
   hideArrow = false,
+  toolUiMeta,
   onToolApprovalResponse,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
@@ -790,6 +794,7 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          toolUiMeta={toolUiMeta}
                           onToolApprovalResponse={onToolApprovalResponse}
                         />
                       );
@@ -901,12 +906,14 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  toolUiMeta,
   onToolApprovalResponse,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  toolUiMeta?: Record<string, { resourceUri?: string; visibility?: string[] }>;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -953,6 +960,24 @@ function MessageTool({
         toolResultPart={toolResultPart}
         errorText={errorText}
         onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+
+  // Render MCP App iframe for tools with a ui:// resource URI
+  const uiResourceUri = toolUiMeta?.[toolName]?.resourceUri;
+  if (uiResourceUri && agentId) {
+    return (
+      <McpAppIframe
+        resourceUri={uiResourceUri}
+        agentId={agentId}
+        toolName={toolName}
+        toolInput={part.input}
+        toolOutput={
+          toolResultPart?.output ?? part.output
+        }
+        toolState={part.state}
+        uiMeta={{ prefersBorder: true }}
       />
     );
   }

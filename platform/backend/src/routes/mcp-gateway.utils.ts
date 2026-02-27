@@ -113,13 +113,14 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
+    const toolsList = mcpTools.map(({ name, description, parameters, meta }) => ({
       name,
       title: archestraToolTitles.get(name) || name,
       description,
       inputSchema: parameters,
       annotations: {},
-      _meta: {},
+      // Pass through _meta from the database (e.g., ui.resourceUri for MCP Apps)
+      _meta: meta ?? {},
     }));
 
     // Log tools/list request

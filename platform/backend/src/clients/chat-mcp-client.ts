@@ -625,7 +625,15 @@ export async function getChatMcpTools({
   abortSignal?: AbortSignal;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
-}): Promise<Record<string, Tool>> {
+}): Promise<{
+  tools: Record<string, Tool>;
+  /** MCP Apps (SEP-1865) UI metadata keyed by slugified tool name. */
+  toolUiMeta: Record<string, { resourceUri?: string; visibility?: string[] }>;
+}> {
+  const toolUiMeta: Record<
+    string,
+    { resourceUri?: string; visibility?: string[] }
+  > = {};
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
 
@@ -642,7 +650,10 @@ export async function getChatMcpTools({
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
+    return {
+      tools: await filterToolsByEnabledIds(cachedTools, enabledToolIds),
+      toolUiMeta,
+    };
   }
 
   // Log cache miss - in multi-pod deployments without sticky sessions,
@@ -670,7 +681,7 @@ export async function getChatMcpTools({
       { agentId, userId },
       "No valid team token available for user - cannot execute tools",
     );
-    return {};
+    return { tools: {}, toolUiMeta };
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
@@ -688,7 +699,7 @@ export async function getChatMcpTools({
       { agentId, userId },
       "No MCP client available, returning empty tools",
     );
-    return {}; // No tools available
+    return { tools: {}, toolUiMeta }; // No tools available
   }
 
   try {
@@ -713,6 +724,24 @@ export async function getChatMcpTools({
 
     for (const mcpTool of filteredMcpTools) {
       try {
+        // Extract MCP Apps (SEP-1865) UI metadata if present
+        const mcpMeta = mcpTool._meta as
+          | { ui?: { resourceUri?: string; visibility?: string[] } }
+          | undefined;
+        if (mcpMeta?.ui) {
+          toolUiMeta[mcpTool.name] = mcpMeta.ui;
+
+          // Skip tools that are only visible to apps (not the LLM)
+          const visibility = mcpMeta.ui.visibility;
+          if (
+            visibility &&
+            visibility.length > 0 &&
+            !visibility.includes("model")
+          ) {
+            continue;
+          }
+        }
+
         // Normalize the schema and wrap with jsonSchema() helper
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
 
@@ -1039,13 +1068,16 @@ export async function getChatMcpTools({
     }
 
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(aiTools, enabledToolIds);
+    return {
+      tools: await filterToolsByEnabledIds(aiTools, enabledToolIds),
+      toolUiMeta,
+    };
   } catch (error) {
     logger.error(
       { agentId, userId, error },
       "Failed to fetch tools from MCP Gateway",
     );
-    return {};
+    return { tools: {}, toolUiMeta };
   }
 }
 

@@ -1533,11 +1533,15 @@ class McpClient {
         // Close connection (we just needed the tools)
         await client.close();
 
-        // Transform tools to our format
+        // Transform tools to our format (preserve _meta for MCP Apps / SEP-1865)
         return toolsResult.tools.map((tool: Tool) => ({
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          ...(tool._meta &&
+            Object.keys(tool._meta).length > 0 && {
+              meta: tool._meta as Record<string, unknown>,
+            }),
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
@@ -1565,6 +1569,94 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  /**
+   * Read a ui:// resource from the MCP server that owns it.
+   * Used by the MCP App proxy to serve HTML content for sandboxed iframes.
+   *
+   * Creates a temporary client connection, reads the resource, then closes.
+   */
+  async readResource(
+    uri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<{
+    contents: Array<{ uri: string; mimeType?: string; text?: string }>;
+  }> {
+    // Find the server that owns this resource by checking tool metadata
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    let targetTool: (typeof tools)[0] | undefined;
+
+    for (const tool of tools) {
+      const meta = tool.meta as Record<string, unknown> | null;
+      const ui = meta?.ui as Record<string, unknown> | undefined;
+      if (ui?.resourceUri === uri) {
+        targetTool = tool;
+        break;
+      }
+    }
+
+    if (!targetTool?.catalogId) {
+      throw new Error(`No MCP server found for resource: ${uri}`);
+    }
+
+    // Resolve the tool to its MCP server and connect
+    const toolCall: CommonToolCall = {
+      id: `resource-read-${Date.now()}`,
+      name: targetTool.name,
+      arguments: {},
+    };
+
+    const validationResult = await this.validateAndGetTool(toolCall, agentId);
+    if ("error" in validationResult) {
+      throw new Error(`Tool validation failed for resource: ${uri}`);
+    }
+
+    const { tool, catalogItem } = validationResult;
+    const serverResult = await this.determineTargetMcpServerIdForCatalogItem({
+      tool,
+      toolCall,
+      agentId,
+      tokenAuth,
+      catalogItem,
+    });
+    if ("error" in serverResult) {
+      throw new Error(`Cannot determine MCP server for resource: ${uri}`);
+    }
+
+    const { targetMcpServerId } = serverResult;
+
+    // Get secrets for the target MCP server
+    const secretsResult = await this.getSecretsForMcpServer({
+      targetMcpServerId,
+      toolCall,
+      agentId,
+    });
+    const secrets =
+      "error" in secretsResult ? {} : secretsResult.secrets;
+
+    // Build a connection key and get transport
+    const connectionKey = `${catalogItem.id}:${targetMcpServerId}:resource-read`;
+    const transport = await this.getTransport(
+      catalogItem,
+      targetMcpServerId,
+      secrets,
+      connectionKey,
+      tokenAuth,
+    );
+
+    // Get or create a client for this connection
+    const client = await this.getOrCreateClient(connectionKey, transport);
+
+    const result = await client.readResource({ uri });
+    return {
+      contents: result.contents.map((c: { uri: string; mimeType?: string; text?: string }) => ({
+        uri: c.uri,
+        mimeType: c.mimeType,
+        text: c.text,
+      })),
+    };
   }
 
   /**

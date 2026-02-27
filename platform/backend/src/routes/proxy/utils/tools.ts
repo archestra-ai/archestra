@@ -15,6 +15,7 @@ export const persistTools = async (
     toolName: string;
     toolParameters?: Record<string, unknown>;
     toolDescription?: string;
+    toolMeta?: Record<string, unknown>;
   }>,
   agentId: string,
 ) => {
@@ -95,10 +96,11 @@ export const persistTools = async (
   );
   await ToolModel.bulkCreateProxyToolsIfNotExists(
     toolsToAutoDiscover.map(
-      ({ toolName, toolParameters, toolDescription }) => ({
+      ({ toolName, toolParameters, toolDescription, toolMeta }) => ({
         name: toolName,
         parameters: toolParameters,
         description: toolDescription,
+        meta: toolMeta,
       }),
     ),
     agentId,

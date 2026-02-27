@@ -269,6 +269,7 @@ class ToolModel {
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        meta: schema.toolsTable.meta,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
         policiesAutoConfiguringStartedAt:
           schema.toolsTable.policiesAutoConfiguringStartedAt,
@@ -408,6 +409,7 @@ class ToolModel {
       name: string;
       description: string | null;
       parameters: Record<string, unknown>;
+      meta?: Record<string, unknown>;
       catalogId: string;
     }>,
   ): Promise<Tool[]> {
@@ -460,6 +462,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
+          meta: tool.meta ?? {},
           catalogId: tool.catalogId,
           agentId: null,
         });
@@ -898,6 +901,8 @@ class ToolModel {
       catalogId: string;
       /** The original tool name from the MCP server (e.g., "generate_text") */
       rawToolName?: string;
+      /** MCP tool _meta (e.g., _meta.ui for MCP Apps). Opaque pass-through. */
+      meta?: Record<string, unknown>;
     }>,
   ): Promise<{
     created: Tool[];
@@ -1023,8 +1028,11 @@ class ToolModel {
         const parametersChanged =
           JSON.stringify(existingTool.parameters) !==
           JSON.stringify(tool.parameters);
+        const metaChanged =
+          JSON.stringify(existingTool.meta ?? {}) !==
+          JSON.stringify(tool.meta ?? {});
 
-        if (nameChanged || descriptionChanged || parametersChanged) {
+        if (nameChanged || descriptionChanged || parametersChanged || metaChanged) {
           // Update existing tool (including rename if catalog name changed)
           const [updatedTool] = await db
             .update(schema.toolsTable)
@@ -1032,6 +1040,7 @@ class ToolModel {
               name: tool.name, // This handles renaming when catalog name changes
               description: tool.description,
               parameters: tool.parameters,
+              meta: tool.meta ?? {},
               updatedAt: new Date(),
             })
             .where(eq(schema.toolsTable.id, existingTool.id))
@@ -1049,6 +1058,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
+          meta: tool.meta ?? {},
           catalogId: tool.catalogId,
           agentId: null,
         });
@@ -1213,6 +1223,7 @@ class ToolModel {
       name: string;
       description?: string | null;
       parameters?: Record<string, unknown>;
+      meta?: Record<string, unknown>;
     }>,
     /** @deprecated No longer used. Proxy tools are shared (agentId=NULL). Kept for call-site compatibility. */
     _agentId: string,
@@ -1247,6 +1258,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description ?? null,
           parameters: tool.parameters ?? {},
+          meta: tool.meta ?? {},
           catalogId: null,
           agentId: null,
         });

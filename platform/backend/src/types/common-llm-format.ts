@@ -11,6 +11,8 @@ export type CommonMcpToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  /** MCP tool _meta (e.g., _meta.ui for MCP Apps). Opaque pass-through. */
+  meta?: Record<string, unknown>;
 };
 
 export const CommonToolCallSchema = z

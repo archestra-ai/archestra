@@ -195,10 +195,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // then test the API key
         try {
           await testProviderApiKey(body.provider, actualApiKeyValue);
-        } catch (_error) {
+        } catch (error) {
           throw new ApiError(
             400,
-            `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
+            `Invalid API key: Failed to connect to ${capitalize(body.provider)}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
         // then create the secret
@@ -216,10 +216,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Test the API key before saving
         try {
           await testProviderApiKey(body.provider, actualApiKeyValue);
-        } catch (_error) {
+        } catch (error) {
           throw new ApiError(
             400,
-            `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
+            `Invalid API key: Failed to connect to ${capitalize(body.provider)}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
 

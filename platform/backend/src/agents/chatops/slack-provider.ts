@@ -366,7 +366,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Welcome to Archestra!*\nEach Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
+              text: "Each Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
             },
           },
           {
@@ -820,9 +820,7 @@ class SlackProvider implements ChatOpsProvider {
       });
       blocks.push({
         type: "context",
-        elements: [
-          { type: "mrkdwn", text: `Link: ${params.actionUrl}` },
-        ],
+        elements: [{ type: "mrkdwn", text: `Link: ${params.actionUrl}` }],
       });
     }
 

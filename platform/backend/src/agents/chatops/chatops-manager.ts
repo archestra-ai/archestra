@@ -636,11 +636,17 @@ export class ChatOpsManager {
           actionUrl: welcome.actionUrl,
           actionLabel: welcome.actionLabel,
         });
-      } else {
-        // Fallback: send as a regular reply with the URL inline
+      } else if (isDM) {
+        // Fallback in DMs: send the link inline (it's private)
         await provider.sendReply({
           originalMessage: message,
-          text: `${welcome.text}\n${welcome.actionUrl}`,
+          text: `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
+        });
+      } else {
+        // Fallback in channels: don't expose the signup link
+        await provider.sendReply({
+          originalMessage: message,
+          text: `${welcome.text} Send me a direct message and I'll send you a signup link.`,
         });
       }
     } catch (error) {

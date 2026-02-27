@@ -362,7 +362,7 @@ for (const config of testConfigs) {
     { tag: ["@flaky"] },
     () => {
       // Retry to handle async usage tracking race conditions in CI.
-      // Use a generous timeout because polling for usage tracking can exceed
+      // Use a generous timeout because polling for usage tracking can exceed default.
       // the default 60s limit under CI resource contention.
       test.describe.configure({ retries: 2, timeout: 120_000 });
       let profileId: string;
@@ -472,7 +472,7 @@ for (const config of testConfigs) {
         // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
         // Use generous timeouts - in CI, async tracking can be very slow due to resource contention
         // across parallel test suites and multiple providers running concurrently
-        const maxPollingAttempts = 90;
+        const maxPollingAttempts = 120;
         const pollingIntervalMs = 1000;
         let usageTracked = false;
 

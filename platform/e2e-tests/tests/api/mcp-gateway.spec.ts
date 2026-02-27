@@ -404,6 +404,10 @@ test.describe("MCP Gateway - OAuth 2.1 Discovery", () => {
 });
 
 test.describe("MCP Gateway - External MCP Server Tests", () => {
+  // Increase timeout for this group — the beforeAll installs a K8s-hosted MCP
+  // server and waits for tool discovery, which can easily exceed 60 s in CI.
+  test.describe.configure({ timeout: 120_000 });
+
   let profileId: string;
   let archestraToken: string;
 

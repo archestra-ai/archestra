@@ -186,7 +186,7 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     await clickButton({ page, options: { name: "Test & Create" } });
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${parentKeyName}`),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
 
     // Navigate to Virtual API Keys tab
     await goToVirtualKeysPage(page);

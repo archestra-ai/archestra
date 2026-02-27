@@ -7,6 +7,7 @@ import {
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MEMBER_EMAIL,
 } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
@@ -162,28 +163,23 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       }
 
       // Check Manage Credentials dialog
-      // Member cannot see Manage Credentials button
-      if (user === "Member") {
-        await expect(
-          page.getByTestId(
-            `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`,
-          ),
-        ).not.toBeVisible();
-      } else {
-        // Admin and Editor opens Manage Credentials dialog and sees credentials
-        const expectedCredentials = {
-          Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
-          Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
-        };
-        await openManageCredentialsDialog(page, catalogItemName);
-        const visibleCredentials = await getVisibleCredentials(page);
-        for (const credential of expectedCredentials[user]) {
-          await expect(visibleCredentials).toContain(credential);
-          await expect(visibleCredentials).toHaveLength(
-            expectedCredentials[user].length,
-          );
-        }
+      // All users can see Manage Credentials button and open the dialog
+      // Members see only their personal and team credentials they have access to
+      const expectedCredentials = {
+        Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
+        Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
+        Member: [MEMBER_EMAIL],
+      };
+      await openManageCredentialsDialog(page, catalogItemName);
+      const visibleCredentials = await getVisibleCredentials(page);
+      for (const credential of expectedCredentials[user]) {
+        await expect(visibleCredentials).toContain(credential);
+        await expect(visibleCredentials).toHaveLength(
+          expectedCredentials[user].length,
+        );
+      }
 
+      if (user !== "Member") {
         // Check TokenSelect shows correct credentials
         await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
           page,
@@ -324,7 +320,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     const expectedCredentialsCount = {
       Admin: 4, // admin sees all credentials (3 personal + 1 DEFAULT team)
       Editor: 2, // editor sees their own credentials (personal + DEFAULT team)
-      Member: 1, // member sees only their own personal credential
+      Member: 2, // member sees their personal credential + DEFAULT team credential (member is in Default Team)
     };
     await expect(
       page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),

@@ -16,7 +16,10 @@ interface ModelFromProvider {
   createdAt?: string;
 }
 
-type ModelFetcher = (apiKey: string) => Promise<ModelFromProvider[]>;
+type ModelFetcher = (
+  apiKey: string,
+  baseUrl?: string | null,
+) => Promise<ModelFromProvider[]>;
 
 /**
  * Service for syncing models from provider APIs to the database.
@@ -50,6 +53,7 @@ class ModelSyncService {
     apiKeyId: string,
     provider: SupportedProvider,
     apiKeyValue: string,
+    baseUrl?: string | null,
   ): Promise<number> {
     const fetcher = this.modelFetchers.get(provider);
 
@@ -63,7 +67,7 @@ class ModelSyncService {
 
     try {
       // 1. Fetch models from provider API
-      const providerModels = await fetcher(apiKeyValue);
+      const providerModels = await fetcher(apiKeyValue, baseUrl);
 
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
@@ -148,6 +152,7 @@ class ModelSyncService {
       id: string;
       provider: SupportedProvider;
       apiKeyValue: string;
+      baseUrl?: string | null;
     }>,
   ): Promise<Map<string, number>> {
     const results = new Map<string, number>();
@@ -158,6 +163,7 @@ class ModelSyncService {
           apiKey.id,
           apiKey.provider,
           apiKey.apiKeyValue,
+          apiKey.baseUrl,
         );
         results.set(apiKey.id, count);
       } catch (error) {

@@ -58,8 +58,11 @@ export interface ModelInfo {
 /**
  * Fetch models from Anthropic API
  */
-async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.anthropic.baseUrl;
+async function fetchAnthropicModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
   const url = `${baseUrl}/v1/models?limit=100`;
 
   const response = await fetch(url, {
@@ -94,8 +97,11 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from OpenAI API
  */
-async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.openai.baseUrl;
+async function fetchOpenAiModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.openai.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -169,8 +175,11 @@ export function mapOpenAiModelToModelInfo(
 /**
  * Fetch models from Gemini API (Google AI Studio - API key mode)
  */
-export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.gemini.baseUrl;
+export async function fetchGeminiModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.gemini.baseUrl;
   const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
 
   const response = await fetch(url);
@@ -209,8 +218,11 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from Cerebras API (OpenAI-compatible)
  * Note: Llama models are excluded as they are not allowed in chat
  */
-async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.cerebras.baseUrl;
+async function fetchCerebrasModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.cerebras.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -250,8 +262,11 @@ async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from Mistral API (OpenAI-compatible)
  */
-async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.mistral.baseUrl;
+async function fetchMistralModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.mistral.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -295,7 +310,10 @@ async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
  *
  * @see https://docs.perplexity.ai/models/model-cards
  */
-async function fetchPerplexityModels(_apiKey: string): Promise<ModelInfo[]> {
+async function fetchPerplexityModels(
+  _apiKey: string,
+  _baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
   // Perplexity has no /models endpoint - validation happens on first actual use.
   // Model list centralized in shared/model-constants.ts (PERPLEXITY_MODELS).
   return PERPLEXITY_MODELS.map((m) => ({
@@ -309,8 +327,11 @@ async function fetchPerplexityModels(_apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from Groq API (OpenAI-compatible)
  * @see https://console.groq.com/docs/api-reference
  */
-async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.groq.baseUrl;
+async function fetchGroqModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.groq.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -349,8 +370,11 @@ async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
  */
-async function fetchVllmModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.vllm.baseUrl;
+async function fetchVllmModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.vllm.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -396,8 +420,11 @@ async function fetchVllmModels(apiKey: string): Promise<ModelInfo[]> {
  * Ollama exposes an OpenAI-compatible /models endpoint
  * See: https://github.com/ollama/ollama/blob/main/docs/openai.md
  */
-async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.ollama.baseUrl;
+async function fetchOllamaModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.ollama.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -439,8 +466,11 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from Cohere API
  */
-async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.cohere.baseUrl;
+async function fetchCohereModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.cohere.baseUrl;
   const url = `${baseUrl}/v2/models`;
 
   const response = await fetch(url, {
@@ -492,8 +522,11 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from Zhipuai API
  */
-async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.zhipuai.baseUrl;
+async function fetchZhipuaiModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.zhipuai.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -576,7 +609,10 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
   return allModels;
 }
 
-async function fetchMinimaxModels(_apiKey: string): Promise<ModelInfo[]> {
+async function fetchMinimaxModels(
+  _apiKey: string,
+  _baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
   // MiniMax does not provide a /v1/models endpoint (returns 404)
   // Return known models directly. API key validation happens during actual chat completion requests.
   // Model list centralized in shared/model-constants.ts (MINIMAX_MODELS).
@@ -590,8 +626,11 @@ async function fetchMinimaxModels(_apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from DeepSeek API
  */
-async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.deepseek.baseUrl;
+async function fetchDeepSeekModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.deepseek.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -633,8 +672,11 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
  */
-export async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.bedrock.baseUrl;
+export async function fetchBedrockModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.bedrock.baseUrl;
   if (!baseUrl) {
     logger.warn("Bedrock base URL not configured");
     return [];
@@ -738,8 +780,11 @@ export async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from OpenRouter API (OpenAI-compatible)
  */
-async function fetchOpenrouterModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.openrouter.baseUrl;
+async function fetchOpenrouterModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+): Promise<ModelInfo[]> {
+  const baseUrl = baseUrlOverride || config.llm.openrouter.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -904,7 +949,7 @@ async function getProviderApiKey({
 // We need to make sure that every new provider we support has a model fetcher function
 const modelFetchers: Record<
   SupportedProvider,
-  (apiKey: string) => Promise<ModelInfo[]>
+  (apiKey: string, baseUrl?: string | null) => Promise<ModelInfo[]>
 > = {
   anthropic: fetchAnthropicModels,
   bedrock: fetchBedrockModels,
@@ -935,8 +980,9 @@ for (const [provider, fetcher] of Object.entries(modelFetchers)) {
 export async function testProviderApiKey(
   provider: SupportedProvider,
   apiKey: string,
+  baseUrl?: string | null,
 ): Promise<void> {
-  await modelFetchers[provider](apiKey);
+  await modelFetchers[provider](apiKey, baseUrl);
 }
 
 /**
@@ -1146,6 +1192,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKey.id,
             apiKey.provider,
             secretValue ?? "",
+            apiKey.baseUrl,
           );
         } catch (error) {
           logger.error(

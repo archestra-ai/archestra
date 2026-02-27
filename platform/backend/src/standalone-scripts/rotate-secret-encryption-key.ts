@@ -1,26 +1,4 @@
 // biome-ignore-all lint/suspicious/noConsole: standalone script uses console for logging
-/**
- * Secret Encryption Key Rotation Script
- *
- * Re-encrypts all secrets in the database when rotating ARCHESTRA_AUTH_SECRET.
- *
- * Usage:
- *   OLD_ARCHESTRA_AUTH_SECRET=<old-secret> \
- *   ARCHESTRA_AUTH_SECRET=<new-secret> \
- *   ARCHESTRA_DATABASE_URL=postgresql://user:pass@host:5432/db \
- *   npx tsx src/standalone-scripts/rotate-secret-encryption-key.ts
- *
- * IMPORTANT: Stop the application before running this script to avoid race
- * conditions with concurrent secret writes.
- *
- * The script will:
- *   1. Derive encryption keys from both the old and new secrets
- *   2. Read all rows from the secret table
- *   3. Decrypt each with the old key and re-encrypt with the new key
- *   4. Update all rows in a single transaction (all-or-nothing)
- *
- * If DRY_RUN=true is set, the script will report what would change without writing.
- */
 import { pathToFileURL } from "node:url";
 import { eq } from "drizzle-orm";
 import db, { initializeDatabase, schema } from "@/database";
@@ -30,6 +8,33 @@ import {
   encryptSecretValueWithKey,
   isEncryptedSecret,
 } from "@/utils/crypto";
+
+const HELP_TEXT = `
+Secret Encryption Key Rotation Script
+
+Re-encrypts all secrets in the database when rotating ARCHESTRA_AUTH_SECRET.
+
+IMPORTANT: Stop the application before running this script to avoid race
+conditions with concurrent secret writes.
+
+Usage:
+  OLD_ARCHESTRA_AUTH_SECRET=<old-secret> \\
+  ARCHESTRA_AUTH_SECRET=<new-secret> \\
+  ARCHESTRA_DATABASE_URL=postgresql://user:pass@host:5432/db \\
+  npx tsx src/standalone-scripts/rotate-secret-encryption-key.ts
+
+Environment variables:
+  OLD_ARCHESTRA_AUTH_SECRET   The previous secret (required)
+  ARCHESTRA_AUTH_SECRET       The new secret (required)
+  ARCHESTRA_DATABASE_URL      PostgreSQL connection string (required)
+  DRY_RUN=true                Preview what would change without writing
+
+The script will:
+  1. Derive encryption keys from both the old and new secrets
+  2. Read all rows from the secret table
+  3. Decrypt each with the old key and re-encrypt with the new key
+  4. Update all rows in a single transaction (all-or-nothing)
+`.trim();
 
 export async function rotateSecretEncryptionKey(opts: {
   oldSecret: string;
@@ -102,6 +107,11 @@ export async function rotateSecretEncryptionKey(opts: {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log(HELP_TEXT);
+    process.exit(0);
+  }
+
   const oldSecret = process.env.OLD_ARCHESTRA_AUTH_SECRET;
   const newSecret = process.env.ARCHESTRA_AUTH_SECRET;
   const dryRun = process.env.DRY_RUN === "true";

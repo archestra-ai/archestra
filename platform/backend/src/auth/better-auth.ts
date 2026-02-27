@@ -3,6 +3,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import {
   ARCHESTRA_TOKEN_PREFIX,
+  AUTO_PROVISIONED_INVITATION_STATUS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
   SSO_TRUSTED_PROVIDER_IDS,
@@ -445,7 +446,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       "[auth:beforeHook] Invitation found, validating",
     );
 
-    if (status !== "pending" && !status?.startsWith("auto-provisioned")) {
+    if (
+      status !== "pending" &&
+      !status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)
+    ) {
       logger.debug(
         { invitationId, status },
         "[auth:beforeHook] Invitation not pending",
@@ -482,7 +486,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     // Handle auto-provisioned users: they already have a user record but no account.
     // Delete the placeholder user and re-create the invitation as "pending" so
     // better-auth can proceed with normal sign-up (creates fresh user + account).
-    if (status?.startsWith("auto-provisioned")) {
+    if (status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)) {
       const [existingUser] = await db
         .select({ id: schema.usersTable.id })
         .from(schema.usersTable)

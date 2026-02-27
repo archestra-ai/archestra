@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
+import { AUTO_PROVISIONED_INVITATION_STATUS } from "@shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -21,7 +22,9 @@ function SignUpWithInvitationContent() {
     if (
       invitationId &&
       invitationData?.userExists &&
-      !invitationData.invitation?.status?.startsWith("auto-provisioned")
+      !invitationData.invitation?.status?.startsWith(
+        AUTO_PROVISIONED_INVITATION_STATUS,
+      )
     ) {
       router.push(`/auth/sign-in?invitationId=${invitationId}`);
     }

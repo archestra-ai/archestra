@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, MEMBER_ROLE_NAME } from "@shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -53,7 +53,7 @@ export async function autoProvisionUser(params: {
       organizationId: org.id,
       email: normalizedEmail,
       role: MEMBER_ROLE_NAME,
-      status: `auto-provisioned:${provider}`,
+      status: `${AUTO_PROVISIONED_INVITATION_STATUS}:${provider}`,
       expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS),
       inviterId: userId, // Self-referencing — auto-provisioned
     });

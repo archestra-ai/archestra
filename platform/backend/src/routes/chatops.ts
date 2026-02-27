@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
@@ -470,7 +470,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   message.senderEmail.toLowerCase(),
                 );
                 const autoProvInv = invitations.find((inv) =>
-                  inv.status?.startsWith("auto-provisioned"),
+                  inv.status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS),
                 );
                 if (autoProvInv) {
                   const sso = await isSsoConfigured();

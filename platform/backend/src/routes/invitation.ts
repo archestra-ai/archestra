@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InvitationModel, UserModel } from "@/models";
@@ -47,7 +47,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       // Check if invitation is valid (pending or auto-provisioned)
       if (
         invitation.status !== "pending" &&
-        !invitation.status.startsWith("auto-provisioned")
+        !invitation.status.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)
       ) {
         throw new ApiError(
           400,

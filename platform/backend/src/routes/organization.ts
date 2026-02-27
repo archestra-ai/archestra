@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
 import { eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -153,7 +153,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           status: schema.invitationsTable.status,
         })
         .from(schema.invitationsTable)
-        .where(like(schema.invitationsTable.status, "auto-provisioned%"));
+        .where(
+          like(
+            schema.invitationsTable.status,
+            `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+          ),
+        );
 
       // Build email → { provider, invitationId } map
       const emailToInvitation = new Map<

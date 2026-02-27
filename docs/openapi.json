@@ -34777,6 +34777,7 @@
                   }
                 },
                 "required": [
+                  "scope",
                   "name"
                 ]
               }

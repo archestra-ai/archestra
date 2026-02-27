@@ -10971,7 +10971,7 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
-        scope?: 'personal' | 'team' | 'org';
+        scope: 'personal' | 'team' | 'org';
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;

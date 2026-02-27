@@ -175,17 +175,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         logger.info(
           "Created Readonly Vault external vault secret reference for local config secrets",
         );
-      } else if (restBody.localConfig?.environment) {
+      } else if (
+        restBody.localConfig?.environment ||
+        restBody.localConfig?.imagePullSecrets
+      ) {
         // Extract secret env vars from localConfig.environment
         const secretEnvVars: Record<string, string> = {};
-        for (const envVar of restBody.localConfig.environment) {
-          if (
-            envVar.type === "secret" &&
-            envVar.value &&
-            !envVar.promptOnInstallation
-          ) {
-            secretEnvVars[envVar.key] = envVar.value;
-            delete envVar.value; // Remove value from catalog template
+        if (restBody.localConfig.environment) {
+          for (const envVar of restBody.localConfig.environment) {
+            if (
+              envVar.type === "secret" &&
+              envVar.value &&
+              !envVar.promptOnInstallation
+            ) {
+              secretEnvVars[envVar.key] = envVar.value;
+              delete envVar.value; // Remove value from catalog template
+            }
           }
         }
 
@@ -425,7 +430,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         logger.info(
           "Created Readonly Vault external vault secret reference for local config secrets",
         );
-      } else if (restBody.localConfig?.environment) {
+      } else if (
+        restBody.localConfig?.environment ||
+        restBody.localConfig?.imagePullSecrets
+      ) {
         // Get existing secret values to preserve keys that are still in the request
         const existingSecretValues: Record<string, string> = {};
         if (localConfigSecretId) {
@@ -442,7 +450,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Preserve existing values for keys that are in the request but have no new value
         const secretEnvVars: Record<string, string> = {};
 
-        for (const envVar of restBody.localConfig.environment) {
+        for (const envVar of restBody.localConfig.environment ?? []) {
           if (envVar.type === "secret" && !envVar.promptOnInstallation) {
             if (envVar.value) {
               // New value provided - use it

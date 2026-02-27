@@ -539,7 +539,7 @@ export default class K8sDeployment {
 
     const createdSecretNames: string[] = [];
 
-    for (const [index, entry] of imagePullSecrets.entries()) {
+    for (const entry of imagePullSecrets) {
       if (entry.source !== "credentials") continue;
 
       const passwordKey = `__regcred_password:${entry.server}:${entry.username}`;
@@ -556,13 +556,18 @@ export default class K8sDeployment {
         continue;
       }
 
-      // Use sanitized server hostname in secret name for kubectl traceability
-      const sanitizedServer = entry.server
-        .replace(/[^a-z0-9-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 40);
-      const secretName = `mcp-server-${this.mcpServer.id}-regcred-${sanitizedServer}`;
+      // Use sanitized server + username in secret name for kubectl traceability and uniqueness
+      // K8s secret names must be DNS-1123 subdomain: max 253 chars, [a-z0-9.-], start/end alphanumeric
+      const sanitizedServer = K8sDeployment.ensureStringIsRfc1123Compliant(
+        entry.server,
+      ).slice(0, 40);
+      const sanitizedUsername = K8sDeployment.ensureStringIsRfc1123Compliant(
+        entry.username,
+      ).slice(0, 20);
+      const secretName =
+        `mcp-server-${this.mcpServer.id}-regcred-${sanitizedServer}-${sanitizedUsername}`
+          .replace(/[^a-z0-9]+$/, "")
+          .substring(0, 253);
       const auth = Buffer.from(`${entry.username}:${password}`).toString(
         "base64",
       );

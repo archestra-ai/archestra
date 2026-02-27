@@ -1192,6 +1192,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKey.id,
             apiKey.provider,
             secretValue ?? "",
+            apiKey.baseUrl,
           );
         } catch (error) {
           logger.error(

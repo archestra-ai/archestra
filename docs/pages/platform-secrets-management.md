@@ -16,7 +16,7 @@ This document covers Vault secret manager configuration. Include:
 - Secret storage paths
 -->
 
-Archestra supports external secrets storage. When enabled, sensitive data like API keys and MCP server credentials are stored externally.
+Archestra stores sensitive data like API keys, OAuth tokens, and MCP server credentials as secrets. By default, secrets are encrypted at rest in the database. Optionally, you can configure external secrets storage with HashiCorp Vault.
 
 > **Note:** Existing secrets are not migrated when you enable external storage. Recreate secrets after changing the secrets manager.
 

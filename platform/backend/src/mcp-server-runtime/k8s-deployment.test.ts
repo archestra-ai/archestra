@@ -4200,11 +4200,13 @@ describe("K8sDeployment.createDockerRegistrySecrets", () => {
     mcpServerId: string,
     mockCreateSecret: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({}),
     mockReplaceSecret: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({}),
+    teamId?: string | null,
   ): K8sDeployment {
     const mcpServer = {
       id: mcpServerId,
       name: "test-server",
       catalogId: "catalog-id",
+      teamId: teamId ?? null,
     } as McpServer;
 
     const mockK8sApi = {
@@ -4395,6 +4397,54 @@ describe("K8sDeployment.createDockerRegistrySecrets", () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toContain("docker.io");
     expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
+  test("includes team-id label when mcpServer.teamId is set", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi(
+      "srv-team",
+      mockCreate,
+      vi.fn().mockResolvedValue({}),
+      "team-abc-123",
+    );
+    await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:quay.io:user": "pass" },
+      [
+        {
+          source: "credentials",
+          server: "quay.io",
+          username: "user",
+          email: "a@b.com",
+        },
+      ],
+    );
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const body = mockCreate.mock.calls[0][0].body;
+    expect(body.metadata.labels["team-id"]).toBe("team-abc-123");
+  });
+
+  test("omits team-id label when mcpServer.teamId is null", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const deployment = createDeploymentWithMockedK8sApi(
+      "srv-no-team",
+      mockCreate,
+      vi.fn().mockResolvedValue({}),
+      null,
+    );
+    await deployment.createDockerRegistrySecrets(
+      { "__regcred_password:quay.io:user": "pass" },
+      [
+        {
+          source: "credentials",
+          server: "quay.io",
+          username: "user",
+          email: "a@b.com",
+        },
+      ],
+    );
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const body = mockCreate.mock.calls[0][0].body;
+    expect(body.metadata.labels["team-id"]).toBeUndefined();
   });
 });
 

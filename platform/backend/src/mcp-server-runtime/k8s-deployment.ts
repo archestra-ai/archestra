@@ -590,6 +590,9 @@ export default class K8sDeployment {
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
             type: "regcred",
+            ...(this.mcpServer.teamId
+              ? { "team-id": this.mcpServer.teamId }
+              : {}),
           }),
         },
         type: "kubernetes.io/dockerconfigjson",

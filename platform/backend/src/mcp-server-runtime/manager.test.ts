@@ -753,3 +753,150 @@ describe("McpServerRuntimeManager", () => {
     });
   });
 });
+
+describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
+  test("returns empty array when k8sApi is not initialized", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
+    expect(result).toEqual([]);
+  });
+
+  test("returns empty array when called without options (restrictive default)", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    const mockListSecrets = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-team-a",
+            labels: { app: "mcp-server", type: "regcred", "team-id": "a" },
+          },
+        },
+      ],
+    });
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: mockListSecrets,
+    };
+
+    const result = await manager.listDockerRegistrySecrets();
+    expect(result).toEqual([]);
+    expect(mockListSecrets).not.toHaveBeenCalled();
+  });
+
+  test("admin sees all Archestra-managed secrets", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    const mockListSecrets = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-team-a",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "team-id": "team-a",
+            },
+          },
+        },
+        {
+          metadata: {
+            name: "regcred-team-b",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "team-id": "team-b",
+            },
+          },
+        },
+      ],
+    });
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: mockListSecrets,
+    };
+
+    const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
+    expect(result).toEqual([
+      { name: "regcred-team-a" },
+      { name: "regcred-team-b" },
+    ]);
+
+    expect(mockListSecrets).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labelSelector: "app=mcp-server,type=regcred",
+      }),
+    );
+  });
+
+  test("non-admin only sees secrets matching their team IDs", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    const mockListSecrets = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-team-a",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "team-id": "team-a",
+            },
+          },
+        },
+        {
+          metadata: {
+            name: "regcred-team-b",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "team-id": "team-b",
+            },
+          },
+        },
+        {
+          metadata: {
+            name: "regcred-no-team",
+            labels: { app: "mcp-server", type: "regcred" },
+          },
+        },
+      ],
+    });
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: mockListSecrets,
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+    expect(result).toEqual([{ name: "regcred-team-a" }]);
+  });
+
+  test("non-admin with no teams sees no secrets", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    const mockListSecrets = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: {
+            name: "regcred-team-a",
+            labels: {
+              app: "mcp-server",
+              type: "regcred",
+              "team-id": "team-a",
+            },
+          },
+        },
+      ],
+    });
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: mockListSecrets,
+    };
+
+    const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
+    expect(result).toEqual([]);
+  });
+});

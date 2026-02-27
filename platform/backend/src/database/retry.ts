@@ -52,14 +52,18 @@ const TRANSIENT_ERROR_PATTERNS = [
   "timeout expired",
 ];
 
+/** Maximum depth for cause-chain traversal to guard against circular references */
+const MAX_CAUSE_DEPTH = 5;
+
 /**
  * Determine whether a database error is transient (i.e. retrying may succeed).
  *
  * Checks the error itself and, for DrizzleQueryError wrappers, recursively
- * checks the underlying cause.
+ * checks the underlying cause (bounded to {@link MAX_CAUSE_DEPTH} levels).
  */
-export function isTransientDbError(error: unknown): boolean {
+export function isTransientDbError(error: unknown, depth = 0): boolean {
   if (!(error instanceof Error)) return false;
+  if (depth > MAX_CAUSE_DEPTH) return false;
 
   // Check PostgreSQL error code (set by node-postgres on query errors)
   const pgCode = (error as Error & { code?: string }).code;
@@ -73,7 +77,7 @@ export function isTransientDbError(error: unknown): boolean {
 
   // DrizzleQueryError wraps the underlying pg error as `cause`
   const cause = (error as Error & { cause?: unknown }).cause;
-  if (cause) return isTransientDbError(cause);
+  if (cause) return isTransientDbError(cause, depth + 1);
 
   return false;
 }
@@ -139,6 +143,9 @@ export async function withDbRetry<T>(
   throw new Error("withDbRetry: unreachable");
 }
 
+/** Symbol marker to prevent double-wrapping the same pool */
+const RETRY_WRAPPED = Symbol("retryWrapped");
+
 /**
  * Wrap a pg.Pool instance so that its `query()` method automatically retries
  * transient connection errors.
@@ -149,10 +156,15 @@ export async function withDbRetry<T>(
  *
  * Transaction queries (via a checked-out PoolClient) are NOT affected by this
  * wrapper; callers should use {@link withDbRetry} around the entire transaction.
+ *
+ * Calling this function multiple times on the same pool is a no-op (guarded
+ * by a Symbol marker to prevent compounding retries).
  */
 export function wrapPoolWithRetry(pool: {
   query: (...args: unknown[]) => unknown;
 }): void {
+  if ((pool as Record<symbol, unknown>)[RETRY_WRAPPED]) return;
+
   const originalQuery = pool.query.bind(pool);
 
   pool.query = ((...args: unknown[]) => {
@@ -165,4 +177,6 @@ export function wrapPoolWithRetry(pool: {
     // Promise-style call: wrap with retry logic
     return withDbRetry(() => originalQuery(...args) as Promise<unknown>);
   }) as typeof pool.query;
+
+  (pool as Record<symbol, unknown>)[RETRY_WRAPPED] = true;
 }

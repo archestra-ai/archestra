@@ -111,6 +111,15 @@ describe("isTransientDbError", () => {
     });
     expect(isTransientDbError(outerError)).toBe(true);
   });
+
+  test("returns false when cause chain exceeds max depth", () => {
+    // Build a chain deeper than MAX_CAUSE_DEPTH (5)
+    let error: Error = new Error("ECONNREFUSED");
+    for (let i = 0; i < 7; i++) {
+      error = new Error(`wrapper ${i}`, { cause: error });
+    }
+    expect(isTransientDbError(error)).toBe(false);
+  });
 });
 
 describe("withDbRetry", () => {
@@ -298,5 +307,21 @@ describe("wrapPoolWithRetry", () => {
     const result = await pool.query("SELECT count(*) FROM users");
     expect(result).toEqual({ rows: [{ count: 5 }], rowCount: 1 });
     expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test("calling wrapPoolWithRetry twice does not double-wrap", async () => {
+    const mockQuery = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("connect ECONNREFUSED 10.2.124.50:5432"))
+      .mockResolvedValue({ rows: [{ id: 1 }], rowCount: 1 });
+
+    const pool = { query: mockQuery };
+    wrapPoolWithRetry(pool);
+    wrapPoolWithRetry(pool); // second call should be a no-op
+
+    const result = await pool.query("SELECT 1");
+    expect(result).toEqual({ rows: [{ id: 1 }], rowCount: 1 });
+    // Should be 2 (1 initial + 1 retry), NOT 4+ from double-wrapped retries
+    expect(mockQuery).toHaveBeenCalledTimes(2);
   });
 });

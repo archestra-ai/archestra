@@ -86,6 +86,13 @@ export function getDb() {
  *
  * Uses a 3-second timeout to prevent hanging probes under high load.
  * This is called every 10 seconds by K8s readiness probes (per Helm config).
+ *
+ * Note: pool.query() is wrapped with retry logic (see {@link wrapPoolWithRetry}).
+ * This is intentional for health checks — a single transient blip (e.g.
+ * ECONNREFUSED during a brief network hiccup) will be retried rather than
+ * immediately marking the pod as unhealthy and causing unnecessary restarts.
+ * The 3-second Promise.race timeout still caps the total wall-clock time,
+ * so hanging connections are detected promptly regardless of retries.
  */
 export async function isDatabaseHealthy(): Promise<boolean> {
   if (!pool) {

@@ -193,6 +193,7 @@ test.describe("Image Pull Secrets", () => {
     expect(regcredSecret.type).toBe("kubernetes.io/dockerconfigjson");
     expect(regcredSecret.metadata?.labels?.["mcp-server-id"]).toBe(serverId);
     expect(regcredSecret.metadata?.labels?.type).toBe("regcred");
+    expect(regcredSecret.metadata?.labels?.["team-id"]).toBe(defaultTeam.id);
 
     // Verify dockerconfigjson content
     const dockerConfigJsonB64 = regcredSecret.data?.[".dockerconfigjson"];
@@ -211,5 +212,27 @@ test.describe("Image Pull Secrets", () => {
     expect(secretName).toContain(`mcp-server-${serverId}-regcred-`);
     expect(secretName).toContain("test-registry.example.com");
     expect(secretName).toContain("e2e-test-user");
+  });
+
+  test("GET /api/k8s/image-pull-secrets returns Archestra-managed secrets but not pre-existing ones", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/k8s/image-pull-secrets",
+    });
+    const secrets: Array<{ name: string }> = await response.json();
+
+    // The Archestra-managed regcred (created by server installation) should appear
+    const regcredNames = secrets.map((s) => s.name);
+    const hasArchestraRegcred = regcredNames.some((name) =>
+      name.includes(`mcp-server-${serverId}-regcred-`),
+    );
+    expect(hasArchestraRegcred).toBe(true);
+
+    // The pre-existing test secret (created without Archestra labels) should NOT appear
+    expect(regcredNames).not.toContain(TEST_EXISTING_SECRET_NAME);
   });
 });

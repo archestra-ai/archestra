@@ -271,6 +271,30 @@ const groqConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const xaiConfig: ToolPersistenceTestConfig = {
+  providerName: "xAI",
+
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "grok-4-1-fast-non-reasoning",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const minimaxConfig: ToolPersistenceTestConfig = {
   providerName: "Minimax",
 
@@ -379,6 +403,7 @@ const testConfigsMap = {
   gemini: geminiConfig,
   cohere: cohereConfig,
   groq: groqConfig,
+  xai: xaiConfig,
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
   vllm: vllmConfig,

@@ -77,6 +77,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   gemini: "gemini-2.5-pro",
   cohere: "command-r-08-2024",
   groq: "llama-3.1-8b-instant",
+  xai: "grok-4",
   ollama: "llama3.2",
   vllm: "default",
   cerebras: "llama-4-scout-17b-16e-instruct",

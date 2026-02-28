@@ -275,6 +275,18 @@ const openrouterConfig: StreamingToolCallTestConfig = {
   expectedToolName: "read_file",
 };
 
+const xaiConfig: StreamingToolCallTestConfig = {
+  providerName: "xAI",
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildStreamingRequest: (content, tools) =>
+    buildOpenAIStreamingRequest("grok-2-1212", content, tools),
+  expectedToolName: "read_file",
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -296,6 +308,7 @@ const testConfigsMap = {
   bedrock: null, // Bedrock uses binary AWS EventStream format which cannot be mocked via WireMock SSE
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
+  xai: xaiConfig,
 } satisfies Record<SupportedProvider, StreamingToolCallTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

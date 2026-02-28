@@ -1,6 +1,7 @@
 import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -13,6 +14,7 @@ import {
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
   McpServerModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -858,8 +860,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (_request, reply) => {
-      const secrets = await mcpServerRuntimeManager.listDockerRegistrySecrets();
+    async ({ user, headers }, reply) => {
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        headers,
+      );
+
+      const secrets = isMcpServerAdmin
+        ? await mcpServerRuntimeManager.listDockerRegistrySecrets({
+            isAdmin: true,
+          })
+        : await mcpServerRuntimeManager.listDockerRegistrySecrets({
+            teamIds: await TeamModel.getUserTeamIds(user.id),
+          });
+
       return reply.send(secrets);
     },
   );

@@ -169,10 +169,10 @@ The function must:
 
 Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
 
-| File                                     | Description                                                                                                                |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/clients/dual-llm-client.ts` | Create `{Provider}DualLlmClient` class implementing `DualLlmClient` interface with `chat()` and `chatWithSchema()` methods |
-| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                               |
+| File                                     | Description                                                                                                                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/clients/dual-llm-client.ts` | **OpenAI-compatible providers:** use `createOpenAiCompatibleDualLlmClient({ providerLabel, baseUrl, defaultModel })`. **Non-OpenAI providers:** create a custom class implementing `DualLlmClient` |
+| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                                                                                            |
 
 ### Metrics
 
@@ -292,6 +292,7 @@ Existing provider implementations for reference:
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):
 
 - Groq: `backend/src/routes/proxy/routesv2/groq.ts`, `backend/src/routes/proxy/adapterV2/groq.ts` (best starting point — cleanest example of OpenAI reuse)
+- xAI: `backend/src/routes/proxy/routesv2/xai.ts`, `backend/src/routes/proxy/adapterV2/xai.ts`
 - vLLM: `backend/src/routes/proxy/routesv2/vllm.ts`, `backend/src/routes/proxy/adapterV2/vllm.ts`
 - Ollama: `backend/src/routes/proxy/routesv2/ollama.ts`, `backend/src/routes/proxy/adapterV2/ollama.ts`
 - ZhipuAI: `backend/src/routes/proxy/routesv2/zhipuai.ts`, `backend/src/routes/proxy/adapterV2/zhipuai.ts`

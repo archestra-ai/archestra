@@ -43,145 +43,237 @@ export interface DualLlmClient {
   ): Promise<T>;
 }
 
-/**
- * OpenRouter implementation of DualLlmClient (OpenAI-compatible)
- */
-export class OpenrouterDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "openrouter/auto") {
-    logger.debug({ model }, "[dualLlmClient] OpenRouter: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.openrouter.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] OpenRouter: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-    return response.choices[0].message.content?.trim() || "";
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] OpenRouter: starting chat with schema",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature,
-    });
-    return JSON.parse(response.choices[0].message.content || "") as T;
-  }
-}
+// =============================================================================
+// OpenAI-compatible factory
+// =============================================================================
 
 /**
- * OpenAI implementation of DualLlmClient
+ * Factory for creating DualLlmClient classes for OpenAI-compatible providers.
+ * Handles chat completions with json_schema structured output and automatic
+ * fallback to prompt-based JSON extraction when structured output is unsupported.
+ *
+ * @param params.providerLabel - Human-readable name for logging (e.g., "Groq")
+ * @param params.baseUrl - Provider's API base URL
+ * @param params.defaultModel - Default model ID when none is specified
+ * @param params.apiKeyFallback - Fallback API key value when none is provided (e.g., "EMPTY" for keyless providers like vLLM/Ollama)
  */
-export class OpenAiDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
+function createOpenAiCompatibleDualLlmClient(params: {
+  providerLabel: string;
+  baseUrl: string;
+  defaultModel: string;
+  apiKeyFallback?: string;
+}): {
+  new (apiKey: string, model?: string): DualLlmClient;
+} {
+  return class implements DualLlmClient {
+    private client: OpenAI;
+    private model: string;
 
-  constructor(apiKey: string, model = "gpt-4o") {
-    logger.debug({ model }, "[dualLlmClient] OpenAI: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.openai.baseUrl,
-    });
-    this.model = model;
-  }
+    constructor(apiKey: string, model = params.defaultModel) {
+      logger.debug(
+        { model },
+        `[dualLlmClient] ${params.providerLabel}: initializing client`,
+      );
+      this.client = new OpenAI({
+        apiKey: apiKey || params.apiKeyFallback || apiKey,
+        baseURL: params.baseUrl,
+      });
+      this.model = model;
+    }
 
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] OpenAI: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] OpenAI: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
+    async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+      logger.debug(
+        { model: this.model, messageCount: messages.length, temperature },
+        `[dualLlmClient] ${params.providerLabel}: starting chat completion`,
+      );
+      const response = await this.client.chat.completions.create({
         model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
+        messages,
         temperature,
-      },
-      "[dualLlmClient] OpenAI: starting chat with schema",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature,
-    });
+      });
 
-    const content = response.choices[0].message.content || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] OpenAI: chat with schema complete, parsing response",
-    );
-    return JSON.parse(content) as T;
-  }
+      const content = response.choices[0].message.content?.trim() || "";
+      logger.debug(
+        { model: this.model, responseLength: content.length },
+        `[dualLlmClient] ${params.providerLabel}: chat completion complete`,
+      );
+      return content;
+    }
+
+    async chatWithSchema<T>(
+      messages: DualLlmMessage[],
+      schema: {
+        name: string;
+        schema: {
+          type: string;
+          properties: Record<string, unknown>;
+          required: string[];
+          additionalProperties: boolean;
+        };
+      },
+      temperature = 0,
+    ): Promise<T> {
+      logger.debug(
+        {
+          model: this.model,
+          schemaName: schema.name,
+          messageCount: messages.length,
+          temperature,
+        },
+        `[dualLlmClient] ${params.providerLabel}: starting chat with schema`,
+      );
+
+      // Try OpenAI-compatible structured output first
+      try {
+        const response = await this.client.chat.completions.create({
+          model: this.model,
+          messages,
+          response_format: {
+            type: "json_schema",
+            json_schema: schema,
+          },
+          temperature,
+        });
+
+        const content = response.choices[0].message.content || "";
+        logger.debug(
+          { model: this.model, responseLength: content.length },
+          `[dualLlmClient] ${params.providerLabel}: chat with schema complete, parsing response`,
+        );
+        return JSON.parse(content) as T;
+      } catch (error) {
+        // Fallback to prompt-based JSON-only response if structured output unsupported
+        logger.debug(
+          {
+            model: this.model,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          `[dualLlmClient] ${params.providerLabel}: structured output not supported, using prompt fallback`,
+        );
+
+        const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+        const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+          if (idx === 0 && msg.role === "user") {
+            return {
+              ...msg,
+              content: `${systemPrompt}\n\n${msg.content}`,
+            };
+          }
+          return msg;
+        });
+
+        const response = await this.client.chat.completions.create({
+          model: this.model,
+          messages: enhancedMessages,
+          temperature,
+        });
+
+        const content = response.choices[0].message.content || "";
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+          null,
+          content,
+        ];
+        const jsonText = (jsonMatch[1] || content).trim();
+
+        try {
+          return JSON.parse(jsonText) as T;
+        } catch (parseError) {
+          logger.error(
+            { model: this.model, content: jsonText, parseError },
+            `[dualLlmClient] ${params.providerLabel}: failed to parse JSON response`,
+          );
+          throw parseError;
+        }
+      }
+    }
+  };
 }
+
+// =============================================================================
+// OpenAI-compatible providers (use factory)
+// =============================================================================
+
+export const OpenAiDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "OpenAI",
+  baseUrl: config.llm.openai.baseUrl,
+  defaultModel: "gpt-4o",
+});
+
+export const OpenrouterDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "OpenRouter",
+  baseUrl: config.llm.openrouter.baseUrl,
+  defaultModel: "openrouter/auto",
+});
+
+export const CerebrasDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Cerebras",
+  baseUrl: config.llm.cerebras.baseUrl,
+  defaultModel: "gpt-oss-120b",
+});
+
+export const MistralDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Mistral",
+  baseUrl: config.llm.mistral.baseUrl,
+  defaultModel: "mistral-large-latest",
+});
+
+export const PerplexityDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Perplexity",
+  baseUrl: config.llm.perplexity.baseUrl,
+  defaultModel: "sonar-pro",
+});
+
+export const GroqDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Groq",
+  baseUrl: config.llm.groq.baseUrl,
+  defaultModel: "llama-3.3-70b-versatile",
+});
+
+export const XaiDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "xAI",
+  baseUrl: config.llm.xai.baseUrl,
+  defaultModel: "grok-4",
+});
+
+export const ZhipuaiDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Zhipuai",
+  baseUrl: config.llm.zhipuai.baseUrl,
+  defaultModel: "glm-4.5-flash",
+});
+
+export const MinimaxDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "MiniMax",
+  baseUrl: config.llm.minimax.baseUrl,
+  defaultModel: "MiniMax-M2.1",
+});
+
+export const DeepSeekDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "DeepSeek",
+  baseUrl: config.llm.deepseek.baseUrl,
+  defaultModel: "deepseek-chat",
+});
+
+export const VllmDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "vLLM",
+  baseUrl: config.llm.vllm.baseUrl ?? "",
+  defaultModel: "default",
+  apiKeyFallback: "EMPTY",
+});
+
+export const OllamaDualLlmClient = createOpenAiCompatibleDualLlmClient({
+  providerLabel: "Ollama",
+  baseUrl: config.llm.ollama.baseUrl ?? "",
+  defaultModel: "default",
+  apiKeyFallback: "EMPTY",
+});
+
+// =============================================================================
+// Non-OpenAI providers (custom implementations)
+// =============================================================================
 
 /**
  * Anthropic implementation of DualLlmClient
@@ -294,320 +386,6 @@ Return only the JSON object, no other text.`;
 }
 
 /**
- * Cerebras implementation of DualLlmClient (OpenAI-compatible)
- */
-export class CerebrasDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "gpt-oss-120b") {
-    logger.debug({ model }, "[dualLlmClient] Cerebras: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.cerebras.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] Cerebras: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Cerebras: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] Cerebras: starting chat with schema",
-    );
-
-    // Cerebras uses OpenAI-compatible API with JSON schema support
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature,
-    });
-
-    const content = response.choices[0].message.content || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Cerebras: chat with schema complete, parsing response",
-    );
-    return JSON.parse(content) as T;
-  }
-}
-
-/**
- * Mistral implementation of DualLlmClient (OpenAI-compatible)
- */
-export class MistralDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "mistral-large-latest") {
-    logger.debug({ model }, "[dualLlmClient] Mistral: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.mistral.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] Mistral: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Mistral: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] Mistral: starting chat with schema",
-    );
-
-    // Mistral uses OpenAI-compatible API with JSON schema support
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature,
-    });
-
-    const content = response.choices[0].message.content || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Mistral: chat with schema complete, parsing response",
-    );
-    return JSON.parse(content) as T;
-  }
-}
-
-/**
- * Perplexity implementation of DualLlmClient (OpenAI-compatible)
- *
- * Note: Perplexity does not support external tool calling.
- * This client is used for dual LLM verification patterns.
- */
-export class PerplexityDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "sonar-pro") {
-    logger.debug({ model }, "[dualLlmClient] Perplexity: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.perplexity.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] Perplexity: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Perplexity: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] Perplexity: starting chat with schema",
-    );
-
-    // Perplexity uses OpenAI-compatible API with JSON schema support
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature,
-    });
-
-    const content = response.choices[0].message.content || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Perplexity: chat with schema complete, parsing response",
-    );
-    return JSON.parse(content) as T;
-  }
-}
-
-/**
- * Groq implementation of DualLlmClient (OpenAI-compatible)
- */
-export class GroqDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "llama-3.3-70b-versatile") {
-    logger.debug({ model }, "[dualLlmClient] Groq: initializing client");
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: config.llm.groq.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] Groq: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Groq: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] Groq: starting chat with schema",
-    );
-
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature,
-    });
-
-    const content = response.choices[0].message.content || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Groq: chat with schema complete, parsing response",
-    );
-    return JSON.parse(content) as T;
-  }
-}
-
-/**
  * Google Gemini implementation of DualLlmClient
  * Supports both API key authentication and Vertex AI (ADC) mode
  */
@@ -707,244 +485,6 @@ export class GeminiDualLlmClient implements DualLlmClient {
       "[dualLlmClient] Gemini: chat with schema complete, parsing response",
     );
     return JSON.parse(content) as T;
-  }
-}
-
-/**
- * vLLM implementation of DualLlmClient
- * vLLM exposes an OpenAI-compatible API, so we use the OpenAI SDK with vLLM's base URL
- */
-export class VllmDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string | undefined, model: string) {
-    logger.debug({ model }, "[dualLlmClient] vLLM: initializing client");
-    // vLLM typically doesn't require API keys, use dummy if not provided
-    this.client = new OpenAI({
-      apiKey: apiKey || "EMPTY",
-      baseURL: config.llm.vllm.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] vLLM: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] vLLM: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] vLLM: starting chat with schema",
-    );
-
-    // vLLM supports JSON schema via guided decoding
-    // Try OpenAI-compatible structured output first
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages,
-        response_format: {
-          type: "json_schema",
-          json_schema: schema,
-        },
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      logger.debug(
-        { model: this.model, responseLength: content.length },
-        "[dualLlmClient] vLLM: chat with schema complete, parsing response",
-      );
-      return JSON.parse(content) as T;
-    } catch {
-      // Fallback to prompt-based approach if structured output not supported
-      logger.debug(
-        { model: this.model },
-        "[dualLlmClient] vLLM: structured output not supported, using prompt fallback",
-      );
-
-      const systemPrompt = `You must respond with valid JSON matching this schema:
-${JSON.stringify(schema.schema, null, 2)}
-
-Return only the JSON object, no other text.`;
-
-      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
-        if (idx === 0 && msg.role === "user") {
-          return {
-            ...msg,
-            content: `${systemPrompt}\n\n${msg.content}`,
-          };
-        }
-        return msg;
-      });
-
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: enhancedMessages,
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
-        null,
-        content,
-      ];
-      const jsonText = jsonMatch[1].trim();
-
-      return JSON.parse(jsonText) as T;
-    }
-  }
-}
-
-/**
- * Ollama implementation of DualLlmClient
- * Ollama exposes an OpenAI-compatible API, so we use the OpenAI SDK with Ollama's base URL
- */
-export class OllamaDualLlmClient implements DualLlmClient {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string | undefined, model: string) {
-    logger.debug({ model }, "[dualLlmClient] Ollama: initializing client");
-    // Ollama typically doesn't require API keys, use dummy if not provided
-    this.client = new OpenAI({
-      apiKey: apiKey || "EMPTY",
-      baseURL: config.llm.ollama.baseUrl,
-    });
-    this.model = model;
-  }
-
-  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-    logger.debug(
-      { model: this.model, messageCount: messages.length, temperature },
-      "[dualLlmClient] Ollama: starting chat completion",
-    );
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature,
-    });
-
-    const content = response.choices[0].message.content?.trim() || "";
-    logger.debug(
-      { model: this.model, responseLength: content.length },
-      "[dualLlmClient] Ollama: chat completion complete",
-    );
-    return content;
-  }
-
-  async chatWithSchema<T>(
-    messages: DualLlmMessage[],
-    schema: {
-      name: string;
-      schema: {
-        type: string;
-        properties: Record<string, unknown>;
-        required: string[];
-        additionalProperties: boolean;
-      };
-    },
-    temperature = 0,
-  ): Promise<T> {
-    logger.debug(
-      {
-        model: this.model,
-        schemaName: schema.name,
-        messageCount: messages.length,
-        temperature,
-      },
-      "[dualLlmClient] Ollama: starting chat with schema",
-    );
-
-    // Ollama supports JSON schema via format parameter for some models
-    // Try OpenAI-compatible structured output first
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages,
-        response_format: {
-          type: "json_schema",
-          json_schema: schema,
-        },
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      logger.debug(
-        { model: this.model, responseLength: content.length },
-        "[dualLlmClient] Ollama: chat with schema complete, parsing response",
-      );
-      return JSON.parse(content) as T;
-    } catch {
-      // Fallback to prompt-based approach if structured output not supported
-      logger.debug(
-        { model: this.model },
-        "[dualLlmClient] Ollama: structured output not supported, using prompt fallback",
-      );
-
-      const systemPrompt = `You must respond with valid JSON matching this schema:
-${JSON.stringify(schema.schema, null, 2)}
-
-Return only the JSON object, no other text.`;
-
-      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
-        if (idx === 0 && msg.role === "user") {
-          return {
-            ...msg,
-            content: `${systemPrompt}\n\n${msg.content}`,
-          };
-        }
-        return msg;
-      });
-
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: enhancedMessages,
-        temperature,
-      });
-
-      const content = response.choices[0].message.content || "";
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
-        null,
-        content,
-      ];
-      const jsonText = jsonMatch[1].trim();
-
-      return JSON.parse(jsonText) as T;
-    }
   }
 }
 
@@ -1094,159 +634,6 @@ Return only the JSON object, no other text.`;
     }
   }
 }
-
-function createOpenAiCompatibleDualLlmClient(params: {
-  providerLabel: string;
-  baseUrl: string;
-  defaultModel: string;
-}): {
-  new (apiKey: string, model?: string): DualLlmClient;
-} {
-  return class implements DualLlmClient {
-    private client: OpenAI;
-    private model: string;
-
-    constructor(apiKey: string, model = params.defaultModel) {
-      logger.debug(
-        { model },
-        `[dualLlmClient] ${params.providerLabel}: initializing client`,
-      );
-      this.client = new OpenAI({
-        apiKey,
-        baseURL: params.baseUrl,
-      });
-      this.model = model;
-    }
-
-    async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
-      logger.debug(
-        { model: this.model, messageCount: messages.length, temperature },
-        `[dualLlmClient] ${params.providerLabel}: starting chat completion`,
-      );
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages,
-        temperature,
-      });
-
-      const content = response.choices[0].message.content?.trim() || "";
-      logger.debug(
-        { model: this.model, responseLength: content.length },
-        `[dualLlmClient] ${params.providerLabel}: chat completion complete`,
-      );
-      return content;
-    }
-
-    async chatWithSchema<T>(
-      messages: DualLlmMessage[],
-      schema: {
-        name: string;
-        schema: {
-          type: string;
-          properties: Record<string, unknown>;
-          required: string[];
-          additionalProperties: boolean;
-        };
-      },
-      temperature = 0,
-    ): Promise<T> {
-      logger.debug(
-        {
-          model: this.model,
-          schemaName: schema.name,
-          messageCount: messages.length,
-          temperature,
-        },
-        `[dualLlmClient] ${params.providerLabel}: starting chat with schema`,
-      );
-
-      // Try OpenAI-compatible structured output first
-      try {
-        const response = await this.client.chat.completions.create({
-          model: this.model,
-          messages,
-          response_format: {
-            type: "json_schema",
-            json_schema: schema,
-          },
-          temperature,
-        });
-
-        const content = response.choices[0].message.content || "";
-        logger.debug(
-          { model: this.model, responseLength: content.length },
-          `[dualLlmClient] ${params.providerLabel}: chat with schema complete, parsing response`,
-        );
-        return JSON.parse(content) as T;
-      } catch (error) {
-        // Fallback to prompt-based JSON-only response if structured output unsupported
-        logger.debug(
-          {
-            model: this.model,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          `[dualLlmClient] ${params.providerLabel}: structured output not supported, using prompt fallback`,
-        );
-
-        const systemPrompt = `You must respond with valid JSON matching this schema:
-${JSON.stringify(schema.schema, null, 2)}
-
-Return only the JSON object, no other text.`;
-
-        const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
-          if (idx === 0 && msg.role === "user") {
-            return {
-              ...msg,
-              content: `${systemPrompt}\n\n${msg.content}`,
-            };
-          }
-          return msg;
-        });
-
-        const response = await this.client.chat.completions.create({
-          model: this.model,
-          messages: enhancedMessages,
-          temperature,
-        });
-
-        const content = response.choices[0].message.content || "";
-        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
-          null,
-          content,
-        ];
-        const jsonText = (jsonMatch[1] || content).trim();
-
-        try {
-          return JSON.parse(jsonText) as T;
-        } catch (parseError) {
-          logger.error(
-            { model: this.model, content: jsonText, parseError },
-            `[dualLlmClient] ${params.providerLabel}: failed to parse JSON response`,
-          );
-          throw parseError;
-        }
-      }
-    }
-  };
-}
-
-export const ZhipuaiDualLlmClient = createOpenAiCompatibleDualLlmClient({
-  providerLabel: "Zhipuai",
-  baseUrl: config.llm.zhipuai.baseUrl,
-  defaultModel: "glm-4.5-flash",
-});
-
-export const MinimaxDualLlmClient = createOpenAiCompatibleDualLlmClient({
-  providerLabel: "MiniMax",
-  baseUrl: config.llm.minimax.baseUrl,
-  defaultModel: "MiniMax-M2.1",
-});
-
-export const DeepSeekDualLlmClient = createOpenAiCompatibleDualLlmClient({
-  providerLabel: "DeepSeek",
-  baseUrl: config.llm.deepseek.baseUrl,
-  defaultModel: "deepseek-chat",
-});
 
 /**
  * Bedrock implementation of DualLlmClient
@@ -1422,6 +809,10 @@ Return only the JSON object, no other text.`;
   }
 }
 
+// =============================================================================
+// Factory registry
+// =============================================================================
+
 type DualLlmClientFactory = (
   apiKey: string | undefined,
   model: string | undefined,
@@ -1457,6 +848,10 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
       if (!apiKey) throw new Error("API key required for Groq dual LLM");
       return new GroqDualLlmClient(apiKey, model);
     },
+    xai: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for xAI dual LLM");
+      return new XaiDualLlmClient(apiKey, model);
+    },
     gemini: (apiKey) => {
       // Gemini supports Vertex AI mode where apiKey may be undefined
       return new GeminiDualLlmClient(apiKey);
@@ -1471,11 +866,11 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     },
     vllm: (apiKey, model) => {
       if (!model) throw new Error("Model name required for vLLM dual LLM");
-      return new VllmDualLlmClient(apiKey, model);
+      return new VllmDualLlmClient(apiKey || "EMPTY", model);
     },
     ollama: (apiKey, model) => {
       if (!model) throw new Error("Model name required for Ollama dual LLM");
-      return new OllamaDualLlmClient(apiKey, model);
+      return new OllamaDualLlmClient(apiKey || "EMPTY", model);
     },
     zhipuai: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Zhipuai dual LLM");

@@ -250,6 +250,12 @@ const groqConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const xaiConfig = makeOpenAiCompatibleCostConfig({
+  providerName: "xAI",
+  modelName: "test-xai-cost-limit",
+  provider: "xai",
+});
+
 const openrouterConfig: TokenCostLimitTestConfig = {
   providerName: "OpenRouter",
 
@@ -344,6 +350,7 @@ const testConfigsMap = {
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
   groq: groqConfig,
+  xai: xaiConfig,
   openrouter: openrouterConfig,
   perplexity: perplexityConfig,
   vllm: vllmConfig,

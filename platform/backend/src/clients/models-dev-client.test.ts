@@ -159,6 +159,7 @@ describe("ModelsDevClient", () => {
       expect(modelsDevClient.mapProvider("mistral")).toBe("mistral");
       expect(modelsDevClient.mapProvider("deepseek")).toBe("deepseek");
       expect(modelsDevClient.mapProvider("openrouter")).toBe("openrouter");
+      expect(modelsDevClient.mapProvider("xai")).toBe("xai");
     });
 
     test("maps OpenAI-compatible providers to openai", () => {
@@ -171,7 +172,6 @@ describe("ModelsDevClient", () => {
 
     test("returns null for explicitly unsupported providers", () => {
       expect(modelsDevClient.mapProvider("perplexity")).toBeNull();
-      expect(modelsDevClient.mapProvider("xai")).toBeNull();
       expect(modelsDevClient.mapProvider("nvidia")).toBeNull();
       expect(modelsDevClient.mapProvider("amazon-bedrock")).toBeNull();
       expect(modelsDevClient.mapProvider("azure")).toBeNull();

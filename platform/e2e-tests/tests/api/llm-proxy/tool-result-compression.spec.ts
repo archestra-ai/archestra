@@ -79,6 +79,43 @@ const openaiConfig: CompressionTestConfig = {
   }),
 };
 
+const xaiConfig: CompressionTestConfig = {
+  providerName: "xAI",
+
+  endpoint: (profileId) => `/v1/xai/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequestWithToolResult: () => ({
+    model: "grok-4-1-fast-non-reasoning",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 const groqConfig: CompressionTestConfig = {
   providerName: "Groq",
 
@@ -607,6 +644,7 @@ const testConfigsMap = {
   cerebras: cerebrasConfig,
   mistral: mistralConfig,
   groq: groqConfig,
+  xai: xaiConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,

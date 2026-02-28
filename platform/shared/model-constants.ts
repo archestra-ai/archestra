@@ -13,6 +13,7 @@ export const SupportedProvidersSchema = z.enum([
   "mistral",
   "perplexity",
   "groq",
+  "xai",
   "openrouter",
   "vllm",
   "ollama",
@@ -31,6 +32,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
   "groq:chatCompletions",
+  "xai:chatCompletions",
   "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
@@ -55,6 +57,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   mistral: "Mistral AI",
   perplexity: "Perplexity AI",
   groq: "Groq",
+  xai: "xAI",
   openrouter: "OpenRouter",
   vllm: "vLLM",
   ollama: "Ollama",
@@ -103,6 +106,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   mistral: "https://api.mistral.ai/v1",
   perplexity: "https://api.perplexity.ai",
   groq: "https://api.groq.com/openai/v1",
+  xai: "https://api.x.ai/v1",
   openrouter: "https://openrouter.ai/api/v1",
   vllm: "",
   ollama: "http://localhost:11434/v1",
@@ -160,6 +164,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   groq: {
     fastest: ["llama-3.1-8b", "gemma2-9b"],
     best: ["llama-3.3-70b", "llama-3.1-70b"],
+  },
+  xai: {
+    fastest: ["fast", "grok-code"],
+    best: ["grok-4"],
   },
   openrouter: {
     fastest: ["openrouter/auto"],

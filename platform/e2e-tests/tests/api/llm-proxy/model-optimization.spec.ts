@@ -93,6 +93,41 @@ const openaiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const xaiConfig: ModelOptimizationTestConfig = {
+  providerName: "xAI",
+  provider: "xai",
+
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-xai-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-xai-baseline",
+  optimizedModel: "e2e-test-xai-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 const groqConfig: ModelOptimizationTestConfig = {
   providerName: "Groq",
   provider: "groq",
@@ -587,6 +622,7 @@ const testConfigsMap = {
   mistral: mistralConfig,
   perplexity: perplexityConfig,
   groq: groqConfig,
+  xai: xaiConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,
   zhipuai: zhipuaiConfig,

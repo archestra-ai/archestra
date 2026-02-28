@@ -8,6 +8,7 @@ import {
   fetchGeminiModelsViaVertexAi,
   fetchModelsForProvider,
   mapOpenAiModelToModelInfo,
+  testProviderApiKey,
 } from "./routes.models";
 
 // Mock fetch globally for testing API calls
@@ -1053,6 +1054,94 @@ describe("chat-models", () => {
 
       const models = await fetchBedrockModels("test-api-key");
       expect(models).toEqual([]);
+    });
+  });
+
+  describe("testProviderApiKey", () => {
+    test("uses config baseUrl when no override is provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [{ id: "deepseek-chat", created: 1700000000 }],
+          }),
+      });
+
+      await testProviderApiKey("deepseek", "test-key");
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toBe(`${config.llm.deepseek.baseUrl}/models`);
+    });
+
+    test("uses baseUrl override when provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [{ id: "deepseek-chat", created: 1700000000 }],
+          }),
+      });
+
+      const customBaseUrl = "https://custom-proxy.example.com/v1";
+      await testProviderApiKey("deepseek", "test-key", customBaseUrl);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toBe(`${customBaseUrl}/models`);
+      // Must NOT use the config base URL
+      expect(url).not.toContain(config.llm.deepseek.baseUrl);
+    });
+
+    test("falls back to config baseUrl when override is null", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [{ id: "deepseek-chat", created: 1700000000 }],
+          }),
+      });
+
+      await testProviderApiKey("deepseek", "test-key", null);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toBe(`${config.llm.deepseek.baseUrl}/models`);
+    });
+
+    test("openai fetcher uses baseUrl override", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              { id: "gpt-4o", created: 1, object: "model", owned_by: "openai" },
+            ],
+          }),
+      });
+
+      const customBaseUrl = "https://my-openai-proxy.example.com/v1";
+      await testProviderApiKey("openai", "test-key", customBaseUrl);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toBe(`${customBaseUrl}/models`);
+    });
+
+    test("throws when API key is invalid (fetch returns error)", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve("Unauthorized"),
+      });
+
+      await expect(
+        testProviderApiKey(
+          "openai",
+          "bad-key",
+          "https://custom.example.com/v1",
+        ),
+      ).rejects.toThrow();
     });
   });
 });

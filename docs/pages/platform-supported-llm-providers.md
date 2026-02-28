@@ -389,6 +389,43 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
 
+## xAI (Grok)
+
+[xAI](https://x.ai/) is Elon Musk's AI company offering the Grok series of large language models with real-time information access and advanced reasoning capabilities.
+
+### Supported xAI APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### xAI Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/xai/{profile-id}`
+- **Authentication**: Pass your xAI API key in `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                     | Required | Description                                                                    |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_XAI_BASE_URL`     | No       | xAI API base URL (default: `https://api.x.ai/v1`)                             |
+| `ARCHESTRA_CHAT_XAI_API_KEY` | No       | Default API key for xAI (can be overridden per conversation/team/org)       |
+
+### Getting an API Key
+
+You can generate an API key from the [xAI Console](https://console.x.ai/).
+
+### Popular Models
+
+- `grok-2-latest` - Latest Grok model with enhanced capabilities
+- `grok-2-mini` - Lightweight variant optimized for speed
+- `grok-beta` - Beta version with experimental features
+
+### Important Notes
+
+- **OpenAI-compatible API**: xAI's API follows the OpenAI Chat Completions format, making it easy to switch between providers
+- **Real-time information**: Grok models have access to real-time information from X (Twitter) for up-to-date responses
+- **API Key format**: Obtain your API key from the [xAI Console](https://console.x.ai/)
+- **Rate limits**: Be mindful of xAI's rate limits when implementing high-volume applications
+
 ## MiniMax
 
 [MiniMax](https://www.minimax.io/) is a Chinese AI company offering advanced large language models with strong reasoning capabilities. The platform provides the MiniMax-M2 series with chain-of-thought reasoning capabilities and support for text, images, and multi-turn conversations.

@@ -19,6 +19,7 @@ import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import OpenrouterChatCompletionInteraction from "./llmProviders/openrouter";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
 
 type InteractionFactory = (interaction: Interaction) => InteractionUtils;
@@ -40,6 +41,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
+  "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
 };
 

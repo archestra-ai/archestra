@@ -184,6 +184,10 @@ export const RouteId = {
   GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
   GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
 
+  // Proxy Routes - xAI
+  XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
+  XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+
   // Proxy Routes - OpenRouter
   OpenrouterChatCompletionsWithDefaultAgent:
     "openrouterChatCompletionsWithDefaultAgent",

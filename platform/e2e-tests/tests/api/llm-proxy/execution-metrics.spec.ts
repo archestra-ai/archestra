@@ -216,6 +216,22 @@ const deepseekConfig: ExecutionMetricsTestConfig = {
   }),
 };
 
+const xaiConfig: ExecutionMetricsTestConfig = {
+  providerName: "xAI",
+
+  endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "grok-2-1212",
+    messages: [{ role: "user", content }],
+  }),
+};
+
 const bedrockConfig: ExecutionMetricsTestConfig = {
   providerName: "Bedrock",
 
@@ -269,6 +285,7 @@ const testConfigsMap = {
   bedrock: bedrockConfig,
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity has no tool calling - execution metrics require tool call flows
+  xai: xaiConfig,
 } satisfies Record<SupportedProvider, ExecutionMetricsTestConfig | null>;
 
 const testConfigs = Object.values(testConfigsMap).filter(

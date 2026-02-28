@@ -88,6 +88,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mistral: config.llm.mistral.baseUrl || null,
           perplexity: config.llm.perplexity.baseUrl || null,
           groq: config.llm.groq.baseUrl || null,
+          xai: config.llm.xai.baseUrl || null,
           vllm: config.llm.vllm.baseUrl || null,
           ollama: config.llm.ollama.baseUrl || null,
           zhipuai: config.llm.zhipuai.baseUrl || null,

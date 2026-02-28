@@ -12,4 +12,5 @@ export { default as OpenAi } from "./openai";
 export { default as Openrouter } from "./openrouter";
 export { default as Perplexity } from "./perplexity";
 export { default as Vllm } from "./vllm";
+export { default as Xai } from "./xai";
 export { default as Zhipuai } from "./zhipuai";

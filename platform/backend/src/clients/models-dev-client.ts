@@ -57,7 +57,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)
   perplexity: null,
-  xai: null,
+  xai: "xai",
   nvidia: null,
   "amazon-bedrock": null,
   azure: null,
@@ -412,6 +412,7 @@ class ModelsDevClient {
       mistral: ["mistral/"],
       perplexity: ["perplexity/"],
       groq: ["groq/"],
+      xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],
       vllm: ["vllm/"],

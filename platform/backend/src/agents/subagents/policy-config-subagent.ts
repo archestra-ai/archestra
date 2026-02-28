@@ -304,6 +304,7 @@ const PROVIDER_TO_DISCRIMINATOR: Record<
   mistral: "mistral:chatCompletions",
   perplexity: "perplexity:chatCompletions",
   groq: "groq:chatCompletions",
+  xai: "xai:chatCompletions",
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",
   zhipuai: "zhipuai:chatCompletions",

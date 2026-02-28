@@ -17,6 +17,7 @@ import {
   Openrouter,
   Perplexity,
   Vllm,
+  Xai,
   Zhipuai,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
@@ -39,6 +40,7 @@ export const InteractionRequestSchema = z.union([
   Mistral.API.ChatCompletionRequestSchema,
   Perplexity.API.ChatCompletionRequestSchema,
   Groq.API.ChatCompletionRequestSchema,
+  Xai.API.ChatCompletionRequestSchema,
   Openrouter.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
@@ -57,6 +59,7 @@ export const InteractionResponseSchema = z.union([
   Mistral.API.ChatCompletionResponseSchema,
   Perplexity.API.ChatCompletionResponseSchema,
   Groq.API.ChatCompletionResponseSchema,
+  Xai.API.ChatCompletionResponseSchema,
   Openrouter.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
@@ -160,6 +163,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Groq.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Groq.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["xai:chatCompletions"]),
+    request: Xai.API.ChatCompletionRequestSchema,
+    processedRequest: Xai.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Xai.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

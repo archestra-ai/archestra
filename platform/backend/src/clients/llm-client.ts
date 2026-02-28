@@ -7,6 +7,7 @@ import { createVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createXai } from "@ai-sdk/xai";
 import { context, propagation } from "@opentelemetry/api";
 import {
   EXTERNAL_AGENT_ID_HEADER,
@@ -102,6 +103,7 @@ const envApiKeyGetters: Record<
   openrouter: () => config.chat.openrouter?.apiKey || undefined,
   perplexity: () => config.chat.perplexity.apiKey,
   groq: () => config.chat.groq.apiKey,
+  xai: () => config.chat.xai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
@@ -239,6 +241,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   mistral: "mistral-small-latest", // Mistral's fast model
   perplexity: "sonar", // Perplexity's fast model
   groq: "llama-3.1-8b-instant", // Groq's fast model
+  xai: "grok-code-fast-1", // xAI's fast model
 };
 
 /**
@@ -393,7 +396,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     return client.chat(modelName);
   },
 
-  groq: ({ apiKey, modelName }) => {
+  groq: ({ apiKey, modelName, baseUrl }) => {
     if (!apiKey) {
       throw new ApiError(
         400,
@@ -402,7 +405,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     }
     const client = createGroq({
       apiKey,
-      baseURL: config.llm.groq.baseUrl,
+      baseURL: baseUrl ?? config.llm.groq.baseUrl,
     });
     return client(modelName);
   },
@@ -448,7 +451,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     return client.chat(modelName);
   },
 
-  minimax: ({ apiKey, modelName }) => {
+  minimax: ({ apiKey, modelName, baseUrl }) => {
     if (!apiKey) {
       throw new ApiError(
         400,
@@ -458,12 +461,12 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     // MiniMax uses OpenAI-compatible API
     const client = createOpenAI({
       apiKey,
-      baseURL: config.llm.minimax.baseUrl,
+      baseURL: baseUrl ?? config.llm.minimax.baseUrl,
     });
     return client(modelName);
   },
 
-  deepseek: ({ apiKey, modelName }) => {
+  deepseek: ({ apiKey, modelName, baseUrl }) => {
     if (!apiKey) {
       throw new ApiError(
         400,
@@ -472,7 +475,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     }
     const client = createOpenAI({
       apiKey,
-      baseURL: config.llm.deepseek.baseUrl,
+      baseURL: baseUrl ?? config.llm.deepseek.baseUrl,
     });
     return client.chat(modelName);
   },
@@ -499,6 +502,20 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       accessKeyId: undefined,
       sessionToken: undefined,
       credentialProvider: undefined,
+    });
+    return client(modelName);
+  },
+
+  xai: ({ apiKey, modelName, baseUrl }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "xAI API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
+      );
+    }
+    const client = createXai({
+      apiKey,
+      baseURL: baseUrl ?? config.llm.xai.baseUrl,
     });
     return client(modelName);
   },
@@ -684,6 +701,22 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createGroq({
         apiKey,
         baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+        fetch: createTracedFetch(),
+      });
+      return client(modelName);
+    },
+
+    xai: ({ apiKey, agentId, modelName, headers }) => {
+      if (!apiKey) {
+        throw new ApiError(
+          400,
+          "xAI API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
+        );
+      }
+      const client = createXai({
+        apiKey,
+        baseURL: buildProxyBaseUrl("xai", agentId),
         headers,
         fetch: createTracedFetch(),
       });

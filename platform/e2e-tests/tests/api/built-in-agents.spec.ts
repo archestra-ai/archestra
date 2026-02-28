@@ -191,6 +191,125 @@ test.describe("Built-In Agents API", () => {
     expect(body.error.message).toContain("LLM API key");
   });
 
+  test("auto-configure creates policies for tool via route", async ({
+    request,
+    makeApiRequest,
+    createMcpCatalogItem,
+    installMcpServer,
+    uninstallMcpServer,
+    getTeamByName,
+  }) => {
+    // 1. Create a chat API key pointing to wiremock
+    const chatApiKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: `e2e-auto-config-route-${Date.now()}`,
+        provider: "openai",
+        apiKey: "openai-policy-config-e2e",
+        scope: "org_wide",
+        baseUrl: `${WIREMOCK_INTERNAL_URL}/openai/v1`,
+      },
+    });
+    const chatApiKey = await chatApiKeyResponse.json();
+
+    // 2. Create and install an MCP server to get tools in the DB
+    const defaultTeam = await getTeamByName(request, "Default Team");
+    expect(defaultTeam).toBeTruthy();
+
+    const serverName = `auto-config-route-test-${Date.now()}`;
+    const catalogResponse = await createMcpCatalogItem(request, {
+      name: serverName,
+      description: "Test server for auto-configure route e2e test",
+      serverType: "remote",
+      serverUrl: `${WIREMOCK_INTERNAL_URL}/mcp/context7`,
+    });
+    const catalogItem = await catalogResponse.json();
+
+    const serverResponse = await installMcpServer(request, {
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      teamId: defaultTeam!.id,
+    });
+    const server = await serverResponse.json();
+
+    try {
+      // 3. Find the tool IDs created by the install
+      const toolsResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/tools/with-assignments?search=${serverName}&limit=100`,
+      });
+      const toolsResult = await toolsResponse.json();
+      const toolIds = toolsResult.data.map(
+        (t: { id: string }) => t.id,
+      ) as string[];
+      expect(toolIds.length).toBeGreaterThan(0);
+
+      // 4. Call auto-configure-policies route
+      const autoConfigResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/agent-tools/auto-configure-policies",
+        data: { toolIds },
+      });
+      const autoConfigResult = await autoConfigResponse.json();
+
+      // 5. Verify route response
+      expect(autoConfigResult.success).toBe(true);
+      expect(autoConfigResult.results).toHaveLength(toolIds.length);
+      for (const result of autoConfigResult.results) {
+        expect(result.success).toBe(true);
+        expect(result.toolId).toBeDefined();
+        // Matches wiremock openai-policy-config-subagent.json response
+        expect(result.config).toEqual({
+          toolInvocationAction: "allow_when_context_is_untrusted",
+          trustedDataAction: "mark_as_untrusted",
+          reasoning: "E2E test: read-only tool with external data",
+        });
+      }
+
+      // 6. Verify tool invocation policies were persisted
+      const invocationResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/autonomy-policies/tool-invocation",
+      });
+      const invocationPolicies = await invocationResponse.json();
+      for (const toolId of toolIds) {
+        const policy = invocationPolicies.find(
+          (p: { toolId: string }) => p.toolId === toolId,
+        );
+        expect(policy).toBeDefined();
+        expect(policy.action).toBe("allow_when_context_is_untrusted");
+      }
+
+      // 7. Verify trusted data policies were persisted
+      const trustedDataResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/trusted-data-policies",
+      });
+      const trustedDataPolicies = await trustedDataResponse.json();
+      for (const toolId of toolIds) {
+        const policy = trustedDataPolicies.find(
+          (p: { toolId: string }) => p.toolId === toolId,
+        );
+        expect(policy).toBeDefined();
+        expect(policy.action).toBe("mark_as_untrusted");
+      }
+    } finally {
+      // Cleanup
+      await uninstallMcpServer(request, server.id);
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      });
+    }
+  });
+
   test("auto-configure triggers on tool assignment", async ({
     request,
     makeApiRequest,

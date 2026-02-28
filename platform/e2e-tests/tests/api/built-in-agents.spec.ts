@@ -1,6 +1,9 @@
 import type { APIRequestContext } from "@playwright/test";
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
-import { WIREMOCK_INTERNAL_URL } from "../../consts";
+import {
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  WIREMOCK_INTERNAL_URL,
+} from "../../consts";
 import type { TestFixtures } from "./fixtures";
 import { expect, test } from "./fixtures";
 
@@ -67,10 +70,7 @@ test.describe("Built-In Agents API", () => {
     expect(updated.description).toBe(originalDescription);
   });
 
-  test("cannot delete built-in agent", async ({
-    request,
-    makeApiRequest,
-  }) => {
+  test("cannot delete built-in agent", async ({ request, makeApiRequest }) => {
     const builtIn = await getBuiltInAgent(request, makeApiRequest);
     expect(builtIn).toBeTruthy();
 
@@ -84,10 +84,7 @@ test.describe("Built-In Agents API", () => {
     expect(deleteResponse.status()).toBe(403);
   });
 
-  test("can update builtInAgentConfig", async ({
-    request,
-    makeApiRequest,
-  }) => {
+  test("can update builtInAgentConfig", async ({ request, makeApiRequest }) => {
     const builtIn = await getBuiltInAgent(request, makeApiRequest);
     expect(builtIn).toBeTruthy();
 
@@ -251,10 +248,12 @@ test.describe("Built-In Agents API", () => {
       serverId = server.id;
 
       // 5. Wait for the tool to appear in agent-tools
+      // Tool names are slugified as <catalogName>__<toolName>
+      const fullToolName = `${catalogItem.name}${MCP_SERVER_TOOL_NAME_SEPARATOR}resolve-library-id`;
       const agentTool = await waitForAgentTool(
         request,
         agent.id,
-        "resolve-library-id",
+        fullToolName,
         { maxAttempts: 30, delayMs: 1000 },
       );
       expect(agentTool).toBeTruthy();

@@ -660,7 +660,6 @@ class SlackProvider implements ChatOpsProvider {
           invitationId,
           email: senderEmail,
           name: displayName,
-
         });
         this.sendDirectMessage({
           userId,

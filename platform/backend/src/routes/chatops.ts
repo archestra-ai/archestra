@@ -466,7 +466,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // If this is a DM and user has a pending auto-provisioned invitation,
               // send the signup link before the agent selection card.
               // Skip when SSO is enabled — users just sign in via their IdP.
-              if (isTeamsDm && message.senderEmail && !(await isSsoConfigured())) {
+              if (
+                isTeamsDm &&
+                message.senderEmail &&
+                !(await isSsoConfigured())
+              ) {
                 const invitations = await InvitationModel.findByEmail(
                   message.senderEmail.toLowerCase(),
                 );
@@ -478,7 +482,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     invitationId: autoProvInv.id,
                     email: message.senderEmail,
                     name: message.senderName,
-
                   });
                   await context
                     .sendActivity(

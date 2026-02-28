@@ -30,12 +30,12 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Upgrade npm to 11.10.1 which bundles fixed versions of all previously vulnerable dependencies:
+# Upgrade npm to 11.11.0 which bundles fixed versions of all previously vulnerable dependencies:
 # tar@7.5.9 (CVE-2026-23950, CVE-2026-23745, CVE-2026-24842, CVE-2026-26960)
 # glob@13.0.6 (CVE-2025-64756)
-# minimatch@10.2.2 (CVE-2026-26996)
-# brace-expansion@5.0.2 (GHSA-7h2j-956f-4vf2)
-RUN npm install -g npm@11.10.1
+# minimatch@10.2.2 (CVE-2026-26996, CVE-2026-27903, CVE-2026-27904)
+# brace-expansion@5.0.3 (GHSA-7h2j-956f-4vf2)
+RUN npm install -g npm@11.11.0
 
 WORKDIR /opt/node-deps
 

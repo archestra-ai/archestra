@@ -613,7 +613,6 @@ export class ChatOpsManager {
         invitationId,
         email: message.senderEmail || "",
         name: displayName,
-
       });
 
       const isDM = message.metadata?.channelType === "im";
@@ -804,7 +803,7 @@ export class ChatOpsManager {
   }
 
   /**
-   * Validate that the MS Teams user has access to the agent.
+   * Validate that user has access to the agent.
    * 1. Use pre-resolved email from TeamsInfo (Bot Framework), or fall back to Graph API
    * 2. Look up Archestra user by email
    * 3. Check user has team-based access to the agent
@@ -874,7 +873,7 @@ export class ChatOpsManager {
         };
       }
 
-      // Send ephemeral welcome message (non-blocking)
+      // Send welcome message (non-blocking)
       this.sendAutoProvisionWelcome({
         provider,
         message,

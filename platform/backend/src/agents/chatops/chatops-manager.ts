@@ -606,12 +606,14 @@ export class ChatOpsManager {
   }): Promise<void> {
     const { provider, message, invitationId, displayName } = params;
     try {
-      const sso = await isSsoConfigured();
+      // Skip welcome message when SSO is enabled — users just sign in via their IdP
+      if (await isSsoConfigured()) return;
+
       const welcome = buildWelcomeMessage({
         invitationId,
         email: message.senderEmail || "",
         name: displayName,
-        isSso: sso,
+
       });
 
       const isDM = message.metadata?.channelType === "im";

@@ -107,18 +107,9 @@ export function buildWelcomeMessage(params: {
   invitationId: string;
   email: string;
   name: string;
-  isSso: boolean;
 }): WelcomeMessage {
-  const { invitationId, email, name, isSso } = params;
+  const { invitationId, email, name } = params;
   const baseUrl = config.frontendBaseUrl;
-
-  if (isSso) {
-    return {
-      text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,
-      actionUrl: `${baseUrl}/auth/sign-in`,
-      actionLabel: "Sign In",
-    };
-  }
 
   return {
     text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,

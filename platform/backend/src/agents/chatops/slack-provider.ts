@@ -654,20 +654,21 @@ class SlackProvider implements ChatOpsProvider {
         };
       }
 
-      // Send welcome DM (fire-and-forget)
-      const sso = await isSsoConfigured();
-      const welcome = buildWelcomeMessage({
-        invitationId,
-        email: senderEmail,
-        name: displayName,
-        isSso: sso,
-      });
-      this.sendDirectMessage({
-        userId,
-        text: welcome.text,
-        actionUrl: welcome.actionUrl,
-        actionLabel: welcome.actionLabel,
-      }).catch(() => {});
+      // Send welcome DM (fire-and-forget) — skip when SSO is enabled
+      if (!(await isSsoConfigured())) {
+        const welcome = buildWelcomeMessage({
+          invitationId,
+          email: senderEmail,
+          name: displayName,
+
+        });
+        this.sendDirectMessage({
+          userId,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+        }).catch(() => {});
+      }
     }
 
     switch (command) {

@@ -1,27 +1,24 @@
-import { policyConfigSubagent } from "@/agents/subagents";
-import { resolveProviderApiKey } from "@/clients/llm-client";
-import logger from "@/logging";
-import { ApiKeyModelModel } from "@/models";
+import { BUILT_IN_AGENT_IDS } from "@shared";
+import { generateObject } from "ai";
 import {
+  createDirectLLMModel,
+  resolveProviderApiKey,
+} from "@/clients/llm-client";
+import logger from "@/logging";
+import {
+  AgentModel,
+  ApiKeyModelModel,
+  ToolInvocationPolicyModel,
+  ToolModel,
+  TrustedDataPolicyModel,
+} from "@/models";
+import type { Tool } from "@/types";
+import {
+  type PolicyConfig,
+  PolicyConfigSchema,
   type SupportedChatProvider,
   SupportedChatProviderSchema,
 } from "@/types";
-import ToolModel from "./tool";
-import ToolInvocationPolicyModel from "./tool-invocation-policy";
-import TrustedDataPolicyModel from "./trusted-data-policy";
-
-type PolicyConfig = {
-  toolInvocationAction:
-    | "allow_when_context_is_untrusted"
-    | "block_when_context_is_untrusted"
-    | "block_always";
-  trustedDataAction:
-    | "mark_as_trusted"
-    | "mark_as_untrusted"
-    | "sanitize_with_dual_llm"
-    | "block_always";
-  reasoning: string;
-};
 
 interface AutoPolicyResult {
   success: boolean;
@@ -41,7 +38,7 @@ interface BulkAutoPolicyResult {
 /**
  * Auto-configure security policies tools using LLM analysis
  */
-export class ToolAutoPolicyService {
+export class PolicyConfigurationService {
   /**
    * Check if auto-policy service is available for an organization.
    * Requires at least one LLM API key to be configured via the UI.
@@ -57,62 +54,6 @@ export class ToolAutoPolicyService {
 
     logger.debug({ organizationId, available }, "isAvailable: result");
     return available;
-  }
-
-  /**
-   * Analyze a tool and determine appropriate security policies using the PolicyConfigSubagent
-   */
-  private async analyzeTool(
-    tool: Parameters<typeof policyConfigSubagent.analyze>[0]["tool"],
-    mcpServerName: string | null,
-    provider: SupportedChatProvider,
-    apiKey: string,
-    modelName: string,
-    organizationId: string,
-  ): Promise<PolicyConfig> {
-    logger.info(
-      {
-        toolName: tool.name,
-        mcpServerName,
-        provider,
-        subagent: "PolicyConfigSubagent",
-      },
-      "analyzeTool: delegating to PolicyConfigSubagent",
-    );
-
-    try {
-      // Delegate to the PolicyConfigSubagent
-      const result = await policyConfigSubagent.analyze({
-        tool,
-        mcpServerName,
-        provider,
-        apiKey,
-        modelName,
-        organizationId,
-      });
-
-      logger.info(
-        {
-          toolName: tool.name,
-          mcpServerName,
-          config: result,
-        },
-        "analyzeTool: PolicyConfigSubagent analysis completed",
-      );
-
-      return result;
-    } catch (error) {
-      logger.error(
-        {
-          toolName: tool.name,
-          mcpServerName,
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-        "analyzeTool: PolicyConfigSubagent analysis failed",
-      );
-      throw error;
-    }
   }
 
   /**
@@ -162,14 +103,14 @@ export class ToolAutoPolicyService {
         "configurePoliciesForTool: fetched tool details",
       );
 
-      // Analyze tool and get policy configuration using PolicyConfigSubagent
+      // Analyze tool and get policy configuration
       const policyConfig = await this.analyzeTool(
         tool,
         mcpServerName,
         resolved.provider,
         resolved.apiKey,
         resolved.modelName,
-        organizationId,
+        resolved.baseUrl,
       );
 
       // Create/upsert call policy (tool invocation policy)
@@ -415,6 +356,78 @@ export class ToolAutoPolicyService {
   }
 
   /**
+   * Analyze a tool and determine appropriate security policies using LLM
+   */
+  private async analyzeTool(
+    tool: Pick<Tool, "id" | "name" | "description" | "parameters">,
+    mcpServerName: string | null,
+    provider: SupportedChatProvider,
+    apiKey: string,
+    modelName: string,
+    baseUrl: string | null,
+  ): Promise<PolicyConfig> {
+    logger.info(
+      {
+        toolName: tool.name,
+        mcpServerName,
+        provider,
+        model: modelName,
+      },
+      "analyzeTool: starting policy analysis",
+    );
+
+    // Fetch the built-in agent's system prompt for the analysis template
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+    );
+    if (!builtInAgent?.systemPrompt) {
+      throw new Error(
+        "Policy configuration built-in agent not found or has no system prompt",
+      );
+    }
+
+    const model = createDirectLLMModel({
+      provider,
+      apiKey,
+      modelName,
+      baseUrl,
+    });
+    const prompt = buildPrompt(builtInAgent.systemPrompt, tool, mcpServerName);
+
+    try {
+      const result = await generateObject({
+        model,
+        schema: PolicyConfigSchema,
+        prompt,
+      });
+
+      logger.info(
+        {
+          toolName: tool.name,
+          mcpServerName,
+          config: result.object,
+        },
+        "analyzeTool: analysis completed",
+      );
+
+      return result.object;
+    } catch (error) {
+      logger.error(
+        {
+          toolName: tool.name,
+          mcpServerName,
+          provider,
+          model: modelName,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        "analyzeTool: analysis failed",
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Resolve provider, API key, and best model for auto-policy operations.
    * Uses resolveSmartDefaultProvider to find a DB-configured key,
    * then ApiKeyModelModel.getBestModel to determine the model.
@@ -426,11 +439,12 @@ export class ToolAutoPolicyService {
     provider: SupportedChatProvider;
     apiKey: string;
     modelName: string;
+    baseUrl: string | null;
   } | null> {
     const providers = SupportedChatProviderSchema.options;
 
     for (const provider of providers) {
-      const { apiKey, chatApiKeyId } = await resolveProviderApiKey({
+      const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
         organizationId,
         userId,
         provider,
@@ -441,7 +455,7 @@ export class ToolAutoPolicyService {
       const bestModel = await ApiKeyModelModel.getBestModel(chatApiKeyId);
       if (!bestModel) continue;
 
-      return { provider, apiKey, modelName: bestModel.modelId };
+      return { provider, apiKey, modelName: bestModel.modelId, baseUrl };
     }
 
     return null;
@@ -449,4 +463,27 @@ export class ToolAutoPolicyService {
 }
 
 // Singleton instance
-export const toolAutoPolicyService = new ToolAutoPolicyService();
+export const policyConfigurationService = new PolicyConfigurationService();
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Build the analysis prompt by substituting tool metadata into the template.
+ * The template comes from the built-in agent's systemPrompt.
+ */
+function buildPrompt(
+  template: string,
+  tool: Pick<Tool, "name" | "description" | "parameters">,
+  mcpServerName: string | null,
+): string {
+  return template
+    .replace("{tool.name}", tool.name)
+    .replace(
+      "{tool.description}",
+      tool.description || "No description provided",
+    )
+    .replace("{mcpServerName}", mcpServerName || "Unknown")
+    .replace("{tool.parameters}", JSON.stringify(tool.parameters, null, 2));
+}

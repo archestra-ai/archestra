@@ -1,4 +1,6 @@
 import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
@@ -1698,6 +1700,106 @@ describe("AgentModel", () => {
       const toolNames = foundAgent.tools.map((t) => t.name);
       expect(toolNames).toContain("default_regular_tool");
       expect(toolNames).toContain("archestra__default_tool");
+    });
+  });
+
+  describe("getBuiltInAgent", () => {
+    test("returns null when no built-in agent exists", async () => {
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      );
+      expect(result).toBeNull();
+    });
+
+    test("returns the built-in agent by config name", async () => {
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      );
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe(BUILT_IN_AGENT_NAMES.POLICY_CONFIG);
+      expect(result?.builtInAgentConfig).toEqual(
+        expect.objectContaining({
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        }),
+      );
+    });
+
+    test("does not return agents without built-in config", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+
+      const result = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("findAll with excludeBuiltIn", () => {
+    test("excludes built-in agents when excludeBuiltIn is true", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      const all = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(all).toHaveLength(2);
+
+      const filtered = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        excludeBuiltIn: true,
+      });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].name).toBe("Regular Agent");
+    });
+
+    test("includes built-in agents when excludeBuiltIn is false", async () => {
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      const all = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(all).toHaveLength(1);
+      expect(all[0].builtInAgentConfig).toBeTruthy();
     });
   });
 });

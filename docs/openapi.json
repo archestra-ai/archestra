@@ -36771,6 +36771,30 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "builtInAgentConfig": {
+                            "nullable": true,
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "policy-configuration-subagent"
+                                    ]
+                                  },
+                                  "autoConfigureOnToolAssignment": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "autoConfigureOnToolAssignment"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -36920,6 +36944,9 @@
                           "authorName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "builtIn": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -36943,11 +36970,13 @@
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
+                          "builtInAgentConfig",
                           "createdAt",
                           "updatedAt",
                           "tools",
                           "teams",
-                          "labels"
+                          "labels",
+                          "builtIn"
                         ],
                         "additionalProperties": false
                       }
@@ -37299,6 +37328,29 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "builtInAgentConfig": {
+                    "nullable": true,
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "policy-configuration-subagent"
+                            ]
+                          },
+                          "autoConfigureOnToolAssignment": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "autoConfigureOnToolAssignment"
+                        ]
+                      }
+                    ]
+                  },
                   "teams": {
                     "default": [],
                     "type": "array",
@@ -37473,6 +37525,30 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolAssignment": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -37622,6 +37698,9 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "builtIn": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -37645,11 +37724,13 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "builtInAgentConfig",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "builtIn"
                   ],
                   "additionalProperties": false
                 }
@@ -37909,6 +37990,15 @@
             "name": "agentTypes",
             "required": false,
             "description": "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeBuiltIn",
+            "required": false,
+            "description": "Exclude built-in agents from the results. Defaults to false."
           }
         ],
         "responses": {
@@ -38041,6 +38131,30 @@
                       "identityProviderId": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "builtInAgentConfig": {
+                        "nullable": true,
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "policy-configuration-subagent"
+                                ]
+                              },
+                              "autoConfigureOnToolAssignment": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "autoConfigureOnToolAssignment"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "createdAt": {
                         "type": "string",
@@ -38191,6 +38305,9 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "builtIn": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -38214,11 +38331,13 @@
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
+                      "builtInAgentConfig",
                       "createdAt",
                       "updatedAt",
                       "tools",
                       "teams",
-                      "labels"
+                      "labels",
+                      "builtIn"
                     ],
                     "additionalProperties": false
                   }
@@ -38575,6 +38694,30 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolAssignment": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -38724,6 +38867,9 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "builtIn": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -38747,11 +38893,13 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "builtInAgentConfig",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "builtIn"
                   ],
                   "additionalProperties": false
                 }
@@ -39107,6 +39255,30 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolAssignment": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -39256,6 +39428,9 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "builtIn": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -39279,11 +39454,13 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "builtInAgentConfig",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "builtIn"
                   ],
                   "additionalProperties": false
                 }
@@ -39651,6 +39828,30 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolAssignment": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -39800,6 +40001,9 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "builtIn": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -39823,11 +40027,13 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "builtInAgentConfig",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "builtIn"
                   ],
                   "additionalProperties": false
                 }
@@ -40131,6 +40337,29 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "builtInAgentConfig": {
+                    "nullable": true,
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "policy-configuration-subagent"
+                            ]
+                          },
+                          "autoConfigureOnToolAssignment": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "autoConfigureOnToolAssignment"
+                        ]
+                      }
+                    ]
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -40311,6 +40540,30 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolAssignment": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -40460,6 +40713,9 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "builtIn": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -40483,11 +40739,13 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "builtInAgentConfig",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "builtIn"
                   ],
                   "additionalProperties": false
                 }
@@ -41108,6 +41366,30 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "builtInAgentConfig": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "policy-configuration-subagent"
+                                  ]
+                                },
+                                "autoConfigureOnToolAssignment": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "autoConfigureOnToolAssignment"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -41257,6 +41539,9 @@
                         "authorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "builtIn": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -41280,11 +41565,13 @@
                         "llmApiKeyId",
                         "llmModel",
                         "identityProviderId",
+                        "builtInAgentConfig",
                         "createdAt",
                         "updatedAt",
                         "tools",
                         "teams",
-                        "labels"
+                        "labels",
+                        "builtIn"
                       ],
                       "additionalProperties": false
                     },
@@ -41709,6 +41996,30 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolAssignment": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -41858,6 +42169,9 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "builtIn": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -41881,11 +42195,13 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
+                    "builtInAgentConfig",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "builtIn"
                   ],
                   "additionalProperties": false
                 }
@@ -108257,9 +108573,6 @@
                         "team"
                       ]
                     },
-                    "autoConfigureNewTools": {
-                      "type": "boolean"
-                    },
                     "globalToolPolicy": {
                       "type": "string",
                       "enum": [
@@ -108284,7 +108597,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "autoConfigureNewTools",
                     "globalToolPolicy",
                     "allowChatFileUploads"
                   ],
@@ -108592,9 +108904,6 @@
                   "convertToolResultsToToon": {
                     "type": "boolean"
                   },
-                  "autoConfigureNewTools": {
-                    "type": "boolean"
-                  },
                   "allowChatFileUploads": {
                     "type": "boolean"
                   }
@@ -108696,9 +109005,6 @@
                         "team"
                       ]
                     },
-                    "autoConfigureNewTools": {
-                      "type": "boolean"
-                    },
                     "globalToolPolicy": {
                       "type": "string",
                       "enum": [
@@ -108723,7 +109029,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "autoConfigureNewTools",
                     "globalToolPolicy",
                     "allowChatFileUploads"
                   ],
@@ -110297,247 +110602,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/policy-config-subagent/prompt": {
-      "get": {
-        "operationId": "getPolicyConfigSubagentPrompt",
-        "summary": "Get analysis prompt template",
-        "tags": [
-          "policy-config-subagent"
-        ],
-        "description": "Returns the prompt template used by the Policy Configuration Subagent to analyze tools",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "promptTemplate": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "promptTemplate"
-                  ],
-                  "additionalProperties": false
                 }
               }
             }

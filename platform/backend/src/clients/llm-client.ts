@@ -84,32 +84,6 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
 }
 
 /**
- * Environment variable API key getter for each provider.
- * TypeScript enforces that ALL providers in SupportedChatProvider have an entry.
- */
-const envApiKeyGetters: Record<
-  SupportedChatProvider,
-  () => string | undefined
-> = {
-  anthropic: () => config.chat.anthropic.apiKey,
-  bedrock: () => config.chat.bedrock.apiKey,
-  cerebras: () => config.chat.cerebras.apiKey,
-  cohere: () => config.chat.cohere.apiKey,
-  gemini: () => config.chat.gemini.apiKey,
-  minimax: () => config.chat.minimax.apiKey,
-  mistral: () => config.chat.mistral.apiKey,
-  ollama: () => config.chat.ollama.apiKey,
-  openai: () => config.chat.openai.apiKey,
-  openrouter: () => config.chat.openrouter?.apiKey || undefined,
-  perplexity: () => config.chat.perplexity.apiKey,
-  groq: () => config.chat.groq.apiKey,
-  xai: () => config.chat.xai.apiKey,
-  vllm: () => config.chat.vllm.apiKey,
-  zhipuai: () => config.chat.zhipuai.apiKey,
-  deepseek: () => config.chat.deepseek.apiKey,
-};
-
-/**
  * Resolve API key for a provider using priority:
  * agent's configured key > conversation > personal > team > org_wide > environment variable
  *
@@ -210,12 +184,10 @@ export function isApiKeyRequired(
   provider: SupportedChatProvider,
   apiKey: string | undefined,
 ): boolean {
-  // For Gemini with Vertex AI enabled, API key is not required
-  const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
-  // vLLM and Ollama typically don't require API keys (use "EMPTY" or dummy values)
-  const isVllm = provider === "vllm";
-  const isOllama = provider === "ollama";
-  return !apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama;
+  if (apiKey) return false;
+  // Gemini with Vertex AI doesn't require an API key
+  if (provider === "gemini" && isVertexAiEnabled()) return false;
+  return !!providerModelConfigs[provider].apiKeyRequiredMessage;
 }
 
 /**
@@ -245,283 +217,6 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
 };
 
 /**
- * Parameters for creating a direct LLM model (calls provider API directly)
- */
-type DirectModelParams = {
-  apiKey: string | undefined;
-  modelName: string;
-  baseUrl?: string | null;
-};
-
-/**
- * Model creator function type for direct API calls
- */
-type DirectModelCreator = (params: DirectModelParams) => LLMModel;
-
-/**
- * Registry of direct model creators for each provider.
- * TypeScript enforces that ALL providers in SupportedChatProvider have an entry.
- * Adding a new provider to SupportedChatProvider will cause a compile error here
- * until the corresponding creator is added.
- */
-const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
-  anthropic: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
-      );
-    }
-    const client = createAnthropic({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.anthropic.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  openai: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "OpenAI API key is required. Please configure OPENAI_API_KEY.",
-      );
-    }
-    const client = createOpenAI({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.openai.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  openrouter: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
-      );
-    }
-    // OpenRouter uses OpenAI-compatible API
-    // Use client.chat() to force Chat Completions API (not Responses API)
-    const client = createOpenAI({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.openrouter.baseUrl,
-    });
-    return client.chat(modelName);
-  },
-
-  gemini: ({ apiKey, modelName, baseUrl }) => {
-    // Check if Vertex AI mode is enabled
-    if (isVertexAiEnabled()) {
-      const { vertexAi } = config.llm.gemini;
-      const client = createVertex({
-        project: vertexAi.project,
-        location: vertexAi.location,
-        googleAuthOptions: {
-          projectId: vertexAi.project,
-          ...(vertexAi.credentialsFile && {
-            keyFilename: vertexAi.credentialsFile,
-          }),
-        },
-      });
-      return client(modelName);
-    }
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
-      );
-    }
-    const client = createGoogleGenerativeAI({
-      apiKey,
-      baseURL: baseUrl ?? undefined,
-    });
-    return client(modelName);
-  },
-
-  cerebras: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
-      );
-    }
-    const client = createCerebras({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.cerebras.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  cohere: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Cohere API key is required. Please configure COHERE_API_KEY.",
-      );
-    }
-    const client = createCohere({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.cohere.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  mistral: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Mistral API key is required. Please configure MISTRAL_API_KEY.",
-      );
-    }
-    const client = createMistral({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.mistral.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  perplexity: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
-      );
-    }
-    // Perplexity uses OpenAI-compatible API, so we use the OpenAI SDK
-    // This provides better compatibility than @ai-sdk/perplexity
-    const client = createOpenAI({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.perplexity.baseUrl,
-    });
-    return client.chat(modelName);
-  },
-
-  groq: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
-      );
-    }
-    const client = createGroq({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.groq.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  vllm: ({ apiKey, modelName, baseUrl }) => {
-    // vLLM uses OpenAI-compatible API
-    // Use client.chat() to force the Chat Completions API (/chat/completions)
-    // instead of the default Responses API (/responses) which many
-    // OpenAI-compatible providers don't support
-    const client = createOpenAI({
-      apiKey: apiKey || "EMPTY",
-      baseURL: baseUrl ?? config.llm.vllm.baseUrl,
-    });
-    return client.chat(modelName);
-  },
-
-  ollama: ({ apiKey, modelName, baseUrl }) => {
-    // Ollama uses OpenAI-compatible API
-    // Use client.chat() to force the Chat Completions API (/chat/completions)
-    // instead of the default Responses API (/responses) which Ollama doesn't
-    // fully support (especially streaming tool calls)
-    const client = createOpenAI({
-      apiKey: apiKey || "EMPTY",
-      baseURL: baseUrl ?? config.llm.ollama.baseUrl,
-    });
-    return client.chat(modelName);
-  },
-
-  zhipuai: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
-      );
-    }
-    // Zhipu AI uses OpenAI-compatible API
-    // Use client.chat() to force the Chat Completions API (/chat/completions)
-    // instead of the default Responses API (/responses)
-    const client = createOpenAI({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.zhipuai.baseUrl,
-    });
-    return client.chat(modelName);
-  },
-
-  minimax: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "MiniMax API key is required. Please configure ARCHESTRA_CHAT_MINIMAX_API_KEY.",
-      );
-    }
-    // MiniMax uses OpenAI-compatible API
-    const client = createOpenAI({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.minimax.baseUrl,
-    });
-    return client(modelName);
-  },
-
-  deepseek: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
-      );
-    }
-    const client = createOpenAI({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.deepseek.baseUrl,
-    });
-    return client.chat(modelName);
-  },
-
-  bedrock: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
-      );
-    }
-    // Extract region from Bedrock base URL if configured
-    const effectiveBaseUrl = baseUrl ?? config.llm.bedrock.baseUrl;
-    const regionMatch = effectiveBaseUrl.match(
-      /bedrock-runtime\.([a-z0-9-]+)\./,
-    );
-    const region = regionMatch?.[1] || "us-east-1";
-
-    const client = createAmazonBedrock({
-      apiKey,
-      region,
-      baseURL: effectiveBaseUrl,
-      secretAccessKey: undefined,
-      accessKeyId: undefined,
-      sessionToken: undefined,
-      credentialProvider: undefined,
-    });
-    return client(modelName);
-  },
-
-  xai: ({ apiKey, modelName, baseUrl }) => {
-    if (!apiKey) {
-      throw new ApiError(
-        400,
-        "xAI API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
-      );
-    }
-    const client = createXai({
-      apiKey,
-      baseURL: baseUrl ?? config.llm.xai.baseUrl,
-    });
-    return client(modelName);
-  },
-};
-
-/**
  * Create an LLM model that calls the provider API directly (not through LLM Proxy).
  * Use this for meta operations like title generation that don't need proxy features.
  */
@@ -534,272 +229,21 @@ export function createDirectLLMModel({
   provider: SupportedChatProvider;
   apiKey: string | undefined;
   modelName: string;
-  baseUrl?: string | null;
+  baseUrl: string | null;
 }): LLMModel {
-  const creator = directModelCreators[provider];
-  if (!creator) {
+  const cfg = providerModelConfigs[provider];
+  if (!cfg) {
     throw new ApiError(400, `Unsupported provider: ${provider}`);
   }
-  return creator({ apiKey, modelName, baseUrl });
+  if (cfg.apiKeyRequiredMessage && !apiKey) {
+    throw new ApiError(400, cfg.apiKeyRequiredMessage);
+  }
+  return cfg.createModel({
+    apiKey,
+    modelName,
+    baseURL: baseUrl ?? cfg.defaultBaseUrl,
+  });
 }
-
-/**
- * Creates a fetch wrapper that injects W3C trace context (traceparent/tracestate)
- * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
- * parent context and create child spans, linking chat → LLM proxy traces together.
- */
-function createTracedFetch(): typeof globalThis.fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    // Inject active trace context (traceparent, tracestate) into outgoing headers.
-    // Uses a carrier object because propagation.inject expects a plain object,
-    // then copies the injected headers into the actual Headers instance.
-    const carrier: Record<string, string> = {};
-    propagation.inject(context.active(), carrier);
-    for (const [key, value] of Object.entries(carrier)) {
-      headers.set(key, value);
-    }
-    return globalThis.fetch(input, { ...init, headers });
-  };
-}
-
-/**
- * Parameters for creating a proxied LLM model (through LLM Proxy)
- */
-type ProxiedModelParams = {
-  apiKey: string | undefined;
-  agentId: string;
-  modelName: string;
-  headers: Record<string, string> | undefined;
-};
-
-/**
- * Model creator function type for proxied API calls
- */
-type ProxiedModelCreator = (params: ProxiedModelParams) => LLMModel;
-
-/**
- * Build the proxy base URL for a provider
- */
-function buildProxyBaseUrl(provider: string, agentId: string): string {
-  return `http://localhost:${config.api.port}/v1/${provider}/${agentId}`;
-}
-
-/**
- * Registry of proxied model creators for each provider.
- * TypeScript enforces that ALL providers in SupportedChatProvider have an entry.
- * Adding a new provider to SupportedChatProvider will cause a compile error here
- * until the corresponding creator is added.
- */
-const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
-  {
-    anthropic: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/anthropic/:agentId/v1/messages
-      const client = createAnthropic({
-        apiKey,
-        baseURL: `${buildProxyBaseUrl("anthropic", agentId)}/v1`,
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    gemini: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/gemini/:agentId/v1beta/models
-      // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
-      const client = createGoogleGenerativeAI({
-        apiKey: apiKey || "vertex-ai-mode",
-        baseURL: `${buildProxyBaseUrl("gemini", agentId)}/v1beta`,
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    openai: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("openai", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      // Use .chat() to force Chat Completions API (not Responses API)
-      // so our proxy's tool policy evaluation is applied
-      return client.chat(modelName);
-    },
-
-    openrouter: ({ apiKey, agentId, modelName, headers }) => {
-      if (!apiKey) {
-        throw new ApiError(
-          400,
-          "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
-        );
-      }
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("openrouter", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client.chat(modelName);
-    },
-
-    cohere: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/cohere/:agentId (SDK appends /chat)
-      // We use the native Cohere provider which uses the V2 API
-      const client = createCohere({
-        apiKey,
-        baseURL: buildProxyBaseUrl("cohere", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    cerebras: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/cerebras/:agentId (SDK appends /chat/completions)
-      const client = createCerebras({
-        apiKey,
-        baseURL: buildProxyBaseUrl("cerebras", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    mistral: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/mistral/:agentId (SDK appends /chat/completions)
-      const client = createMistral({
-        apiKey,
-        baseURL: buildProxyBaseUrl("mistral", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    perplexity: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
-      // Perplexity uses OpenAI-compatible API, so we use the OpenAI SDK
-      // This provides better compatibility than @ai-sdk/perplexity
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("perplexity", agentId),
-        headers,
-      });
-      return client.chat(modelName);
-    },
-
-    groq: ({ apiKey, agentId, modelName, headers }) => {
-      if (!apiKey) {
-        throw new ApiError(
-          400,
-          "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
-        );
-      }
-      const client = createGroq({
-        apiKey,
-        baseURL: buildProxyBaseUrl("groq", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    xai: ({ apiKey, agentId, modelName, headers }) => {
-      if (!apiKey) {
-        throw new ApiError(
-          400,
-          "xAI API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
-        );
-      }
-      const client = createXai({
-        apiKey,
-        baseURL: buildProxyBaseUrl("xai", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-
-    vllm: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
-      // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK
-      const client = createOpenAI({
-        apiKey: apiKey || "EMPTY", // vLLM typically doesn't require API keys
-        baseURL: buildProxyBaseUrl("vllm", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      // Use .chat() to force Chat Completions API
-      return client.chat(modelName);
-    },
-
-    ollama: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/ollama/:agentId (SDK appends /chat/completions)
-      // Ollama uses OpenAI-compatible API, so we use the OpenAI SDK
-      const client = createOpenAI({
-        apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
-        baseURL: buildProxyBaseUrl("ollama", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      // Use .chat() to force Chat Completions API
-      return client.chat(modelName);
-    },
-
-    zhipuai: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/zhipuai/:agentId (SDK appends /chat/completions)
-      // Zhipuai is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("zhipuai", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client.chat(modelName);
-    },
-
-    minimax: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/minimax/:agentId (SDK appends /chat/completions)
-      // MiniMax is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("minimax", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client.chat(modelName);
-    },
-
-    deepseek: ({ apiKey, agentId, modelName, headers }) => {
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("deepseek", agentId),
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client.chat(modelName);
-    },
-
-    bedrock: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/bedrock/:agentId (SDK appends /converse)
-      // Bedrock uses Bearer token auth through the proxy
-      const client = createAmazonBedrock({
-        apiKey, // Bearer token for proxy authentication
-        region: "us-east-1", // Placeholder - proxy extracts actual region from base URL
-        baseURL: buildProxyBaseUrl("bedrock", agentId),
-        secretAccessKey: undefined,
-        accessKeyId: undefined,
-        sessionToken: undefined,
-        credentialProvider: undefined,
-        headers,
-        fetch: createTracedFetch(),
-      });
-      return client(modelName);
-    },
-  };
 
 /**
  * Create an LLM model for the specified provider, pointing to the LLM Proxy
@@ -844,8 +288,19 @@ export function createLLMModel(params: {
   const headers =
     Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined;
 
-  const creator = proxiedModelCreators[provider];
-  return creator({ apiKey, agentId, modelName, headers });
+  const cfg = providerModelConfigs[provider];
+  const proxyBaseUrl = buildProxyBaseUrl(provider, agentId);
+  const baseURL = cfg.proxiedPathSuffix
+    ? `${proxyBaseUrl}${cfg.proxiedPathSuffix}`
+    : proxyBaseUrl;
+
+  return cfg.createModel({
+    apiKey,
+    modelName,
+    baseURL,
+    headers,
+    fetch: createTracedFetch(),
+  });
 }
 
 /**
@@ -918,4 +373,284 @@ export async function createLLMModelForAgent(params: {
   });
 
   return { model, provider, apiKeySource: source };
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Environment variable API key getter for each provider.
+ * TypeScript enforces that ALL providers in SupportedChatProvider have an entry.
+ */
+const envApiKeyGetters: Record<
+  SupportedChatProvider,
+  () => string | undefined
+> = {
+  anthropic: () => config.chat.anthropic.apiKey,
+  bedrock: () => config.chat.bedrock.apiKey,
+  cerebras: () => config.chat.cerebras.apiKey,
+  cohere: () => config.chat.cohere.apiKey,
+  gemini: () => config.chat.gemini.apiKey,
+  minimax: () => config.chat.minimax.apiKey,
+  mistral: () => config.chat.mistral.apiKey,
+  ollama: () => config.chat.ollama.apiKey,
+  openai: () => config.chat.openai.apiKey,
+  openrouter: () => config.chat.openrouter?.apiKey || undefined,
+  perplexity: () => config.chat.perplexity.apiKey,
+  groq: () => config.chat.groq.apiKey,
+  xai: () => config.chat.xai.apiKey,
+  vllm: () => config.chat.vllm.apiKey,
+  zhipuai: () => config.chat.zhipuai.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
+};
+
+/**
+ * Unified model creation config for each provider.
+ * A single `createModel` function handles both direct and proxied calls.
+ *
+ * For direct calls: only apiKey, modelName, baseURL are provided.
+ * For proxied calls: headers and fetch are also provided (for trace context injection).
+ */
+type ProviderModelConfig = {
+  createModel: (params: {
+    apiKey: string | undefined;
+    modelName: string;
+    baseURL: string | undefined;
+    headers?: Record<string, string>;
+    fetch?: typeof globalThis.fetch;
+  }) => LLMModel;
+  /** Default base URL for direct calls (falls back to provider's built-in default when undefined) */
+  defaultBaseUrl: string | undefined;
+  /** Error message when API key is missing. Undefined = key is optional (vllm, ollama). */
+  apiKeyRequiredMessage?: string;
+  /** Path suffix appended to proxy base URL for proxied calls (e.g. "/v1" for anthropic) */
+  proxiedPathSuffix?: string;
+};
+
+/**
+ * Unified registry of model configs for each provider.
+ * TypeScript enforces that ALL providers in SupportedChatProvider have an entry.
+ * Adding a new provider to SupportedChatProvider will cause a compile error here
+ * until the corresponding config is added.
+ */
+const providerModelConfigs: Record<SupportedChatProvider, ProviderModelConfig> =
+  {
+    // --- Native SDK providers (use their own SDK, call client(modelName)) ---
+
+    anthropic: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createAnthropic({ apiKey, baseURL, headers, fetch })(modelName),
+      defaultBaseUrl: config.llm.anthropic.baseUrl,
+      apiKeyRequiredMessage:
+        "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
+      proxiedPathSuffix: "/v1",
+    },
+
+    cerebras: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createCerebras({ apiKey, baseURL, headers, fetch })(modelName),
+      defaultBaseUrl: config.llm.cerebras.baseUrl,
+      apiKeyRequiredMessage:
+        "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
+    },
+
+    cohere: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createCohere({ apiKey, baseURL, headers, fetch })(modelName),
+      defaultBaseUrl: config.llm.cohere.baseUrl,
+      apiKeyRequiredMessage:
+        "Cohere API key is required. Please configure COHERE_API_KEY.",
+    },
+
+    mistral: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createMistral({ apiKey, baseURL, headers, fetch })(modelName),
+      defaultBaseUrl: config.llm.mistral.baseUrl,
+      apiKeyRequiredMessage:
+        "Mistral API key is required. Please configure MISTRAL_API_KEY.",
+    },
+
+    groq: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createGroq({ apiKey, baseURL, headers, fetch })(modelName),
+      defaultBaseUrl: config.llm.groq.baseUrl,
+      apiKeyRequiredMessage:
+        "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
+    },
+
+    xai: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createXai({ apiKey, baseURL, headers, fetch })(modelName),
+      defaultBaseUrl: config.llm.xai.baseUrl,
+      apiKeyRequiredMessage:
+        "xAI API key is required. Please configure ARCHESTRA_CHAT_XAI_API_KEY.",
+    },
+
+    // --- OpenAI-compatible providers (use createOpenAI with .chat()) ---
+
+    openai: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      defaultBaseUrl: config.llm.openai.baseUrl,
+      apiKeyRequiredMessage:
+        "OpenAI API key is required. Please configure OPENAI_API_KEY.",
+    },
+
+    openrouter: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      defaultBaseUrl: config.llm.openrouter.baseUrl,
+      apiKeyRequiredMessage:
+        "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+    },
+
+    perplexity: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      defaultBaseUrl: config.llm.perplexity.baseUrl,
+      apiKeyRequiredMessage:
+        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
+    },
+
+    zhipuai: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      defaultBaseUrl: config.llm.zhipuai.baseUrl,
+      apiKeyRequiredMessage:
+        "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
+    },
+
+    minimax: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      defaultBaseUrl: config.llm.minimax.baseUrl,
+      apiKeyRequiredMessage:
+        "MiniMax API key is required. Please configure ARCHESTRA_CHAT_MINIMAX_API_KEY.",
+    },
+
+    deepseek: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      defaultBaseUrl: config.llm.deepseek.baseUrl,
+      apiKeyRequiredMessage:
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+    },
+
+    // --- OpenAI-compatible providers with optional API key ---
+
+    vllm: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({
+          apiKey: apiKey || "EMPTY",
+          baseURL,
+          headers,
+          fetch,
+        }).chat(modelName),
+      defaultBaseUrl: config.llm.vllm.baseUrl,
+      // No apiKeyRequiredMessage — key is optional
+    },
+
+    ollama: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+        createOpenAI({
+          apiKey: apiKey || "EMPTY",
+          baseURL,
+          headers,
+          fetch,
+        }).chat(modelName),
+      defaultBaseUrl: config.llm.ollama.baseUrl,
+      // No apiKeyRequiredMessage — key is optional
+    },
+
+    // --- Special providers ---
+
+    gemini: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+        // Proxied path (headers/fetch provided): always use GoogleGenerativeAI
+        if (headers || fetch) {
+          return createGoogleGenerativeAI({
+            apiKey: apiKey || "vertex-ai-mode",
+            baseURL,
+            headers,
+            fetch,
+          })(modelName);
+        }
+        // Direct path: use Vertex AI if enabled
+        if (isVertexAiEnabled()) {
+          const { vertexAi } = config.llm.gemini;
+          return createVertex({
+            project: vertexAi.project,
+            location: vertexAi.location,
+            googleAuthOptions: {
+              projectId: vertexAi.project,
+              ...(vertexAi.credentialsFile && {
+                keyFilename: vertexAi.credentialsFile,
+              }),
+            },
+          })(modelName);
+        }
+        // Direct path without Vertex AI — key is required
+        if (!apiKey) {
+          throw new ApiError(
+            400,
+            "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
+          );
+        }
+        return createGoogleGenerativeAI({ apiKey, baseURL })(modelName);
+      },
+      defaultBaseUrl: undefined, // GoogleGenerativeAI has its own default
+      // apiKeyRequiredMessage is undefined — validation is inside createModel (Vertex AI special case)
+      proxiedPathSuffix: "/v1beta",
+    },
+
+    bedrock: {
+      createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+        // Extract region from Bedrock base URL if present; falls back to us-east-1
+        const regionMatch = baseURL?.match(/bedrock-runtime\.([a-z0-9-]+)\./);
+
+        const region = regionMatch?.[1] || "us-east-1";
+        return createAmazonBedrock({
+          apiKey,
+          region,
+          baseURL,
+          secretAccessKey: undefined,
+          accessKeyId: undefined,
+          sessionToken: undefined,
+          credentialProvider: undefined,
+          headers,
+          fetch,
+        })(modelName);
+      },
+      defaultBaseUrl: config.llm.bedrock.baseUrl,
+      apiKeyRequiredMessage:
+        "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
+    },
+  };
+
+/**
+ * Creates a fetch wrapper that injects W3C trace context (traceparent/tracestate)
+ * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
+ * parent context and create child spans, linking chat → LLM proxy traces together.
+ */
+function createTracedFetch(): typeof globalThis.fetch {
+  return (input, init) => {
+    const headers = new Headers(init?.headers);
+    // Inject active trace context (traceparent, tracestate) into outgoing headers.
+    // Uses a carrier object because propagation.inject expects a plain object,
+    // then copies the injected headers into the actual Headers instance.
+    const carrier: Record<string, string> = {};
+    propagation.inject(context.active(), carrier);
+    for (const [key, value] of Object.entries(carrier)) {
+      headers.set(key, value);
+    }
+    return globalThis.fetch(input, { ...init, headers });
+  };
+}
+
+/**
+ * Build the proxy base URL for a provider
+ */
+function buildProxyBaseUrl(provider: string, agentId: string): string {
+  return `http://localhost:${config.api.port}/v1/${provider}/${agentId}`;
 }

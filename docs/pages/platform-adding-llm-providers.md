@@ -255,7 +255,7 @@ Chat uses Vercel AI SDK which requires provider-specific model creation.
 | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `backend/src/clients/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
 | `backend/src/clients/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                     |
-| `backend/src/clients/llm-client.ts` | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
+| `backend/src/clients/llm-client.ts` | Add entry to `providerModelConfigs` registry - defines SDK initialization, default base URL, API key requirement, and proxied path suffix |
 
 ### Error Handling
 

@@ -1,20 +1,20 @@
+import { generateObject } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { policyConfigSubagent } from "@/agents/subagents";
 import { resolveProviderApiKey } from "@/clients/llm-client";
 import db, { schema } from "@/database";
 import { ApiKeyModelModel } from "@/models";
+import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
-import { ToolAutoPolicyService } from "./agent-tool-auto-policy";
+import { PolicyConfigurationService } from "./policy-configuration";
 
 vi.mock("@/clients/llm-client", () => ({
   resolveProviderApiKey: vi.fn(),
+  createDirectLLMModel: vi.fn(() => "mocked-model"),
 }));
 
-vi.mock("@/agents/subagents", () => ({
-  policyConfigSubagent: {
-    analyze: vi.fn(),
-  },
+vi.mock("ai", () => ({
+  generateObject: vi.fn(),
 }));
 
 const NO_KEY = {
@@ -43,6 +43,11 @@ const MOCK_MODEL = {
   updatedAt: new Date(),
 };
 
+const MOCK_BUILT_IN_AGENT = {
+  systemPrompt:
+    "Analyze this MCP tool: {tool.name} - {tool.description} - {mcpServerName} - {tool.parameters}",
+};
+
 /**
  * Helper: mock resolveProviderApiKey to return a key for a specific provider
  * and NO_KEY for all others.
@@ -60,12 +65,12 @@ function mockProviderKey(
   });
 }
 
-describe("ToolAutoPolicyService", () => {
-  let service: ToolAutoPolicyService;
+describe("PolicyConfigurationService", () => {
+  let service: PolicyConfigurationService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new ToolAutoPolicyService();
+    service = new PolicyConfigurationService();
     // Default: no provider has a key
     vi.mocked(resolveProviderApiKey).mockResolvedValue(NO_KEY);
   });
@@ -148,17 +153,22 @@ describe("ToolAutoPolicyService", () => {
 
       mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
       vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
+        MOCK_BUILT_IN_AGENT as never,
+      );
 
       // Create MCP server and tool
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      // Mock the subagent analysis
-      vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        toolInvocationAction: "allow_when_context_is_untrusted",
-        trustedDataAction: "mark_as_trusted",
-        reasoning: "This tool is safe",
-      });
+      // Mock the generateObject call
+      vi.mocked(generateObject).mockResolvedValue({
+        object: {
+          toolInvocationAction: "allow_when_context_is_untrusted",
+          trustedDataAction: "mark_as_trusted",
+          reasoning: "This tool is safe",
+        },
+      } as never);
 
       const result = await service.configurePoliciesForTool(tool.id, org.id);
 
@@ -169,12 +179,12 @@ describe("ToolAutoPolicyService", () => {
         reasoning: "This tool is safe",
       });
 
-      // Verify subagent was called with provider/apiKey/modelName
-      expect(policyConfigSubagent.analyze).toHaveBeenCalledWith(
+      // Verify generateObject was called
+      expect(generateObject).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
-          apiKey: "sk-ant-test-key",
-          modelName: "claude-3-5-sonnet-20241022",
+          model: "mocked-model",
+          schema: expect.any(Object),
+          prompt: expect.any(String),
         }),
       );
 
@@ -211,16 +221,21 @@ describe("ToolAutoPolicyService", () => {
         modelId: "gpt-4o",
         provider: "openai",
       });
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
+        MOCK_BUILT_IN_AGENT as never,
+      );
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
       // Mock blocking policy response
-      vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        toolInvocationAction: "block_always",
-        trustedDataAction: "block_always",
-        reasoning: "This tool is risky",
-      });
+      vi.mocked(generateObject).mockResolvedValue({
+        object: {
+          toolInvocationAction: "block_always",
+          trustedDataAction: "block_always",
+          reasoning: "This tool is risky",
+        },
+      } as never);
 
       await service.configurePoliciesForTool(tool.id, org.id);
 
@@ -247,15 +262,20 @@ describe("ToolAutoPolicyService", () => {
 
       mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
       vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
+        MOCK_BUILT_IN_AGENT as never,
+      );
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        toolInvocationAction: "allow_when_context_is_untrusted",
-        trustedDataAction: "sanitize_with_dual_llm",
-        reasoning: "This tool needs sanitization",
-      });
+      vi.mocked(generateObject).mockResolvedValue({
+        object: {
+          toolInvocationAction: "allow_when_context_is_untrusted",
+          trustedDataAction: "sanitize_with_dual_llm",
+          reasoning: "This tool needs sanitization",
+        },
+      } as never);
 
       await service.configurePoliciesForTool(tool.id, org.id);
 
@@ -275,15 +295,20 @@ describe("ToolAutoPolicyService", () => {
 
       mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
       vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
+        MOCK_BUILT_IN_AGENT as never,
+      );
 
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(policyConfigSubagent.analyze).mockResolvedValue({
-        toolInvocationAction: "block_when_context_is_untrusted",
-        trustedDataAction: "mark_as_untrusted",
-        reasoning: "External API that could leak data",
-      });
+      vi.mocked(generateObject).mockResolvedValue({
+        object: {
+          toolInvocationAction: "block_when_context_is_untrusted",
+          trustedDataAction: "mark_as_untrusted",
+          reasoning: "External API that could leak data",
+        },
+      } as never);
 
       await service.configurePoliciesForTool(tool.id, org.id);
 

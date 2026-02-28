@@ -1,3 +1,4 @@
+export * from "./built-in-agents";
 export * from "./chat";
 export * from "./chat-error";
 export * from "./consts";

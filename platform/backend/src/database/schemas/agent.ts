@@ -10,7 +10,11 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentHistoryEntry, AgentType } from "@/types/agent";
+import type {
+  AgentHistoryEntry,
+  AgentType,
+  BuiltInAgentConfig,
+} from "@/types/agent";
 
 export const agentScopeEnum = pgEnum("agent_scope", [
   "personal",
@@ -98,6 +102,11 @@ const agentsTable = pgTable(
       () => identityProvidersTable.id,
       { onDelete: "set null" },
     ),
+
+    /** JSONB config for built-in agents (null for user-created agents) */
+    builtInAgentConfig: jsonb(
+      "built_in_agent_config",
+    ).$type<BuiltInAgentConfig>(),
 
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

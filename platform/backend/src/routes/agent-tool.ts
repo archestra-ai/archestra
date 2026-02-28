@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
@@ -20,7 +21,6 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
-import { toolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
@@ -390,7 +390,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Check if service is available for this organization
-      const available = await toolAutoPolicyService.isAvailable(
+      const available = await policyConfigurationService.isAvailable(
         organizationId,
         user.id,
       );
@@ -405,7 +405,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const result = await toolAutoPolicyService.configurePoliciesForTools(
+      const result = await policyConfigurationService.configurePoliciesForTools(
         toolIds,
         organizationId,
         user.id,

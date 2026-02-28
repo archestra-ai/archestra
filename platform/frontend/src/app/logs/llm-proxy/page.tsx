@@ -41,7 +41,10 @@ export default async function LlmProxyLogsPageServer() {
           sortDirection: "desc",
         },
       }),
-      archestraApiSdk.getAllAgents({ headers }),
+      archestraApiSdk.getAllAgents({
+        headers,
+        query: { excludeBuiltIn: true },
+      }),
     ]);
     if (interactionsResponse.error) {
       handleApiError(interactionsResponse.error);

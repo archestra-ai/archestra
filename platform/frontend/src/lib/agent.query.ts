@@ -29,10 +29,14 @@ export function useProfiles(
     filters?: archestraApiTypes.GetAllAgentsData["query"];
   } = {},
 ) {
+  const filters = {
+    excludeBuiltIn: true,
+    ...params?.filters,
+  } satisfies archestraApiTypes.GetAllAgentsData["query"];
   return useQuery({
-    queryKey: ["agents", "all", params?.filters],
+    queryKey: ["agents", "all", filters],
     queryFn: async () => {
-      const response = await getAllAgents({ query: params?.filters });
+      const response = await getAllAgents({ query: filters });
       return response.data ?? [];
     },
     initialData: params?.initialData,
@@ -229,9 +233,11 @@ export function useLabelValues(params?: { key?: string }) {
  */
 export function useInternalAgents() {
   return useQuery({
-    queryKey: ["agents", "all", { agentType: "agent" }],
+    queryKey: ["agents", "all", { agentType: "agent", excludeBuiltIn: true }],
     queryFn: async () => {
-      const response = await getAllAgents({ query: { agentType: "agent" } });
+      const response = await getAllAgents({
+        query: { agentType: "agent", excludeBuiltIn: true },
+      });
       return response.data ?? [];
     },
   });

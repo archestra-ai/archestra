@@ -11,6 +11,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
   min,
   type SQL,
   sql,
@@ -33,6 +34,15 @@ import type {
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
+
+/**
+ * Add the computed `builtIn` virtual field to a raw agent row.
+ */
+function withBuiltIn<T extends { builtInAgentConfig: unknown }>(
+  agent: T,
+): T & { builtIn: boolean } {
+  return { ...agent, builtIn: agent.builtInAgentConfig != null };
+}
 
 class AgentModel {
   /**
@@ -108,12 +118,12 @@ class AgentModel {
         .where(eq(schema.agentToolsTable.agentId, createdAgent.id)),
     ]);
 
-    return {
+    return withBuiltIn({
       ...createdAgent,
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
-    };
+    });
   }
 
   /**
@@ -125,6 +135,7 @@ class AgentModel {
     options?: {
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+      excludeBuiltIn?: boolean;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -152,6 +163,11 @@ class AgentModel {
     // Filter by agentType if specified (single type, backwards compatible)
     else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
+    }
+
+    // Exclude built-in agents (e.g. for chat dropdown)
+    if (options?.excludeBuiltIn) {
+      whereConditions.push(isNull(schema.agentsTable.builtInAgentConfig));
     }
 
     // Apply access control filtering for non-agent admins
@@ -183,12 +199,15 @@ class AgentModel {
       const tool = row.tools;
 
       if (!agentsMap.has(agent.id)) {
-        agentsMap.set(agent.id, {
-          ...agent,
-          tools: [],
-          teams: [] as Array<{ id: string; name: string }>,
-          labels: [],
-        });
+        agentsMap.set(
+          agent.id,
+          withBuiltIn({
+            ...agent,
+            tools: [],
+            teams: [] as Array<{ id: string; name: string }>,
+            labels: [],
+          }),
+        );
       }
 
       // Add tool if it exists (leftJoin returns null for agents with no tools)
@@ -272,12 +291,14 @@ class AgentModel {
       toolsByAgent.set(row.agentId, existing);
     }
 
-    return agents.map((agent) => ({
-      ...agent,
-      tools: toolsByAgent.get(agent.id) || [],
-      teams: teamsMap.get(agent.id) || [],
-      labels: labelsMap.get(agent.id) || [],
-    }));
+    return agents.map((agent) =>
+      withBuiltIn({
+        ...agent,
+        tools: toolsByAgent.get(agent.id) || [],
+        teams: teamsMap.get(agent.id) || [],
+        labels: labelsMap.get(agent.id) || [],
+      }),
+    );
   }
 
   /**
@@ -341,12 +362,14 @@ class AgentModel {
       toolsByAgent.set(row.agentId, existing);
     }
 
-    return agents.map((agent) => ({
-      ...agent,
-      tools: toolsByAgent.get(agent.id) || [],
-      teams: teamsMap.get(agent.id) || [],
-      labels: labelsMap.get(agent.id) || [],
-    }));
+    return agents.map((agent) =>
+      withBuiltIn({
+        ...agent,
+        tools: toolsByAgent.get(agent.id) || [],
+        teams: teamsMap.get(agent.id) || [],
+        labels: labelsMap.get(agent.id) || [],
+      }),
+    );
   }
 
   /**
@@ -517,12 +540,15 @@ class AgentModel {
       const tool = row.tools;
 
       if (!agentsMap.has(agent.id)) {
-        agentsMap.set(agent.id, {
-          ...agent,
-          tools: [],
-          teams: [] as Array<{ id: string; name: string }>,
-          labels: [],
-        });
+        agentsMap.set(
+          agent.id,
+          withBuiltIn({
+            ...agent,
+            tools: [],
+            teams: [] as Array<{ id: string; name: string }>,
+            labels: [],
+          }),
+        );
       }
 
       // Add tool if it exists (leftJoin returns null for agents with no tools)
@@ -646,12 +672,12 @@ class AgentModel {
     const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
 
-    const result: Agent = {
+    const result: Agent = withBuiltIn({
       ...agent,
       tools,
       teams,
       labels,
-    };
+    });
 
     await AgentModel.populateAuthorNames([result]);
 
@@ -711,12 +737,12 @@ class AgentModel {
       .map((row) => row.tools)
       .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
-    return {
+    return withBuiltIn({
       ...agent,
       tools,
       teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
       labels: await AgentLabelModel.getLabelsForAgent(agent.id),
-    };
+    });
   }
 
   private static async getOrCreateDefaultByType(
@@ -750,12 +776,12 @@ class AgentModel {
         .map((row) => row.tools)
         .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
-      return {
+      return withBuiltIn({
         ...agent,
         tools,
         teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
-      };
+      });
     }
 
     // No default agent exists, create one
@@ -811,15 +837,16 @@ class AgentModel {
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {
-      [updatedAgent] = await db
+      const [row] = await db
         .update(schema.agentsTable)
         .set(agent)
         .where(eq(schema.agentsTable.id, id))
         .returning();
 
-      if (!updatedAgent) {
+      if (!row) {
         return null;
       }
+      updatedAgent = withBuiltIn(row);
 
       // If name changed, sync delegation tool names and invalidate parent caches
       if (agent.name && agent.name !== existingAgent.name) {
@@ -832,7 +859,7 @@ class AgentModel {
         }
       }
     } else {
-      updatedAgent = existingAgent;
+      updatedAgent = withBuiltIn(existingAgent);
     }
 
     // Sync team assignments if teams is provided
@@ -859,12 +886,12 @@ class AgentModel {
     const currentTeams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
 
-    return {
+    return withBuiltIn({
       ...updatedAgent,
       tools,
       teams: currentTeams,
       labels: currentLabels,
-    };
+    });
   }
 
   /**
@@ -987,6 +1014,42 @@ class AgentModel {
       current: agent,
       history: agent.promptHistory || [],
     };
+  }
+
+  /**
+   * Find a built-in agent by its config name discriminator.
+   */
+  static async getBuiltInAgent(builtInName: string): Promise<Agent | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${builtInName}`,
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    const [teams, labels] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgent(row.id),
+      AgentLabelModel.getLabelsForAgent(row.id),
+    ]);
+
+    const toolRows = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.agentId, row.id));
+
+    return withBuiltIn({
+      ...row,
+      tools: toolRows.map((r) => r.tool),
+      teams,
+      labels,
+    });
   }
 
   static async delete(id: string): Promise<boolean> {

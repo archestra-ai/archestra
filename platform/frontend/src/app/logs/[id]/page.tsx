@@ -29,7 +29,10 @@ export default async function ChatPageServer({
         headers,
         path: { interactionId: id },
       }),
-      archestraApiSdk.getAllAgents({ headers }),
+      archestraApiSdk.getAllAgents({
+        headers,
+        query: { excludeBuiltIn: true },
+      }),
     ]);
     if (interactionResponse.error) {
       handleApiError(interactionResponse.error);

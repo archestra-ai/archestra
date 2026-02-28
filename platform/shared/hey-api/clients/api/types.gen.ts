@@ -11734,6 +11734,10 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
+            builtInAgentConfig: {
+                name: 'policy-configuration-subagent';
+                autoConfigureOnToolAssignment: boolean;
+            } | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -11776,6 +11780,7 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            builtIn: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -11808,6 +11813,10 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
+        builtInAgentConfig?: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -11907,6 +11916,10 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -11949,6 +11962,7 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     };
 };
 
@@ -11966,6 +11980,10 @@ export type GetAllAgentsData = {
          * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
          */
         agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
+        /**
+         * Exclude built-in agents from the results. Defaults to false.
+         */
+        excludeBuiltIn?: boolean;
     };
     url: '/api/agents/all';
 };
@@ -12056,6 +12074,10 @@ export type GetAllAgentsResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12098,6 +12120,7 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     }>;
 };
 
@@ -12196,6 +12219,10 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12238,6 +12265,7 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     };
 };
 
@@ -12336,6 +12364,10 @@ export type GetDefaultLlmProxyResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12378,6 +12410,7 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     };
 };
 
@@ -12557,6 +12590,10 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12599,6 +12636,7 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     };
 };
 
@@ -12622,6 +12660,10 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
+        builtInAgentConfig?: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -12723,6 +12765,10 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12765,6 +12811,7 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     };
 };
 
@@ -12866,6 +12913,10 @@ export type GetAgentVersionsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
+            builtInAgentConfig: {
+                name: 'policy-configuration-subagent';
+                autoConfigureOnToolAssignment: boolean;
+            } | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -12908,6 +12959,7 @@ export type GetAgentVersionsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            builtIn: boolean;
         };
         history: Array<{
             version: number;
@@ -13020,6 +13072,10 @@ export type RollbackAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolAssignment: boolean;
+        } | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -13062,6 +13118,7 @@ export type RollbackAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        builtIn: boolean;
     };
 };
 
@@ -31082,7 +31139,6 @@ export type GetOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
-        autoConfigureNewTools: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
     };
@@ -31100,7 +31156,6 @@ export type UpdateOrganizationData = {
         logo?: string | null;
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
-        autoConfigureNewTools?: boolean;
         allowChatFileUploads?: boolean;
     };
     path?: never;
@@ -31184,7 +31239,6 @@ export type UpdateOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
-        autoConfigureNewTools: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
     };
@@ -31680,83 +31734,6 @@ export type PerplexityChatCompletionsWithAgentResponses = {
 };
 
 export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletionsWithAgentResponses[keyof PerplexityChatCompletionsWithAgentResponses];
-
-export type GetPolicyConfigSubagentPromptData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/policy-config-subagent/prompt';
-};
-
-export type GetPolicyConfigSubagentPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPolicyConfigSubagentPromptError = GetPolicyConfigSubagentPromptErrors[keyof GetPolicyConfigSubagentPromptErrors];
-
-export type GetPolicyConfigSubagentPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        promptTemplate: string;
-    };
-};
-
-export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
 
 export type GetSecretsTypeData = {
     body?: never;

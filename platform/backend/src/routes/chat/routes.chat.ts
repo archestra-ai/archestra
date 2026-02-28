@@ -1338,7 +1338,7 @@ export interface GenerateTitleParams {
   provider: SupportedChatProvider;
   apiKey: string | undefined;
   chatApiKeyId?: string;
-  baseUrl?: string | null;
+  baseUrl: string | null;
   firstUserMessage: string;
   firstAssistantMessage: string;
 }

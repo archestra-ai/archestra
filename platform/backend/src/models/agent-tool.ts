@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS } from "@shared";
 import {
   and,
   asc,
@@ -282,10 +283,13 @@ class AgentToolModel {
 
     // Auto-configure policies if enabled (run in background)
     // Import at top of method to avoid circular dependency
-    const { toolAutoPolicyService } = await import("./agent-tool-auto-policy");
-    const { default: OrganizationModel } = await import("./organization");
+    const { policyConfigurationService } = await import(
+      "@/agents/subagents/policy-configuration"
+    );
+    const { default: AgentModel } = await import("./agent");
 
-    // Get agent's organization via team relationship and trigger auto-configure in background
+    // Check the built-in Policy Configuration Subagent for auto-configure setting
+    // and trigger auto-configure in background
     db.select({ organizationId: schema.teamsTable.organizationId })
       .from(schema.agentTeamsTable)
       .innerJoin(
@@ -298,11 +302,18 @@ class AgentToolModel {
         if (rows.length === 0) return;
 
         const organizationId = rows[0].organizationId;
-        const organization = await OrganizationModel.getById(organizationId);
 
-        if (organization?.autoConfigureNewTools) {
+        // Read auto-configure setting from the built-in Policy Config agent
+        const builtInAgent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        );
+        const config = builtInAgent?.builtInAgentConfig;
+        if (
+          config?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
+          config.autoConfigureOnToolAssignment
+        ) {
           // Use the unified method with timeout and loading state management
-          await toolAutoPolicyService.configurePoliciesForToolWithTimeout(
+          await policyConfigurationService.configurePoliciesForToolWithTimeout(
             toolId,
             organizationId,
           );

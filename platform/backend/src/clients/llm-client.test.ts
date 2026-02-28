@@ -72,6 +72,7 @@ describe("createDirectLLMModel", () => {
       provider: "anthropic",
       apiKey: "test-key",
       modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -81,6 +82,7 @@ describe("createDirectLLMModel", () => {
       provider: "openai",
       apiKey: "test-key",
       modelName: "gpt-4o-mini",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -90,6 +92,7 @@ describe("createDirectLLMModel", () => {
       provider: "gemini",
       apiKey: "test-key",
       modelName: "gemini-1.5-flash",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -99,6 +102,7 @@ describe("createDirectLLMModel", () => {
       provider: "cerebras",
       apiKey: "test-key",
       modelName: "llama-3.3-70b",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -108,6 +112,7 @@ describe("createDirectLLMModel", () => {
       provider: "cohere",
       apiKey: "test-key",
       modelName: "command-light",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -117,6 +122,7 @@ describe("createDirectLLMModel", () => {
       provider: "vllm",
       apiKey: undefined,
       modelName: "default",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -126,6 +132,7 @@ describe("createDirectLLMModel", () => {
       provider: "ollama",
       apiKey: undefined,
       modelName: "llama3.2",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -135,6 +142,7 @@ describe("createDirectLLMModel", () => {
       provider: "zhipuai",
       apiKey: "test-key",
       modelName: "glm-4-flash",
+      baseUrl: null,
     });
     expect(model).toBeDefined();
   });
@@ -145,6 +153,7 @@ describe("createDirectLLMModel", () => {
         provider: "unsupported" as never,
         apiKey: "test-key",
         modelName: "some-model",
+        baseUrl: null,
       }),
     ).toThrow("Unsupported provider: unsupported");
   });
@@ -155,6 +164,7 @@ describe("createDirectLLMModel", () => {
         provider: "gemini",
         apiKey: undefined,
         modelName: "gemini-1.5-flash",
+        baseUrl: null,
       }),
     ).toThrow(
       "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
@@ -167,6 +177,7 @@ describe("createDirectLLMModel", () => {
         provider: "anthropic",
         apiKey: undefined,
         modelName: "claude-3-5-haiku-20241022",
+        baseUrl: null,
       }),
     ).toThrow(
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
@@ -179,6 +190,7 @@ describe("createDirectLLMModel", () => {
         provider: "openai",
         apiKey: undefined,
         modelName: "gpt-4o-mini",
+        baseUrl: null,
       }),
     ).toThrow("OpenAI API key is required. Please configure OPENAI_API_KEY.");
   });
@@ -189,6 +201,7 @@ describe("createDirectLLMModel", () => {
         provider: "cerebras",
         apiKey: undefined,
         modelName: "llama-3.3-70b",
+        baseUrl: null,
       }),
     ).toThrow(
       "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
@@ -201,6 +214,7 @@ describe("createDirectLLMModel", () => {
         provider: "cohere",
         apiKey: undefined,
         modelName: "command-light",
+        baseUrl: null,
       }),
     ).toThrow("Cohere API key is required. Please configure COHERE_API_KEY.");
   });
@@ -211,6 +225,7 @@ describe("createDirectLLMModel", () => {
         provider: "zhipuai",
         apiKey: undefined,
         modelName: "glm-4-flash",
+        baseUrl: null,
       }),
     ).toThrow(
       "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",

@@ -239,9 +239,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkUpsertDefaultResultPolicy]: {
     policy: ["update"],
   },
-  [RouteId.GetPolicyConfigSubagentPrompt]: {
-    organization: ["read"],
-  },
   [RouteId.GetDefaultDualLlmConfig]: {
     dualLlmConfig: ["read"],
   },

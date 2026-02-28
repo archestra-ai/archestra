@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  AlertTriangle,
-  FileImage,
-  ShieldCheck,
-  ShieldOff,
-  Sparkles,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, FileImage, ShieldCheck, ShieldOff } from "lucide-react";
 import Link from "next/link";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -18,7 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -27,37 +19,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useChatApiKeys } from "@/lib/chat-settings.query";
 import {
   useOrganization,
   useUpdateOrganization,
 } from "@/lib/organization.query";
-import { usePolicyConfigSubagentPrompt } from "@/lib/policy-config-subagent.query";
 
 export default function SecuritySettingsPage() {
   const { data: organization } = useOrganization();
-  const { data: chatApiKeys, isLoading: isLoadingApiKeys } = useChatApiKeys();
-  const { data: promptTemplate } = usePolicyConfigSubagentPrompt();
 
   const updateOrgMutation = useUpdateOrganization(
     "Setting updated",
     "Failed to update setting",
   );
 
-  // Check for any org-wide LLM API key (required for auto-policy subagent)
-  const hasAnyLlmKey = chatApiKeys?.some((key) => key.scope === "org_wide");
-
   const handleGlobalToolPolicyChange = async (
     value: "permissive" | "restrictive",
   ) => {
     await updateOrgMutation.mutateAsync({
       globalToolPolicy: value,
-    });
-  };
-
-  const handleToggleAutoConfigureNewTools = async (checked: boolean) => {
-    await updateOrgMutation.mutateAsync({
-      autoConfigureNewTools: checked,
     });
   };
 
@@ -170,102 +149,6 @@ export default function SecuritySettingsPage() {
               Support for file-based security policies is coming soon.
             </AlertDescription>
           </Alert>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-500" />
-            <CardTitle>Policy Configuration Subagent</CardTitle>
-          </div>
-          <CardDescription>
-            Analyzes trusted tool metadata with AI to generate deterministic
-            security policies for handling untrusted data
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!hasAnyLlmKey && !isLoadingApiKeys && (
-            <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
-              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                <XCircle className="h-4 w-4" />
-                <span>Requires an LLM API key</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Configure in{" "}
-                <Link
-                  href="/llm-proxies/provider-settings"
-                  className="text-primary hover:underline"
-                >
-                  Provider Settings
-                </Link>
-              </p>
-            </div>
-          )}
-        </CardContent>
-        <CardHeader>
-          <CardTitle>Trigger Rules</CardTitle>
-          <CardDescription>
-            Configure when the subagent should run
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-configure-new-tools">
-                On tool assignment
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically analyze and configure security policies when tools
-                are assigned
-              </p>
-            </div>
-            <WithPermissions
-              permissions={{ organization: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <Switch
-                  id="auto-configure-new-tools"
-                  checked={organization?.autoConfigureNewTools ?? false}
-                  onCheckedChange={handleToggleAutoConfigureNewTools}
-                  disabled={
-                    !hasAnyLlmKey ||
-                    updateOrgMutation.isPending ||
-                    !hasPermission
-                  }
-                />
-              )}
-            </WithPermissions>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Manual trigger</Label>
-              <p className="text-sm text-muted-foreground">
-                Select tools on the{" "}
-                <Link
-                  href="/tool-policies"
-                  className="text-primary hover:underline"
-                >
-                  Tools page
-                </Link>{" "}
-                and click "Configure with Subagent"
-              </p>
-            </div>
-            <div className="text-sm text-muted-foreground">Always enabled</div>
-          </div>
-        </CardContent>
-        <CardHeader>
-          <CardTitle>Analysis Prompt</CardTitle>
-          <CardDescription>
-            Prompt used by the subagent to analyze tools
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-muted rounded-md p-4 font-mono text-xs whitespace-pre-wrap break-words overflow-x-auto">
-            {promptTemplate}
-          </div>
         </CardContent>
       </Card>
     </div>

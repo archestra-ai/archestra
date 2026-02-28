@@ -104,6 +104,7 @@ describe("mcpProxyRoutes POST /api/mcp/:agentId", () => {
     vi.spyOn(AgentModel, "findById").mockResolvedValue({
       id: agentId,
       name: "Test Agent",
+      organizationId: TEST_ORG_ID,
     } as unknown as Awaited<ReturnType<typeof AgentModel.findById>>);
     // Tool has visibility: ["model"] — app-callable is false
     vi.spyOn(ToolModel, "findByName").mockResolvedValue({
@@ -137,6 +138,7 @@ describe("mcpProxyRoutes POST /api/mcp/:agentId", () => {
     vi.spyOn(AgentModel, "findById").mockResolvedValue({
       id: agentId,
       name: "Test Agent",
+      organizationId: TEST_ORG_ID,
     } as unknown as Awaited<ReturnType<typeof AgentModel.findById>>);
     vi.spyOn(ToolModel, "findByName").mockResolvedValue({
       id: "tool-2",
@@ -165,5 +167,23 @@ describe("mcpProxyRoutes POST /api/mcp/:agentId", () => {
       // Any non-200 status is fine here — tool visibility was not the blocker
       expect(response.statusCode).not.toBe(400);
     }
+  });
+
+  test("returns 403 when agent exists but belongs to another organization", async () => {
+    vi.spyOn(auth, "hasAnyAgentTypeAdminPermission").mockResolvedValue(true);
+    vi.spyOn(AgentModel, "findById").mockResolvedValue({
+      id: crypto.randomUUID(),
+      name: "Other Org Agent",
+      organizationId: crypto.randomUUID(),
+    } as unknown as Awaited<ReturnType<typeof AgentModel.findById>>);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/${crypto.randomUUID()}`,
+      headers: { "content-type": "application/json" },
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(403);
   });
 });

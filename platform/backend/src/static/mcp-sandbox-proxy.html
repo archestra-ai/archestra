@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="color-scheme" content="light dark">
-  <!-- CSP is set via HTTP headers by serve.ts (based on ?csp= query param).
+  <!-- CSP is set via strict HTTP headers by server.ts.
        The inner iframe inherits this CSP since we use document.write(). -->
   <title>MCP-UI Proxy</title>
   <style>
@@ -63,7 +63,16 @@ if (!document.referrer) {
 
 // Extract the expected host origin from the referrer for origin validation.
 // This is the origin we expect all parent messages to come from.
-const EXPECTED_HOST_ORIGIN = new URL(document.referrer).origin;
+let EXPECTED_HOST_ORIGIN = "";
+try {
+  EXPECTED_HOST_ORIGIN = new URL(document.referrer).origin;
+} catch {
+  throw new Error("Invalid referrer origin, cannot validate embedding site.");
+}
+
+if (EXPECTED_HOST_ORIGIN === "null") {
+  throw new Error("Opaque referrer origins are not allowed.");
+}
 
 if (ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(EXPECTED_HOST_ORIGIN)) {
   throw new Error(
@@ -127,22 +136,28 @@ const PROXY_READY_NOTIFICATION =
 // intercepted here (not relayed) because the Sandbox uses it to configure and
 // load the inner iframe with the view HTML content.
 //
-// Security: CSP is enforced via HTTP headers on sandbox.html (set by serve.ts
-// based on ?csp= query param). This is tamper-proof unlike meta tags.
+// Security: CSP is enforced via HTTP headers on sandbox.html (set by server.ts).
+// This is tamper-proof unlike meta tags.
 
-window.addEventListener("message", async (event) => {
+function isMessageFromExpectedParent(event) {
+  return (
+    event.source === window.parent &&
+    event.origin === EXPECTED_HOST_ORIGIN
+  );
+}
+
+window.addEventListener("message", (event) => {
   if (event.source === window.parent) {
-    if(location.hostname === "localhost") {
-      console.debug('[Sandbox] Message from parent:', event.data)
+    if (location.hostname === "localhost") {
+      console.debug("[Sandbox] Message from parent:", event.data);
     }
-    // Validate that messages from parent come from the expected host origin.
-    // This prevents malicious pages from sending messages to this sandbox.
-    if (event.origin !== EXPECTED_HOST_ORIGIN) {
+    // Strictly validate parent origin before processing any message payload.
+    if (!isMessageFromExpectedParent(event)) {
       console.error(
         "[Sandbox] Rejecting message from unexpected origin:",
         event.origin,
         "expected:",
-        EXPECTED_HOST_ORIGIN
+        EXPECTED_HOST_ORIGIN,
       );
       return;
     }
@@ -167,7 +182,9 @@ window.addEventListener("message", async (event) => {
           doc.close();
         } else {
           // Fallback to srcdoc if document is not accessible
-          console.warn("[Sandbox] document.write not available, falling back to srcdoc");
+          console.warn(
+            "[Sandbox] document.write not available, falling back to srcdoc",
+          );
           inner.srcdoc = html;
         }
       }
@@ -177,8 +194,8 @@ window.addEventListener("message", async (event) => {
       }
     }
   } else if (event.source === inner.contentWindow) {
-    if(location.hostname === "localhost") {
-      console.debug('[Sandbox] Message from inner iframe:', event.data)
+    if (location.hostname === "localhost") {
+      console.debug("[Sandbox] Message from inner iframe:", event.data);
     }
     if (event.origin !== OWN_ORIGIN) {
       console.error(
@@ -198,12 +215,12 @@ window.addEventListener("message", async (event) => {
 // Notify the Host that the Sandbox is ready to receive view HTML.
 // Use specific origin instead of "*" to ensure only the expected host receives this.
 
-  // console.log('[Sandbox] Notifying host that the Sandbox is ready to receive view HTML..', EXPECTED_HOST_ORIGIN);
-  window.parent.postMessage({
-    jsonrpc: "2.0",
-    method: PROXY_READY_NOTIFICATION,
-    params: {},
-  }, EXPECTED_HOST_ORIGIN);
+// console.log("[Sandbox] Notifying host that the Sandbox is ready to receive view HTML..", EXPECTED_HOST_ORIGIN);
+window.parent.postMessage({
+  jsonrpc: "2.0",
+  method: PROXY_READY_NOTIFICATION,
+  params: {},
+}, EXPECTED_HOST_ORIGIN);
 </script>
 </body>
 </html>

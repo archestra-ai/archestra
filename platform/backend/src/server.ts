@@ -20,7 +20,6 @@ import { readFileSync } from "node:fs";
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
-import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
@@ -481,39 +480,45 @@ const startMetricsServer = async () => {
 
 // ============ MCP Sandbox Server ============
 
-/**
- * Validate CSP domain entries to prevent injection attacks.
- * Rejects entries containing characters that could:
- * - `;` or newlines: break out to new CSP directive
- * - quotes: inject CSP keywords like 'unsafe-eval'
- * - space: inject multiple sources in one entry
- */
-export function sanitizeCspDomains(domains?: string[]): string[] {
-  if (!domains) return [];
-  return domains.filter(
-    (d) => typeof d === "string" && !/[;\r\n'"\\ ]/.test(d),
-  );
+function normalizeAllowedOrigins(origins: string[]): string[] {
+  const normalizedOrigins = new Set<string>();
+  for (const origin of origins) {
+    try {
+      const parsedOrigin = new URL(origin);
+      if (
+        (parsedOrigin.protocol === "https:" ||
+          parsedOrigin.protocol === "http:") &&
+        !parsedOrigin.username &&
+        !parsedOrigin.password
+      ) {
+        normalizedOrigins.add(parsedOrigin.origin);
+      }
+    } catch {
+      // Ignore invalid origin entries.
+    }
+  }
+  return [...normalizedOrigins];
 }
 
-export function buildCspHeader(csp?: McpUiResourceCsp): string {
-  const resourceDomains = sanitizeCspDomains(csp?.resourceDomains).join(" ");
-  const connectDomains = sanitizeCspDomains(csp?.connectDomains).join(" ");
-  const frameDomains = sanitizeCspDomains(csp?.frameDomains).join(" ") || null;
-  const baseUriDomains =
-    sanitizeCspDomains(csp?.baseUriDomains).join(" ") || null;
-
+export function buildCspHeader(allowedOrigins: string[] = []): string {
+  const frameAncestors = normalizeAllowedOrigins(allowedOrigins);
   const directives = [
     "default-src 'none'",
-    `script-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
-    `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
-    `img-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `font-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `connect-src 'self' ${connectDomains}`.trim(),
-    `worker-src 'self' blob: ${resourceDomains}`.trim(),
-    frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
+    "script-src 'self' 'unsafe-inline' blob: data: https:",
+    "style-src 'self' 'unsafe-inline' blob: data: https:",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: blob: https:",
+    "connect-src 'self' https: wss:",
+    "worker-src 'self' blob:",
+    "frame-src 'self' https:",
     "object-src 'none'",
-    baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
   ];
+
+  if (frameAncestors.length > 0) {
+    directives.push(`frame-ancestors ${frameAncestors.join(" ")}`);
+  }
 
   return directives.join("; ");
 }
@@ -525,7 +530,7 @@ let sandboxServerInstance: Awaited<
 /**
  * Start a dedicated sandbox server on a separate port for MCP App iframe isolation.
  *
- * Serves the sandbox proxy HTML with dynamic CSP headers based on the ?csp= query param.
+ * Serves the sandbox proxy HTML with strict CSP headers.
  * Must be on a different origin (port) than the main app for proper iframe sandboxing.
  */
 const startSandboxServer = async () => {
@@ -558,53 +563,20 @@ const startSandboxServer = async () => {
     methods: ["GET"],
   });
 
-  // Serve sandbox.html with CSP from query params
-  sandboxServer.get(
-    "/mcp-sandbox-proxy.html",
-    {
-      schema: {
-        querystring: z.object({
-          csp: z.string().max(4096).optional(),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const { csp: cspParam } = request.query as { csp?: string };
+  // Serve sandbox.html with a fixed, strict CSP header.
+  sandboxServer.get("/mcp-sandbox-proxy.html", async (_request, reply) => {
+    // Set CSP via HTTP header — tamper-proof unlike meta tags
+    const cspHeader = buildCspHeader(config.mcpSandbox.allowedOrigins);
+    void reply.header("Content-Security-Policy", cspHeader);
 
-      // Parse CSP config from query param: ?csp=<url-encoded-json>
-      // Validated with a strict schema to prevent injection via malformed objects.
-      const CspSchema = z
-        .object({
-          connectDomains: z.array(z.string()).optional(),
-          resourceDomains: z.array(z.string()).optional(),
-          frameDomains: z.array(z.string()).optional(),
-          baseUriDomains: z.array(z.string()).optional(),
-        })
-        .strict();
+    // Prevent caching to ensure fresh CSP on each load
+    void reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    void reply.header("Pragma", "no-cache");
+    void reply.header("Expires", "0");
 
-      let cspConfig: McpUiResourceCsp | undefined;
-      if (cspParam) {
-        try {
-          const parsed = JSON.parse(cspParam);
-          cspConfig = CspSchema.parse(parsed);
-        } catch {
-          request.log.warn("Invalid CSP query param — ignoring");
-        }
-      }
-
-      // Set CSP via HTTP header — tamper-proof unlike meta tags
-      const cspHeader = buildCspHeader(cspConfig);
-      void reply.header("Content-Security-Policy", cspHeader);
-
-      // Prevent caching to ensure fresh CSP on each load
-      void reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
-      void reply.header("Pragma", "no-cache");
-      void reply.header("Expires", "0");
-
-      void reply.type("text/html");
-      return reply.send(sandboxHtml);
-    },
-  );
+    void reply.type("text/html");
+    return reply.send(sandboxHtml);
+  });
 
   // Catch-all: only sandbox.html is served on this port
   sandboxServer.setNotFoundHandler((_request, reply) => {

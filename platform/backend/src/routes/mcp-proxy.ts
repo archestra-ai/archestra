@@ -44,6 +44,7 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const body = request.body as Record<string, unknown>;
       const userId = request.user.id;
       const { organizationId } = request;
+      const cacheKey = getScopedCacheKey(agentId, userId, organizationId);
 
       fastify.log.info(
         { agentId, method: body.method, userId },
@@ -52,7 +53,7 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Verify user has access to the requested agent, using a short-lived
       // cache to avoid repeated DB round-trips within the same MCP App session.
-      let agent = agentAccessCache.get(`${agentId}:${userId}`);
+      let agent = agentAccessCache.get(cacheKey);
       if (!agent) {
         const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
           userId,
@@ -61,13 +62,11 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agent =
           (await AgentModel.findById(agentId, userId, isAgentAdmin)) ??
           undefined;
-        if (agent) {
-          agentAccessCache.set(`${agentId}:${userId}`, agent);
-        }
       }
-      if (!agent) {
+      if (!agent || agent.organizationId !== organizationId) {
         throw new ApiError(403, "Forbidden");
       }
+      agentAccessCache.set(cacheKey, agent);
 
       // Build a session-scoped TokenAuthContext so audit logs, user context, and
       // organisation-scoped Archestra tools all work the same as token auth.
@@ -116,7 +115,11 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let hijacked = false;
       let server: McpServer | undefined;
       try {
-        const cachedServer = mcpServerCache.acquire(agentId, userId);
+        const cachedServer = mcpServerCache.acquire(
+          agentId,
+          userId,
+          organizationId,
+        );
         if (cachedServer) {
           server = cachedServer;
         } else {
@@ -186,7 +189,9 @@ export const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       } finally {
-        if (server) mcpServerCache.release(agentId, userId, server);
+        if (server) {
+          mcpServerCache.release(agentId, userId, organizationId, server);
+        }
       }
     },
   );
@@ -219,8 +224,12 @@ class McpServerCache {
   });
 
   /** Try to acquire a cached server. Returns undefined if none available or busy. */
-  acquire(agentId: string, userId: string): McpServer | undefined {
-    const key = `${agentId}:${userId}`;
+  acquire(
+    agentId: string,
+    userId: string,
+    organizationId: string,
+  ): McpServer | undefined {
+    const key = getScopedCacheKey(agentId, userId, organizationId);
     const entry = this.lru.get(key);
     if (!entry || entry.inUse) return undefined;
     entry.inUse = true;
@@ -228,8 +237,13 @@ class McpServerCache {
   }
 
   /** Release a server back into the cache for future reuse. */
-  release(agentId: string, userId: string, server: McpServer): void {
-    const key = `${agentId}:${userId}`;
+  release(
+    agentId: string,
+    userId: string,
+    organizationId: string,
+    server: McpServer,
+  ): void {
+    const key = getScopedCacheKey(agentId, userId, organizationId);
     const entry = this.lru.get(key);
     // Only release back if we still own the cache slot (no concurrent overwrite)
     if (entry && entry.server === server) {
@@ -243,6 +257,14 @@ class McpServerCache {
   clear(): void {
     this.lru.clear();
   }
+}
+
+function getScopedCacheKey(
+  agentId: string,
+  userId: string,
+  organizationId: string,
+): string {
+  return `${organizationId}:${agentId}:${userId}`;
 }
 
 const mcpServerCache = new McpServerCache();

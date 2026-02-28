@@ -316,12 +316,12 @@ export function useMemberSignupStatus() {
   return useQuery({
     queryKey: organizationKeys.memberSignupStatus(),
     queryFn: async () => {
-      const response = await fetch("/api/organization/members/signup-status");
-      if (!response.ok)
+      const { data, error } =
+        await archestraApiSdk.getMemberSignupStatus();
+      if (error) {
         return { pendingSignupMembers: [] as PendingSignupMember[] };
-      return response.json() as Promise<{
-        pendingSignupMembers: PendingSignupMember[];
-      }>;
+      }
+      return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
     },
   });
 }
@@ -333,16 +333,15 @@ export function useDeletePendingSignupMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const response = await fetch(
-        `/api/organization/members/${userId}/pending-signup`,
-        { method: "DELETE" },
-      );
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        handleApiError(data?.error);
+      const { data, error } =
+        await archestraApiSdk.deletePendingSignupMember({
+          path: { userId },
+        });
+      if (error) {
+        handleApiError(error);
         return null;
       }
-      return response.json();
+      return data;
     },
     onSuccess: (data) => {
       if (!data) return;

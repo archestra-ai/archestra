@@ -1,5 +1,5 @@
 import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
-import { eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
@@ -235,7 +235,15 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const invitations = await db
         .select({ id: schema.invitationsTable.id })
         .from(schema.invitationsTable)
-        .where(eq(schema.invitationsTable.email, user.email));
+        .where(
+          and(
+            eq(schema.invitationsTable.email, user.email),
+            like(
+              schema.invitationsTable.status,
+              `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+            ),
+          ),
+        );
 
       for (const inv of invitations) {
         await InvitationModel.delete(inv.id);

@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import { MemberModel, OrganizationModel, UserModel } from "@/models";
 import type { ChatOpsProviderType } from "@/types/chatops";
+import { isUniqueConstraintError } from "@/utils/db";
 
 const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -66,10 +67,7 @@ export async function autoProvisionUser(params: {
     return { userId, invitationId };
   } catch (error) {
     // Handle race condition: unique constraint violation on user.email
-    if (
-      error instanceof Error &&
-      error.message.includes("unique") // Postgres unique violation
-    ) {
+    if (isUniqueConstraintError(error)) {
       logger.debug(
         { email: normalizedEmail },
         "[ChatOps] Auto-provision race condition — user already exists",

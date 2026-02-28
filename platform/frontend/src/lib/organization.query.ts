@@ -316,8 +316,7 @@ export function useMemberSignupStatus() {
   return useQuery({
     queryKey: organizationKeys.memberSignupStatus(),
     queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getMemberSignupStatus();
+      const { data, error } = await archestraApiSdk.getMemberSignupStatus();
       if (error) {
         return { pendingSignupMembers: [] as PendingSignupMember[] };
       }
@@ -333,10 +332,9 @@ export function useDeletePendingSignupMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } =
-        await archestraApiSdk.deletePendingSignupMember({
-          path: { userId },
-        });
+      const { data, error } = await archestraApiSdk.deletePendingSignupMember({
+        path: { userId },
+      });
       if (error) {
         handleApiError(error);
         return null;

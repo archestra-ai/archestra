@@ -58,8 +58,9 @@
       "@isaacs/brace-expansion": "5.0.1",
       "ajv": "8.18.0",
       "axios": ">=1.13.5",
-      "minimatch": ">=10.2.1",
-      "rollup": ">=4.59.0"
+      "minimatch": ">=10.2.3",
+      "rollup": ">=4.59.0",
+      "serialize-javascript": ">=7.0.3"
     },
     "patchedDependencies": {
       "ai@6.0.90": "patches/ai@6.0.90.patch"

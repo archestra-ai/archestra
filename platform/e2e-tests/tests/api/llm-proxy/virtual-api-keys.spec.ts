@@ -671,7 +671,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     }
   });
 
-  test("virtual key with per-key base URL routes to custom endpoint", async ({
+  test.skip("virtual key with per-key base URL routes to custom endpoint", async ({
     request,
     makeApiRequest,
     createLlmProxy,

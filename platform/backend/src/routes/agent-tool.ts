@@ -400,7 +400,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "POST /api/agent-tools/auto-configure-policies: service not available",
         );
         throw new ApiError(
-          503,
+          400,
           "Auto-policy requires an LLM API key to be configured in LLM API Keys settings",
         );
       }

@@ -173,6 +173,24 @@ test.describe("Built-In Agents API", () => {
     );
   });
 
+  test("auto-configure returns 400 when no LLM API key is configured", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // isAvailable check runs before tool lookup, so any valid UUID works
+    const response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agent-tools/auto-configure-policies",
+      data: { toolIds: ["00000000-0000-0000-0000-000000000001"] },
+      ignoreStatusCheck: true,
+    });
+
+    expect(response.status()).toBe(400);
+    const body = await response.json();
+    expect(body.error.message).toContain("LLM API key");
+  });
+
   test("auto-configure triggers on tool assignment", async ({
     request,
     makeApiRequest,

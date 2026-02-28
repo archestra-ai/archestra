@@ -12,6 +12,7 @@ vi.mock("@shared", async () => {
     ...actual,
     archestraApiSdk: {
       updateChatOpsConfigInQuickstart: vi.fn(),
+      refreshChatOpsChannelDiscovery: vi.fn().mockResolvedValue({}),
     },
   };
 });

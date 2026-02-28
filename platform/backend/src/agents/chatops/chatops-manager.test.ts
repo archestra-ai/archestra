@@ -400,6 +400,7 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, adminUser.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
+      scope: "team",
       teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);

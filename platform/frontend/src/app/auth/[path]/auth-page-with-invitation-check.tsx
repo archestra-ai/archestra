@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
 import { BackendConnectivityStatus } from "@/app/auth/_components/backend-connectivity-status";
 import { AppLogo } from "@/components/app-logo";
+import { CommunityLinks } from "@/components/community-links";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { LoadingSpinner } from "@/components/loading";
 import {
@@ -137,6 +138,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
                 : getValidatedRedirectPath(redirectTo)
             }
           />
+          <CommunityLinks />
         </div>
       </main>
     </BackendConnectivityStatus>

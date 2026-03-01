@@ -22,6 +22,12 @@ import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { AppLogo } from "@/components/app-logo";
+import {
+  COMMUNITY_BUG_REPORT_URL,
+  COMMUNITY_DOCS_URL,
+  COMMUNITY_GITHUB_URL,
+  COMMUNITY_SLACK_URL,
+} from "@/components/community-links";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
@@ -310,7 +316,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <a
-                    href="https://github.com/archestra-ai/archestra"
+                    href={COMMUNITY_GITHUB_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -328,7 +334,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <a
-                    href="https://archestra.ai/docs/"
+                    href={COMMUNITY_DOCS_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -340,7 +346,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <a
-                    href="https://archestra.ai/join-slack"
+                    href={COMMUNITY_SLACK_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -352,7 +358,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <a
-                    href="https://github.com/archestra-ai/archestra/issues/new"
+                    href={COMMUNITY_BUG_REPORT_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

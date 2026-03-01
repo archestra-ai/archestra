@@ -5,6 +5,8 @@ import { AUTO_PROVISIONED_INVITATION_STATUS } from "@shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AppLogo } from "@/components/app-logo";
+import { CommunityLinks } from "@/components/community-links";
 import { LoadingSpinner } from "@/components/loading";
 import { useInvitationCheck } from "@/lib/invitation.query";
 
@@ -90,6 +92,7 @@ function SignUpWithInvitationContent() {
       <Suspense fallback={<LoadingSpinner />}>
         <main className="h-full flex items-center justify-center p-4">
           <div className="w-full max-w-sm space-y-4">
+            <AppLogo />
             {invitationId && (
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center space-y-2">
                 <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
@@ -113,6 +116,7 @@ function SignUpWithInvitationContent() {
                 }
               />
             </div>
+            <CommunityLinks />
           </div>
         </main>
       </Suspense>

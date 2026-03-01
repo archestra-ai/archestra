@@ -11,7 +11,6 @@ import {
   eq,
   ilike,
   inArray,
-  isNull,
   min,
   type SQL,
   sql,
@@ -158,7 +157,7 @@ class AgentModel {
 
     // Exclude built-in agents (e.g. for chat dropdown)
     if (options?.excludeBuiltIn) {
-      whereConditions.push(isNull(schema.agentsTable.builtInAgentConfig));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
     // Apply access control filtering for non-agent admins

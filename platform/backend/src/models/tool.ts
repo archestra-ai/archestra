@@ -98,6 +98,33 @@ class ToolModel {
     return updatedTool || null;
   }
 
+  /** Mark a tool as currently auto-configuring policies (sets loading timestamp) */
+  static async setAutoConfiguringState(id: string): Promise<void> {
+    await db
+      .update(schema.toolsTable)
+      .set({ policiesAutoConfiguringStartedAt: new Date() })
+      .where(eq(schema.toolsTable.id, id));
+  }
+
+  /** Clear the auto-configuring loading state, optionally resetting all policy metadata */
+  static async clearAutoConfiguringState(
+    id: string,
+    options?: { resetAll: boolean },
+  ): Promise<void> {
+    const setData: Partial<UpdateTool> = {
+      policiesAutoConfiguringStartedAt: null,
+    };
+    if (options?.resetAll) {
+      setData.policiesAutoConfiguredAt = null;
+      setData.policiesAutoConfiguredReasoning = null;
+      setData.policiesAutoConfiguredModel = null;
+    }
+    await db
+      .update(schema.toolsTable)
+      .set(setData)
+      .where(eq(schema.toolsTable.id, id));
+  }
+
   // TODO: used only in tests and should be removed.
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
     // For shared tools (agentId=null, catalogId=null) — covers both proxy-sniffed and Archestra built-in tools

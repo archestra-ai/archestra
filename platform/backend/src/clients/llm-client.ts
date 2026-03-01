@@ -26,6 +26,12 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { ApiError } from "@/types";
 
 /**
+ * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
+ * The OpenAI SDK requires a non-empty apiKey string, so we pass this sentinel value.
+ */
+const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
+
+/**
  * Note: vLLM and Ollama use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
  * When creating a vLLM/Ollama model, we use createOpenAI with the respective base URL.
  */
@@ -513,7 +519,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   vllm: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
       createOpenAI({
-        apiKey: apiKey || "EMPTY",
+        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
         baseURL,
         headers,
         fetch,
@@ -525,7 +531,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   ollama: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
       createOpenAI({
-        apiKey: apiKey || "EMPTY",
+        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
         baseURL,
         headers,
         fetch,

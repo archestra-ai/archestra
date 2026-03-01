@@ -1,6 +1,9 @@
 import type { APIRequestContext } from "@playwright/test";
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR, WIREMOCK_INTERNAL_URL } from "../../consts";
+import {
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  WIREMOCK_INTERNAL_URL,
+} from "../../consts";
 import type { TestFixtures } from "./fixtures";
 import { expect, test } from "./fixtures";
 

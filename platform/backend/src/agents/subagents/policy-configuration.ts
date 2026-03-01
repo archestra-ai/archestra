@@ -106,15 +106,15 @@ export class PolicyConfigurationService {
       );
 
       // Analyze tool and get policy configuration
-      const policyConfig = await this.analyzeTool(
+      const policyConfig = await this.analyzeTool({
         tool,
         mcpServerName,
-        resolved.provider,
-        resolved.apiKey,
-        resolved.modelName,
-        resolved.baseUrl,
+        provider: resolved.provider,
+        apiKey: resolved.apiKey,
+        modelName: resolved.modelName,
+        baseUrl: resolved.baseUrl,
         organizationId,
-      );
+      });
 
       // Create/upsert call policy (tool invocation policy)
       await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
@@ -173,10 +173,6 @@ export class PolicyConfigurationService {
     organizationId: string,
     userId?: string,
   ): Promise<AutoPolicyResult & { timedOut?: boolean }> {
-    const db = (await import("@/database")).default;
-    const schema = await import("@/database/schemas");
-    const { eq } = await import("drizzle-orm");
-
     logger.info(
       { toolId, organizationId },
       "configurePoliciesForToolWithTimeout: starting",
@@ -184,10 +180,7 @@ export class PolicyConfigurationService {
 
     try {
       // Set loading timestamp to show loading state in UI
-      await db
-        .update(schema.toolsTable)
-        .set({ policiesAutoConfiguringStartedAt: new Date() })
-        .where(eq(schema.toolsTable.id, toolId));
+      await ToolModel.setAutoConfiguringState(toolId);
 
       // Create a 10-second timeout promise
       const timeoutPromise = new Promise<{
@@ -218,10 +211,7 @@ export class PolicyConfigurationService {
       // Handle the result and clear loading timestamp
       if (result.timedOut) {
         // Just clear the loading timestamp, let background operation continue
-        await db
-          .update(schema.toolsTable)
-          .set({ policiesAutoConfiguringStartedAt: null })
-          .where(eq(schema.toolsTable.id, toolId));
+        await ToolModel.clearAutoConfiguringState(toolId);
 
         logger.warn(
           { toolId, organizationId },
@@ -229,10 +219,7 @@ export class PolicyConfigurationService {
         );
       } else if (result.success) {
         // Success - clear loading timestamp (policiesAutoConfiguredAt already set by configurePoliciesForTool)
-        await db
-          .update(schema.toolsTable)
-          .set({ policiesAutoConfiguringStartedAt: null })
-          .where(eq(schema.toolsTable.id, toolId));
+        await ToolModel.clearAutoConfiguringState(toolId);
 
         logger.info(
           { toolId, organizationId },
@@ -240,15 +227,7 @@ export class PolicyConfigurationService {
         );
       } else {
         // Failed - clear both timestamps, reasoning, and model
-        await db
-          .update(schema.toolsTable)
-          .set({
-            policiesAutoConfiguringStartedAt: null,
-            policiesAutoConfiguredAt: null,
-            policiesAutoConfiguredReasoning: null,
-            policiesAutoConfiguredModel: null,
-          })
-          .where(eq(schema.toolsTable.id, toolId));
+        await ToolModel.clearAutoConfiguringState(toolId, { resetAll: true });
 
         logger.warn(
           {
@@ -263,18 +242,14 @@ export class PolicyConfigurationService {
       return result;
     } catch (error) {
       // On error, clear both timestamps, reasoning, and model
-      await db
-        .update(schema.toolsTable)
-        .set({
-          policiesAutoConfiguringStartedAt: null,
-          policiesAutoConfiguredAt: null,
-          policiesAutoConfiguredReasoning: null,
-          policiesAutoConfiguredModel: null,
-        })
-        .where(eq(schema.toolsTable.id, toolId))
-        .catch(() => {
-          /* ignore cleanup errors */
-        });
+      await ToolModel.clearAutoConfiguringState(toolId, { resetAll: true }).catch(
+        (cleanupError) => {
+          logger.warn(
+            { toolId, error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError) },
+            "configurePoliciesForToolWithTimeout: failed to clear auto-configuring state during error cleanup",
+          );
+        },
+      );
 
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -364,15 +339,16 @@ export class PolicyConfigurationService {
   /**
    * Analyze a tool and determine appropriate security policies using LLM
    */
-  private async analyzeTool(
-    tool: Pick<Tool, "id" | "name" | "description" | "parameters">,
-    mcpServerName: string | null,
-    provider: SupportedProvider,
-    apiKey: string | undefined,
-    modelName: string,
-    baseUrl: string | null,
-    organizationId: string,
-  ): Promise<PolicyConfig> {
+  private async analyzeTool(params: {
+    tool: Pick<Tool, "id" | "name" | "description" | "parameters">;
+    mcpServerName: string | null;
+    provider: SupportedProvider;
+    apiKey: string | undefined;
+    modelName: string;
+    baseUrl: string | null;
+    organizationId: string;
+  }): Promise<PolicyConfig> {
+    const { tool, mcpServerName, provider, apiKey, modelName, baseUrl, organizationId } = params;
     logger.info(
       {
         toolName: tool.name,

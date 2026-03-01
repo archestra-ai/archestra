@@ -440,7 +440,7 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
-export default {
+const config = {
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
@@ -750,3 +750,19 @@ export default {
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
 };
+
+export default config;
+
+/**
+ * Get the environment variable API key for a provider.
+ * Centralizes the config.chat[provider].apiKey lookup to avoid duplication.
+ */
+export function getProviderEnvApiKey(
+  provider: SupportedProvider,
+): string | undefined {
+  const entry = config.chat[provider as keyof typeof config.chat];
+  if (typeof entry === "object" && entry !== null && "apiKey" in entry) {
+    return entry.apiKey || undefined;
+  }
+  return undefined;
+}

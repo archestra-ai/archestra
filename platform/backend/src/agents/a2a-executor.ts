@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { SupportedProvider } from "@shared";
 import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
 import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
@@ -17,7 +18,6 @@ import {
   TeamModel,
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
-import type { SupportedChatProvider } from "@/types";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -475,14 +475,14 @@ async function resolveModelForAgent(params: {
   agent: { llmModel: string | null; llmApiKeyId: string | null };
   userId: string;
   organizationId: string;
-}): Promise<{ model: string; provider: SupportedChatProvider }> {
+}): Promise<{ model: string; provider: SupportedProvider }> {
   const { agent, userId, organizationId } = params;
 
   // Priority 1 & 2: Agent has a configured API key
   if (agent.llmApiKeyId) {
     const agentApiKey = await ChatApiKeyModel.findById(agent.llmApiKeyId);
     if (agentApiKey) {
-      const provider = agentApiKey.provider as SupportedChatProvider;
+      const provider = agentApiKey.provider;
 
       // Priority 1: Key + explicit model
       if (agent.llmModel) {
@@ -550,7 +550,7 @@ async function resolveModelForAgent(params: {
 
     if (withBestModels.length > 0) {
       const selected = withBestModels[0];
-      const provider = selected.apiKey.provider as SupportedChatProvider;
+      const provider = selected.apiKey.provider;
       logger.debug(
         {
           model: selected.model.modelId,

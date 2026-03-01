@@ -4,6 +4,7 @@ import {
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   type SupportedProvider,
+  SupportedProvidersSchema,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -12,7 +13,7 @@ import {
   isVertexAiEnabled,
 } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
-import config from "@/config";
+import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
 import {
   ApiKeyModelModel,
@@ -33,7 +34,6 @@ import {
   ModelWithApiKeysSchema,
   type OpenAi,
   SelectModelSchema,
-  SupportedChatProviderSchema,
   UpdateModelPricingSchema,
   UuidIdSchema,
 } from "@/types";
@@ -42,7 +42,7 @@ import {
 const ChatModelSchema = z.object({
   id: z.string(),
   displayName: z.string(),
-  provider: SupportedChatProviderSchema,
+  provider: SupportedProvidersSchema,
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
 });
@@ -963,28 +963,7 @@ async function getProviderApiKey({
   }
 
   // Fall back to environment variable
-  // Using Record<SupportedProvider, ...> ensures TypeScript will error if a new provider is added
-  // but not included in this map. This prevents missing API key fallbacks for new providers.
-  const envApiKeyFallbacks: Record<SupportedProvider, () => string | null> = {
-    anthropic: () => config.chat.anthropic.apiKey || null,
-    cerebras: () => config.chat.cerebras.apiKey || null,
-    cohere: () => config.chat.cohere?.apiKey || null,
-    gemini: () => config.chat.gemini.apiKey || null,
-    mistral: () => config.chat.mistral.apiKey || null,
-    ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
-    openai: () => config.chat.openai.apiKey || null,
-    openrouter: () => config.chat.openrouter?.apiKey || null,
-    perplexity: () => config.chat.perplexity?.apiKey || null,
-    groq: () => config.chat.groq?.apiKey || null,
-    xai: () => config.chat.xai?.apiKey || null,
-    vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
-    zhipuai: () => config.chat.zhipuai?.apiKey || null,
-    deepseek: () => config.chat.deepseek?.apiKey || null,
-    bedrock: () => config.chat.bedrock.apiKey || null,
-    minimax: () => config.chat.minimax?.apiKey || null,
-  };
-
-  return envApiKeyFallbacks[provider]();
+  return getProviderEnvApiKey(provider) ?? null;
 }
 
 // We need to make sure that every new provider we support has a model fetcher function
@@ -1114,7 +1093,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.",
         tags: ["Chat"],
         querystring: z.object({
-          provider: SupportedChatProviderSchema.optional(),
+          provider: SupportedProvidersSchema.optional(),
         }),
         response: constructResponseSchema(z.array(ChatModelSchema)),
       },

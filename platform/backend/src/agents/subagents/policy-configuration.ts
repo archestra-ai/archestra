@@ -1,4 +1,8 @@
 import { BUILT_IN_AGENT_IDS } from "@shared";
+import {
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@shared/model-constants";
 import { generateObject } from "ai";
 import {
   createDirectLLMModel,
@@ -13,12 +17,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import type { Tool } from "@/types";
-import {
-  type PolicyConfig,
-  PolicyConfigSchema,
-  type SupportedChatProvider,
-  SupportedChatProviderSchema,
-} from "@/types";
+import { type PolicyConfig, PolicyConfigSchema } from "@/types";
 
 interface AutoPolicyResult {
   success: boolean;
@@ -361,7 +360,7 @@ export class PolicyConfigurationService {
   private async analyzeTool(
     tool: Pick<Tool, "id" | "name" | "description" | "parameters">,
     mcpServerName: string | null,
-    provider: SupportedChatProvider,
+    provider: SupportedProvider,
     apiKey: string,
     modelName: string,
     baseUrl: string | null,
@@ -436,12 +435,12 @@ export class PolicyConfigurationService {
     organizationId: string,
     userId?: string,
   ): Promise<{
-    provider: SupportedChatProvider;
+    provider: SupportedProvider;
     apiKey: string;
     modelName: string;
     baseUrl: string | null;
   } | null> {
-    const providers = SupportedChatProviderSchema.options;
+    const providers = SupportedProvidersSchema.options;
 
     for (const provider of providers) {
       const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
@@ -462,13 +461,6 @@ export class PolicyConfigurationService {
   }
 }
 
-// Singleton instance
-export const policyConfigurationService = new PolicyConfigurationService();
-
-// =============================================================================
-// Internal helpers
-// =============================================================================
-
 /**
  * Build the analysis prompt by substituting tool metadata into the template.
  * The template comes from the built-in agent's systemPrompt.
@@ -487,3 +479,5 @@ function buildPrompt(
     .replace("{mcpServerName}", mcpServerName || "Unknown")
     .replace("{tool.parameters}", JSON.stringify(tool.parameters, null, 2));
 }
+
+export const policyConfigurationService = new PolicyConfigurationService();

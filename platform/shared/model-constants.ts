@@ -43,6 +43,16 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
+
+/**
+ * Type guard to check if a value is a valid SupportedProvider
+ */
+export function isSupportedProvider(
+  value: unknown,
+): value is SupportedProvider {
+  return SupportedProvidersSchema.safeParse(value).success;
+}
+
 export type SupportedProviderDiscriminator = z.infer<
   typeof SupportedProvidersDiscriminatorSchema
 >;
@@ -202,4 +212,53 @@ export const MODEL_MARKER_PATTERNS: Record<
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
   },
+};
+
+/**
+ * Fast models for each provider, used as fallback for title generation and other quick operations.
+ * These are optimized for speed and cost rather than capability.
+ *
+ * Primary resolution uses ApiKeyModelModel.getFastestModel() from the database.
+ * This map serves as a fallback when no database result is available.
+ */
+export const FAST_MODELS: Record<SupportedProvider, string> = {
+  anthropic: "claude-haiku-4-5-20251001",
+  openai: "gpt-4o-mini",
+  openrouter: "openrouter/auto",
+  gemini: "gemini-2.0-flash-001",
+  cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  cohere: "command-light", // Cohere's fast model
+  vllm: "default", // vLLM uses whatever model is deployed
+  ollama: "llama3.2", // Common fast model for Ollama
+  zhipuai: "glm-4-flash", // Zhipu's fast model
+  minimax: "MiniMax-M2.5-highspeed", // MiniMax's fastest model
+  deepseek: "deepseek-chat", // DeepSeek's fast model
+  bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
+  mistral: "mistral-small-latest", // Mistral's fast model
+  perplexity: "sonar", // Perplexity's fast model
+  groq: "llama-3.1-8b-instant", // Groq's fast model
+  xai: "grok-code-fast-1", // xAI's fast model
+};
+
+/**
+ * Default model for each provider when no synced "best" model is available.
+ * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
+ */
+export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+  anthropic: "claude-opus-4-1-20250805",
+  openai: "gpt-4o",
+  openrouter: "openrouter/auto",
+  gemini: "gemini-2.5-pro",
+  cohere: "command-r-08-2024",
+  groq: "llama-3.1-8b-instant",
+  xai: "grok-4",
+  ollama: "llama3.2",
+  vllm: "default",
+  cerebras: "llama-4-scout-17b-16e-instruct",
+  mistral: "mistral-large-latest",
+  perplexity: "sonar-pro",
+  zhipuai: "glm-4-plus",
+  deepseek: "deepseek-chat",
+  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
+  minimax: "MiniMax-M2.5",
 };

@@ -1,6 +1,10 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { SupportedProvider } from "@shared";
-import { PROVIDERS_WITH_OPTIONAL_API_KEY, RouteId } from "@shared";
+import {
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  RouteId,
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
@@ -27,8 +31,6 @@ import {
   constructResponseSchema,
   SelectChatApiKeySchema,
   type SelectSecret,
-  type SupportedChatProvider,
-  SupportedChatProviderSchema,
 } from "@/types";
 
 async function testApiKeyOrThrow(
@@ -91,7 +93,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Get API keys available for the current user to use in chat",
         tags: ["Chat API Keys"],
         querystring: z.object({
-          provider: SupportedChatProviderSchema.optional(),
+          provider: SupportedProvidersSchema.optional(),
           /** Include a specific key by ID even if user doesn't have direct access (e.g. agent's configured key) */
           includeKeyId: z.string().uuid().optional(),
         }),
@@ -152,7 +154,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z
           .object({
             name: z.string().min(1, "Name is required"),
-            provider: SupportedChatProviderSchema,
+            provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
@@ -719,7 +721,7 @@ function getChatApiKeySecretName({
  * Validates that the provider is allowed based on current configuration.
  * Throws ApiError if Gemini provider is requested while Vertex AI is enabled.
  */
-export function validateProviderAllowed(provider: SupportedChatProvider): void {
+export function validateProviderAllowed(provider: SupportedProvider): void {
   if (provider === "gemini" && isVertexAiEnabled()) {
     throw new ApiError(
       400,

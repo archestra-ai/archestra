@@ -5,10 +5,11 @@ import {
   PLAYWRIGHT_MCP_SERVER_NAME,
   type PredefinedRoleName,
   type SupportedProvider,
+  SupportedProviders,
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
-import config from "@/config";
+import { getProviderEnvApiKey } from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
@@ -373,44 +374,24 @@ async function seedTeamTokens(): Promise<void> {
 async function seedChatApiKeysFromEnv(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
 
-  // Map of provider to environment variable
-  const providerEnvVars: Record<SupportedProvider, string> = {
-    anthropic: config.chat.anthropic.apiKey,
-    openai: config.chat.openai.apiKey,
-    openrouter: config.chat.openrouter.apiKey,
-    gemini: config.chat.gemini.apiKey,
-    cerebras: config.chat.cerebras.apiKey,
-    cohere: config.chat.cohere.apiKey,
-    mistral: config.chat.mistral.apiKey,
-    perplexity: config.chat.perplexity.apiKey,
-    groq: config.chat.groq.apiKey,
-    xai: config.chat.xai.apiKey,
-    ollama: config.chat.ollama.apiKey,
-    vllm: config.chat.vllm.apiKey,
-    zhipuai: config.chat.zhipuai.apiKey,
-    deepseek: config.chat.deepseek.apiKey,
-    bedrock: config.chat.bedrock.apiKey,
-    minimax: config.chat.minimax.apiKey,
-  };
+  for (const provider of SupportedProviders) {
+    const apiKeyValue = getProviderEnvApiKey(provider);
 
-  for (const [provider, apiKeyValue] of Object.entries(providerEnvVars)) {
     // Skip providers without API keys configured
     if (!apiKeyValue || apiKeyValue.trim() === "") {
       continue;
     }
 
-    const typedProvider = provider as SupportedProvider;
-
     // Check if API key already exists for this provider
     const existing = await ChatApiKeyModel.findByScope(
       org.id,
-      typedProvider,
+      provider,
       "org_wide",
     );
 
     if (existing) {
       // Sync models if not already synced
-      await syncModelsForApiKey(existing.id, typedProvider, apiKeyValue);
+      await syncModelsForApiKey(existing.id, provider, apiKeyValue);
       continue;
     }
 
@@ -423,8 +404,8 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     // Create the API key
     const apiKey = await ChatApiKeyModel.create({
       organizationId: org.id,
-      name: getProviderDisplayName(typedProvider),
-      provider: typedProvider,
+      name: getProviderDisplayName(provider),
+      provider: provider,
       secretId: secret.id,
       scope: "org_wide",
       userId: null,
@@ -437,7 +418,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     );
 
     // Sync models from provider
-    await syncModelsForApiKey(apiKey.id, typedProvider, apiKeyValue);
+    await syncModelsForApiKey(apiKey.id, provider, apiKeyValue);
   }
 }
 

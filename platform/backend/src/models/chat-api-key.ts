@@ -2,6 +2,7 @@ import {
   isVaultReference,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   parseVaultReference,
+  type SupportedProvider,
 } from "@shared";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -12,7 +13,6 @@ import type {
   ChatApiKeyWithScopeInfo,
   InsertChatApiKey,
   SecretValue,
-  SupportedChatProvider,
   UpdateChatApiKey,
 } from "@/types";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
@@ -192,7 +192,7 @@ class ChatApiKeyModel {
     organizationId: string,
     userId: string,
     userTeamIds: string[],
-    provider?: SupportedChatProvider,
+    provider?: SupportedProvider,
   ): Promise<ChatApiKeyWithScopeInfo[]> {
     // Build conditions
     const conditions = [
@@ -327,7 +327,7 @@ class ChatApiKeyModel {
     organizationId: string;
     userId: string;
     userTeamIds: string[];
-    provider: SupportedChatProvider;
+    provider: SupportedProvider;
     conversationId: string | null;
     agentLlmApiKeyId?: string | null;
   }): Promise<ChatApiKey | null> {
@@ -487,7 +487,7 @@ class ChatApiKeyModel {
    */
   static async findByScope(
     organizationId: string,
-    provider: SupportedChatProvider,
+    provider: SupportedProvider,
     scope: ChatApiKeyScope,
     scopeId?: string, // userId for personal, teamId for team
   ): Promise<ChatApiKey | null> {
@@ -562,7 +562,7 @@ class ChatApiKeyModel {
    */
   static async hasConfiguredApiKey(
     organizationId: string,
-    provider: SupportedChatProvider,
+    provider: SupportedProvider,
   ): Promise<boolean> {
     const [result] = await db
       .select({ id: schema.chatApiKeysTable.id })
@@ -588,7 +588,7 @@ class ChatApiKeyModel {
    * System keys are global (one per provider).
    */
   static async findSystemKey(
-    provider: SupportedChatProvider,
+    provider: SupportedProvider,
   ): Promise<ChatApiKey | null> {
     const [result] = await db
       .select()
@@ -611,7 +611,7 @@ class ChatApiKeyModel {
   static async createSystemKey(params: {
     organizationId: string;
     name: string;
-    provider: SupportedChatProvider;
+    provider: SupportedProvider;
   }): Promise<ChatApiKey> {
     const [apiKey] = await db
       .insert(schema.chatApiKeysTable)
@@ -634,7 +634,7 @@ class ChatApiKeyModel {
    * Delete the system API key for a provider.
    * Also deletes associated model links via cascade.
    */
-  static async deleteSystemKey(provider: SupportedChatProvider): Promise<void> {
+  static async deleteSystemKey(provider: SupportedProvider): Promise<void> {
     await db
       .delete(schema.chatApiKeysTable)
       .where(

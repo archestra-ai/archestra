@@ -1,9 +1,12 @@
 import {
   type ChatErrorResponse,
+  FAST_MODELS,
+  isSupportedProvider,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   type SupportedProvider,
   SupportedProviders,
+  SupportedProvidersSchema,
   TimeInMs,
   type TokenUsage,
 } from "@shared";
@@ -26,7 +29,6 @@ import {
   createDirectLLMModel,
   createLLMModelForAgent,
   detectProviderFromModel,
-  FAST_MODELS,
   isApiKeyRequired,
   resolveProviderApiKey,
 } from "@/clients/llm-client";
@@ -51,10 +53,7 @@ import {
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
-  isSupportedChatProvider,
   SelectConversationSchema,
-  type SupportedChatProvider,
-  SupportedChatProviderSchema,
   type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
@@ -96,7 +95,7 @@ const DEFAULT_MODELS: Record<SupportedProvider, string> = {
 async function getSmartDefaultModel(
   userId: string,
   organizationId: string,
-): Promise<{ model: string; provider: SupportedChatProvider }> {
+): Promise<{ model: string; provider: SupportedProvider }> {
   // Get user's team IDs for resolution
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
@@ -134,7 +133,7 @@ async function getSmartDefaultModel(
 
   // Check environment variables as fallback
   // Uses DEFAULT_MODELS for model names to avoid duplicating defaults
-  for (const provider of SupportedChatProviderSchema.options) {
+  for (const provider of SupportedProvidersSchema.options) {
     const providerConfig = config.chat[provider] as
       | { apiKey?: string }
       | undefined;
@@ -304,7 +303,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
-      const provider = isSupportedChatProvider(conversation.selectedProvider)
+      const provider = isSupportedProvider(conversation.selectedProvider)
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
 
@@ -987,7 +986,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use the conversation's selected provider for title generation
       // This ensures the title is generated using the same provider as the chat
       // Fall back to detecting from model name for backward compatibility
-      const provider = isSupportedChatProvider(conversation.selectedProvider)
+      const provider = isSupportedProvider(conversation.selectedProvider)
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
 
@@ -1335,7 +1334,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
  * Parameters for generating a conversation title
  */
 export interface GenerateTitleParams {
-  provider: SupportedChatProvider;
+  provider: SupportedProvider;
   apiKey: string | undefined;
   chatApiKeyId?: string;
   baseUrl: string | null;
@@ -1598,7 +1597,7 @@ async function validateChatApiKeyAccess(
  * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
  */
 async function resolveFastModelName(
-  provider: SupportedChatProvider,
+  provider: SupportedProvider,
   chatApiKeyId: string | undefined,
 ): Promise<string> {
   if (!chatApiKeyId) {

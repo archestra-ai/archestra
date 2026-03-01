@@ -1981,4 +1981,45 @@ describe("ToolModel", () => {
       expect(createdTool.name).toBe("new-tool");
     });
   });
+
+  describe("findAllWithAssignments", () => {
+    test("returns deterministic order for tools with identical createdAt timestamps", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "TestAgent" });
+
+      // Create multiple tools with the exact same createdAt timestamp
+      const sharedTimestamp = new Date("2024-01-01T00:00:00Z");
+      const toolNames = ["tool-c", "tool-a", "tool-b"];
+      const tools = [];
+      for (const name of toolNames) {
+        const tool = await ToolModel.create({
+          name,
+          description: `Description for ${name}`,
+          parameters: {},
+          createdAt: sharedTimestamp,
+          updatedAt: sharedTimestamp,
+        });
+        await makeAgentTool(agent.id, tool.id);
+        tools.push(tool);
+      }
+
+      // Fetch multiple times and verify ordering is identical
+      const result1 = await ToolModel.findAllWithAssignments({
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+      const result2 = await ToolModel.findAllWithAssignments({
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const ids1 = result1.data.map((t) => t.id);
+      const ids2 = result2.data.map((t) => t.id);
+      expect(ids1).toEqual(ids2);
+    });
+  });
 });

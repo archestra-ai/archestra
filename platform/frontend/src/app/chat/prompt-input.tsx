@@ -1,11 +1,11 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
 import {
   E2eTestId,
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
   type ModelInputModality,
+  type SupportedProvider,
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";

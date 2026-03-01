@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
-import type { SupportedProvider } from "@shared";
-import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
+import { PLAYWRIGHT_MCP_CATALOG_ID, type SupportedProvider } from "@shared";
 import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -482,7 +481,7 @@ async function resolveModelForAgent(params: {
   if (agent.llmApiKeyId) {
     const agentApiKey = await ChatApiKeyModel.findById(agent.llmApiKeyId);
     if (agentApiKey) {
-      const provider = agentApiKey.provider;
+      const provider = agentApiKey.provider as SupportedProvider;
 
       // Priority 1: Key + explicit model
       if (agent.llmModel) {
@@ -550,7 +549,7 @@ async function resolveModelForAgent(params: {
 
     if (withBestModels.length > 0) {
       const selected = withBestModels[0];
-      const provider = selected.apiKey.provider;
+      const provider = selected.apiKey.provider as SupportedProvider;
       logger.debug(
         {
           model: selected.model.modelId,

@@ -5,8 +5,7 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
-import { isSupportedProvider } from "@shared/model-constants";
+import { ARCHESTRA_TOKEN_PREFIX, isSupportedProvider } from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import { resolveProviderApiKey } from "@/clients/llm-client";

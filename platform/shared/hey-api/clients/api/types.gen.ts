@@ -11738,6 +11738,7 @@ export type GetAgentsResponses = {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
             } | null;
+            builtIn: boolean | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -11766,6 +11767,7 @@ export type GetAgentsResponses = {
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
+                policiesAutoConfiguredModel: string | null;
                 createdAt: string;
                 updatedAt: string;
             }>;
@@ -11780,7 +11782,6 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
-            builtIn: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -11920,6 +11921,7 @@ export type CreateAgentResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -11948,6 +11950,7 @@ export type CreateAgentResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -11962,7 +11965,6 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     };
 };
 
@@ -12078,6 +12080,7 @@ export type GetAllAgentsResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12106,6 +12109,7 @@ export type GetAllAgentsResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12120,7 +12124,6 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     }>;
 };
 
@@ -12223,6 +12226,7 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12251,6 +12255,7 @@ export type GetDefaultMcpGatewayResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12265,7 +12270,6 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     };
 };
 
@@ -12368,6 +12372,7 @@ export type GetDefaultLlmProxyResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12396,6 +12401,7 @@ export type GetDefaultLlmProxyResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12410,7 +12416,6 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     };
 };
 
@@ -12594,6 +12599,7 @@ export type GetAgentResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12622,6 +12628,7 @@ export type GetAgentResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12636,7 +12643,6 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     };
 };
 
@@ -12769,6 +12775,7 @@ export type UpdateAgentResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12797,6 +12804,7 @@ export type UpdateAgentResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -12811,7 +12819,6 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     };
 };
 
@@ -12917,6 +12924,7 @@ export type GetAgentVersionsResponses = {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
             } | null;
+            builtIn: boolean | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -12945,6 +12953,7 @@ export type GetAgentVersionsResponses = {
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
+                policiesAutoConfiguredModel: string | null;
                 createdAt: string;
                 updatedAt: string;
             }>;
@@ -12959,7 +12968,6 @@ export type GetAgentVersionsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
-            builtIn: boolean;
         };
         history: Array<{
             version: number;
@@ -13076,6 +13084,7 @@ export type RollbackAgentResponses = {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
         } | null;
+        builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -13104,6 +13113,7 @@ export type RollbackAgentResponses = {
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -13118,7 +13128,6 @@ export type RollbackAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
-        builtIn: boolean;
     };
 };
 
@@ -13867,6 +13876,7 @@ export type GetAgentToolsResponses = {
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
+        policiesAutoConfiguredModel: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -33735,6 +33745,7 @@ export type GetToolsResponses = {
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
+        policiesAutoConfiguredModel: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -33857,6 +33868,9 @@ export type GetToolsWithAssignmentsResponses = {
             catalogId: string | null;
             createdAt: string;
             updatedAt: string;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             assignmentCount: number;
             assignments: Array<{
                 agentToolId: string;

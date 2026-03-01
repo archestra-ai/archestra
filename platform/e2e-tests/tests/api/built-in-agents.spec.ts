@@ -177,12 +177,12 @@ test.describe("Built-In Agents API", () => {
     request,
     makeApiRequest,
   }) => {
-    // isAvailable check runs before tool lookup, so any valid UUID works
+    // isAvailable check runs before tool lookup, so any valid UUIDv4 works
     const response = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/agent-tools/auto-configure-policies",
-      data: { toolIds: ["00000000-0000-0000-0000-000000000001"] },
+      data: { toolIds: [crypto.randomUUID()] },
       ignoreStatusCheck: true,
     });
 
@@ -257,9 +257,9 @@ test.describe("Built-In Agents API", () => {
       const autoConfigResult = await autoConfigResponse.json();
 
       // 5. Verify route response
-      expect(autoConfigResult.success).toBe(true);
       expect(autoConfigResult.results).toHaveLength(toolIds.length);
       for (const result of autoConfigResult.results) {
+        expect(result.error).toBeUndefined();
         expect(result.success).toBe(true);
         expect(result.toolId).toBeDefined();
         // Matches wiremock openai-policy-config-subagent.json response

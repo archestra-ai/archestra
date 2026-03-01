@@ -1,23 +1,16 @@
-import { BUILT_IN_AGENT_IDS } from "@shared";
-import {
-  type SupportedProvider,
-  SupportedProvidersSchema,
-} from "@shared/model-constants";
+import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@shared";
 import { generateObject } from "ai";
-import {
-  createDirectLLMModel,
-  resolveProviderApiKey,
-} from "@/clients/llm-client";
+import { createDirectLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
-  ApiKeyModelModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "@/models";
 import type { Tool } from "@/types";
 import { type PolicyConfig, PolicyConfigSchema } from "@/types";
+import { resolveSmartDefaultLlm } from "@/utils/resolve-smart-default-llm";
 
 interface AutoPolicyResult {
   success: boolean;
@@ -48,7 +41,7 @@ export class PolicyConfigurationService {
       "isAvailable: checking auto-policy availability",
     );
 
-    const result = await this.resolveProviderAndKey(organizationId, userId);
+    const result = await resolveSmartDefaultLlm({ organizationId, userId });
     const available = result !== null;
 
     logger.debug({ organizationId, available }, "isAvailable: result");
@@ -69,7 +62,7 @@ export class PolicyConfigurationService {
     );
 
     // Resolve provider and API key
-    const resolved = await this.resolveProviderAndKey(organizationId, userId);
+    const resolved = await resolveSmartDefaultLlm({ organizationId, userId });
     if (!resolved) {
       logger.warn(
         { toolId, organizationId },
@@ -110,6 +103,7 @@ export class PolicyConfigurationService {
         resolved.apiKey,
         resolved.modelName,
         resolved.baseUrl,
+        organizationId,
       );
 
       // Create/upsert call policy (tool invocation policy)
@@ -124,10 +118,11 @@ export class PolicyConfigurationService {
         policyConfig.trustedDataAction,
       );
 
-      // Update tool with timestamps and reasoning for tracking
+      // Update tool with timestamps, reasoning, and model for tracking
       await ToolModel.update(toolId, {
         policiesAutoConfiguredAt: new Date(),
         policiesAutoConfiguredReasoning: policyConfig.reasoning,
+        policiesAutoConfiguredModel: resolved.modelName,
       });
 
       logger.info(
@@ -234,13 +229,14 @@ export class PolicyConfigurationService {
           "configurePoliciesForToolWithTimeout: completed successfully",
         );
       } else {
-        // Failed - clear both timestamps and reasoning
+        // Failed - clear both timestamps, reasoning, and model
         await db
           .update(schema.toolsTable)
           .set({
             policiesAutoConfiguringStartedAt: null,
             policiesAutoConfiguredAt: null,
             policiesAutoConfiguredReasoning: null,
+            policiesAutoConfiguredModel: null,
           })
           .where(eq(schema.toolsTable.id, toolId));
 
@@ -256,13 +252,14 @@ export class PolicyConfigurationService {
 
       return result;
     } catch (error) {
-      // On error, clear both timestamps and reasoning
+      // On error, clear both timestamps, reasoning, and model
       await db
         .update(schema.toolsTable)
         .set({
           policiesAutoConfiguringStartedAt: null,
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
+          policiesAutoConfiguredModel: null,
         })
         .where(eq(schema.toolsTable.id, toolId))
         .catch(() => {
@@ -361,9 +358,10 @@ export class PolicyConfigurationService {
     tool: Pick<Tool, "id" | "name" | "description" | "parameters">,
     mcpServerName: string | null,
     provider: SupportedProvider,
-    apiKey: string,
+    apiKey: string | undefined,
     modelName: string,
     baseUrl: string | null,
+    organizationId: string,
   ): Promise<PolicyConfig> {
     logger.info(
       {
@@ -378,6 +376,7 @@ export class PolicyConfigurationService {
     // Fetch the built-in agent's system prompt for the analysis template
     const builtInAgent = await AgentModel.getBuiltInAgent(
       BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organizationId,
     );
     if (!builtInAgent?.systemPrompt) {
       throw new Error(
@@ -424,40 +423,6 @@ export class PolicyConfigurationService {
       );
       throw error;
     }
-  }
-
-  /**
-   * Resolve provider, API key, and best model for auto-policy operations.
-   * Uses resolveSmartDefaultProvider to find a DB-configured key,
-   * then ApiKeyModelModel.getBestModel to determine the model.
-   */
-  private async resolveProviderAndKey(
-    organizationId: string,
-    userId?: string,
-  ): Promise<{
-    provider: SupportedProvider;
-    apiKey: string;
-    modelName: string;
-    baseUrl: string | null;
-  } | null> {
-    const providers = SupportedProvidersSchema.options;
-
-    for (const provider of providers) {
-      const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
-        organizationId,
-        userId,
-        provider,
-      });
-
-      if (!apiKey || !chatApiKeyId) continue;
-
-      const bestModel = await ApiKeyModelModel.getBestModel(chatApiKeyId);
-      if (!bestModel) continue;
-
-      return { provider, apiKey, modelName: bestModel.modelId, baseUrl };
-    }
-
-    return null;
   }
 }
 

@@ -1,6 +1,6 @@
 {
-  "id": "45e37a49-4a91-4110-8ad5-d4657b0d806a",
-  "prevId": "2e116bab-2f67-4bc9-b6c4-4dc20c5944cd",
+  "id": "1b7f0cd9-22b7-4cab-8b25-71169ca345a2",
+  "prevId": "55508777-d585-45f7-b661-eb544419275b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -536,6 +536,16 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "built_in": {
+          "name": "built_in",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "\"agents\".\"built_in_agent_config\" IS NOT NULL",
+            "type": "stored"
+          }
         },
         "created_at": {
           "name": "created_at",
@@ -5564,6 +5574,12 @@
         },
         "policies_auto_configured_reasoning": {
           "name": "policies_auto_configured_reasoning",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "policies_auto_configured_model": {
+          "name": "policies_auto_configured_model",
           "type": "text",
           "primaryKey": false,
           "notNull": false

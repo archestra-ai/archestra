@@ -36795,6 +36795,10 @@
                               }
                             ]
                           },
+                          "builtIn": {
+                            "nullable": true,
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -36867,6 +36871,10 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
+                                "policiesAutoConfiguredModel": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -36887,6 +36895,7 @@
                                 "policiesAutoConfiguredAt",
                                 "policiesAutoConfiguringStartedAt",
                                 "policiesAutoConfiguredReasoning",
+                                "policiesAutoConfiguredModel",
                                 "createdAt",
                                 "updatedAt"
                               ],
@@ -36944,9 +36953,6 @@
                           "authorName": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "builtIn": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -36971,12 +36977,12 @@
                           "llmModel",
                           "identityProviderId",
                           "builtInAgentConfig",
+                          "builtIn",
                           "createdAt",
                           "updatedAt",
                           "tools",
                           "teams",
-                          "labels",
-                          "builtIn"
+                          "labels"
                         ],
                         "additionalProperties": false
                       }
@@ -37549,6 +37555,10 @@
                         }
                       ]
                     },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -37621,6 +37631,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -37641,6 +37655,7 @@
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -37698,9 +37713,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "builtIn": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -37725,12 +37737,12 @@
                     "llmModel",
                     "identityProviderId",
                     "builtInAgentConfig",
+                    "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels",
-                    "builtIn"
+                    "labels"
                   ],
                   "additionalProperties": false
                 }
@@ -38156,6 +38168,10 @@
                           }
                         ]
                       },
+                      "builtIn": {
+                        "nullable": true,
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -38228,6 +38244,10 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "policiesAutoConfiguredModel": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "createdAt": {
                               "type": "string",
                               "format": "date-time"
@@ -38248,6 +38268,7 @@
                             "policiesAutoConfiguredAt",
                             "policiesAutoConfiguringStartedAt",
                             "policiesAutoConfiguredReasoning",
+                            "policiesAutoConfiguredModel",
                             "createdAt",
                             "updatedAt"
                           ],
@@ -38305,9 +38326,6 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
-                      },
-                      "builtIn": {
-                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -38332,12 +38350,12 @@
                       "llmModel",
                       "identityProviderId",
                       "builtInAgentConfig",
+                      "builtIn",
                       "createdAt",
                       "updatedAt",
                       "tools",
                       "teams",
-                      "labels",
-                      "builtIn"
+                      "labels"
                     ],
                     "additionalProperties": false
                   }
@@ -38718,6 +38736,10 @@
                         }
                       ]
                     },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -38790,6 +38812,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -38810,6 +38836,7 @@
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -38867,9 +38894,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "builtIn": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -38894,12 +38918,12 @@
                     "llmModel",
                     "identityProviderId",
                     "builtInAgentConfig",
+                    "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels",
-                    "builtIn"
+                    "labels"
                   ],
                   "additionalProperties": false
                 }
@@ -39279,6 +39303,10 @@
                         }
                       ]
                     },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -39351,6 +39379,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -39371,6 +39403,7 @@
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -39428,9 +39461,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "builtIn": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -39455,12 +39485,12 @@
                     "llmModel",
                     "identityProviderId",
                     "builtInAgentConfig",
+                    "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels",
-                    "builtIn"
+                    "labels"
                   ],
                   "additionalProperties": false
                 }
@@ -39852,6 +39882,10 @@
                         }
                       ]
                     },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -39924,6 +39958,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -39944,6 +39982,7 @@
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -40001,9 +40040,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "builtIn": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -40028,12 +40064,12 @@
                     "llmModel",
                     "identityProviderId",
                     "builtInAgentConfig",
+                    "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels",
-                    "builtIn"
+                    "labels"
                   ],
                   "additionalProperties": false
                 }
@@ -40564,6 +40600,10 @@
                         }
                       ]
                     },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -40636,6 +40676,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -40656,6 +40700,7 @@
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -40713,9 +40758,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "builtIn": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -40740,12 +40782,12 @@
                     "llmModel",
                     "identityProviderId",
                     "builtInAgentConfig",
+                    "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels",
-                    "builtIn"
+                    "labels"
                   ],
                   "additionalProperties": false
                 }
@@ -41390,6 +41432,10 @@
                             }
                           ]
                         },
+                        "builtIn": {
+                          "nullable": true,
+                          "type": "boolean"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -41462,6 +41508,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "policiesAutoConfiguredModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -41482,6 +41532,7 @@
                               "policiesAutoConfiguredAt",
                               "policiesAutoConfiguringStartedAt",
                               "policiesAutoConfiguredReasoning",
+                              "policiesAutoConfiguredModel",
                               "createdAt",
                               "updatedAt"
                             ],
@@ -41539,9 +41590,6 @@
                         "authorName": {
                           "nullable": true,
                           "type": "string"
-                        },
-                        "builtIn": {
-                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -41566,12 +41614,12 @@
                         "llmModel",
                         "identityProviderId",
                         "builtInAgentConfig",
+                        "builtIn",
                         "createdAt",
                         "updatedAt",
                         "tools",
                         "teams",
-                        "labels",
-                        "builtIn"
+                        "labels"
                       ],
                       "additionalProperties": false
                     },
@@ -42020,6 +42068,10 @@
                         }
                       ]
                     },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -42092,6 +42144,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -42112,6 +42168,7 @@
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -42169,9 +42226,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "builtIn": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -42196,12 +42250,12 @@
                     "llmModel",
                     "identityProviderId",
                     "builtInAgentConfig",
+                    "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels",
-                    "builtIn"
+                    "labels"
                   ],
                   "additionalProperties": false
                 }
@@ -44703,6 +44757,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "policiesAutoConfiguredModel": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -44723,6 +44781,7 @@
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",
+                      "policiesAutoConfiguredModel",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -117271,6 +117330,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "policiesAutoConfiguredModel": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -117323,6 +117386,7 @@
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",
+                      "policiesAutoConfiguredModel",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -117674,6 +117738,19 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "policiesAutoConfiguredAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguredReasoning": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "assignmentCount": {
                             "type": "number"
                           },
@@ -117746,6 +117823,9 @@
                           "catalogId",
                           "createdAt",
                           "updatedAt",
+                          "policiesAutoConfiguredAt",
+                          "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
                           "assignmentCount",
                           "assignments"
                         ],

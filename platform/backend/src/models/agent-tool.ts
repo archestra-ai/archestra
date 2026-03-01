@@ -289,14 +289,12 @@ class AgentToolModel {
     const { default: AgentModel } = await import("./agent");
 
     // Check the built-in Policy Configuration Subagent for auto-configure setting
-    // and trigger auto-configure in background
-    db.select({ organizationId: schema.teamsTable.organizationId })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(eq(schema.agentTeamsTable.agentId, agentId))
+    // and trigger auto-configure in background.
+    // Look up organizationId from the agents table directly (not via teams)
+    // to handle org-scoped and personal agents that may have no team assignments.
+    db.select({ organizationId: schema.agentsTable.organizationId })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, agentId))
       .limit(1)
       .then(async (rows) => {
         if (rows.length === 0) return;
@@ -306,6 +304,7 @@ class AgentToolModel {
         // Read auto-configure setting from the built-in Policy Config agent
         const builtInAgent = await AgentModel.getBuiltInAgent(
           BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          organizationId,
         );
         const config = builtInAgent?.builtInAgentConfig;
         if (

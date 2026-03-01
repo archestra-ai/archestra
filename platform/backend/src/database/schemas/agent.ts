@@ -1,4 +1,5 @@
 import type { IncomingEmailSecurityMode } from "@shared";
+import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -107,6 +108,11 @@ const agentsTable = pgTable(
     builtInAgentConfig: jsonb(
       "built_in_agent_config",
     ).$type<BuiltInAgentConfig>(),
+
+    /** Computed column: true when builtInAgentConfig is not null */
+    builtIn: boolean("built_in").generatedAlwaysAs(
+      (): SQL => sql`${agentsTable.builtInAgentConfig} IS NOT NULL`,
+    ),
 
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

@@ -1,15 +1,13 @@
 import { generateObject } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { resolveProviderApiKey } from "@/clients/llm-client";
 import db, { schema } from "@/database";
-import { ApiKeyModelModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
+import { resolveSmartDefaultLlm } from "@/utils/resolve-smart-default-llm";
 import { PolicyConfigurationService } from "./policy-configuration";
 
 vi.mock("@/clients/llm-client", () => ({
-  resolveProviderApiKey: vi.fn(),
   createDirectLLMModel: vi.fn(() => "mocked-model"),
 }));
 
@@ -17,53 +15,21 @@ vi.mock("ai", () => ({
   generateObject: vi.fn(),
 }));
 
-const NO_KEY = {
-  apiKey: undefined,
-  source: "environment",
-  chatApiKeyId: undefined,
-  baseUrl: null,
-};
-
-const MOCK_MODEL = {
-  id: "model-1",
-  externalId: "anthropic/claude-3-5-sonnet",
-  modelId: "claude-3-5-sonnet-20241022",
-  provider: "anthropic" as const,
-  description: null,
-  contextLength: null,
-  inputModalities: null,
-  outputModalities: null,
-  supportsToolCalling: null,
-  promptPricePerToken: null,
-  completionPricePerToken: null,
-  customPricePerMillionInput: null,
-  customPricePerMillionOutput: null,
-  lastSyncedAt: new Date(),
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+vi.mock("@/utils/resolve-smart-default-llm", () => ({
+  resolveSmartDefaultLlm: vi.fn(),
+}));
 
 const MOCK_BUILT_IN_AGENT = {
   systemPrompt:
     "Analyze this MCP tool: {tool.name} - {tool.description} - {mcpServerName} - {tool.parameters}",
 };
 
-/**
- * Helper: mock resolveProviderApiKey to return a key for a specific provider
- * and NO_KEY for all others.
- */
-function mockProviderKey(
-  provider: string,
-  apiKey: string,
-  chatApiKeyId: string,
-) {
-  vi.mocked(resolveProviderApiKey).mockImplementation(async (params) => {
-    if (params.provider === provider) {
-      return { apiKey, source: "org_wide", chatApiKeyId, baseUrl: null };
-    }
-    return NO_KEY;
-  });
-}
+const MOCK_RESOLVED_LLM = {
+  provider: "anthropic" as const,
+  apiKey: "sk-ant-test-key",
+  modelName: "claude-3-5-sonnet-20241022",
+  baseUrl: null,
+};
 
 describe("PolicyConfigurationService", () => {
   let service: PolicyConfigurationService;
@@ -71,12 +37,12 @@ describe("PolicyConfigurationService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service = new PolicyConfigurationService();
-    // Default: no provider has a key
-    vi.mocked(resolveProviderApiKey).mockResolvedValue(NO_KEY);
+    // Default: no LLM available
+    vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(null);
   });
 
   describe("isAvailable", () => {
-    test("returns false when no API key configured", async ({
+    test("returns false when resolveSmartDefaultLlm returns null", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -86,13 +52,12 @@ describe("PolicyConfigurationService", () => {
       expect(result).toBe(false);
     });
 
-    test("returns true when a provider key exists", async ({
+    test("returns true when resolveSmartDefaultLlm returns a result", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
-      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.isAvailable(org.id);
 
@@ -104,13 +69,10 @@ describe("PolicyConfigurationService", () => {
 
       await service.isAvailable(org.id, "user-123");
 
-      // Should have been called with userId for at least the first provider
-      expect(resolveProviderApiKey).toHaveBeenCalledWith(
-        expect.objectContaining({
-          organizationId: org.id,
-          userId: "user-123",
-        }),
-      );
+      expect(resolveSmartDefaultLlm).toHaveBeenCalledWith({
+        organizationId: org.id,
+        userId: "user-123",
+      });
     });
   });
 
@@ -132,8 +94,7 @@ describe("PolicyConfigurationService", () => {
     test("returns error when tool not found", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
-      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.configurePoliciesForTool(
         "nonexistent-tool",
@@ -151,8 +112,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
-      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -213,13 +173,11 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      mockProviderKey("openai", "sk-openai-test-key", "key-456");
-      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue({
-        ...MOCK_MODEL,
-        id: "model-2",
-        externalId: "openai/gpt-4o",
-        modelId: "gpt-4o",
+      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue({
         provider: "openai",
+        apiKey: "sk-openai-test-key",
+        modelName: "gpt-4o",
+        baseUrl: null,
       });
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
@@ -260,8 +218,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
-      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -293,8 +250,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      mockProviderKey("anthropic", "sk-ant-test-key", "key-123");
-      vi.spyOn(ApiKeyModelModel, "getBestModel").mockResolvedValue(MOCK_MODEL);
+      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );

@@ -2,7 +2,7 @@ import {
   DEFAULT_MODELS,
   type SupportedProvider,
   SupportedProvidersSchema,
-} from "@shared/model-constants";
+} from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { resolveProviderApiKey } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";

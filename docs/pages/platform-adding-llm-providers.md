@@ -169,10 +169,10 @@ The function must:
 
 Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
 
-| File                                     | Description                                                                                                                                                                             |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File                                     | Description                                                                                                                                                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `backend/src/clients/dual-llm-client.ts` | **OpenAI-compatible providers:** use `createOpenAiCompatibleDualLlmClient({ providerLabel, baseUrl, defaultModel })`. **Non-OpenAI providers:** create a custom class implementing `DualLlmClient` |
-| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                                                                                            |
+| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                                                                                                       |
 
 ### Metrics
 
@@ -230,14 +230,6 @@ Environment variables for API keys and base URLs.
 | ----------------------- | ------------------------------------------ |
 | `backend/src/config.ts` | Add `chat.{provider}.apiKey` and `baseUrl` |
 
-### Chat Provider Registration
-
-Allows users to select this provider's models in the Chat UI.
-
-| File                                | Description                          |
-| ----------------------------------- | ------------------------------------ |
-| `backend/src/types/chat-api-key.ts` | Add to `SupportedChatProviderSchema` |
-
 ### Model Listing
 
 Each provider has a different API for listing available models.
@@ -251,10 +243,10 @@ Each provider has a different API for listing available models.
 
 Chat uses Vercel AI SDK which requires provider-specific model creation.
 
-| File                                | Description                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `backend/src/clients/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
-| `backend/src/clients/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                     |
+| File                                | Description                                                                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/clients/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`)                                          |
+| `backend/src/clients/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                                                              |
 | `backend/src/clients/llm-client.ts` | Add entry to `providerModelConfigs` registry - defines SDK initialization, default base URL, API key requirement, and proxied path suffix |
 
 ### Error Handling

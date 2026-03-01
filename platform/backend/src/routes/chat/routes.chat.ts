@@ -2,11 +2,8 @@ import {
   type ChatErrorResponse,
   FAST_MODELS,
   isSupportedProvider,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   type SupportedProvider,
-  SupportedProviders,
-  SupportedProvidersSchema,
   TimeInMs,
   type TokenUsage,
 } from "@shared";
@@ -24,7 +21,6 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
   createDirectLLMModel,
   createLLMModelForAgent,
@@ -46,7 +42,6 @@ import {
 } from "@/models";
 import ApiKeyModelModel from "@/models/api-key-model";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,
@@ -59,103 +54,12 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { resolveSmartDefaultLlmForChat } from "@/utils/resolve-smart-default-llm";
 import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
   type UiMessage,
 } from "./strip-images-from-messages";
-
-/**
- * Default model for each provider when no synced "best" model is available.
- * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
- */
-const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-1-20250805",
-  openai: "gpt-4o",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-2.5-pro",
-  cohere: "command-r-08-2024",
-  groq: "llama-3.1-8b-instant",
-  xai: "grok-4",
-  ollama: "llama3.2",
-  vllm: "default",
-  cerebras: "llama-4-scout-17b-16e-instruct",
-  mistral: "mistral-large-latest",
-  perplexity: "sonar-pro",
-  zhipuai: "glm-4-plus",
-  deepseek: "deepseek-chat",
-  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
-  minimax: "MiniMax-M2.5",
-};
-
-/**
- * Get a smart default model and provider based on available API keys for the user.
- * Priority: personal key > team key > org-wide key > env var > fallback
- */
-async function getSmartDefaultModel(
-  userId: string,
-  organizationId: string,
-): Promise<{ model: string; provider: SupportedProvider }> {
-  // Get user's team IDs for resolution
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-
-  /**
-   * Check what API keys are available using the new scope-based resolution
-   * Try to find an available API key in order of preference
-   */
-  for (const provider of SupportedProviders) {
-    const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
-      organizationId: organizationId,
-      userId: userId,
-      userTeamIds: userTeamIds,
-      provider: provider,
-      conversationId: null,
-    });
-
-    if (!resolvedKey) continue;
-
-    // For providers with optional API keys (Ollama, vLLM), a key without a secret is valid
-    const hasSecret = resolvedKey.secretId
-      ? !!(await getSecretValueForLlmProviderApiKey(resolvedKey.secretId))
-      : false;
-
-    if (hasSecret || PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
-      // Try to get the best model from the synced models for this key
-      const bestModel = await ApiKeyModelModel.getBestModel(resolvedKey.id);
-      if (bestModel) {
-        return { model: bestModel.modelId, provider };
-      }
-
-      // Fall back to hardcoded defaults
-      return { model: DEFAULT_MODELS[provider], provider };
-    }
-  }
-
-  // Check environment variables as fallback
-  // Uses DEFAULT_MODELS for model names to avoid duplicating defaults
-  for (const provider of SupportedProvidersSchema.options) {
-    const providerConfig = config.chat[provider] as
-      | { apiKey?: string }
-      | undefined;
-    if (providerConfig?.apiKey) {
-      return { model: DEFAULT_MODELS[provider], provider };
-    }
-  }
-
-  // Check if Vertex AI is enabled - use Gemini without API key
-  if (isVertexAiEnabled()) {
-    logger.info(
-      "getSmartDefaultModel:Vertex AI is enabled, using gemini-2.5-pro",
-    );
-    return { model: "gemini-2.5-pro", provider: "gemini" };
-  }
-
-  // Ultimate fallback - use configured defaults
-  return {
-    model: config.chat.defaultModel,
-    provider: config.chat.defaultProvider,
-  };
-}
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -767,10 +671,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!selectedModel) {
         // No model specified - use smart defaults for both model and provider
-        const smartDefault = await getSmartDefaultModel(
-          user.id,
+        const smartDefault = await resolveSmartDefaultLlmForChat({
           organizationId,
-        );
+          userId: user.id,
+        });
         modelToUse = smartDefault.model;
         providerToUse = smartDefault.provider;
       } else if (!selectedProvider) {

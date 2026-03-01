@@ -21,4 +21,6 @@ SELECT
   ),
   now(), now()
 FROM organization o;--> statement-breakpoint
-ALTER TABLE "organization" DROP COLUMN "auto_configure_new_tools";
+ALTER TABLE "organization" DROP COLUMN "auto_configure_new_tools";--> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "built_in" boolean GENERATED ALWAYS AS ("agents"."built_in_agent_config" IS NOT NULL) STORED;--> statement-breakpoint
+ALTER TABLE "tools" ADD COLUMN "policies_auto_configured_model" text;

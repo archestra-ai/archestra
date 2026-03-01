@@ -9,17 +9,17 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import { context, propagation } from "@opentelemetry/api";
-import type { SupportedProvider } from "@shared";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   SESSION_ID_HEADER,
+  type SupportedProvider,
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import config, { getProviderEnvApiKey } from "@/config";
+import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -160,7 +160,7 @@ export async function resolveProviderApiKey(params: {
   }
 
   // Fall back to environment variable
-  const envApiKey = getProviderEnvApiKey(provider);
+  const envApiKey = envApiKeyGetters[provider]();
   if (envApiKey) {
     return {
       apiKey: envApiKey,
@@ -190,6 +190,32 @@ export function isApiKeyRequired(
   if (provider === "gemini" && isVertexAiEnabled()) return false;
   return !!providerModelConfigs[provider].apiKeyRequiredMessage;
 }
+
+/**
+ * Fast models for each provider, used as fallback for title generation and other quick operations.
+ * These are optimized for speed and cost rather than capability.
+ *
+ * Primary resolution uses ApiKeyModelModel.getFastestModel() from the database.
+ * This map serves as a fallback when no database result is available.
+ */
+export const FAST_MODELS: Record<SupportedProvider, string> = {
+  anthropic: "claude-haiku-4-5-20251001",
+  openai: "gpt-4o-mini",
+  openrouter: "openrouter/auto",
+  gemini: "gemini-2.0-flash-001",
+  cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  cohere: "command-light", // Cohere's fast model
+  vllm: "default", // vLLM uses whatever model is deployed
+  ollama: "llama3.2", // Common fast model for Ollama
+  zhipuai: "glm-4-flash", // Zhipu's fast model
+  minimax: "MiniMax-M2.5-highspeed", // MiniMax's fastest model
+  deepseek: "deepseek-chat", // DeepSeek's fast model
+  bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
+  mistral: "mistral-small-latest", // Mistral's fast model
+  perplexity: "sonar", // Perplexity's fast model
+  groq: "llama-3.1-8b-instant", // Groq's fast model
+  xai: "grok-code-fast-1", // xAI's fast model
+};
 
 /**
  * Create an LLM model that calls the provider API directly (not through LLM Proxy).
@@ -353,6 +379,29 @@ export async function createLLMModelForAgent(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * Environment variable API key getter for each provider.
+ * TypeScript enforces that ALL providers in SupportedProvider have an entry.
+ */
+const envApiKeyGetters: Record<SupportedProvider, () => string | undefined> = {
+  anthropic: () => config.chat.anthropic.apiKey,
+  bedrock: () => config.chat.bedrock.apiKey,
+  cerebras: () => config.chat.cerebras.apiKey,
+  cohere: () => config.chat.cohere.apiKey,
+  gemini: () => config.chat.gemini.apiKey,
+  minimax: () => config.chat.minimax.apiKey,
+  mistral: () => config.chat.mistral.apiKey,
+  ollama: () => config.chat.ollama.apiKey,
+  openai: () => config.chat.openai.apiKey,
+  openrouter: () => config.chat.openrouter?.apiKey || undefined,
+  perplexity: () => config.chat.perplexity.apiKey,
+  groq: () => config.chat.groq.apiKey,
+  xai: () => config.chat.xai.apiKey,
+  vllm: () => config.chat.vllm.apiKey,
+  zhipuai: () => config.chat.zhipuai.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
+};
 
 /**
  * Unified model creation config for each provider.

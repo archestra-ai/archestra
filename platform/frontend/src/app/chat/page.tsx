@@ -1,10 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import {
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
-  type SupportedProvider,
-} from "@shared";
+import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -103,7 +100,11 @@ import {
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
 import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
-import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
+import {
+  type SupportedProvider,
+  useChatApiKeys,
+  useCreateChatApiKey,
+} from "@/lib/chat-settings.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,

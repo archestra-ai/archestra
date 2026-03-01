@@ -141,7 +141,6 @@ export const SelectAgentSchema = createSelectSchema(
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
-  builtIn: z.boolean(),
 });
 
 // Base schema without refinement - can be used with .partial()

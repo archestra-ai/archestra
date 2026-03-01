@@ -1,4 +1,4 @@
-import { SupportedProvidersSchema } from "@shared/model-constants";
+import { SupportedProvidersSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,

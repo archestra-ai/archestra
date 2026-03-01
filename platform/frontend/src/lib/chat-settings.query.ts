@@ -7,6 +7,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, toApiError } from "./utils";
 
+export type { SupportedProvider };
+
 export type ChatApiKeyScope =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["scope"];
 

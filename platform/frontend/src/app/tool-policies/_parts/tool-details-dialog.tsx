@@ -1,7 +1,14 @@
 "use client";
 
 import { parseFullToolName } from "@shared";
-import { ChevronDown, ChevronRight, Layers, User } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import {
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  Sparkles,
+  User,
+} from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -183,6 +190,32 @@ export function ToolDetailsDialog({
 
         <div className="flex-1 overflow-y-auto pr-2 -mr-2">
           <div className="space-y-6">
+            {tool.policiesAutoConfiguredReasoning && (
+              <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
+                <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-purple-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">
+                      AI Policy Reasoning
+                    </span>
+                    {tool.policiesAutoConfiguredAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(
+                          new Date(tool.policiesAutoConfiguredAt),
+                          { addSuffix: true },
+                        )}
+                        {tool.policiesAutoConfiguredModel &&
+                          ` with ${tool.policiesAutoConfiguredModel}`}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {tool.policiesAutoConfiguredReasoning}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <ToolReadonlyDetails tool={tool} />
 
             {/* Assignments Section */}

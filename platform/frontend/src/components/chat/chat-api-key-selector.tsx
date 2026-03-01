@@ -340,7 +340,10 @@ export function ChatApiKeySelector({
               {availableProviders.map((provider) => (
                 <CommandGroup
                   key={provider}
-                  heading={providerDisplayNames[provider] ?? provider}
+                  heading={
+                    providerDisplayNames[provider as SupportedProvider] ??
+                    provider
+                  }
                 >
                   {keysByProvider[provider]?.map((key) => (
                     <CommandItem

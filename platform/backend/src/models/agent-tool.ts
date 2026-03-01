@@ -281,7 +281,10 @@ class AgentToolModel {
       })
       .returning();
 
-    // Auto-configure policies if enabled (run in background)
+    // Auto-configure policies if enabled (fire-and-forget).
+    // This is intentionally best-effort: the agent-tool is returned immediately
+    // while the policy configuration runs asynchronously. If the background
+    // operation fails, the error is logged but does not affect the caller.
     // Import at top of method to avoid circular dependency
     const { policyConfigurationService } = await import(
       "@/agents/subagents/policy-configuration"

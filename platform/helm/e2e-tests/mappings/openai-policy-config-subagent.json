@@ -2,11 +2,11 @@
   "request": {
     "method": "POST",
     "urlPath": "/openai/v1/chat/completions",
-    "headers": {
-      "Authorization": {
-        "contains": "openai-policy-config-e2e"
+    "bodyPatterns": [
+      {
+        "contains": "toolInvocationAction"
       }
-    }
+    ]
   },
   "response": {
     "status": 200,

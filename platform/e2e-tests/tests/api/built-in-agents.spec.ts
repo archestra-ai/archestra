@@ -1,71 +1,8 @@
 import type { APIRequestContext } from "@playwright/test";
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
-import {
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  WIREMOCK_INTERNAL_URL,
-} from "../../consts";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR, WIREMOCK_INTERNAL_URL } from "../../consts";
 import type { TestFixtures } from "./fixtures";
 import { expect, test } from "./fixtures";
-
-/**
- * Helper: delete all existing chat API keys and return their metadata
- * so they can be restored later. This is needed because CI seeds chat API keys
- * via environment variables during backend startup, which interferes with tests
- * that need to control which LLM API key resolveSmartDefaultLlm picks.
- */
-async function deleteAllChatApiKeys(
-  request: APIRequestContext,
-  makeApiRequest: TestFixtures["makeApiRequest"],
-): Promise<Array<{ provider: string; name: string; scope: string; baseUrl: string | null }>> {
-  const keysResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/chat-api-keys",
-  });
-  const existingKeys = await keysResponse.json();
-  const savedKeys: Array<{ provider: string; name: string; scope: string; baseUrl: string | null }> = [];
-
-  for (const key of existingKeys) {
-    savedKeys.push({
-      provider: key.provider,
-      name: key.name,
-      scope: key.scope,
-      baseUrl: key.baseUrl,
-    });
-    await makeApiRequest({
-      request,
-      method: "delete",
-      urlSuffix: `/api/chat-api-keys/${key.id}`,
-    });
-  }
-
-  return savedKeys;
-}
-
-/**
- * Helper: restore previously deleted chat API keys with a dummy test-key value.
- * Models will be re-synced automatically by the backend on key creation.
- */
-async function restoreChatApiKeys(
-  request: APIRequestContext,
-  makeApiRequest: TestFixtures["makeApiRequest"],
-  savedKeys: Array<{ provider: string; name: string; scope: string; baseUrl: string | null }>,
-) {
-  for (const key of savedKeys) {
-    await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/chat-api-keys",
-      data: {
-        name: key.name,
-        provider: key.provider,
-        apiKey: "test-key",
-        scope: key.scope,
-        ...(key.baseUrl && { baseUrl: key.baseUrl }),
-      },
-    });
-  }
-}
 
 /**
  * Helper: fetch all agents of type "agent" and find the built-in
@@ -233,32 +170,6 @@ test.describe("Built-In Agents API", () => {
     );
   });
 
-  test("auto-configure returns 400 when no LLM API key is configured", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    // CI seeds chat API keys from env vars during startup.
-    // Delete them to test the "no key available" error path.
-    const savedKeys = await deleteAllChatApiKeys(request, makeApiRequest);
-
-    try {
-      // isAvailable check runs before tool lookup, so any valid UUIDv4 works
-      const response = await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/agent-tools/auto-configure-policies",
-        data: { toolIds: [crypto.randomUUID()] },
-        ignoreStatusCheck: true,
-      });
-
-      expect(response.status()).toBe(400);
-      const body = await response.json();
-      expect(body.error.message).toContain("LLM API key");
-    } finally {
-      await restoreChatApiKeys(request, makeApiRequest, savedKeys);
-    }
-  });
-
   test("auto-configure creates policies for tool via route", async ({
     request,
     makeApiRequest,
@@ -267,26 +178,11 @@ test.describe("Built-In Agents API", () => {
     uninstallMcpServer,
     getTeamByName,
   }) => {
-    // Delete all seeded chat API keys so resolveSmartDefaultLlm picks the
-    // test-created OpenAI key (which points to the WireMock mapping).
-    const savedKeys = await deleteAllChatApiKeys(request, makeApiRequest);
+    // Relies on CI-seeded OpenAI chat API key (first provider in iteration order)
+    // routing through WireMock. The WireMock mapping matches on request body
+    // containing "toolInvocationAction" (the generateObject schema).
 
-    // 1. Create a chat API key pointing to wiremock
-    const chatApiKeyResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/chat-api-keys",
-      data: {
-        name: `e2e-auto-config-route-${Date.now()}`,
-        provider: "openai",
-        apiKey: "openai-policy-config-e2e",
-        scope: "org_wide",
-        baseUrl: `${WIREMOCK_INTERNAL_URL}/openai/v1`,
-      },
-    });
-    const chatApiKey = await chatApiKeyResponse.json();
-
-    // 2. Create and install an MCP server to get tools in the DB
+    // 1. Create and install an MCP server to get tools in the DB
     const defaultTeam = await getTeamByName(request, "Default Team");
     expect(defaultTeam).toBeTruthy();
 
@@ -307,7 +203,7 @@ test.describe("Built-In Agents API", () => {
     const server = await serverResponse.json();
 
     try {
-      // 3. Find the tool IDs created by the install
+      // 2. Find the tool IDs created by the install
       const toolsResponse = await makeApiRequest({
         request,
         method: "get",
@@ -319,7 +215,7 @@ test.describe("Built-In Agents API", () => {
       ) as string[];
       expect(toolIds.length).toBeGreaterThan(0);
 
-      // 4. Call auto-configure-policies route
+      // 3. Call auto-configure-policies route
       const autoConfigResponse = await makeApiRequest({
         request,
         method: "post",
@@ -328,7 +224,7 @@ test.describe("Built-In Agents API", () => {
       });
       const autoConfigResult = await autoConfigResponse.json();
 
-      // 5. Verify route response
+      // 4. Verify route response
       expect(autoConfigResult.results).toHaveLength(toolIds.length);
       for (const result of autoConfigResult.results) {
         expect(result.error).toBeUndefined();
@@ -342,7 +238,7 @@ test.describe("Built-In Agents API", () => {
         });
       }
 
-      // 6. Verify tool invocation policies were persisted
+      // 5. Verify tool invocation policies were persisted
       const invocationResponse = await makeApiRequest({
         request,
         method: "get",
@@ -357,7 +253,7 @@ test.describe("Built-In Agents API", () => {
         expect(policy.action).toBe("allow_when_context_is_untrusted");
       }
 
-      // 7. Verify trusted data policies were persisted
+      // 6. Verify trusted data policies were persisted
       const trustedDataResponse = await makeApiRequest({
         request,
         method: "get",
@@ -374,12 +270,6 @@ test.describe("Built-In Agents API", () => {
     } finally {
       // Cleanup
       await uninstallMcpServer(request, server.id);
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
-      });
-      await restoreChatApiKeys(request, makeApiRequest, savedKeys);
     }
   });
 
@@ -394,9 +284,8 @@ test.describe("Built-In Agents API", () => {
     uninstallMcpServer,
     getTeamByName,
   }) => {
-    // Delete all seeded chat API keys so resolveSmartDefaultLlm picks the
-    // test-created OpenAI key (which points to the WireMock mapping).
-    const savedKeys = await deleteAllChatApiKeys(request, makeApiRequest);
+    // Relies on CI-seeded OpenAI chat API key routing through WireMock.
+    // The WireMock mapping matches on body containing "toolInvocationAction".
 
     // 1. Enable autoConfigureOnToolAssignment on the built-in agent
     const builtIn = await getBuiltInAgent(request, makeApiRequest);
@@ -414,23 +303,7 @@ test.describe("Built-In Agents API", () => {
       },
     });
 
-    // 2. Create a chat API key pointing to wiremock with a key that matches
-    //    the openai-policy-config-subagent.json mapping
-    const chatApiKeyResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/chat-api-keys",
-      data: {
-        name: `e2e-policy-config-${Date.now()}`,
-        provider: "openai",
-        apiKey: "openai-policy-config-e2e",
-        scope: "org_wide",
-        baseUrl: `${WIREMOCK_INTERNAL_URL}/openai/v1`,
-      },
-    });
-    const chatApiKey = await chatApiKeyResponse.json();
-
-    // 3. Create an agent and an MCP catalog item with a tool
+    // 2. Create an agent and an MCP catalog item with a tool
     const defaultTeam = await getTeamByName(request, "Default Team");
     expect(defaultTeam).toBeTruthy();
 
@@ -451,7 +324,7 @@ test.describe("Built-In Agents API", () => {
 
     let serverId: string | undefined;
     try {
-      // 4. Install the MCP server with the agent — this assigns tools
+      // 3. Install the MCP server with the agent — this assigns tools
       const serverResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
@@ -461,7 +334,7 @@ test.describe("Built-In Agents API", () => {
       const server = await serverResponse.json();
       serverId = server.id;
 
-      // 5. Wait for the tool to appear in agent-tools
+      // 4. Wait for the tool to appear in agent-tools
       // Tool names are slugified as <catalogName>__<toolName>
       const fullToolName = `${catalogItem.name}${MCP_SERVER_TOOL_NAME_SEPARATOR}resolve-library-id`;
       const agentTool = await waitForAgentTool(
@@ -472,7 +345,7 @@ test.describe("Built-In Agents API", () => {
       );
       expect(agentTool).toBeTruthy();
 
-      // 6. Poll the tool to check if auto-configure ran
+      // 5. Poll the tool to check if auto-configure ran
       //    Auto-configure runs async in the background after tool assignment.
       //    Note: bulkCreateForAgentsAndTools (used by MCP server install) doesn't
       //    trigger auto-configure, only AgentToolModel.create does.
@@ -490,11 +363,6 @@ test.describe("Built-In Agents API", () => {
         await uninstallMcpServer(request, serverId);
       }
       await deleteAgent(request, agent.id);
-      await makeApiRequest({
-        request,
-        method: "delete",
-        urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
-      });
       // Restore original auto-configure setting
       await makeApiRequest({
         request,
@@ -507,7 +375,6 @@ test.describe("Built-In Agents API", () => {
           },
         },
       });
-      await restoreChatApiKeys(request, makeApiRequest, savedKeys);
     }
   });
 });

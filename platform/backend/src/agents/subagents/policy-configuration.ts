@@ -4,6 +4,7 @@ import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
+  InternalMcpCatalogModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
@@ -75,9 +76,12 @@ export class PolicyConfigurationService {
     }
 
     try {
-      // Get all tools as admin to bypass access control
-      const tools = await ToolModel.findAll(undefined, true);
-      const tool = tools.find((t) => t.id === toolId);
+      let tool: Tool | null;
+      try {
+        tool = await ToolModel.findById(toolId, undefined, true);
+      } catch {
+        tool = null;
+      }
 
       if (!tool) {
         logger.warn({ toolId }, "configurePoliciesForTool: tool not found");
@@ -87,8 +91,14 @@ export class PolicyConfigurationService {
         };
       }
 
-      // Get MCP server name from joined data
-      const mcpServerName = tool.catalog?.name || null;
+      // Look up catalog name for the MCP server context
+      let mcpServerName: string | null = null;
+      if (tool.catalogId) {
+        const catalog = await InternalMcpCatalogModel.findById(tool.catalogId, {
+          expandSecrets: false,
+        });
+        mcpServerName = catalog?.name ?? null;
+      }
 
       logger.debug(
         { toolId, toolName: tool.name, mcpServerName },
@@ -437,13 +447,13 @@ function buildPrompt(
   mcpServerName: string | null,
 ): string {
   return template
-    .replace("{tool.name}", tool.name)
-    .replace(
+    .replaceAll("{tool.name}", tool.name)
+    .replaceAll(
       "{tool.description}",
       tool.description || "No description provided",
     )
-    .replace("{mcpServerName}", mcpServerName || "Unknown")
-    .replace("{tool.parameters}", JSON.stringify(tool.parameters, null, 2));
+    .replaceAll("{mcpServerName}", mcpServerName || "Unknown")
+    .replaceAll("{tool.parameters}", JSON.stringify(tool.parameters, null, 2));
 }
 
 export const policyConfigurationService = new PolicyConfigurationService();

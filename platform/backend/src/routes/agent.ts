@@ -417,7 +417,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Only allow specific fields for built-in agents
+        // Only allow specific fields for built-in agents.
+        // Fields like name, description, and systemPrompt are intentionally excluded:
+        // the systemPrompt contains the analysis template with {tool.name}, {tool.description},
+        // etc. placeholders used by the policy configuration subagent.
         updateData = {
           ...(body.builtInAgentConfig !== undefined && {
             builtInAgentConfig: body.builtInAgentConfig,

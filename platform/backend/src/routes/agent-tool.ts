@@ -389,7 +389,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "POST /api/agent-tools/auto-configure-policies: request received",
       );
 
-      // Check if service is available for this organization
+      // Check if service is available for this organization.
+      // Note: configurePoliciesForTools also checks isAvailable internally for
+      // non-route callers (e.g., auto-configure on tool assignment).
       const available = await policyConfigurationService.isAvailable(
         organizationId,
         user.id,

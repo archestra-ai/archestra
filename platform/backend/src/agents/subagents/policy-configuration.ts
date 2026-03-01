@@ -242,14 +242,20 @@ export class PolicyConfigurationService {
       return result;
     } catch (error) {
       // On error, clear both timestamps, reasoning, and model
-      await ToolModel.clearAutoConfiguringState(toolId, { resetAll: true }).catch(
-        (cleanupError) => {
-          logger.warn(
-            { toolId, error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError) },
-            "configurePoliciesForToolWithTimeout: failed to clear auto-configuring state during error cleanup",
-          );
-        },
-      );
+      await ToolModel.clearAutoConfiguringState(toolId, {
+        resetAll: true,
+      }).catch((cleanupError) => {
+        logger.warn(
+          {
+            toolId,
+            error:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError),
+          },
+          "configurePoliciesForToolWithTimeout: failed to clear auto-configuring state during error cleanup",
+        );
+      });
 
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -348,7 +354,15 @@ export class PolicyConfigurationService {
     baseUrl: string | null;
     organizationId: string;
   }): Promise<PolicyConfig> {
-    const { tool, mcpServerName, provider, apiKey, modelName, baseUrl, organizationId } = params;
+    const {
+      tool,
+      mcpServerName,
+      provider,
+      apiKey,
+      modelName,
+      baseUrl,
+      organizationId,
+    } = params;
     logger.info(
       {
         toolName: tool.name,
@@ -429,7 +443,12 @@ function buildPrompt(
       tool.description || "No description provided",
     )
     .replaceAll("{mcpServerName}", mcpServerName || "Unknown")
-    .replaceAll("{tool.parameters}", JSON.stringify(tool.parameters, null, 2));
+    .replaceAll(
+      "{tool.parameters}",
+      tool.parameters
+        ? JSON.stringify(tool.parameters, null, 2)
+        : "No parameters",
+    );
 }
 
 export const policyConfigurationService = new PolicyConfigurationService();

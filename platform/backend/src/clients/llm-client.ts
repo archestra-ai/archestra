@@ -238,7 +238,7 @@ export function createLLMModel(params: {
   userId?: string;
   externalAgentId?: string;
   sessionId?: string;
-  baseUrl?: string | null;
+  baseUrl: string | null;
 }): LLMModel {
   const {
     provider,

@@ -96,9 +96,10 @@ export async function resolveSmartDefaultLlmForChat(params: {
   // 3. Check if Vertex AI is enabled — use Gemini without API key
   if (isVertexAiEnabled()) {
     logger.info(
-      "resolveSmartDefaultLlmForChat: Vertex AI is enabled, using gemini-2.5-pro",
+      { model: DEFAULT_MODELS.gemini },
+      "resolveSmartDefaultLlmForChat: Vertex AI is enabled",
     );
-    return { model: "gemini-2.5-pro", provider: "gemini" };
+    return { model: DEFAULT_MODELS.gemini, provider: "gemini" };
   }
 
   // 4. Ultimate fallback — use configured defaults

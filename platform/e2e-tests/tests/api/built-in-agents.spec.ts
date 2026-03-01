@@ -276,13 +276,12 @@ test.describe("Built-In Agents API", () => {
     }
   });
 
-  test("auto-configure triggers on tool assignment", async ({
+  test("auto-configure triggers on individual tool assignment", async ({
     request,
     makeApiRequest,
     createAgent,
     createMcpCatalogItem,
     installMcpServer,
-    waitForAgentTool,
     deleteAgent,
     uninstallMcpServer,
     getTeamByName,
@@ -306,7 +305,7 @@ test.describe("Built-In Agents API", () => {
       },
     });
 
-    // 2. Create an agent and an MCP catalog item with a tool
+    // 2. Create an agent and install an MCP server (without agent assignment)
     const defaultTeam = await getTeamByName(request, "Default Team");
     expect(defaultTeam).toBeTruthy();
 
@@ -317,9 +316,10 @@ test.describe("Built-In Agents API", () => {
     );
     const agent = await agentResponse.json();
 
+    const serverName = `policy-config-assign-test-${Date.now()}`;
     const catalogResponse = await createMcpCatalogItem(request, {
-      name: `policy-config-test-server-${Date.now()}`,
-      description: "Test server for auto-configure e2e test",
+      name: serverName,
+      description: "Test server for auto-configure assignment e2e test",
       serverType: "remote",
       serverUrl: `${WIREMOCK_INTERNAL_URL}/mcp/context7`,
     });
@@ -327,39 +327,70 @@ test.describe("Built-In Agents API", () => {
 
     let serverId: string | undefined;
     try {
-      // 3. Install the MCP server with the agent — this assigns tools
+      // 3. Install MCP server WITHOUT agentIds — tools are created but not assigned
       const serverResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
         teamId: defaultTeam!.id,
-        agentIds: [agent.id],
       });
       const server = await serverResponse.json();
       serverId = server.id;
 
-      // 4. Wait for the tool to appear in agent-tools
-      // Tool names are slugified as <catalogName>__<toolName>
-      const fullToolName = `${catalogItem.name}${MCP_SERVER_TOOL_NAME_SEPARATOR}resolve-library-id`;
-      const agentTool = await waitForAgentTool(
-        request,
-        agent.id,
-        fullToolName,
-        { maxAttempts: 30, delayMs: 1000 },
-      );
-      expect(agentTool).toBeTruthy();
-
-      // 5. Poll the tool to check if auto-configure ran
-      //    Auto-configure runs async in the background after tool assignment.
-      //    Note: bulkCreateForAgentsAndTools (used by MCP server install) doesn't
-      //    trigger auto-configure, only AgentToolModel.create does.
-      //    This verifies the integration works when tools ARE assigned via create().
-      const toolResponse = await makeApiRequest({
+      // 4. Find tool IDs from the installed server
+      const toolsResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/agent-tools?agentId=${agent.id}&limit=100`,
+        urlSuffix: `/api/tools/with-assignments?search=${serverName}&limit=100`,
       });
-      const agentTools = await toolResponse.json();
-      expect(agentTools.data.length).toBeGreaterThan(0);
+      const toolsResult = await toolsResponse.json();
+      const tools = toolsResult.data as Array<{ id: string; name: string }>;
+      expect(tools.length).toBeGreaterThan(0);
+
+      // 5. Individually assign a tool to the agent via the POST endpoint
+      //    This uses AgentToolModel.create() which triggers auto-configure
+      const toolToAssign = tools[0];
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: `/api/agents/${agent.id}/tools/${toolToAssign.id}`,
+        data: {
+          credentialSourceMcpServerId: server.id,
+        },
+      });
+
+      // 6. Poll for policies to be created by the async auto-configure
+      let policiesFound = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const invocationResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: "/api/autonomy-policies/tool-invocation",
+        });
+        const invocationPolicies = await invocationResponse.json();
+        const policy = invocationPolicies.find(
+          (p: { toolId: string }) => p.toolId === toolToAssign.id,
+        );
+        if (policy) {
+          policiesFound = true;
+          expect(policy.action).toBe("allow_when_context_is_untrusted");
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      expect(policiesFound).toBe(true);
+
+      // 7. Verify trusted data policy was also created
+      const trustedDataResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/trusted-data-policies",
+      });
+      const trustedDataPolicies = await trustedDataResponse.json();
+      const tdPolicy = trustedDataPolicies.find(
+        (p: { toolId: string }) => p.toolId === toolToAssign.id,
+      );
+      expect(tdPolicy).toBeDefined();
+      expect(tdPolicy.action).toBe("mark_as_untrusted");
     } finally {
       // Cleanup
       if (serverId) {

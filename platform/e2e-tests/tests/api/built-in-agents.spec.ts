@@ -1,9 +1,6 @@
 import type { APIRequestContext } from "@playwright/test";
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
-import {
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  WIREMOCK_INTERNAL_URL,
-} from "../../consts";
+import { WIREMOCK_INTERNAL_URL } from "../../consts";
 import type { TestFixtures } from "./fixtures";
 import { expect, test } from "./fixtures";
 
@@ -201,7 +198,7 @@ test.describe("Built-In Agents API", () => {
     const serverResponse = await installMcpServer(request, {
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      teamId: defaultTeam!.id,
+      teamId: defaultTeam?.id,
     });
     const server = await serverResponse.json();
 
@@ -331,7 +328,7 @@ test.describe("Built-In Agents API", () => {
       const serverResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
-        teamId: defaultTeam!.id,
+        teamId: defaultTeam?.id,
       });
       const server = await serverResponse.json();
       serverId = server.id;
@@ -358,8 +355,10 @@ test.describe("Built-In Agents API", () => {
         },
       });
 
-      // 6. Poll for policies to be created by the async auto-configure
-      let policiesFound = false;
+      // 6. Poll until auto-configure has updated the tool invocation policy
+      //    to the WireMock-stubbed value. Default policies may already exist
+      //    with block_when_context_is_untrusted, so we poll for the expected value.
+      let invocationPolicyConfigured = false;
       for (let attempt = 0; attempt < 30; attempt++) {
         const invocationResponse = await makeApiRequest({
           request,
@@ -370,27 +369,33 @@ test.describe("Built-In Agents API", () => {
         const policy = invocationPolicies.find(
           (p: { toolId: string }) => p.toolId === toolToAssign.id,
         );
-        if (policy) {
-          policiesFound = true;
-          expect(policy.action).toBe("allow_when_context_is_untrusted");
+        if (policy && policy.action === "allow_when_context_is_untrusted") {
+          invocationPolicyConfigured = true;
           break;
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
-      expect(policiesFound).toBe(true);
+      expect(invocationPolicyConfigured).toBe(true);
 
-      // 7. Verify trusted data policy was also created
-      const trustedDataResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: "/api/trusted-data-policies",
-      });
-      const trustedDataPolicies = await trustedDataResponse.json();
-      const tdPolicy = trustedDataPolicies.find(
-        (p: { toolId: string }) => p.toolId === toolToAssign.id,
-      );
-      expect(tdPolicy).toBeDefined();
-      expect(tdPolicy.action).toBe("mark_as_untrusted");
+      // 7. Verify trusted data policy was also updated by auto-configure
+      let trustedDataPolicyConfigured = false;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const trustedDataResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: "/api/trusted-data-policies",
+        });
+        const trustedDataPolicies = await trustedDataResponse.json();
+        const tdPolicy = trustedDataPolicies.find(
+          (p: { toolId: string }) => p.toolId === toolToAssign.id,
+        );
+        if (tdPolicy && tdPolicy.action === "mark_as_untrusted") {
+          trustedDataPolicyConfigured = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      expect(trustedDataPolicyConfigured).toBe(true);
     } finally {
       // Cleanup
       if (serverId) {

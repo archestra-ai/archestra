@@ -389,14 +389,13 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "POST /api/agent-tools/auto-configure-policies: request received",
       );
 
-      // Check if service is available for this organization.
-      // Note: configurePoliciesForTools also checks isAvailable internally for
-      // non-route callers (e.g., auto-configure on tool assignment).
-      const available = await policyConfigurationService.isAvailable(
+      // Pre-resolve LLM to give a clear 400 error if no API key is configured.
+      // This resolved config is then threaded through to avoid redundant DB queries.
+      const resolvedLlm = await policyConfigurationService.resolveLlm({
         organizationId,
-        user.id,
-      );
-      if (!available) {
+        userId: user.id,
+      });
+      if (!resolvedLlm) {
         logger.warn(
           { organizationId, userId: user.id },
           "POST /api/agent-tools/auto-configure-policies: service not available",
@@ -408,9 +407,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const result = await policyConfigurationService.configurePoliciesForTools(
-        toolIds,
-        organizationId,
-        user.id,
+        {
+          toolIds,
+          organizationId,
+          userId: user.id,
+        },
       );
 
       logger.info(

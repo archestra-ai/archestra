@@ -315,10 +315,10 @@ class AgentToolModel {
           config.autoConfigureOnToolAssignment
         ) {
           // Use the unified method with timeout and loading state management
-          await policyConfigurationService.configurePoliciesForToolWithTimeout(
+          await policyConfigurationService.configurePoliciesForToolWithTimeout({
             toolId,
             organizationId,
-          );
+          });
         }
       })
       .catch((error) => {

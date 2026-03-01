@@ -1086,7 +1086,10 @@ describe("AgentToolModel.findAll", () => {
       // Wait for the async fire-and-forget to complete
       await vi.waitFor(
         () => {
-          expect(mockConfigurePolicies).toHaveBeenCalledWith(tool.id, org.id);
+          expect(mockConfigurePolicies).toHaveBeenCalledWith({
+            toolId: tool.id,
+            organizationId: org.id,
+          });
         },
         { timeout: 5000 },
       );

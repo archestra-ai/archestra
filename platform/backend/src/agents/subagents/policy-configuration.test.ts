@@ -41,33 +41,36 @@ describe("PolicyConfigurationService", () => {
     vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(null);
   });
 
-  describe("isAvailable", () => {
-    test("returns false when resolveSmartDefaultLlm returns null", async ({
+  describe("resolveLlm", () => {
+    test("returns null when resolveSmartDefaultLlm returns null", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      const result = await service.isAvailable(org.id);
+      const result = await service.resolveLlm({ organizationId: org.id });
 
-      expect(result).toBe(false);
+      expect(result).toBeNull();
     });
 
-    test("returns true when resolveSmartDefaultLlm returns a result", async ({
+    test("returns resolved config when resolveSmartDefaultLlm returns a result", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
       vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
-      const result = await service.isAvailable(org.id);
+      const result = await service.resolveLlm({ organizationId: org.id });
 
-      expect(result).toBe(true);
+      expect(result).toEqual(MOCK_RESOLVED_LLM);
     });
 
     test("passes userId when provided", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      await service.isAvailable(org.id, "user-123");
+      await service.resolveLlm({
+        organizationId: org.id,
+        userId: "user-123",
+      });
 
       expect(resolveSmartDefaultLlm).toHaveBeenCalledWith({
         organizationId: org.id,
@@ -82,10 +85,10 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      const result = await service.configurePoliciesForTool(
-        "nonexistent-tool",
-        org.id,
-      );
+      const result = await service.configurePoliciesForTool({
+        toolId: "nonexistent-tool",
+        organizationId: org.id,
+      });
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("LLM API key not configured");
@@ -96,10 +99,10 @@ describe("PolicyConfigurationService", () => {
 
       vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
-      const result = await service.configurePoliciesForTool(
-        "nonexistent-tool",
-        org.id,
-      );
+      const result = await service.configurePoliciesForTool({
+        toolId: "nonexistent-tool",
+        organizationId: org.id,
+      });
 
       expect(result.success).toBe(false);
       expect(result.error).toBe("Tool not found");
@@ -130,7 +133,10 @@ describe("PolicyConfigurationService", () => {
         },
       } as never);
 
-      const result = await service.configurePoliciesForTool(tool.id, org.id);
+      const result = await service.configurePoliciesForTool({
+        toolId: tool.id,
+        organizationId: org.id,
+      });
 
       expect(result.success).toBe(true);
       expect(result.config).toEqual({
@@ -195,7 +201,10 @@ describe("PolicyConfigurationService", () => {
         },
       } as never);
 
-      await service.configurePoliciesForTool(tool.id, org.id);
+      await service.configurePoliciesForTool({
+        toolId: tool.id,
+        organizationId: org.id,
+      });
 
       // Verify blocking policies were created
       const invocationPolicies = await db
@@ -234,7 +243,10 @@ describe("PolicyConfigurationService", () => {
         },
       } as never);
 
-      await service.configurePoliciesForTool(tool.id, org.id);
+      await service.configurePoliciesForTool({
+        toolId: tool.id,
+        organizationId: org.id,
+      });
 
       const trustedDataPolicies = await db
         .select()
@@ -266,7 +278,10 @@ describe("PolicyConfigurationService", () => {
         },
       } as never);
 
-      await service.configurePoliciesForTool(tool.id, org.id);
+      await service.configurePoliciesForTool({
+        toolId: tool.id,
+        organizationId: org.id,
+      });
 
       const invocationPolicies = await db
         .select()
@@ -290,10 +305,10 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      const result = await service.configurePoliciesForTools(
-        ["tool-1", "tool-2"],
-        org.id,
-      );
+      const result = await service.configurePoliciesForTools({
+        toolIds: ["tool-1", "tool-2"],
+        organizationId: org.id,
+      });
 
       expect(result.success).toBe(false);
       expect(result.results).toHaveLength(2);

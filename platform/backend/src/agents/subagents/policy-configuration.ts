@@ -13,6 +13,13 @@ import type { Tool } from "@/types";
 import { type PolicyConfig, PolicyConfigSchema } from "@/types";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 
+interface ResolvedLlm {
+  provider: SupportedProvider;
+  apiKey: string | undefined;
+  modelName: string;
+  baseUrl: string | null;
+}
+
 interface AutoPolicyResult {
   success: boolean;
   config?: PolicyConfig;
@@ -33,37 +40,36 @@ interface BulkAutoPolicyResult {
  */
 export class PolicyConfigurationService {
   /**
-   * Check if auto-policy service is available for an organization.
-   * Requires at least one LLM API key to be configured via the UI.
+   * Resolve the LLM provider/key for an organization.
+   * Returns the resolved config or null if unavailable.
    */
-  async isAvailable(organizationId: string, userId?: string): Promise<boolean> {
-    logger.debug(
-      { organizationId, userId },
-      "isAvailable: checking auto-policy availability",
-    );
-
-    const result = await resolveSmartDefaultLlm({ organizationId, userId });
-    const available = result !== null;
-
-    logger.debug({ organizationId, available }, "isAvailable: result");
-    return available;
+  async resolveLlm(params: {
+    organizationId: string;
+    userId?: string;
+  }): Promise<ResolvedLlm | null> {
+    return resolveSmartDefaultLlm(params);
   }
 
   /**
-   * Auto-configure policies for a specific tool
+   * Auto-configure policies for a specific tool.
+   * Pass `resolvedLlm` to skip redundant LLM resolution in bulk flows.
    */
-  async configurePoliciesForTool(
-    toolId: string,
-    organizationId: string,
-    userId?: string,
-  ): Promise<AutoPolicyResult> {
+  async configurePoliciesForTool(params: {
+    toolId: string;
+    organizationId: string;
+    userId?: string;
+    resolvedLlm?: ResolvedLlm;
+  }): Promise<AutoPolicyResult> {
+    const { toolId, organizationId, userId, resolvedLlm } = params;
+
     logger.info(
       { toolId, organizationId, userId },
       "configurePoliciesForTool: starting",
     );
 
-    // Resolve provider and API key
-    const resolved = await resolveSmartDefaultLlm({ organizationId, userId });
+    // Use pre-resolved LLM or resolve now
+    const resolved =
+      resolvedLlm ?? (await resolveSmartDefaultLlm({ organizationId, userId }));
     if (!resolved) {
       logger.warn(
         { toolId, organizationId },
@@ -165,14 +171,18 @@ export class PolicyConfigurationService {
   }
 
   /**
-   * Configure a single tool with timeout and loading state management
-   * This is the unified method used by both manual button clicks and automatic tool assignment
+   * Configure a single tool with timeout and loading state management.
+   * This is the unified method used by both manual button clicks and automatic tool assignment.
+   * Pass `resolvedLlm` to skip redundant LLM resolution in bulk flows.
    */
-  async configurePoliciesForToolWithTimeout(
-    toolId: string,
-    organizationId: string,
-    userId?: string,
-  ): Promise<AutoPolicyResult & { timedOut?: boolean }> {
+  async configurePoliciesForToolWithTimeout(params: {
+    toolId: string;
+    organizationId: string;
+    userId?: string;
+    resolvedLlm?: ResolvedLlm;
+  }): Promise<AutoPolicyResult & { timedOut?: boolean }> {
+    const { toolId, organizationId } = params;
+
     logger.info(
       { toolId, organizationId },
       "configurePoliciesForToolWithTimeout: starting",
@@ -199,12 +209,10 @@ export class PolicyConfigurationService {
 
       // Race between auto-configure and timeout
       const result = await Promise.race([
-        this.configurePoliciesForTool(toolId, organizationId, userId).then(
-          (res) => ({
-            ...res,
-            timedOut: false,
-          }),
-        ),
+        this.configurePoliciesForTool(params).then((res) => ({
+          ...res,
+          timedOut: false,
+        })),
         timeoutPromise,
       ]);
 
@@ -272,22 +280,27 @@ export class PolicyConfigurationService {
   }
 
   /**
-   * Auto-configure policies for multiple tools in bulk
-   * Uses the unified timeout logic for consistent behavior
+   * Auto-configure policies for multiple tools in bulk.
+   * Resolves the LLM once and threads it through to avoid redundant DB queries.
    */
-  async configurePoliciesForTools(
-    toolIds: string[],
-    organizationId: string,
-    userId?: string,
-  ): Promise<BulkAutoPolicyResult> {
+  async configurePoliciesForTools(params: {
+    toolIds: string[];
+    organizationId: string;
+    userId?: string;
+  }): Promise<BulkAutoPolicyResult> {
+    const { toolIds, organizationId, userId } = params;
+
     logger.info(
       { organizationId, count: toolIds.length },
       "configurePoliciesForTools: starting bulk auto-configure",
     );
 
-    // Check if API key is available
-    const available = await this.isAvailable(organizationId, userId);
-    if (!available) {
+    // Resolve LLM once for all tools
+    const resolvedLlm = await resolveSmartDefaultLlm({
+      organizationId,
+      userId,
+    });
+    if (!resolvedLlm) {
       logger.warn(
         { organizationId },
         "configurePoliciesForTools: service not available",
@@ -302,18 +315,19 @@ export class PolicyConfigurationService {
       };
     }
 
-    // Process all tools in parallel using the unified timeout logic
+    // Process all tools in parallel, threading the resolved LLM
     logger.info(
       { organizationId, count: toolIds.length },
       "configurePoliciesForTools: processing tools in parallel",
     );
     const results = await Promise.all(
       toolIds.map(async (toolId) => {
-        const result = await this.configurePoliciesForToolWithTimeout(
+        const result = await this.configurePoliciesForToolWithTimeout({
           toolId,
           organizationId,
           userId,
-        );
+          resolvedLlm,
+        });
         return {
           toolId,
           ...result,

@@ -1,6 +1,5 @@
 import {
   type ChatErrorResponse,
-  FAST_MODELS,
   isSupportedProvider,
   RouteId,
   type SupportedProvider,
@@ -40,7 +39,6 @@ import {
   MessageModel,
   TeamModel,
 } from "@/models";
-import ApiKeyModelModel from "@/models/api-key-model";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
   ApiError,
@@ -53,8 +51,11 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import {
+  resolveFastModelName,
+  resolveSmartDefaultLlmForChat,
+} from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
-import { resolveSmartDefaultLlmForChat } from "@/utils/resolve-smart-default-llm";
 import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
@@ -1494,46 +1495,6 @@ async function validateChatApiKeyAccess(
   if (!canAccessKey) {
     throw new ApiError(403, "You do not have access to this API key");
   }
-}
-
-/**
- * Resolves the fast model name for title generation.
- * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
- */
-async function resolveFastModelName(
-  provider: SupportedProvider,
-  chatApiKeyId: string | undefined,
-): Promise<string> {
-  if (!chatApiKeyId) {
-    const fallback = FAST_MODELS[provider];
-    logger.debug(
-      { provider, modelName: fallback },
-      "Title generation: no chatApiKeyId, using hardcoded fast model",
-    );
-    return fallback;
-  }
-
-  try {
-    const fastestModel = await ApiKeyModelModel.getFastestModel(chatApiKeyId);
-    if (fastestModel) {
-      logger.debug(
-        { provider, chatApiKeyId, modelId: fastestModel.modelId },
-        "Title generation: resolved fastest model from DB",
-      );
-      return fastestModel.modelId;
-    }
-    logger.debug(
-      { provider, chatApiKeyId },
-      "Title generation: no fastest model in DB, using hardcoded fallback",
-    );
-  } catch (error) {
-    logger.warn(
-      { error, chatApiKeyId },
-      "Failed to resolve fastest model from DB, falling back to hardcoded model",
-    );
-  }
-
-  return FAST_MODELS[provider];
 }
 
 export default chatRoutes;

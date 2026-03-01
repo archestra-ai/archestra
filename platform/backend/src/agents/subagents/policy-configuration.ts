@@ -1,6 +1,6 @@
 import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@shared";
 import { generateObject } from "ai";
-import { createDirectLLMModel } from "@/clients/llm-client";
+import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -10,7 +10,7 @@ import {
 } from "@/models";
 import type { Tool } from "@/types";
 import { type PolicyConfig, PolicyConfigSchema } from "@/types";
-import { resolveSmartDefaultLlm } from "@/utils/resolve-smart-default-llm";
+import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 
 interface AutoPolicyResult {
   success: boolean;
@@ -384,9 +384,10 @@ export class PolicyConfigurationService {
       );
     }
 
-    const model = createDirectLLMModel({
+    const model = createLLMModel({
       provider,
       apiKey,
+      agentId: builtInAgent.id,
       modelName,
       baseUrl,
     });

@@ -4,18 +4,18 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
-import { resolveSmartDefaultLlm } from "@/utils/resolve-smart-default-llm";
+import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 import { PolicyConfigurationService } from "./policy-configuration";
 
 vi.mock("@/clients/llm-client", () => ({
-  createDirectLLMModel: vi.fn(() => "mocked-model"),
+  createLLMModel: vi.fn(() => "mocked-model"),
 }));
 
 vi.mock("ai", () => ({
   generateObject: vi.fn(),
 }));
 
-vi.mock("@/utils/resolve-smart-default-llm", () => ({
+vi.mock("@/utils/llm-resolution", () => ({
   resolveSmartDefaultLlm: vi.fn(),
 }));
 

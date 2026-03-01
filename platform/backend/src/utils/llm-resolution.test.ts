@@ -5,9 +5,10 @@ import config from "@/config";
 import { ApiKeyModelModel, ChatApiKeyModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  resolveFastModelName,
   resolveSmartDefaultLlm,
   resolveSmartDefaultLlmForChat,
-} from "./resolve-smart-default-llm";
+} from "./llm-resolution";
 
 vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(() => false),
@@ -424,5 +425,48 @@ describe("resolveSmartDefaultLlmForChat", () => {
     } finally {
       config.chat.openai.apiKey = originalApiKey;
     }
+  });
+});
+
+describe("resolveFastModelName", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("returns hardcoded FAST_MODELS fallback when no chatApiKeyId", async () => {
+    const result = await resolveFastModelName("anthropic", undefined);
+
+    // Should return the hardcoded fast model for anthropic
+    expect(result).toBe("claude-haiku-4-5-20251001");
+  });
+
+  test("returns fastest model from DB when chatApiKeyId is provided", async () => {
+    vi.spyOn(ApiKeyModelModel, "getFastestModel").mockResolvedValue({
+      ...MOCK_MODEL,
+      modelId: "claude-haiku-3-5",
+    });
+
+    const result = await resolveFastModelName("anthropic", "key-123");
+
+    expect(result).toBe("claude-haiku-3-5");
+    expect(ApiKeyModelModel.getFastestModel).toHaveBeenCalledWith("key-123");
+  });
+
+  test("falls back to hardcoded model when DB has no fastest model", async () => {
+    vi.spyOn(ApiKeyModelModel, "getFastestModel").mockResolvedValue(null);
+
+    const result = await resolveFastModelName("openai", "key-456");
+
+    expect(result).toBe("gpt-4o-mini");
+  });
+
+  test("falls back to hardcoded model when DB lookup throws", async () => {
+    vi.spyOn(ApiKeyModelModel, "getFastestModel").mockRejectedValue(
+      new Error("DB connection failed"),
+    );
+
+    const result = await resolveFastModelName("openai", "key-789");
+
+    expect(result).toBe("gpt-4o-mini");
   });
 });

@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODELS,
+  FAST_MODELS,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@shared";
@@ -105,4 +106,44 @@ export async function resolveSmartDefaultLlmForChat(params: {
     model: config.chat.defaultModel,
     provider: config.chat.defaultProvider,
   };
+}
+
+/**
+ * Resolve the fastest/cheapest model for a provider (used for title generation).
+ * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
+ */
+export async function resolveFastModelName(
+  provider: SupportedProvider,
+  chatApiKeyId: string | undefined,
+): Promise<string> {
+  if (!chatApiKeyId) {
+    const fallback = FAST_MODELS[provider];
+    logger.debug(
+      { provider, modelName: fallback },
+      "resolveFastModelName: no chatApiKeyId, using hardcoded fast model",
+    );
+    return fallback;
+  }
+
+  try {
+    const fastestModel = await ApiKeyModelModel.getFastestModel(chatApiKeyId);
+    if (fastestModel) {
+      logger.debug(
+        { provider, chatApiKeyId, modelId: fastestModel.modelId },
+        "resolveFastModelName: resolved fastest model from DB",
+      );
+      return fastestModel.modelId;
+    }
+    logger.debug(
+      { provider, chatApiKeyId },
+      "resolveFastModelName: no fastest model in DB, using hardcoded fallback",
+    );
+  } catch (error) {
+    logger.warn(
+      { error, chatApiKeyId },
+      "resolveFastModelName: failed to resolve from DB, falling back to hardcoded model",
+    );
+  }
+
+  return FAST_MODELS[provider];
 }

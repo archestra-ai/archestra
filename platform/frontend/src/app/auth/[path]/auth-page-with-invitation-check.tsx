@@ -127,9 +127,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
             - Normal flow: Points to final destination (from redirectTo param or /).
               After auth completes, user goes directly to their intended page.
           */}
+          <AppLogo />
           <AuthViewWithErrorHandling
             path={path}
-            cardHeader={<AppLogo />}
             callbackURL={
               invitationId
                 ? `${

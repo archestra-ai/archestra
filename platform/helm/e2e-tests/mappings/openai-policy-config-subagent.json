@@ -1,0 +1,40 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/openai/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "contains": "toolInvocationAction"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-policy-config-e2e",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "gpt-4o-2024-08-06",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "{\"toolInvocationAction\":\"allow_when_context_is_untrusted\",\"trustedDataAction\":\"mark_as_untrusted\",\"reasoning\":\"E2E test: read-only tool with external data\"}"
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 50,
+        "total_tokens": 150
+      }
+    }
+  }
+}

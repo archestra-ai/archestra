@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -8,7 +9,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { SupportedChatProvider } from "@/types";
 import secretsTable from "./secret";
 import { team } from "./team";
 import usersTable from "./user";
@@ -21,7 +21,7 @@ const chatApiKeysTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
-    provider: text("provider").$type<SupportedChatProvider>().notNull(),
+    provider: text("provider").$type<SupportedProvider>().notNull(),
     secretId: uuid("secret_id").references(() => secretsTable.id, {
       onDelete: "set null",
     }),

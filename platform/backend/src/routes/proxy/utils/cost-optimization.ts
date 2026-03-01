@@ -21,6 +21,7 @@ import type {
   Openrouter,
   Perplexity,
   Vllm,
+  Xai,
   Zhipuai,
 } from "@/types";
 
@@ -37,6 +38,7 @@ type ProviderMessages = {
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
+  xai: Xai.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
   deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
 };

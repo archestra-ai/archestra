@@ -101,7 +101,7 @@ import {
 } from "@/lib/chat.query";
 import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
 import {
-  type SupportedChatProvider,
+  type SupportedProvider,
   useChatApiKeys,
   useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
@@ -321,7 +321,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
         // Try to restore from localStorage for this provider
@@ -342,11 +342,11 @@ export default function ChatPage() {
   );
 
   // Derive provider from initial model for API key filtering
-  const initialProvider = useMemo((): SupportedChatProvider | undefined => {
+  const initialProvider = useMemo((): SupportedProvider | undefined => {
     if (!initialModel) return undefined;
     for (const [provider, models] of Object.entries(modelsByProvider)) {
       if (models?.some((m) => m.id === initialModel)) {
-        return provider as SupportedChatProvider;
+        return provider as SupportedProvider;
       }
     }
     return undefined;
@@ -451,10 +451,10 @@ export default function ChatPage() {
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
   // Derive current provider from selected model
-  const currentProvider = useMemo((): SupportedChatProvider | undefined => {
+  const currentProvider = useMemo((): SupportedProvider | undefined => {
     if (!conversation?.selectedModel) return undefined;
     const model = chatModels.find((m) => m.id === conversation.selectedModel);
-    return model?.provider as SupportedChatProvider | undefined;
+    return model?.provider;
   }, [conversation?.selectedModel, chatModels]);
 
   // Get selected model's context length for the context indicator
@@ -483,7 +483,7 @@ export default function ChatPage() {
 
       // Find the provider for this model
       const modelInfo = chatModels.find((m) => m.id === model);
-      const provider = modelInfo?.provider as SupportedChatProvider | undefined;
+      const provider = modelInfo?.provider;
 
       updateConversationMutation.mutate({
         id: conversation.id,
@@ -496,7 +496,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleProviderChange = useCallback(
-    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, _apiKeyId: string) => {
       if (!conversation) return;
 
       const providerModels = modelsByProvider[newProvider];
@@ -902,9 +902,7 @@ export default function ChatPage() {
 
       // Find the provider for the initial model
       const modelInfo = chatModels.find((m) => m.id === initialModel);
-      const selectedProvider = modelInfo?.provider as
-        | SupportedChatProvider
-        | undefined;
+      const selectedProvider = modelInfo?.provider;
 
       // Create conversation with the selected agent
       createConversationMutation.mutate(
@@ -987,9 +985,7 @@ export default function ChatPage() {
 
       // Find the provider for the initial model
       const modelInfo = chatModels.find((m) => m.id === initialModel);
-      const selectedProvider = modelInfo?.provider as
-        | SupportedChatProvider
-        | undefined;
+      const selectedProvider = modelInfo?.provider;
 
       // Create conversation with the selected agent and prompt
       createConversationMutation.mutate(
@@ -1085,9 +1081,7 @@ export default function ChatPage() {
 
     // Find the provider for the initial model
     const modelInfo = chatModels.find((m) => m.id === initialModel);
-    const selectedProvider = modelInfo?.provider as
-      | SupportedChatProvider
-      | undefined;
+    const selectedProvider = modelInfo?.provider;
 
     // Create conversation and send message
     createConversationMutation.mutate(

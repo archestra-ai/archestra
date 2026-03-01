@@ -1,14 +1,18 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
+  POLICY_CONFIG_SYSTEM_PROMPT,
   type PredefinedRoleName,
   type SupportedProvider,
+  SupportedProviders,
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
-import config from "@/config";
+import { getProviderEnvApiKey } from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
@@ -373,43 +377,24 @@ async function seedTeamTokens(): Promise<void> {
 async function seedChatApiKeysFromEnv(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
 
-  // Map of provider to environment variable
-  const providerEnvVars: Record<SupportedProvider, string> = {
-    anthropic: config.chat.anthropic.apiKey,
-    openai: config.chat.openai.apiKey,
-    openrouter: config.chat.openrouter.apiKey,
-    gemini: config.chat.gemini.apiKey,
-    cerebras: config.chat.cerebras.apiKey,
-    cohere: config.chat.cohere.apiKey,
-    mistral: config.chat.mistral.apiKey,
-    perplexity: config.chat.perplexity.apiKey,
-    groq: config.chat.groq.apiKey,
-    ollama: config.chat.ollama.apiKey,
-    vllm: config.chat.vllm.apiKey,
-    zhipuai: config.chat.zhipuai.apiKey,
-    deepseek: config.chat.deepseek.apiKey,
-    bedrock: config.chat.bedrock.apiKey,
-    minimax: config.chat.minimax.apiKey,
-  };
+  for (const provider of SupportedProviders) {
+    const apiKeyValue = getProviderEnvApiKey(provider);
 
-  for (const [provider, apiKeyValue] of Object.entries(providerEnvVars)) {
     // Skip providers without API keys configured
     if (!apiKeyValue || apiKeyValue.trim() === "") {
       continue;
     }
 
-    const typedProvider = provider as SupportedProvider;
-
     // Check if API key already exists for this provider
     const existing = await ChatApiKeyModel.findByScope(
       org.id,
-      typedProvider,
+      provider,
       "org_wide",
     );
 
     if (existing) {
       // Sync models if not already synced
-      await syncModelsForApiKey(existing.id, typedProvider, apiKeyValue);
+      await syncModelsForApiKey(existing.id, provider, apiKeyValue);
       continue;
     }
 
@@ -422,8 +407,8 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     // Create the API key
     const apiKey = await ChatApiKeyModel.create({
       organizationId: org.id,
-      name: getProviderDisplayName(typedProvider),
-      provider: typedProvider,
+      name: getProviderDisplayName(provider),
+      provider: provider,
       secretId: secret.id,
       scope: "org_wide",
       userId: null,
@@ -436,7 +421,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     );
 
     // Sync models from provider
-    await syncModelsForApiKey(apiKey.id, typedProvider, apiKeyValue);
+    await syncModelsForApiKey(apiKey.id, provider, apiKeyValue);
   }
 }
 
@@ -477,6 +462,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     mistral: "Mistral",
     perplexity: "Perplexity AI",
     groq: "Groq",
+    xai: "xAI",
     ollama: "Ollama",
     vllm: "vLLM",
     zhipuai: "ZhipuAI",
@@ -552,6 +538,39 @@ async function migrateSecretsToEncrypted(): Promise<void> {
   });
 }
 
+/**
+ * Seeds the Policy Configuration Subagent built-in agent for fresh installs.
+ * Migration 0159 creates this agent for existing organizations, but new
+ * deployments (fresh DB after the migration) need it seeded here.
+ */
+async function seedPolicyConfigAgent(): Promise<void> {
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+
+  const existing = await AgentModel.getBuiltInAgent(
+    BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+    org.id,
+  );
+  if (existing) {
+    logger.info("Policy Configuration Subagent already exists, skipping seed");
+    return;
+  }
+
+  await db.insert(schema.agentsTable).values({
+    organizationId: org.id,
+    name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+    agentType: "agent",
+    scope: "org",
+    description:
+      "Analyzes tool metadata with AI to generate deterministic security policies for handling untrusted data",
+    systemPrompt: POLICY_CONFIG_SYSTEM_PROMPT,
+    builtInAgentConfig: {
+      name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      autoConfigureOnToolAssignment: false,
+    },
+  });
+  logger.info("Seeded Policy Configuration Subagent built-in agent");
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -561,6 +580,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
   await seedChatAssistantAgent();
+  await seedPolicyConfigAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

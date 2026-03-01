@@ -239,9 +239,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkUpsertDefaultResultPolicy]: {
     policy: ["update"],
   },
-  [RouteId.GetPolicyConfigSubagentPrompt]: {
-    organization: ["read"],
-  },
   [RouteId.GetDefaultDualLlmConfig]: {
     dualLlmConfig: ["read"],
   },
@@ -576,6 +573,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviderIdpLogoutUrl]: {},
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
+  [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
 
   // User token routes - available to all authenticated users (manages their own personal token)

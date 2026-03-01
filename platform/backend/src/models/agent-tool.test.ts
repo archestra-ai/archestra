@@ -1,4 +1,7 @@
+import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 
 describe("AgentToolModel.findById", () => {
@@ -1028,6 +1031,120 @@ describe("AgentToolModel.findAll", () => {
       const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
       // Only Archestra tools should be present
       expect(agent1Tools.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("create auto-configure trigger", () => {
+    test("triggers auto-configure when built-in agent has autoConfigureOnToolAssignment enabled", async ({
+      makeAgent,
+      makeTool,
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      // Spy on the dynamic import of policy-configuration
+      const mockConfigurePolicies = vi.fn().mockResolvedValue({
+        success: true,
+        toolId: "test-tool",
+        toolInvocationAction: "allow_when_context_is_untrusted",
+        trustedDataAction: "mark_as_untrusted",
+      });
+
+      vi.doMock("@/agents/subagents/policy-configuration", () => ({
+        policyConfigurationService: {
+          configurePoliciesForToolWithTimeout: mockConfigurePolicies,
+        },
+      }));
+
+      // Create org, user, team, then agent with team assignment
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      const tool = await makeTool({ name: "test-auto-configure-tool" });
+
+      // Create built-in agent with auto-configure enabled
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        organizationId: org.id,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: true,
+        },
+      });
+
+      // Create agent-tool assignment — this should trigger auto-configure
+      await AgentToolModel.create(agent.id, tool.id);
+
+      // Wait for the async fire-and-forget to complete
+      await vi.waitFor(
+        () => {
+          expect(mockConfigurePolicies).toHaveBeenCalledWith({
+            toolId: tool.id,
+            organizationId: org.id,
+          });
+        },
+        { timeout: 5000 },
+      );
+
+      vi.doUnmock("@/agents/subagents/policy-configuration");
+    });
+
+    test("does not trigger auto-configure when built-in agent has autoConfigureOnToolAssignment disabled", async ({
+      makeAgent,
+      makeTool,
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const mockConfigurePolicies = vi.fn().mockResolvedValue({
+        success: true,
+      });
+
+      vi.doMock("@/agents/subagents/policy-configuration", () => ({
+        policyConfigurationService: {
+          configurePoliciesForToolWithTimeout: mockConfigurePolicies,
+        },
+      }));
+
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      const tool = await makeTool({ name: "test-no-auto-configure-tool" });
+
+      // Create built-in agent with auto-configure DISABLED
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        organizationId: org.id,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      // Give the async operation time to run (or not run)
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(mockConfigurePolicies).not.toHaveBeenCalled();
+
+      vi.doUnmock("@/agents/subagents/policy-configuration");
     });
   });
 });

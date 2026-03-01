@@ -619,14 +619,19 @@ export function AgentDialog({
     null,
   );
   const [scope, setScope] = useState<"personal" | "team" | "org">("personal");
+  const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
+    useState(false);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
+  const isBuiltIn = !!agent?.builtIn;
   const showToolsAndSubagents =
-    agentType === "mcp_gateway" ||
-    agentType === "agent" ||
-    agentType === "profile";
-  const showSecurity = agentType === "llm_proxy" || agentType === "agent";
+    !isBuiltIn &&
+    (agentType === "mcp_gateway" ||
+      agentType === "agent" ||
+      agentType === "profile");
+  const showSecurity =
+    !isBuiltIn && (agentType === "llm_proxy" || agentType === "agent");
 
   // Reset form when dialog opens/closes or agent changes
   useEffect(() => {
@@ -675,6 +680,10 @@ export function AgentDialog({
         setIncomingEmailAllowedDomain(
           agentData.incomingEmailAllowedDomain || "",
         );
+        // Built-in agent config
+        setAutoConfigureOnToolAssignment(
+          agentData.builtInAgentConfig?.autoConfigureOnToolAssignment ?? false,
+        );
       } else {
         // Create mode - reset all fields
         setName("");
@@ -692,6 +701,7 @@ export function AgentDialog({
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
+        setAutoConfigureOnToolAssignment(false);
       }
       // Reset counts when dialog opens
       setSelectedToolsCount(0);
@@ -800,8 +810,7 @@ export function AgentDialog({
         setLlmModel(bestModelId);
       } else if (currentLlmProvider !== key.provider) {
         // Only fall back to first model when switching providers (no bestModelId available)
-        const providerModels =
-          modelsByProvider[key.provider as SupportedProvider];
+        const providerModels = modelsByProvider[key.provider];
         if (providerModels?.length) {
           setLlmModel(providerModels[0].id);
         }
@@ -866,7 +875,8 @@ export function AgentDialog({
       let savedAgentId: string;
 
       // Save tool changes FIRST (before agent update triggers refetch that clears pending changes)
-      if (agent) {
+      // Skip for built-in agents as they don't have editable tools
+      if (agent && !isBuiltIn) {
         await agentToolsEditorRef.current?.saveChanges();
       }
 
@@ -881,7 +891,26 @@ export function AgentDialog({
           }
         : {};
 
-      if (agent) {
+      if (agent && isBuiltIn) {
+        // Update built-in agent — only allowed fields
+        const updated = await updateAgent.mutateAsync({
+          id: agent.id,
+          data: {
+            builtInAgentConfig: {
+              name:
+                agent.builtInAgentConfig?.name ??
+                "policy-configuration-subagent",
+              autoConfigureOnToolAssignment,
+            },
+            llmApiKeyId: llmApiKeyId || null,
+            llmModel: llmModel || null,
+          },
+        });
+        savedAgentId = updated?.id ?? agent.id;
+        if (updated?.id) {
+          toast.success("Built-in agent updated successfully");
+        }
+      } else if (agent) {
         // Update existing agent
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
@@ -945,8 +974,12 @@ export function AgentDialog({
         }
       }
 
-      // Sync delegations
-      if (savedAgentId && selectedDelegationTargetIds.length > 0) {
+      // Sync delegations (skip for built-in agents)
+      if (
+        !isBuiltIn &&
+        savedAgentId &&
+        selectedDelegationTargetIds.length > 0
+      ) {
         await syncDelegations.mutateAsync({
           agentId: savedAgentId,
           targetAgentIds: selectedDelegationTargetIds,
@@ -983,6 +1016,8 @@ export function AgentDialog({
     scope,
     agentType,
     agent,
+    isBuiltIn,
+    autoConfigureOnToolAssignment,
     isInternalAgent,
     showSecurity,
     isAdmin,
@@ -1007,23 +1042,39 @@ export function AgentDialog({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {getDialogTitle(agentType, !!agent)}
-            {scope === "personal" ? (
-              <Badge
-                variant="outline"
-                className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs font-normal"
-              >
-                Personal
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="bg-green-500/10 text-green-600 border-green-500/30 text-xs font-normal"
-              >
-                Shared
-              </Badge>
-            )}
+            {isBuiltIn
+              ? `Edit ${agent?.name ?? "Built-In Agent"}`
+              : getDialogTitle(agentType, !!agent)}
+            {!isBuiltIn &&
+              (scope === "personal" ? (
+                <Badge
+                  variant="outline"
+                  className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs font-normal"
+                >
+                  Personal
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="bg-green-500/10 text-green-600 border-green-500/30 text-xs font-normal"
+                >
+                  Shared
+                </Badge>
+              ))}
           </DialogTitle>
+          {isBuiltIn && agent?.description && (
+            <p className="text-sm text-muted-foreground">
+              {agent.description}.{" "}
+              <a
+                href="https://archestra.ai/docs/platform-built-in-agents-policy-config"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Learn more
+              </a>
+            </p>
+          )}
         </DialogHeader>
 
         <DialogForm
@@ -1043,20 +1094,22 @@ export function AgentDialog({
             )}
 
             <div className="rounded-lg border bg-card p-4 space-y-4">
-              {/* Name */}
-              <div className="space-y-2">
-                <Label htmlFor="agentName">Name *</Label>
-                <Input
-                  id="agentName"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={getNamePlaceholder(agentType)}
-                  autoFocus
-                />
-              </div>
+              {/* Name (hidden for built-in agents, shown in dialog title) */}
+              {!isBuiltIn && (
+                <div className="space-y-2">
+                  <Label htmlFor="agentName">Name *</Label>
+                  <Input
+                    id="agentName"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={getNamePlaceholder(agentType)}
+                    autoFocus
+                  />
+                </div>
+              )}
 
-              {/* Description (Agent only) */}
-              {isInternalAgent && (
+              {/* Description (Agent only, hidden for built-in agents) */}
+              {isInternalAgent && !isBuiltIn && (
                 <div className="space-y-2">
                   <Label htmlFor="agentDescription">Description</Label>
                   <p className="text-sm text-muted-foreground">
@@ -1073,34 +1126,61 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* Visibility / Scope */}
-              <AccessLevelSelector
-                scope={scope}
-                onScopeChange={(newScope) => {
-                  setScope(newScope);
-                  if (newScope === "org") {
-                    setAssignedTeamIds([]);
-                  }
-                }}
-                isAdmin={!!isAdmin}
-                initialScope={
-                  agent
-                    ? (((agent as Record<string, unknown>).scope as
-                        | "personal"
-                        | "team"
-                        | "org") ?? undefined)
-                    : undefined
-                }
-                agentType={agentType}
-                teams={teams}
-                assignedTeamIds={assignedTeamIds}
-                onTeamIdsChange={setAssignedTeamIds}
-                hasNoAvailableTeams={hasNoAvailableTeams}
-                showTeamRequired={!isAdmin && !isInternalAgent}
-              />
+              {/* Built-in agent config */}
+              {isBuiltIn && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label
+                        htmlFor="auto-configure-on-tool-assignment"
+                        className="text-sm font-medium cursor-pointer"
+                      >
+                        Auto-configure on tool assignment
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically analyze and configure security policies
+                        when tools are assigned to agents
+                      </p>
+                    </div>
+                    <Switch
+                      id="auto-configure-on-tool-assignment"
+                      checked={autoConfigureOnToolAssignment}
+                      onCheckedChange={setAutoConfigureOnToolAssignment}
+                    />
+                  </div>
+                </div>
+              )}
 
-              {/* LLM Configuration (Agent only) */}
-              {isInternalAgent && (
+              {/* Visibility / Scope */}
+              {!isBuiltIn && (
+                <AccessLevelSelector
+                  scope={scope}
+                  onScopeChange={(newScope) => {
+                    setScope(newScope);
+                    if (newScope === "org") {
+                      setAssignedTeamIds([]);
+                    }
+                  }}
+                  isAdmin={!!isAdmin}
+                  initialScope={
+                    agent
+                      ? (((agent as Record<string, unknown>).scope as
+                          | "personal"
+                          | "team"
+                          | "org") ?? undefined)
+                      : undefined
+                  }
+                  agentType={agentType}
+                  teams={teams}
+                  assignedTeamIds={assignedTeamIds}
+                  onTeamIdsChange={setAssignedTeamIds}
+                  hasNoAvailableTeams={hasNoAvailableTeams}
+                  showTeamRequired={!isAdmin && !isInternalAgent}
+                />
+              )}
+
+              {/* LLM Configuration (Agent and Built-in) */}
+              {(isInternalAgent || isBuiltIn) && (
                 <div className="space-y-2">
                   <Label>LLM Configuration</Label>
                   <p className="text-sm text-muted-foreground">
@@ -1263,7 +1343,7 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* System Prompt (Agent only) */}
+              {/* System Prompt (Agent only, read-only for built-in) */}
               {isInternalAgent && (
                 <div className="space-y-2">
                   <Label htmlFor="systemPrompt">System Prompt</Label>
@@ -1273,12 +1353,13 @@ export function AgentDialog({
                     onChange={(e) => setSystemPrompt(e.target.value)}
                     placeholder="Enter system prompt (instructions for the LLM)"
                     className="min-h-[150px] font-mono"
+                    disabled={isBuiltIn}
                   />
                 </div>
               )}
 
-              {/* User Prompt (Agent only) */}
-              {isInternalAgent && (
+              {/* User Prompt (Agent only, hidden for built-in) */}
+              {isInternalAgent && !isBuiltIn && (
                 <div className="space-y-2">
                   <Label htmlFor="userPrompt">User Prompt</Label>
                   <Textarea
@@ -1291,8 +1372,8 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* Agent Trigger Rules (Agent only) */}
-              {isInternalAgent && (
+              {/* Agent Trigger Rules (Agent only, hidden for built-in) */}
+              {isInternalAgent && !isBuiltIn && (
                 <div className="space-y-4">
                   {/* Email */}
                   {features?.incomingEmail?.enabled ? (
@@ -1451,12 +1532,14 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* Labels */}
-              <ProfileLabels
-                ref={agentLabelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
+              {/* Labels (hidden for built-in) */}
+              {!isBuiltIn && (
+                <ProfileLabels
+                  ref={agentLabelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                />
+              )}
 
               {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
               {agentType === "mcp_gateway" && identityProviders.length > 0 && (

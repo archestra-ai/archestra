@@ -24,6 +24,8 @@ export const organizationKeys = {
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
+  memberSignupStatus: () =>
+    [...organizationKeys.all, "member-signup-status"] as const,
 };
 
 /**
@@ -297,6 +299,54 @@ export function useUpdateOrganization(
       // Invalidate config cache since globalToolPolicy comes from organization record
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toast.success(onSuccessMessage);
+    },
+  });
+}
+
+export type PendingSignupMember = {
+  userId: string;
+  provider: string | null;
+  invitationId: string | null;
+};
+
+/**
+ * Get member signup status — returns members that haven't completed signup
+ */
+export function useMemberSignupStatus() {
+  return useQuery({
+    queryKey: organizationKeys.memberSignupStatus(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getMemberSignupStatus();
+      if (error) {
+        return { pendingSignupMembers: [] as PendingSignupMember[] };
+      }
+      return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
+    },
+  });
+}
+
+/**
+ * Delete a pending signup member (auto-provisioned, hasn't completed signup)
+ */
+export function useDeletePendingSignupMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await archestraApiSdk.deletePendingSignupMember({
+        path: { userId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.memberSignupStatus(),
+      });
+      toast.success("Pending member removed");
     },
   });
 }

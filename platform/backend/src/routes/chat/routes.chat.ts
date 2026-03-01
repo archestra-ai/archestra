@@ -1,9 +1,8 @@
 import {
   type ChatErrorResponse,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isSupportedProvider,
   RouteId,
   type SupportedProvider,
-  SupportedProviders,
   TimeInMs,
   type TokenUsage,
 } from "@shared";
@@ -21,12 +20,10 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
   createDirectLLMModel,
   createLLMModelForAgent,
   detectProviderFromModel,
-  FAST_MODELS,
   isApiKeyRequired,
   resolveProviderApiKey,
 } from "@/clients/llm-client";
@@ -42,120 +39,28 @@ import {
   MessageModel,
   TeamModel,
 } from "@/models";
-import ApiKeyModelModel from "@/models/api-key-model";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
-  isSupportedChatProvider,
   SelectConversationSchema,
-  type SupportedChatProvider,
-  SupportedChatProviderSchema,
   type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import {
+  resolveFastModelName,
+  resolveSmartDefaultLlmForChat,
+} from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
   type UiMessage,
 } from "./strip-images-from-messages";
-
-/**
- * Default model for each provider when no synced "best" model is available.
- * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
- */
-const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-1-20250805",
-  openai: "gpt-4o",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-2.5-pro",
-  cohere: "command-r-08-2024",
-  groq: "llama-3.1-8b-instant",
-  ollama: "llama3.2",
-  vllm: "default",
-  cerebras: "llama-4-scout-17b-16e-instruct",
-  mistral: "mistral-large-latest",
-  perplexity: "sonar-pro",
-  zhipuai: "glm-4-plus",
-  deepseek: "deepseek-chat",
-  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
-  minimax: "MiniMax-M2.5",
-};
-
-/**
- * Get a smart default model and provider based on available API keys for the user.
- * Priority: personal key > team key > org-wide key > env var > fallback
- */
-async function getSmartDefaultModel(
-  userId: string,
-  organizationId: string,
-): Promise<{ model: string; provider: SupportedChatProvider }> {
-  // Get user's team IDs for resolution
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-
-  /**
-   * Check what API keys are available using the new scope-based resolution
-   * Try to find an available API key in order of preference
-   */
-  for (const provider of SupportedProviders) {
-    const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
-      organizationId: organizationId,
-      userId: userId,
-      userTeamIds: userTeamIds,
-      provider: provider,
-      conversationId: null,
-    });
-
-    if (!resolvedKey) continue;
-
-    // For providers with optional API keys (Ollama, vLLM), a key without a secret is valid
-    const hasSecret = resolvedKey.secretId
-      ? !!(await getSecretValueForLlmProviderApiKey(resolvedKey.secretId))
-      : false;
-
-    if (hasSecret || PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
-      // Try to get the best model from the synced models for this key
-      const bestModel = await ApiKeyModelModel.getBestModel(resolvedKey.id);
-      if (bestModel) {
-        return { model: bestModel.modelId, provider };
-      }
-
-      // Fall back to hardcoded defaults
-      return { model: DEFAULT_MODELS[provider], provider };
-    }
-  }
-
-  // Check environment variables as fallback
-  // Uses DEFAULT_MODELS for model names to avoid duplicating defaults
-  for (const provider of SupportedChatProviderSchema.options) {
-    const providerConfig = config.chat[provider] as
-      | { apiKey?: string }
-      | undefined;
-    if (providerConfig?.apiKey) {
-      return { model: DEFAULT_MODELS[provider], provider };
-    }
-  }
-
-  // Check if Vertex AI is enabled - use Gemini without API key
-  if (isVertexAiEnabled()) {
-    logger.info(
-      "getSmartDefaultModel:Vertex AI is enabled, using gemini-2.5-pro",
-    );
-    return { model: "gemini-2.5-pro", provider: "gemini" };
-  }
-
-  // Ultimate fallback - use configured defaults
-  return {
-    model: config.chat.defaultModel,
-    provider: config.chat.defaultProvider,
-  };
-}
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -303,7 +208,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
-      const provider = isSupportedChatProvider(conversation.selectedProvider)
+      const provider = isSupportedProvider(conversation.selectedProvider)
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
 
@@ -767,10 +672,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!selectedModel) {
         // No model specified - use smart defaults for both model and provider
-        const smartDefault = await getSmartDefaultModel(
-          user.id,
+        const smartDefault = await resolveSmartDefaultLlmForChat({
           organizationId,
-        );
+          userId: user.id,
+        });
         modelToUse = smartDefault.model;
         providerToUse = smartDefault.provider;
       } else if (!selectedProvider) {
@@ -986,7 +891,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use the conversation's selected provider for title generation
       // This ensures the title is generated using the same provider as the chat
       // Fall back to detecting from model name for backward compatibility
-      const provider = isSupportedChatProvider(conversation.selectedProvider)
+      const provider = isSupportedProvider(conversation.selectedProvider)
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
 
@@ -1334,10 +1239,10 @@ The title should capture the main topic or theme of the conversation. Respond wi
  * Parameters for generating a conversation title
  */
 export interface GenerateTitleParams {
-  provider: SupportedChatProvider;
+  provider: SupportedProvider;
   apiKey: string | undefined;
   chatApiKeyId?: string;
-  baseUrl?: string | null;
+  baseUrl: string | null;
   firstUserMessage: string;
   firstAssistantMessage: string;
 }
@@ -1590,46 +1495,6 @@ async function validateChatApiKeyAccess(
   if (!canAccessKey) {
     throw new ApiError(403, "You do not have access to this API key");
   }
-}
-
-/**
- * Resolves the fast model name for title generation.
- * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
- */
-async function resolveFastModelName(
-  provider: SupportedChatProvider,
-  chatApiKeyId: string | undefined,
-): Promise<string> {
-  if (!chatApiKeyId) {
-    const fallback = FAST_MODELS[provider];
-    logger.debug(
-      { provider, modelName: fallback },
-      "Title generation: no chatApiKeyId, using hardcoded fast model",
-    );
-    return fallback;
-  }
-
-  try {
-    const fastestModel = await ApiKeyModelModel.getFastestModel(chatApiKeyId);
-    if (fastestModel) {
-      logger.debug(
-        { provider, chatApiKeyId, modelId: fastestModel.modelId },
-        "Title generation: resolved fastest model from DB",
-      );
-      return fastestModel.modelId;
-    }
-    logger.debug(
-      { provider, chatApiKeyId },
-      "Title generation: no fastest model in DB, using hardcoded fallback",
-    );
-  } catch (error) {
-    logger.warn(
-      { error, chatApiKeyId },
-      "Failed to resolve fastest model from DB, falling back to hardcoded model",
-    );
-  }
-
-  return FAST_MODELS[provider];
 }
 
 export default chatRoutes;

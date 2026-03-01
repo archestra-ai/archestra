@@ -1,87 +1,82 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
+import { AUTO_PROVISIONED_INVITATION_STATUS } from "@shared";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
-import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInvitationCheck } from "@/lib/invitation.query";
-import { useAcceptInvitation } from "@/lib/organization.query";
 
 function SignUpWithInvitationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [hasProcessed, setHasProcessed] = useState(false);
-
   const invitationId = searchParams.get("invitationId");
   const email = searchParams.get("email");
-
-  const { data: session } = authClient.useSession();
-  const acceptMutation = useAcceptInvitation();
+  const name = searchParams.get("name");
   const { data: invitationData, isLoading: isCheckingInvitation } =
     useInvitationCheck(invitationId);
 
-  // Redirect existing users to sign-in
+  // Redirect existing users to sign-in (unless auto-provisioned — they need to sign up)
   useEffect(() => {
-    if (invitationId && invitationData?.userExists) {
+    if (
+      invitationId &&
+      invitationData?.userExists &&
+      !invitationData.invitation?.status?.startsWith(
+        AUTO_PROVISIONED_INVITATION_STATUS,
+      )
+    ) {
       router.push(`/auth/sign-in?invitationId=${invitationId}`);
     }
   }, [invitationId, invitationData, router]);
 
-  // Handle auto-accept after sign-up
-  // biome-ignore lint/correctness/useExhaustiveDependencies: acceptMutation object changes reference on every render. Using the stable mutateAsync function reference prevents unnecessary re-executions.
+  // Prefill form fields (but keep them editable for form validation)
   useEffect(() => {
-    // Only process if we've done initial check and now have a new session
-    if (session && invitationId && !hasProcessed) {
-      setHasProcessed(true);
-      acceptMutation.mutateAsync(invitationId);
-    }
-  }, [session, invitationId, hasProcessed, acceptMutation.mutateAsync]);
+    if (!email && !name) return;
 
-  // Prefill email field (but keep it editable for form validation)
-  useEffect(() => {
-    if (!email) return;
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
 
-    const prefillEmail = () => {
-      const emailInput = document.querySelector<HTMLInputElement>(
-        'input[name="email"], input[type="email"]',
-      );
+      if (nativeInputValueSetter) {
+        nativeInputValueSetter.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    };
 
-      if (emailInput && !emailInput.value) {
-        // Use React's way to set the value
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          "value",
-        )?.set;
-
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(emailInput, email);
-          // Trigger React's onChange event
-          const event = new Event("input", { bubbles: true });
-          emailInput.dispatchEvent(event);
-        } else {
-          // Fallback
-          emailInput.value = email;
-          emailInput.dispatchEvent(new Event("input", { bubbles: true }));
-          emailInput.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+    const prefillFields = () => {
+      if (email) {
+        const emailInput = document.querySelector<HTMLInputElement>(
+          'input[name="email"], input[type="email"]',
+        );
+        if (emailInput && !emailInput.value) setInputValue(emailInput, email);
+      }
+      if (name) {
+        const nameInput =
+          document.querySelector<HTMLInputElement>('input[name="name"]');
+        if (nameInput && !nameInput.value) setInputValue(nameInput, name);
       }
     };
 
     // Try multiple times as form might not be rendered immediately
-    const timer1 = setTimeout(prefillEmail, 100);
-    const timer2 = setTimeout(prefillEmail, 300);
-    const timer3 = setTimeout(prefillEmail, 500);
+    const timer1 = setTimeout(prefillFields, 100);
+    const timer2 = setTimeout(prefillFields, 300);
+    const timer3 = setTimeout(prefillFields, 500);
 
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
       clearTimeout(timer3);
     };
-  }, [email]);
+  }, [email, name]);
 
-  // Show loading while checking if user exists
+  // Show loading while checking session, signing out, or checking invitation
   if (isCheckingInvitation && invitationId) {
     return (
       <main className="h-full flex items-center justify-center">

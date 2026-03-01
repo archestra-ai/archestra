@@ -23,6 +23,7 @@ import { usePublicBaseUrl } from "@/lib/features.hook";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
+import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -121,6 +122,7 @@ export default function MsTeamsPage() {
             </div>
           </div>
         )}
+        <LlmKeySetupStep />
         <SetupStep
           title="Setup MS Teams"
           description="Register a Teams bot application and connect it to Archestra"

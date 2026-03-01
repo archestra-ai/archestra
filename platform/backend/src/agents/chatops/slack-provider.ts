@@ -22,6 +22,11 @@ import type {
   ThreadHistoryParams,
 } from "@/types/chatops";
 import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "./auto-provision";
+import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
@@ -310,7 +315,7 @@ class SlackProvider implements ChatOpsProvider {
         elements: [
           {
             type: "plain_text",
-            text: `🤖 ${options.footer}`,
+            text: options.footer,
             emoji: true,
           },
         ],
@@ -361,7 +366,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Welcome to Archestra!*\nEach Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
+              text: "Each Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
             },
           },
           {
@@ -399,13 +404,32 @@ class SlackProvider implements ChatOpsProvider {
           ...actionBlocks,
         ];
 
-    await this.client.chat.postMessage({
-      channel: params.message.channelId,
-      thread_ts: params.message.threadId,
-      text: params.isWelcome ? "Welcome to Archestra!" : "Change Default Agent",
-      // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-      blocks: blocks as any,
-    });
+    const isDM = params.message.metadata?.channelType === "im";
+    const fallbackText = params.isWelcome
+      ? "Welcome to Archestra!"
+      : "Change Default Agent";
+
+    if (isDM) {
+      // In DMs, thread the reply to the user's message so it appears in Chat tab.
+      // Top-level postMessage without thread_ts goes to History.
+      await this.client.chat.postMessage({
+        channel: params.message.channelId,
+        text: fallbackText,
+        // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+        blocks: blocks as any,
+        ...(params.message.threadId
+          ? { thread_ts: params.message.threadId }
+          : {}),
+      });
+    } else {
+      await this.client.chat.postEphemeral({
+        channel: params.message.channelId,
+        user: params.message.senderId,
+        text: fallbackText,
+        // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+        blocks: blocks as any,
+      });
+    }
   }
 
   async getThreadHistory(
@@ -476,6 +500,26 @@ class SlackProvider implements ChatOpsProvider {
       logger.warn(
         { error: errorMessage(error), userId },
         "[SlackProvider] Failed to get user email",
+      );
+      return null;
+    }
+  }
+
+  async getUserName(userId: string): Promise<string | null> {
+    if (!this.client) return null;
+
+    try {
+      const result = await this.client.users.info({ user: userId });
+      return (
+        result.user?.real_name ||
+        result.user?.profile?.display_name ||
+        result.user?.name ||
+        null
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), userId },
+        "[SlackProvider] Failed to get user name",
       );
       return null;
     }
@@ -592,12 +636,38 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
     if (!user) {
-      return {
-        response_type: "ephemeral",
-        text: `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-      };
+      // Auto-provision: create user + member from slash command
+      const displayName =
+        (await this.getUserName(userId)) || body.user_name || "Unknown User";
+      const { invitationId } = await autoProvisionUser({
+        email: senderEmail,
+        name: displayName,
+        provider: "slack",
+      });
+      user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        return {
+          response_type: "ephemeral",
+          text: "Something went wrong while setting up your account. Please try again.",
+        };
+      }
+
+      // Send welcome DM (fire-and-forget) — skip when SSO is enabled
+      if (!(await isSsoConfigured())) {
+        const welcome = buildWelcomeMessage({
+          invitationId,
+          email: senderEmail,
+          name: displayName,
+        });
+        this.sendDirectMessage({
+          userId,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+        }).catch(() => {});
+      }
     }
 
     switch (command) {
@@ -678,6 +748,88 @@ class SlackProvider implements ChatOpsProvider {
           text: "Unknown command. Use `/archestra-help` to see available commands.",
         };
     }
+  }
+
+  async sendEphemeralMessage(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.chat.postEphemeral({
+        channel: params.channelId,
+        user: params.userId,
+        text: params.text,
+        thread_ts: params.threadId,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to send ephemeral message",
+      );
+    }
+  }
+
+  async sendDirectMessage(params: {
+    userId: string;
+    text: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    channelId?: string;
+    threadId?: string;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    let dmChannelId = params.channelId;
+    if (!dmChannelId) {
+      // Open a DM channel with the user
+      const dmResult = await this.client.conversations.open({
+        users: params.userId,
+      });
+      dmChannelId = dmResult.channel?.id;
+      if (!dmChannelId) {
+        logger.warn(
+          { userId: params.userId },
+          "[SlackProvider] Failed to open DM channel",
+        );
+        return;
+      }
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+    const blocks: any[] = [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: params.text },
+      },
+    ];
+
+    if (params.actionUrl && params.actionLabel) {
+      blocks.push({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: params.actionLabel, emoji: true },
+            url: params.actionUrl,
+            style: "primary",
+          },
+        ],
+      });
+      blocks.push({
+        type: "context",
+        elements: [{ type: "mrkdwn", text: `Link: ${params.actionUrl}` }],
+      });
+    }
+
+    await this.client.chat.postMessage({
+      channel: dmChannelId,
+      text: params.text,
+      blocks,
+      ...(params.threadId ? { thread_ts: params.threadId } : {}),
+    });
   }
 
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {

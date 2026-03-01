@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_AGENT_IDS,
   DOMAIN_VALIDATION_REGEX,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
@@ -31,6 +32,23 @@ export type AgentType = z.infer<typeof AgentTypeSchema>;
 export const AgentScopeSchema = z.enum(["personal", "team", "org"]);
 export type AgentScope = z.infer<typeof AgentScopeSchema>;
 
+// Built-in agent config — discriminated union by name
+// Policy Configuration Subagent config
+const PolicyConfigAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
+  autoConfigureOnToolAssignment: z.boolean(),
+});
+
+// Discriminated union — add future built-in agents here
+export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
+  PolicyConfigAgentConfigSchema,
+]);
+
+export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
+export type PolicyConfigAgentConfig = z.infer<
+  typeof PolicyConfigAgentConfigSchema
+>;
+
 /**
  * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
  * Only used when agent_type is 'agent'.
@@ -55,12 +73,14 @@ const selectExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
+  builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
 };
 
 const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
+  builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
 };
 
 /**
@@ -191,3 +211,43 @@ export type Agent = z.infer<typeof SelectAgentSchema>;
 export type InsertAgent = z.infer<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 export type AgentVersionsResponse = z.infer<typeof AgentVersionsResponseSchema>;
+
+/**
+ * Schema for auto-policy LLM analysis output.
+ * Describes security policy recommendations for an MCP tool.
+ */
+export const PolicyConfigSchema = z.object({
+  toolInvocationAction: z
+    .enum([
+      "allow_when_context_is_untrusted",
+      "block_when_context_is_untrusted",
+      "block_always",
+    ])
+    .describe(
+      "When should this tool be allowed to be invoked? " +
+        "'allow_when_context_is_untrusted' - Allow invocation even when untrusted data is present (safe read-only tools). " +
+        "'block_when_context_is_untrusted' - Allow only when context is trusted, block when untrusted data is present (tools that could leak data). " +
+        "'block_always' - Never allow automatic invocation (dangerous tools that execute code, write data, or send data externally).",
+    ),
+  trustedDataAction: z
+    .enum([
+      "mark_as_trusted",
+      "mark_as_untrusted",
+      "sanitize_with_dual_llm",
+      "block_always",
+    ])
+    .describe(
+      "How should the tool's results be treated? " +
+        "'mark_as_trusted' - Results are trusted and can be used directly (internal systems, databases, dev tools). " +
+        "'mark_as_untrusted' - Results are untrusted and will restrict subsequent tool usage (external/filesystem data where exact values are safe). " +
+        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern (untrusted data that needs summarization). " +
+        "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
+    ),
+  reasoning: z
+    .string()
+    .describe(
+      "Brief explanation of why these settings were chosen for this tool.",
+    ),
+});
+
+export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;

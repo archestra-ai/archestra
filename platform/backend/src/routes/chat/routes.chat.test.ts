@@ -223,6 +223,7 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      baseUrl: null,
       firstUserMessage: "Help me debug this React error",
       firstAssistantMessage: "I can help with that.",
     });
@@ -242,6 +243,7 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      baseUrl: null,
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi there!",
     });
@@ -257,6 +259,7 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "openai",
       apiKey: "test-key",
+      baseUrl: null,
       firstUserMessage: "Test",
       firstAssistantMessage: "",
     });
@@ -272,6 +275,7 @@ describe("generateConversationTitle", () => {
       provider: "anthropic",
       apiKey: "test-key",
       chatApiKeyId: "api-key-123",
+      baseUrl: null,
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
@@ -289,6 +293,7 @@ describe("generateConversationTitle", () => {
     await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      baseUrl: null,
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
@@ -307,6 +312,7 @@ describe("generateConversationTitle", () => {
       provider: "openai",
       apiKey: "test-key",
       chatApiKeyId: "api-key-456",
+      baseUrl: null,
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
@@ -325,6 +331,7 @@ describe("generateConversationTitle", () => {
       provider: "gemini",
       apiKey: "test-key",
       chatApiKeyId: "api-key-789",
+      baseUrl: null,
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });

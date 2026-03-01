@@ -83,6 +83,7 @@ class ToolModel {
         | "policiesAutoConfiguredAt"
         | "policiesAutoConfiguringStartedAt"
         | "policiesAutoConfiguredReasoning"
+        | "policiesAutoConfiguredModel"
       >
     >,
   ): Promise<Tool | null> {
@@ -95,6 +96,33 @@ class ToolModel {
       .where(eq(schema.toolsTable.id, id))
       .returning();
     return updatedTool || null;
+  }
+
+  /** Mark a tool as currently auto-configuring policies (sets loading timestamp) */
+  static async setAutoConfiguringState(id: string): Promise<void> {
+    await db
+      .update(schema.toolsTable)
+      .set({ policiesAutoConfiguringStartedAt: new Date() })
+      .where(eq(schema.toolsTable.id, id));
+  }
+
+  /** Clear the auto-configuring loading state, optionally resetting all policy metadata */
+  static async clearAutoConfiguringState(
+    id: string,
+    options?: { resetAll: boolean },
+  ): Promise<void> {
+    const setData: Partial<UpdateTool> = {
+      policiesAutoConfiguringStartedAt: null,
+    };
+    if (options?.resetAll) {
+      setData.policiesAutoConfiguredAt = null;
+      setData.policiesAutoConfiguredReasoning = null;
+      setData.policiesAutoConfiguredModel = null;
+    }
+    await db
+      .update(schema.toolsTable)
+      .set(setData)
+      .where(eq(schema.toolsTable.id, id));
   }
 
   // TODO: used only in tests and should be removed.
@@ -274,6 +302,8 @@ class ToolModel {
           schema.toolsTable.policiesAutoConfiguringStartedAt,
         policiesAutoConfiguredReasoning:
           schema.toolsTable.policiesAutoConfiguredReasoning,
+        policiesAutoConfiguredModel:
+          schema.toolsTable.policiesAutoConfiguredModel,
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -1576,6 +1606,8 @@ class ToolModel {
     }
 
     // Query for tools that have at least one assignment
+    // Secondary sort on id ensures deterministic ordering when primary sort values are equal
+    // (e.g. bulk-inserted MCP tools share the same createdAt timestamp)
     const toolsWithCount = await db
       .select({
         id: schema.toolsTable.id,
@@ -1585,11 +1617,16 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
+        policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
+        policiesAutoConfiguredReasoning:
+          schema.toolsTable.policiesAutoConfiguredReasoning,
+        policiesAutoConfiguredModel:
+          schema.toolsTable.policiesAutoConfiguredModel,
         assignmentCount: assignmentCountSubquery,
       })
       .from(schema.toolsTable)
       .where(toolWhereClause)
-      .orderBy(orderByClause)
+      .orderBy(orderByClause, asc(schema.toolsTable.id))
       .limit(pagination.limit ?? 20)
       .offset(pagination.offset ?? 0);
 
@@ -1735,6 +1772,12 @@ class ToolModel {
       catalogId: tool.catalogId as string | null,
       createdAt: tool.createdAt as Date,
       updatedAt: tool.updatedAt as Date,
+      policiesAutoConfiguredAt:
+        (tool.policiesAutoConfiguredAt as Date | null) ?? null,
+      policiesAutoConfiguredReasoning:
+        (tool.policiesAutoConfiguredReasoning as string | null) ?? null,
+      policiesAutoConfiguredModel:
+        (tool.policiesAutoConfiguredModel as string | null) ?? null,
       assignmentCount: Number(tool.assignmentCount),
       assignments: assignmentsByToolId.get(tool.id as string) || [],
     }));

@@ -1,5 +1,10 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { PROVIDERS_WITH_OPTIONAL_API_KEY, RouteId } from "@shared";
+import {
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  RouteId,
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
@@ -26,9 +31,22 @@ import {
   constructResponseSchema,
   SelectChatApiKeySchema,
   type SelectSecret,
-  type SupportedChatProvider,
-  SupportedChatProviderSchema,
 } from "@/types";
+
+async function testApiKeyOrThrow(
+  provider: SupportedProvider,
+  apiKey: string,
+  baseUrl?: string | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey(provider, apiKey, baseUrl);
+  } catch (error) {
+    throw new ApiError(
+      400,
+      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
 
 const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // List all visible chat API keys for the user
@@ -75,7 +93,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Get API keys available for the current user to use in chat",
         tags: ["Chat API Keys"],
         querystring: z.object({
-          provider: SupportedChatProviderSchema.optional(),
+          provider: SupportedProvidersSchema.optional(),
           /** Include a specific key by ID even if user doesn't have direct access (e.g. agent's configured key) */
           includeKeyId: z.string().uuid().optional(),
         }),
@@ -136,7 +154,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z
           .object({
             name: z.string().min(1, "Name is required"),
-            provider: SupportedChatProviderSchema,
+            provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
             scope: ChatApiKeyScopeSchema.default("personal"),
@@ -193,18 +211,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         // then test the API key
-        try {
-          await testProviderApiKey(
-            body.provider,
-            actualApiKeyValue,
-            body.baseUrl,
-          );
-        } catch (_error) {
-          throw new ApiError(
-            400,
-            `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
-          );
-        }
+        await testApiKeyOrThrow(body.provider, actualApiKeyValue, body.baseUrl);
         // then create the secret
         secret = await secretManager().createSecret(
           { apiKey: vaultReference },
@@ -218,18 +225,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // When readonly_vault is disabled
         actualApiKeyValue = body.apiKey;
         // Test the API key before saving
-        try {
-          await testProviderApiKey(
-            body.provider,
-            actualApiKeyValue,
-            body.baseUrl,
-          );
-        } catch (_error) {
-          throw new ApiError(
-            400,
-            `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
-          );
-        }
+        await testApiKeyOrThrow(body.provider, actualApiKeyValue, body.baseUrl);
 
         secret = await secretManager().createSecret(
           { apiKey: actualApiKeyValue },
@@ -450,18 +446,11 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // the existing baseUrl stored on the API key record.
         const testBaseUrl =
           body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
-        try {
-          await testProviderApiKey(
-            apiKeyFromDB.provider,
-            apiKeyValue,
-            testBaseUrl,
-          );
-        } catch (_error) {
-          throw new ApiError(
-            400,
-            `Invalid API key: Failed to connect to ${capitalize(apiKeyFromDB.provider)}`,
-          );
-        }
+        await testApiKeyOrThrow(
+          apiKeyFromDB.provider,
+          apiKeyValue,
+          testBaseUrl,
+        );
 
         // Update or create the secret
         if (apiKeyFromDB.secretId) {
@@ -732,7 +721,7 @@ function getChatApiKeySecretName({
  * Validates that the provider is allowed based on current configuration.
  * Throws ApiError if Gemini provider is requested while Vertex AI is enabled.
  */
-export function validateProviderAllowed(provider: SupportedChatProvider): void {
+export function validateProviderAllowed(provider: SupportedProvider): void {
   if (provider === "gemini" && isVertexAiEnabled()) {
     throw new ApiError(
       400,

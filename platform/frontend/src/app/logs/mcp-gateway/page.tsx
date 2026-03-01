@@ -42,7 +42,10 @@ export default async function McpGatewayLogsPageServer() {
           sortDirection: "desc",
         },
       }),
-      archestraApiSdk.getAllAgents({ headers }),
+      archestraApiSdk.getAllAgents({
+        headers,
+        query: { excludeBuiltIn: true },
+      }),
     ]);
     if (mcpToolCallsResponse.error) {
       handleApiError(mcpToolCallsResponse.error);

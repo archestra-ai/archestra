@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InvitationModel, UserModel } from "@/models";
@@ -26,7 +26,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               id: z.string(),
               email: z.string().email(),
               organizationId: z.string(),
-              status: z.enum(["pending", "accepted", "canceled"]),
+              status: z.string(),
               expiresAt: z.string().nullable(),
             }),
             userExists: z.boolean(),
@@ -44,8 +44,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         throw new ApiError(404, "Invitation not found");
       }
 
-      // Check if invitation is valid
-      if (invitation.status !== "pending") {
+      // Check if invitation is valid (pending or auto-provisioned)
+      if (
+        invitation.status !== "pending" &&
+        !invitation.status.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)
+      ) {
         throw new ApiError(
           400,
           `This invitation has already been ${invitation.status}`,

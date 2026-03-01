@@ -3,6 +3,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import {
   ARCHESTRA_TOKEN_PREFIX,
+  AUTO_PROVISIONED_INVITATION_STATUS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
   SSO_TRUSTED_PROVIDER_IDS,
@@ -23,7 +24,7 @@ import {
   twoFactor,
 } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -445,7 +446,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       "[auth:beforeHook] Invitation found, validating",
     );
 
-    if (status !== "pending") {
+    if (
+      status !== "pending" &&
+      !status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)
+    ) {
       logger.debug(
         { invitationId, status },
         "[auth:beforeHook] Invitation not pending",
@@ -477,6 +481,67 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
         message:
           "Email address does not match the invitation. You must use the invited email address.",
       });
+    }
+
+    // Handle auto-provisioned users: they already have a user record but no account.
+    // Delete the placeholder user and re-create the invitation as "pending" so
+    // better-auth can proceed with normal sign-up (creates fresh user + account).
+    if (status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)) {
+      const [existingUser] = await db
+        .select({ id: schema.usersTable.id })
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.email, invitation.email))
+        .limit(1);
+
+      if (existingUser) {
+        // Find another user for inviterId FK (the original will be cascade-deleted)
+        const [inviterUser] = await db
+          .select({ id: schema.usersTable.id })
+          .from(schema.usersTable)
+          .where(ne(schema.usersTable.id, existingUser.id))
+          .limit(1);
+
+        if (!inviterUser) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Cannot complete signup",
+          });
+        }
+
+        logger.info(
+          { userId: existingUser.id, email: invitation.email },
+          "[auth:beforeHook] Removing auto-provisioned placeholder for sign-up",
+        );
+
+        // Save invitation data before cascade delete removes it
+        const savedInvitation = {
+          id: invitation.id,
+          organizationId: invitation.organizationId,
+          email: invitation.email,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt,
+        };
+
+        // Delete placeholder user (cascades to member, invitation, user tokens)
+        await db
+          .delete(schema.usersTable)
+          .where(eq(schema.usersTable.id, existingUser.id));
+
+        // Re-create invitation as "pending" for better-auth's normal sign-up flow
+        await db.insert(schema.invitationsTable).values({
+          id: savedInvitation.id,
+          organizationId: savedInvitation.organizationId,
+          email: savedInvitation.email,
+          role: savedInvitation.role,
+          status: "pending",
+          expiresAt: savedInvitation.expiresAt,
+          inviterId: inviterUser.id,
+        });
+
+        logger.debug(
+          { invitationId: savedInvitation.id },
+          "[auth:beforeHook] Re-created invitation as pending for sign-up",
+        );
+      }
     }
 
     logger.debug(

@@ -182,6 +182,39 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
+   * Send an ephemeral message visible only to a specific user.
+   * Used for welcome messages to auto-provisioned users.
+   * Falls back to a regular reply if ephemeral messaging is not supported.
+   */
+  sendEphemeralMessage?(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void>;
+
+  /**
+   * Send a direct message (DM) to a user.
+   * Used for welcome messages to auto-provisioned users.
+   * @param params.userId - The user's ID in the provider's system
+   * @param params.text - The message text (markdown)
+   * @param params.actionUrl - Optional URL for an action button
+   * @param params.actionLabel - Optional label for the action button
+   */
+  sendDirectMessage?(params: {
+    userId: string;
+    text: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    /** When provided, post to this channel instead of opening a new DM via conversations.open.
+     *  Useful for replying inside an existing DM without routing to the History tab. */
+    channelId?: string;
+    /** When provided, thread the message as a reply to this timestamp.
+     *  Required in DMs so the reply appears in Chat tab instead of History. */
+    threadId?: string;
+  }): Promise<void>;
+
+  /**
    * Set a typing/loading status indicator (optional, provider-specific).
    * For Slack: shows "App is thinking..." in the assistant thread.
    * For Teams: sends a typing activity indicator in DMs/group chats,
@@ -214,6 +247,14 @@ export interface ChatOpsProvider {
    * @returns The user's email address, or null if not available
    */
   getUserEmail(userId: string): Promise<string | null>;
+
+  /**
+   * Get user's display name from their provider-specific ID.
+   * Used for auto-provisioning to set a meaningful user name.
+   * @param userId - The user's ID in the provider's system
+   * @returns The user's display name, or null if not available
+   */
+  getUserName?(userId: string): Promise<string | null>;
 
   /**
    * Get a channel's display name from its provider-specific ID.

@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import {
   boolean,
   jsonb,
@@ -6,7 +7,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { SupportedChatProvider } from "@/types";
 import agentsTable from "./agent";
 import chatApiKeysTable from "./chat-api-key";
 
@@ -26,7 +26,7 @@ const conversationsTable = pgTable("conversations", {
   }),
   title: text("title"),
   selectedModel: text("selected_model").notNull().default("gpt-4o"),
-  selectedProvider: text("selected_provider").$type<SupportedChatProvider>(),
+  selectedProvider: text("selected_provider").$type<SupportedProvider>(),
   hasCustomToolSelection: boolean("has_custom_tool_selection")
     .notNull()
     .default(false),

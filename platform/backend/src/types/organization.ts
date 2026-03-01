@@ -105,7 +105,6 @@ export const UpdateOrganizationSchema = z.object({
   onboardingComplete: z.boolean(),
   convertToolResultsToToon: z.boolean(),
   compressionScope: OrganizationCompressionScopeSchema,
-  autoConfigureNewTools: z.boolean(),
   globalToolPolicy: GlobalToolPolicySchema,
   allowChatFileUploads: z.boolean(),
 });

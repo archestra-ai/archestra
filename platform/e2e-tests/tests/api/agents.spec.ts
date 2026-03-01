@@ -1,7 +1,29 @@
 import { expect, test } from "./fixtures";
 
 test.describe("Agents API CRUD", () => {
-  test("should get all agents", async ({ request, makeApiRequest }) => {
+  test("should get all agents excluding built-in when excludeBuiltIn=true", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/agents/all?excludeBuiltIn=true",
+    });
+    const agents = await response.json();
+    expect(Array.isArray(agents)).toBe(true);
+    expect(agents.length).toBeGreaterThan(0);
+
+    const builtInAgents = agents.filter(
+      (a: { builtInAgentConfig?: unknown }) => a.builtInAgentConfig != null,
+    );
+    expect(builtInAgents).toHaveLength(0);
+  });
+
+  test("should include built-in agents when excludeBuiltIn is not set", async ({
+    request,
+    makeApiRequest,
+  }) => {
     const response = await makeApiRequest({
       request,
       method: "get",
@@ -10,6 +32,12 @@ test.describe("Agents API CRUD", () => {
     const agents = await response.json();
     expect(Array.isArray(agents)).toBe(true);
     expect(agents.length).toBeGreaterThan(0);
+
+    // Without excludeBuiltIn, built-in agents should be included
+    const builtInAgents = agents.filter(
+      (a: { builtInAgentConfig?: unknown }) => a.builtInAgentConfig != null,
+    );
+    expect(builtInAgents.length).toBeGreaterThan(0);
   });
 
   test("should create a new agent", async ({ request, createAgent }) => {

@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
@@ -20,7 +21,6 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
-import { toolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
@@ -389,26 +389,29 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "POST /api/agent-tools/auto-configure-policies: request received",
       );
 
-      // Check if service is available for this organization
-      const available = await toolAutoPolicyService.isAvailable(
+      // Pre-resolve LLM to give a clear 400 error if no API key is configured.
+      // This resolved config is then threaded through to avoid redundant DB queries.
+      const resolvedLlm = await policyConfigurationService.resolveLlm({
         organizationId,
-        user.id,
-      );
-      if (!available) {
+        userId: user.id,
+      });
+      if (!resolvedLlm) {
         logger.warn(
           { organizationId, userId: user.id },
           "POST /api/agent-tools/auto-configure-policies: service not available",
         );
         throw new ApiError(
-          503,
+          400,
           "Auto-policy requires an LLM API key to be configured in LLM API Keys settings",
         );
       }
 
-      const result = await toolAutoPolicyService.configurePoliciesForTools(
-        toolIds,
-        organizationId,
-        user.id,
+      const result = await policyConfigurationService.configurePoliciesForTools(
+        {
+          toolIds,
+          organizationId,
+          userId: user.id,
+        },
       );
 
       logger.info(

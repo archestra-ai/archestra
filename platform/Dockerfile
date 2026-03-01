@@ -206,30 +206,30 @@ COPY docker-banner.sh ./
 # Install production dependencies for both workspaces
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
 
-# Patch CVE-2026-26996: minimatch ReDoS vulnerability in pnpm's bundled node_modules
-# Done AFTER pnpm install because minimatch 10.2.1 changes its dependency from
+# Patch CVE-2026-26996, CVE-2026-27903, CVE-2026-27904: minimatch vulnerabilities in pnpm's bundled node_modules
+# Done AFTER pnpm install because minimatch 10.2.x changes its dependency from
 # brace-expansion@^2 to brace-expansion@^5, which breaks pnpm's module resolution
-RUN MINIMATCH_SHA256="3762bb590e36988b9f864e8ed6a8903e31659a937d40d6d95591b2bf406957e0" && \
-    BRACE_EXP_SHA256="3bb99ab8f78f432f3d83f82112683859d0f84c1f1a83f32bef8535d1663ecb4d" && \
+RUN MINIMATCH_SHA256="89d2c40b4596326c5061d95a63a13c5b757f3e03bcad229ab496a66735925529" && \
+    BRACE_EXP_SHA256="b600ebf035952912c2a2f342a15e44764b111251c83598d970ccf3b28e427725" && \
     PNPM_MINIMATCH_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/minimatch" -type d 2>/dev/null) && \
     [ -n "$PNPM_MINIMATCH_PATHS" ] || { echo "WARNING: No minimatch directories found to patch"; exit 0; } && \
     for PNPM_MINIMATCH_PATH in $PNPM_MINIMATCH_PATHS; do \
         echo "Patching minimatch in $PNPM_MINIMATCH_PATH" && \
         TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/minimatch.tgz" https://registry.npmjs.org/minimatch/-/minimatch-10.2.1.tgz && \
+        wget -qO "$TMP_DIR/minimatch.tgz" https://registry.npmjs.org/minimatch/-/minimatch-10.2.4.tgz && \
         echo "$MINIMATCH_SHA256  $TMP_DIR/minimatch.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
         rm -rf "$PNPM_MINIMATCH_PATH"/* && \
         tar -xzf "$TMP_DIR/minimatch.tgz" -C "$PNPM_MINIMATCH_PATH" --strip-components=1 && \
         rm -rf "$TMP_DIR" && \
         BRACE_EXP_PATH="$(dirname "$PNPM_MINIMATCH_PATH")/brace-expansion" && \
         TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.2.tgz && \
+        wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.4.tgz && \
         echo "$BRACE_EXP_SHA256  $TMP_DIR/brace-expansion.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
         rm -rf "$BRACE_EXP_PATH"/* && \
         tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$BRACE_EXP_PATH" --strip-components=1 && \
         rm -rf "$TMP_DIR"; \
     done && \
-    echo "Patched minimatch to 10.2.1 in all pnpm corepack caches"
+    echo "Patched minimatch to 10.2.4 in all pnpm corepack caches"
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist

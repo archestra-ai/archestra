@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -330,26 +331,23 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = (agent as unknown as Record<string, unknown>)
-          .scope as string;
+        const scope = agent.scope;
         return (
           <div className="font-medium">
             <div className="flex items-start gap-2">
               <span className="break-words min-w-0">{agent.name}</span>
-              {scope === "personal" ? (
-                <Badge
-                  variant="outline"
-                  className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs shrink-0"
-                >
+              {agent.builtIn ? (
+                <InlineTag className="bg-purple-500/10 text-purple-600 border border-purple-500/30 shrink-0">
+                  Built-In
+                </InlineTag>
+              ) : scope === "personal" ? (
+                <InlineTag className="bg-blue-500/10 text-blue-600 border border-blue-500/30 shrink-0">
                   Personal
-                </Badge>
+                </InlineTag>
               ) : (
-                <Badge
-                  variant="outline"
-                  className="bg-green-500/10 text-green-600 border-green-500/30 text-xs shrink-0"
-                >
+                <InlineTag className="bg-green-500/10 text-green-600 border border-green-500/30 shrink-0">
                   Shared
-                </Badge>
+                </InlineTag>
               )}
               {agent.labels && agent.labels.length > 0 && (
                 <LabelTags labels={agent.labels} />

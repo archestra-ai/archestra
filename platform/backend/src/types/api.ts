@@ -1,4 +1,4 @@
-import { ApiError, ApiErrorTypeSchema } from "@shared/types";
+import { ApiError, ApiErrorTypeSchema } from "@shared";
 import { z } from "zod";
 
 export { ApiError, ApiErrorTypeSchema };

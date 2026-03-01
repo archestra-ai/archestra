@@ -139,7 +139,6 @@ export const RouteId = {
   DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
   BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
   BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
-  GetPolicyConfigSubagentPrompt: "getPolicyConfigSubagentPrompt",
 
   // Dual LLM Config Routes
   GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
@@ -183,6 +182,10 @@ export const RouteId = {
   // Proxy Routes - Groq
   GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
   GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
+
+  // Proxy Routes - xAI
+  XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
+  XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
 
   // Proxy Routes - OpenRouter
   OpenrouterChatCompletionsWithDefaultAgent:
@@ -269,6 +272,8 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
+  GetMemberSignupStatus: "getMemberSignupStatus",
+  DeletePendingSignupMember: "deletePendingSignupMember",
 
   // Appearance Routes (public/unauthenticated)
   GetPublicAppearance: "getPublicAppearance",

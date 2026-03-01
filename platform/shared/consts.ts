@@ -385,3 +385,5 @@ export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
   "vllm",
 ]);
+
+export const AUTO_PROVISIONED_INVITATION_STATUS = "auto-provisioned";

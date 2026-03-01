@@ -1,6 +1,5 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Check,
@@ -138,7 +137,7 @@ export function ProviderSettingsModels() {
         accessorKey: "provider",
         header: "Provider",
         cell: ({ row }) => {
-          const provider = row.original.provider as SupportedProvider;
+          const provider = row.original.provider;
           const config = PROVIDER_CONFIG[provider];
           if (!config) {
             return <span className="text-sm">{provider}</span>;
@@ -348,8 +347,7 @@ export function ProviderSettingsModels() {
                   <SelectContent>
                     <SelectItem value="all">All providers</SelectItem>
                     {availableProviders.map((provider) => {
-                      const config =
-                        PROVIDER_CONFIG[provider as SupportedProvider];
+                      const config = PROVIDER_CONFIG[provider];
                       return (
                         <SelectItem key={provider} value={provider}>
                           <div className="flex items-center gap-2">

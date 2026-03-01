@@ -411,7 +411,7 @@ export function ChatSidebarSection() {
               pinnedChats.length + recentUnpinnedChats.length && (
               <SidebarMenuSubItem>
                 <SidebarMenuSubButton
-                  className="text-sidebar-foreground/70"
+                  className="cursor-pointer text-sidebar-foreground/70"
                   onClick={openConversationSearch}
                 >
                   <MoreHorizontal />

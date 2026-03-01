@@ -125,6 +125,7 @@ class AgentModel {
     options?: {
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+      excludeBuiltIn?: boolean;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -152,6 +153,11 @@ class AgentModel {
     // Filter by agentType if specified (single type, backwards compatible)
     else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
+    }
+
+    // Exclude built-in agents (e.g. for chat dropdown)
+    if (options?.excludeBuiltIn) {
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
     // Apply access control filtering for non-agent admins
@@ -811,15 +817,16 @@ class AgentModel {
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {
-      [updatedAgent] = await db
+      const [row] = await db
         .update(schema.agentsTable)
         .set(agent)
         .where(eq(schema.agentsTable.id, id))
         .returning();
 
-      if (!updatedAgent) {
+      if (!row) {
         return null;
       }
+      updatedAgent = row;
 
       // If name changed, sync delegation tool names and invalidate parent caches
       if (agent.name && agent.name !== existingAgent.name) {
@@ -986,6 +993,52 @@ class AgentModel {
     return {
       current: agent,
       history: agent.promptHistory || [],
+    };
+  }
+
+  /**
+   * Find a built-in agent by its config name discriminator.
+   * When organizationId is provided, scopes the query to that org
+   * (important for multi-org deployments where each org has its own built-in agent row).
+   */
+  static async getBuiltInAgent(
+    builtInName: string,
+    organizationId?: string,
+  ): Promise<Agent | null> {
+    const conditions: SQL[] = [
+      sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${builtInName}`,
+    ];
+    if (organizationId) {
+      conditions.push(eq(schema.agentsTable.organizationId, organizationId));
+    }
+
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(and(...conditions))
+      .limit(1);
+
+    if (!row) return null;
+
+    const [teams, labels] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgent(row.id),
+      AgentLabelModel.getLabelsForAgent(row.id),
+    ]);
+
+    const toolRows = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.agentId, row.id));
+
+    return {
+      ...row,
+      tools: toolRows.map((r) => r.tool),
+      teams,
+      labels,
     };
   }
 

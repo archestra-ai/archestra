@@ -1,10 +1,13 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type SupportedProvider,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, toApiError } from "./utils";
 
-export type SupportedChatProvider =
-  archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
+export type { SupportedProvider };
 
 export type ChatApiKeyScope =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["scope"];
@@ -40,7 +43,7 @@ export function useChatApiKeys() {
 }
 
 export function useAvailableChatApiKeys(params?: {
-  provider?: SupportedChatProvider;
+  provider?: SupportedProvider;
   includeKeyId?: string | null;
 }) {
   const provider = params?.provider;
@@ -48,8 +51,7 @@ export function useAvailableChatApiKeys(params?: {
   return useQuery({
     queryKey: ["available-chat-api-keys", provider, includeKeyId],
     queryFn: async () => {
-      const query: { provider?: SupportedChatProvider; includeKeyId?: string } =
-        {};
+      const query: { provider?: SupportedProvider; includeKeyId?: string } = {};
       if (provider) query.provider = provider;
       if (includeKeyId) query.includeKeyId = includeKeyId;
       const { data, error } = await getAvailableChatApiKeys({

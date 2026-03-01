@@ -1,9 +1,14 @@
-import { RouteId } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "@/agents/chatops/auto-provision";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
@@ -18,6 +23,7 @@ import {
   AgentModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
+  InvitationModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
@@ -181,7 +187,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               };
               // Resolve sender email and verify they are a registered Archestra user
               if (
-                !(await resolveAndVerifySender(context, provider, cardMessage))
+                !(await resolveAndVerifySenderForMSTeams(
+                  context,
+                  provider,
+                  cardMessage,
+                ))
               ) {
                 return;
               }
@@ -272,7 +282,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
 
             // Resolve sender email and verify they are a registered Archestra user
-            if (!(await resolveAndVerifySender(context, provider, message))) {
+            if (
+              !(await resolveAndVerifySenderForMSTeams(
+                context,
+                provider,
+                message,
+              ))
+            ) {
               return;
             }
 
@@ -414,11 +430,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             if (!binding || !binding.agentId) {
+              const isTeamsDm =
+                context.activity.conversation?.conversationType === "personal";
+
               // Create binding early (without agent) so the DM/channel appears in the UI
               if (!binding) {
-                const isTeamsDm =
-                  context.activity.conversation?.conversationType ===
-                  "personal";
                 const resolvedNames = await resolveTeamsNames(
                   context,
                   message.channelId,
@@ -445,6 +461,34 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   isDm: isTeamsDm,
                   dmOwnerEmail: isTeamsDm ? message.senderEmail : undefined,
                 });
+              }
+
+              // If this is a DM and user has a pending auto-provisioned invitation,
+              // send the signup link before the agent selection card.
+              // Skip when SSO is enabled — users just sign in via their IdP.
+              if (
+                isTeamsDm &&
+                message.senderEmail &&
+                !(await isSsoConfigured())
+              ) {
+                const invitations = await InvitationModel.findByEmail(
+                  message.senderEmail.toLowerCase(),
+                );
+                const autoProvInv = invitations.find((inv) =>
+                  inv.status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS),
+                );
+                if (autoProvInv) {
+                  const welcome = buildWelcomeMessage({
+                    invitationId: autoProvInv.id,
+                    email: message.senderEmail,
+                    name: message.senderName,
+                  });
+                  await context
+                    .sendActivity(
+                      `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
+                    )
+                    .catch(() => {});
+                }
               }
 
               // Discover channels + show agent selection
@@ -1539,7 +1583,7 @@ function isCommand(text: string): boolean {
  * Resolve sender email (TeamsInfo → Graph API fallback) and verify they are a registered Archestra user.
  * Sets message.senderEmail and returns true if verified, false if rejected (with error sent to Teams).
  */
-async function resolveAndVerifySender(
+async function resolveAndVerifySenderForMSTeams(
   context: TurnContext,
   provider: { getUserEmail(aadObjectId: string): Promise<string | null> },
   message: IncomingChatMessage,
@@ -1576,17 +1620,58 @@ async function resolveAndVerifySender(
     return false;
   }
 
-  const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+  let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
-    logger.warn("[ChatOps] Sender is not a registered Archestra user");
-    logger.debug(
-      { senderEmail: message.senderEmail },
-      "[ChatOps] Unregistered sender email",
-    );
-    await context.sendActivity(
-      `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-    );
-    return false;
+    // Auto-provision: create user + member from Teams identity
+    try {
+      await autoProvisionUser({
+        email: message.senderEmail,
+        name: message.senderName,
+        provider: "ms-teams",
+      });
+      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail: message.senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        await context.sendActivity(
+          "Something went wrong while setting up your account. Please try again.",
+        );
+        return false;
+      }
+
+      // In channels, don't expose the signup link — ask user to DM the bot.
+      // In DMs, the signup link is sent later (before the agent selection card).
+      // Skip entirely when SSO is enabled — users just sign in via their IdP.
+      const isDm =
+        context.activity.conversation?.conversationType === "personal";
+      if (!isDm && !(await isSsoConfigured())) {
+        const botId = context.activity.recipient.id;
+        const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
+        await context
+          .sendActivity(
+            `Hey there 👋 We created an Archestra user for you (${message.senderEmail}). ` +
+              `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+              `[Open DM with me](${dmDeepLink})`,
+          )
+          .catch(() => {});
+      }
+
+      logger.info(
+        { senderEmail: message.senderEmail },
+        "[ChatOps] Auto-provisioned user from Teams",
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[ChatOps] Failed to auto-provision user from Teams",
+      );
+      await context.sendActivity(
+        "Something went wrong while setting up your account. Please try again.",
+      );
+      return false;
+    }
   }
 
   return true;

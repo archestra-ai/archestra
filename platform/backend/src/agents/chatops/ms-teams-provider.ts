@@ -273,7 +273,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     let replyText = options.text;
     if (options.footer) {
-      replyText += `\n\n---\n\n🤖 ${options.footer}`;
+      replyText += `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
@@ -577,6 +577,23 @@ class MSTeamsProvider implements ChatOpsProvider {
       }));
   }
 
+  async sendEphemeralMessage(params: {
+    channelId: string;
+    userId: string;
+    text: string;
+    threadId?: string;
+  }): Promise<void> {
+    // Teams doesn't have true ephemeral messages.
+    // Send a 1:1 DM to the user via proactive messaging if possible.
+    if (!this.adapter) return;
+    // For now, log a note — the welcome message is sent as part of the
+    // regular reply flow in the Teams route handler via context.sendActivity.
+    logger.debug(
+      { userId: params.userId },
+      "[MSTeamsProvider] Ephemeral message requested (sent via turn context in route handler)",
+    );
+  }
+
   async setTypingStatus(
     _channelId: string,
     _threadTs: string,
@@ -739,11 +756,6 @@ class MSTeamsProvider implements ChatOpsProvider {
           },
         ]
       : [
-          {
-            type: "TextBlock",
-            weight: "Bolder",
-            text: "Welcome to Archestra!",
-          },
           {
             type: "TextBlock",
             text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",

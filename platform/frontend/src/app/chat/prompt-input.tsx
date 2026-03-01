@@ -5,6 +5,7 @@ import {
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
   type ModelInputModality,
+  type SupportedProvider,
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
@@ -44,7 +45,6 @@ import {
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
-import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
 
 interface ArchestraPromptInputProps {
@@ -62,16 +62,13 @@ interface ArchestraPromptInputProps {
   conversationId?: string;
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
-  currentProvider?: SupportedChatProvider;
+  currentProvider?: SupportedProvider;
   /** Selected API key ID for initial chat mode */
   initialApiKeyId?: string | null;
   /** Callback for API key change in initial chat mode (no conversation) */
   onApiKeyChange?: (apiKeyId: string) => void;
   /** Callback when user selects an API key with a different provider */
-  onProviderChange?: (
-    provider: SupportedChatProvider,
-    apiKeyId: string,
-  ) => void;
+  onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Whether file uploads are allowed (controlled by organization setting) */

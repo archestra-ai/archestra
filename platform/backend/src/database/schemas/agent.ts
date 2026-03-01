@@ -1,4 +1,5 @@
 import type { IncomingEmailSecurityMode } from "@shared";
+import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -10,7 +11,11 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentHistoryEntry, AgentType } from "@/types/agent";
+import type {
+  AgentHistoryEntry,
+  AgentType,
+  BuiltInAgentConfig,
+} from "@/types/agent";
 
 export const agentScopeEnum = pgEnum("agent_scope", [
   "personal",
@@ -97,6 +102,16 @@ const agentsTable = pgTable(
     identityProviderId: text("identity_provider_id").references(
       () => identityProvidersTable.id,
       { onDelete: "set null" },
+    ),
+
+    /** JSONB config for built-in agents (null for user-created agents) */
+    builtInAgentConfig: jsonb(
+      "built_in_agent_config",
+    ).$type<BuiltInAgentConfig>(),
+
+    /** Computed column: true when builtInAgentConfig is not null */
+    builtIn: boolean("built_in").generatedAlwaysAs(
+      (): SQL => sql`${agentsTable.builtInAgentConfig} IS NOT NULL`,
     ),
 
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

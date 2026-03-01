@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/xai/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "grok-4",
+          "created": 1700000000,
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-4-mini",
+          "created": 1700000000,
+          "owned_by": "xai"
+        }
+      ]
+    }
+  }
+}

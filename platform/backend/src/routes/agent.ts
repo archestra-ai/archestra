@@ -11,6 +11,7 @@ import { metrics } from "@/observability";
 import {
   AgentVersionsResponseSchema,
   ApiError,
+  BuiltInAgentConfigSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
@@ -147,12 +148,22 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
             ),
+          excludeBuiltIn: z
+            .preprocess((val) => val === "true" || val === true, z.boolean())
+            .optional()
+            .describe(
+              "Exclude built-in agents from the results. Defaults to false.",
+            ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (
-      { query: { agentType, agentTypes }, user, organizationId },
+      {
+        query: { agentType, agentTypes, excludeBuiltIn },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       // Determine the effective type filter
@@ -186,6 +197,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // agentTypes takes precedence over agentType
           agentType: agentTypes ? undefined : agentType,
           agentTypes,
+          excludeBuiltIn,
         }),
       );
     },
@@ -392,12 +404,42 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
-      // Omit teams if scope is not 'team' — scope takes precedence
-      const updateData = {
-        ...body,
-        ...((body.scope ?? existingAgent.scope) !== "team" &&
-          body.teams !== undefined && { teams: [] }),
-      };
+      // Built-in agent guard: restrict which fields can be modified
+      let updateData: typeof body;
+      if (existingAgent.builtInAgentConfig) {
+        // Validate builtInAgentConfig if provided
+        if (body.builtInAgentConfig) {
+          const parsed = BuiltInAgentConfigSchema.safeParse(
+            body.builtInAgentConfig,
+          );
+          if (!parsed.success) {
+            throw new ApiError(400, "Invalid built-in agent configuration");
+          }
+        }
+
+        // Only allow specific fields for built-in agents.
+        // Fields like name, description, and systemPrompt are intentionally excluded:
+        // the systemPrompt contains the analysis template with {tool.name}, {tool.description},
+        // etc. placeholders used by the policy configuration subagent.
+        updateData = {
+          ...(body.builtInAgentConfig !== undefined && {
+            builtInAgentConfig: body.builtInAgentConfig,
+          }),
+          ...(body.llmApiKeyId !== undefined && {
+            llmApiKeyId: body.llmApiKeyId,
+          }),
+          ...(body.llmModel !== undefined && { llmModel: body.llmModel }),
+          ...(body.scope !== undefined && { scope: body.scope }),
+          ...(body.teams !== undefined && { teams: body.teams }),
+        };
+      } else {
+        // Omit teams if scope is not 'team' — scope takes precedence
+        updateData = {
+          ...body,
+          ...((body.scope ?? existingAgent.scope) !== "team" &&
+            body.teams !== undefined && { teams: [] }),
+        };
+      }
 
       const agent = await AgentModel.update(id, updateData);
 
@@ -455,6 +497,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentAuthorId: agent.authorId,
         userId: user.id,
       });
+
+      // Prevent deletion of built-in agents
+      if (agent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be deleted");
+      }
 
       const success = await AgentModel.delete(id);
 

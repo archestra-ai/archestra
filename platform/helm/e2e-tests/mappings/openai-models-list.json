@@ -21,6 +21,10 @@
           "name": "GPT-4o"
         },
         {
+          "id": "gpt-4o-2024-08-06",
+          "name": "GPT-4o (2024-08-06)"
+        },
+        {
           "id": "gpt-4o-mini",
           "name": "GPT-4o Mini"
         },

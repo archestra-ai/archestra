@@ -54,6 +54,7 @@ const toolsTable = pgTable(
       },
     ),
     policiesAutoConfiguredReasoning: text("policies_auto_configured_reasoning"),
+    policiesAutoConfiguredModel: text("policies_auto_configured_model"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

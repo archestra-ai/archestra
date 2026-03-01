@@ -334,6 +334,9 @@ export function useAutoConfigurePolicies() {
         queryKey: ["tools"],
       });
       queryClient.invalidateQueries({
+        queryKey: ["tools-with-assignments"],
+      });
+      queryClient.invalidateQueries({
         queryKey: ["tool-invocation-policies"],
       });
       queryClient.invalidateQueries({

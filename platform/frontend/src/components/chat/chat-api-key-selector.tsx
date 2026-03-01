@@ -32,7 +32,6 @@ import { useUpdateConversation } from "@/lib/chat.query";
 import {
   type ChatApiKey,
   type ChatApiKeyScope,
-  type SupportedChatProvider,
   useAvailableChatApiKeys,
 } from "@/lib/chat-settings.query";
 
@@ -48,12 +47,9 @@ interface ChatApiKeySelectorProps {
   /** Callback for initial chat mode when no conversationId is available */
   onApiKeyChange?: (apiKeyId: string) => void;
   /** Current provider (derived from selected model) - used for auto-selection */
-  currentProvider?: SupportedChatProvider;
+  currentProvider?: SupportedProvider;
   /** Callback when user explicitly selects a key with different provider */
-  onProviderChange?: (
-    provider: SupportedChatProvider,
-    apiKeyId: string,
-  ) => void;
+  onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
   /** Whether models are still loading - don't render until models are loaded */
@@ -110,8 +106,8 @@ export function ChatApiKeySelector({
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
-    const grouped: Record<SupportedChatProvider, ChatApiKey[]> = {} as Record<
-      SupportedChatProvider,
+    const grouped: Record<SupportedProvider, ChatApiKey[]> = {} as Record<
+      SupportedProvider,
       ChatApiKey[]
     >;
 
@@ -127,7 +123,7 @@ export function ChatApiKeySelector({
 
   // Get available providers sorted (current provider first)
   const availableProviders = useMemo(() => {
-    const providers = Object.keys(keysByProvider) as SupportedChatProvider[];
+    const providers = Object.keys(keysByProvider) as SupportedProvider[];
     // Sort: current provider first, then alphabetically
     return providers.sort((a, b) => {
       if (a === currentProvider) return -1;

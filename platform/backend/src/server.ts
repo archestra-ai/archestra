@@ -72,6 +72,7 @@ import {
   Openrouter,
   Perplexity,
   Vllm,
+  Xai,
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -188,6 +189,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionResponseSchema, {
     id: "MinimaxChatCompletionResponse",
+  });
+  z.globalRegistry.add(Xai.API.ChatCompletionRequestSchema, {
+    id: "XaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Xai.API.ChatCompletionResponseSchema, {
+    id: "XaiChatCompletionResponse",
   });
 }
 

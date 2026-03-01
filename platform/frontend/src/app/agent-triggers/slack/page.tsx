@@ -24,6 +24,7 @@ import { usePublicBaseUrl } from "@/lib/features.hook";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
+import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -198,6 +199,7 @@ export default function SlackPage() {
             </div>
           )}
         </SetupStep>
+        <LlmKeySetupStep />
         <SetupStep
           title="Setup Slack"
           description="Create a Slack App from manifest and connect it to Archestra"

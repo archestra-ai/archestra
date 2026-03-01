@@ -134,6 +134,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.groq.com/keys",
     consoleName: "Groq Console",
   },
+  xai: {
+    name: "xAI",
+    icon: "/icons/xai.png",
+    placeholder: "xai-...",
+    enabled: true,
+    consoleUrl: "https://x.ai/api",
+    consoleName: "xAI",
+  },
   openrouter: {
     name: "OpenRouter",
     icon: "/icons/openrouter.png",

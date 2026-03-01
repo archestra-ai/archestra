@@ -19,6 +19,11 @@ import type {
   IncomingChatMessage,
 } from "@/types/chatops";
 import {
+  autoProvisionUser,
+  buildWelcomeMessage,
+  isSsoConfigured,
+} from "./auto-provision";
+import {
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -307,13 +312,34 @@ export class ChatOpsManager {
       return;
     }
 
-    const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
     if (!user) {
-      await provider.sendReply({
-        originalMessage: message,
-        text: `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+      // Resolve display name from provider (e.g., Slack real_name)
+      const displayName =
+        (await provider.getUserName?.(message.senderId)) || message.senderName;
+
+      // Auto-provision: create user + member from chat platform identity
+      const { invitationId } = await autoProvisionUser({
+        email: message.senderEmail,
+        name: displayName,
+        provider: provider.providerId,
       });
-      return;
+      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { email: message.senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        return;
+      }
+
+      // Send ephemeral welcome message (non-blocking)
+      this.sendAutoProvisionWelcome({
+        provider,
+        message,
+        invitationId,
+        displayName,
+      }).catch(() => {});
     }
 
     // Check for existing binding
@@ -393,13 +419,24 @@ export class ChatOpsManager {
       logger.warn("[ChatOps] Could not resolve interactive user email");
       return;
     }
-    const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
     if (!user) {
-      logger.warn(
-        { senderEmail },
-        "[ChatOps] Interactive user not registered in Archestra",
-      );
-      return;
+      // Auto-provision: create user + member from interactive payload
+      const displayName =
+        (await provider.getUserName?.(selection.userId)) || selection.userName;
+      await autoProvisionUser({
+        email: senderEmail,
+        name: displayName,
+        provider: provider.providerId,
+      });
+      user = await UserModel.findByEmail(senderEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        return;
+      }
     }
 
     // Verify agent exists
@@ -557,6 +594,70 @@ export class ChatOpsManager {
   // Private Methods
   // ===========================================================================
 
+  /**
+   * Send a welcome DM to a newly auto-provisioned user.
+   * Non-fatal — failures are logged but do not block message processing.
+   */
+  private async sendAutoProvisionWelcome(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    invitationId: string;
+    displayName: string;
+  }): Promise<void> {
+    const { provider, message, invitationId, displayName } = params;
+    try {
+      // Skip welcome message when SSO is enabled — users just sign in via their IdP
+      if (await isSsoConfigured()) return;
+
+      const welcome = buildWelcomeMessage({
+        invitationId,
+        email: message.senderEmail || "",
+        name: displayName,
+      });
+
+      const isDM = message.metadata?.channelType === "im";
+
+      if (isDM && provider.sendDirectMessage) {
+        // In DMs, reply in the user's thread so it appears in Chat tab.
+        // Pass channelId to skip conversations.open (which routes to History).
+        // Pass threadId to thread the reply to the user's original message.
+        await provider.sendDirectMessage({
+          userId: message.senderId,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+          channelId: message.channelId,
+          threadId: message.threadId,
+        });
+      } else if (provider.sendDirectMessage) {
+        // In channels, send a separate DM to the user
+        await provider.sendDirectMessage({
+          userId: message.senderId,
+          text: welcome.text,
+          actionUrl: welcome.actionUrl,
+          actionLabel: welcome.actionLabel,
+        });
+      } else if (isDM) {
+        // Fallback in DMs: send the link inline (it's private)
+        await provider.sendReply({
+          originalMessage: message,
+          text: `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
+        });
+      } else {
+        // Fallback in channels: don't expose the signup link
+        await provider.sendReply({
+          originalMessage: message,
+          text: `${welcome.text} Send me a direct message and I'll send you a signup link.`,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to send auto-provision welcome message",
+      );
+    }
+  }
+
   private async sendAgentSelectionCard(
     provider: ChatOpsProvider,
     message: IncomingChatMessage,
@@ -702,7 +803,7 @@ export class ChatOpsManager {
   }
 
   /**
-   * Validate that the MS Teams user has access to the agent.
+   * Validate that user has access to the agent.
    * 1. Use pre-resolved email from TeamsInfo (Bot Framework), or fall back to Graph API
    * 2. Look up Archestra user by email
    * 3. Check user has team-based access to the agent
@@ -749,23 +850,36 @@ export class ChatOpsManager {
       };
     }
 
-    // Look up Archestra user by email
-    const user = await UserModel.findByEmail(userEmail.toLowerCase());
+    // Look up Archestra user by email — auto-provision if not found
+    let user = await UserModel.findByEmail(userEmail.toLowerCase());
 
     if (!user) {
-      logger.warn(
-        { senderEmail: userEmail },
-        "[ChatOps] User not registered in Archestra",
-      );
-      await this.sendSecurityErrorReply(
+      const displayName =
+        (await provider.getUserName?.(message.senderId)) || message.senderName;
+      const { invitationId } = await autoProvisionUser({
+        email: userEmail,
+        name: displayName,
+        provider: provider.providerId,
+      });
+      user = await UserModel.findByEmail(userEmail.toLowerCase());
+      if (!user) {
+        logger.error(
+          { senderEmail: userEmail },
+          "[ChatOps] Auto-provisioned user not found after creation",
+        );
+        return {
+          success: false,
+          error: "Failed to auto-provision user",
+        };
+      }
+
+      // Send welcome message (non-blocking)
+      this.sendAutoProvisionWelcome({
         provider,
         message,
-        `You (${userEmail}) are not a registered Archestra user. Contact your administrator for access.`,
-      );
-      return {
-        success: false,
-        error: `Unauthorized: ${userEmail} is not a registered Archestra user`,
-      };
+        invitationId,
+        displayName,
+      }).catch(() => {});
     }
 
     // Check if user has access to this specific agent (via team membership or admin)
@@ -993,7 +1107,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: agent.name,
+          footer: `🤖 ${agent.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       } else if (
@@ -1022,9 +1136,14 @@ export class ChatOpsManager {
       );
 
       if (sendReply) {
+        const errMsg = errorMessage(error);
+        // Show truncated error details as a subtle footer (max 500 chars)
+        const errorDetail =
+          errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
         await provider.sendReply({
           originalMessage: message,
           text: "Sorry, I encountered an error processing your request.",
+          footer: errorDetail,
           conversationReference: message.metadata?.conversationReference,
         });
       }

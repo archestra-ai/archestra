@@ -217,6 +217,14 @@ export class McpServerRuntimeManager {
 
       logger.info("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
+
+      // Fire-and-forget: backfill team-id labels on existing regcred secrets
+      this.backfillRegcredTeamLabels(installedServers).catch((err) => {
+        logger.warn(
+          { err },
+          "Failed to backfill team-id labels on regcred secrets",
+        );
+      });
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
@@ -755,11 +763,22 @@ export class McpServerRuntimeManager {
   }
 
   /**
-   * List Kubernetes secrets of type kubernetes.io/dockerconfigjson in the namespace.
-   * Used to populate the "existing secret" dropdown in the UI.
+   * List Archestra-managed docker-registry secrets in the namespace.
+   * Filters by `app=mcp-server,type=regcred` labels to exclude pre-existing secrets.
+   * For non-admin users, further filters by `team-id` label matching the user's team IDs.
+   *
+   * Returns empty array when called without options to prevent accidental unscoped access.
    */
-  async listDockerRegistrySecrets(): Promise<Array<{ name: string }>> {
+  async listDockerRegistrySecrets(options?: {
+    isAdmin?: boolean;
+    teamIds?: string[];
+  }): Promise<Array<{ name: string }>> {
     if (!this.k8sApi) {
+      return [];
+    }
+
+    // Default to restrictive: require explicit isAdmin or teamIds
+    if (!options?.isAdmin && !options?.teamIds) {
       return [];
     }
 
@@ -767,8 +786,21 @@ export class McpServerRuntimeManager {
       const secrets = await this.k8sApi.listNamespacedSecret({
         namespace: this.namespace,
         fieldSelector: "type=kubernetes.io/dockerconfigjson",
+        labelSelector: "app=mcp-server,type=regcred",
       });
-      return secrets.items
+
+      let filtered = secrets.items;
+
+      // For non-admin users, filter by team-id label
+      if (!options.isAdmin && options.teamIds) {
+        const teamIdSet = new Set(options.teamIds);
+        filtered = filtered.filter((s) => {
+          const teamId = s.metadata?.labels?.["team-id"];
+          return teamId != null && teamIdSet.has(teamId);
+        });
+      }
+
+      return filtered
         .map((s) => ({ name: s.metadata?.name ?? "" }))
         .filter((s) => s.name.length > 0);
     } catch (error) {
@@ -777,6 +809,76 @@ export class McpServerRuntimeManager {
         "Failed to list docker-registry secrets in namespace",
       );
       return [];
+    }
+  }
+
+  /**
+   * Backfill `team-id` labels on existing regcred secrets that were created
+   * before this label was introduced. Uses the installed servers list to map
+   * mcp-server-id → teamId.
+   */
+  private async backfillRegcredTeamLabels(
+    installedServers: McpServer[],
+  ): Promise<void> {
+    if (!this.k8sApi) return;
+
+    const serverIdToTeamId = new Map<string, string>();
+    for (const server of installedServers) {
+      if (server.teamId) {
+        serverIdToTeamId.set(server.id, server.teamId);
+      }
+    }
+
+    if (serverIdToTeamId.size === 0) return;
+
+    try {
+      const secrets = await this.k8sApi.listNamespacedSecret({
+        namespace: this.namespace,
+        labelSelector: "app=mcp-server,type=regcred",
+        fieldSelector: "type=kubernetes.io/dockerconfigjson",
+      });
+
+      for (const secret of secrets.items) {
+        const labels = secret.metadata?.labels;
+        if (!labels || labels["team-id"]) continue; // already has team-id
+
+        const serverId = labels["mcp-server-id"];
+        if (!serverId) continue;
+
+        const teamId = serverIdToTeamId.get(serverId);
+        if (!teamId) continue;
+
+        const secretName = secret.metadata?.name;
+        if (!secretName) continue;
+
+        try {
+          await this.k8sApi.patchNamespacedSecret({
+            name: secretName,
+            namespace: this.namespace,
+            body: {
+              metadata: {
+                labels: {
+                  "team-id": K8sDeployment.sanitizeLabelValue(teamId),
+                },
+              },
+            },
+          });
+          logger.info(
+            { secretName, teamId },
+            "Backfilled team-id label on regcred secret",
+          );
+        } catch (patchError) {
+          logger.warn(
+            { err: patchError, secretName },
+            "Failed to backfill team-id label on regcred secret",
+          );
+        }
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "Failed to list secrets for team-id backfill",
+      );
     }
   }
 

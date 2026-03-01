@@ -164,6 +164,16 @@ const groqConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+// xAI - Uses OpenAI-compatible streaming format
+const xaiConfig: ChatProviderTestConfig = {
+  providerName: "xai",
+  providerDisplayName: "xAI",
+  modelId: "grok-4",
+  modelDisplayName: "grok-4",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 // OpenRouter - Uses OpenAI-compatible streaming format
 const openrouterConfig: ChatProviderTestConfig = {
   providerName: "openrouter",
@@ -193,6 +203,7 @@ const testConfigs: ChatProviderTestConfig[] = [
   mistralConfig,
   perplexityConfig,
   groqConfig,
+  xaiConfig,
   openrouterConfig,
   ollamaConfig,
   vllmConfig,

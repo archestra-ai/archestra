@@ -213,27 +213,29 @@ const NavPrimary = ({
       {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
-          {item.subItems.map((sub) => (
-            <SidebarMenuSubItem key={sub.title}>
-              <SidebarMenuSubButton
-                asChild
-                isActive={
-                  sub.customIsActive?.(pathname, searchParams) ??
-                  pathname.startsWith(sub.url)
-                }
-              >
-                <Link
-                  href={sub.url}
-                  data-testid={sub.testId}
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false);
-                  }}
+          {item.subItems
+            .filter((sub) => permissionMap[sub.url] ?? true)
+            .map((sub) => (
+              <SidebarMenuSubItem key={sub.title}>
+                <SidebarMenuSubButton
+                  asChild
+                  isActive={
+                    sub.customIsActive?.(pathname, searchParams) ??
+                    pathname.startsWith(sub.url)
+                  }
                 >
-                  <span>{sub.title}</span>
-                </Link>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
+                  <Link
+                    href={sub.url}
+                    data-testid={sub.testId}
+                    onClick={() => {
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                  >
+                    <span>{sub.title}</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
         </SidebarMenuSub>
       )}
     </SidebarMenuItem>

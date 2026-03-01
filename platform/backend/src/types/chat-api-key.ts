@@ -1,3 +1,4 @@
+import { SupportedProvidersSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -7,35 +8,6 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SecretStorageTypeSchema } from "./mcp-server";
 
-// Supported chat providers
-export const SupportedChatProviderSchema = z.enum([
-  "anthropic",
-  "bedrock",
-  "cerebras",
-  "cohere",
-  "gemini",
-  "groq",
-  "openrouter",
-  "mistral",
-  "openai",
-  "perplexity",
-  "vllm",
-  "ollama",
-  "zhipuai",
-  "deepseek",
-  "minimax",
-]);
-export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;
-
-/**
- * Type guard to check if a value is a valid SupportedChatProvider
- */
-export function isSupportedChatProvider(
-  value: unknown,
-): value is SupportedChatProvider {
-  return SupportedChatProviderSchema.safeParse(value).success;
-}
-
 // Chat API Key scope
 export const ChatApiKeyScopeSchema = z.enum(["personal", "team", "org_wide"]);
 export type ChatApiKeyScope = z.infer<typeof ChatApiKeyScopeSchema>;
@@ -44,7 +16,7 @@ export type ChatApiKeyScope = z.infer<typeof ChatApiKeyScopeSchema>;
 export const SelectChatApiKeySchema = createSelectSchema(
   schema.chatApiKeysTable,
 ).extend({
-  provider: SupportedChatProviderSchema,
+  provider: SupportedProvidersSchema,
   scope: ChatApiKeyScopeSchema,
   // baseUrl is nullable in the DB schema (text without .notNull()) but
   // drizzle-zod's createSelectSchema defaults text columns to z.string().
@@ -62,7 +34,7 @@ export const InsertChatApiKeySchema = createInsertSchema(
     updatedAt: true,
   })
   .extend({
-    provider: SupportedChatProviderSchema,
+    provider: SupportedProvidersSchema,
     scope: ChatApiKeyScopeSchema,
   });
 
@@ -76,7 +48,7 @@ export const UpdateChatApiKeySchema = createUpdateSchema(
     updatedAt: true,
   })
   .extend({
-    provider: SupportedChatProviderSchema.optional(),
+    provider: SupportedProvidersSchema.optional(),
     scope: ChatApiKeyScopeSchema.optional(),
     isPrimary: z.boolean().optional(),
   });

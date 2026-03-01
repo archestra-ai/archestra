@@ -29,7 +29,10 @@ export default async function McpToolCallDetailPageServer({
         headers,
         path: { mcpToolCallId: id },
       }),
-      archestraApiSdk.getAllAgents({ headers }),
+      archestraApiSdk.getAllAgents({
+        headers,
+        query: { excludeBuiltIn: true },
+      }),
     ]);
     if (mcpToolCallResponse.error) {
       handleApiError(mcpToolCallResponse.error);

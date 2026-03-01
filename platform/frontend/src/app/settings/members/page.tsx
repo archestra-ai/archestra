@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { PendingSignupMembers } from "@/components/pending-signup-members";
 import {
   Card,
   CardContent,
@@ -21,22 +22,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import {
   organizationKeys,
   useActiveMemberRole,
   useActiveOrganization,
+  useMemberSignupStatus,
 } from "@/lib/organization.query";
 
 function MembersSettingsContent() {
   const queryClient = useQueryClient();
   const { data: activeOrg, isPending } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
+  const { data: chatOpsProviders } = useChatOpsStatus();
+  const hasChatOps = chatOpsProviders?.some((p) => p.configured);
+  const { data: signupStatus } = useMemberSignupStatus();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const hasPermissionTodo = "TODO:";
   const invitationsEnabled = !config.disableInvitations;
+  const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
+  const pendingUserIds = new Set(pendingSignupMembers.map((m) => m.userId));
 
   const members = activeOrg ? (
     <div className="space-y-6">
@@ -68,6 +76,7 @@ function MembersSettingsContent() {
           actionLabel: null,
           instructions: null,
         })}
+        filterFn={(member) => !pendingUserIds.has(member.userId)}
         action={
           invitationsEnabled
             ? () => {
@@ -76,6 +85,9 @@ function MembersSettingsContent() {
             : undefined
         }
       />
+      {hasChatOps && (
+        <PendingSignupMembers pendingSignupMembers={pendingSignupMembers} />
+      )}
       {invitationsEnabled && (
         <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
       )}

@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS } from "@shared";
 import {
   and,
   asc,
@@ -280,32 +281,44 @@ class AgentToolModel {
       })
       .returning();
 
-    // Auto-configure policies if enabled (run in background)
+    // Auto-configure policies if enabled (fire-and-forget).
+    // This is intentionally best-effort: the agent-tool is returned immediately
+    // while the policy configuration runs asynchronously. If the background
+    // operation fails, the error is logged but does not affect the caller.
     // Import at top of method to avoid circular dependency
-    const { toolAutoPolicyService } = await import("./agent-tool-auto-policy");
-    const { default: OrganizationModel } = await import("./organization");
+    const { policyConfigurationService } = await import(
+      "@/agents/subagents/policy-configuration"
+    );
+    const { default: AgentModel } = await import("./agent");
 
-    // Get agent's organization via team relationship and trigger auto-configure in background
-    db.select({ organizationId: schema.teamsTable.organizationId })
-      .from(schema.agentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(eq(schema.agentTeamsTable.agentId, agentId))
+    // Check the built-in Policy Configuration Subagent for auto-configure setting
+    // and trigger auto-configure in background.
+    // Look up organizationId from the agents table directly (not via teams)
+    // to handle org-scoped and personal agents that may have no team assignments.
+    db.select({ organizationId: schema.agentsTable.organizationId })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, agentId))
       .limit(1)
       .then(async (rows) => {
         if (rows.length === 0) return;
 
         const organizationId = rows[0].organizationId;
-        const organization = await OrganizationModel.getById(organizationId);
 
-        if (organization?.autoConfigureNewTools) {
+        // Read auto-configure setting from the built-in Policy Config agent
+        const builtInAgent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          organizationId,
+        );
+        const config = builtInAgent?.builtInAgentConfig;
+        if (
+          config?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
+          config.autoConfigureOnToolAssignment
+        ) {
           // Use the unified method with timeout and loading state management
-          await toolAutoPolicyService.configurePoliciesForToolWithTimeout(
+          await policyConfigurationService.configurePoliciesForToolWithTimeout({
             toolId,
             organizationId,
-          );
+          });
         }
       })
       .catch((error) => {

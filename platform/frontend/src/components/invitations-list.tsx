@@ -7,7 +7,13 @@ import { toast } from "sonner";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
@@ -42,6 +48,9 @@ function InvitationsListContent({
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Pending Invitations</CardTitle>
+          <CardDescription>
+            Pending invitations for members to join the organization.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {invitations.length === 0 && (

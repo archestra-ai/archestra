@@ -12,6 +12,7 @@ import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import openrouterProxyRoutesV2 from "./proxy/routesv2/openrouter";
 import perplexityProxyRoutesV2 from "./proxy/routesv2/perplexity";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
+import xaiProxyRoutesV2 from "./proxy/routesv2/xai";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
 
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
@@ -43,7 +44,6 @@ export { default as oauthServerRoutes } from "./oauth-server";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
-export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 // Proxy routes
 export const anthropicProxyRoutes = anthropicProxyRoutesV2;
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
@@ -52,6 +52,7 @@ export const geminiProxyRoutes = geminiProxyRoutesV2;
 export const mistralProxyRoutes = mistralProxyRoutesV2;
 export const perplexityProxyRoutes = perplexityProxyRoutesV2;
 export const groqProxyRoutes = groqProxyRoutesV2;
+export const xaiProxyRoutes = xaiProxyRoutesV2;
 export const openAiProxyRoutes = openAiProxyRoutesV2;
 export const openrouterProxyRoutes = openrouterProxyRoutesV2;
 export const vllmProxyRoutes = vllmProxyRoutesV2;

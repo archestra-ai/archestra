@@ -253,6 +253,14 @@ const groqConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const xaiConfig: ToolInvocationTestConfig = {
+  ...makeOpenAiCompatibleToolConfig({
+    providerName: "xAI",
+    endpoint: (agentId) => `/v1/xai/${agentId}/chat/completions`,
+    model: "grok-4-1-fast-non-reasoning",
+  }),
+};
+
 const anthropicConfig: ToolInvocationTestConfig = {
   providerName: "Anthropic",
 
@@ -634,6 +642,7 @@ const testConfigsMap = {
   cohere: cohereConfig,
   cerebras: cerebrasConfig,
   groq: groqConfig,
+  xai: xaiConfig,
   mistral: mistralConfig,
   vllm: vllmConfig,
   ollama: ollamaConfig,

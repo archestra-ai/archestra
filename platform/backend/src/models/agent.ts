@@ -356,7 +356,7 @@ class AgentModel {
   }
 
   /**
-   * Find all internal agents.
+   * Find all internal agents (excluding built-in agents).
    * Used to populate the agent selection dropdown in Teams/Slack/etc.
    */
   static async findAllInternalAgents(): Promise<Pick<Agent, "id" | "name">[]> {
@@ -366,7 +366,12 @@ class AgentModel {
         name: schema.agentsTable.name,
       })
       .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.agentType, "agent"))
+      .where(
+        and(
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+        ),
+      )
       .orderBy(asc(schema.agentsTable.name));
 
     return agents;

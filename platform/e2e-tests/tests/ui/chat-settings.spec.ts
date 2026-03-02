@@ -343,14 +343,14 @@ test.describe("Provider Settings - Tab Navigation", () => {
 
     // Virtual API Keys tab
     await page.getByRole("link", { name: "Virtual API Keys" }).click();
-    await page.waitForURL("**/provider-settings?tab=virtual-keys");
+    await page.waitForURL("**/llm/providers?tab=virtual-keys");
     await expect(
       page.getByRole("heading", { name: "Virtual API Keys" }),
     ).toBeVisible();
 
     // Models tab
     await page.getByRole("link", { name: "Models" }).click();
-    await page.waitForURL("**/provider-settings?tab=models");
+    await page.waitForURL("**/llm/providers?tab=models");
     await expect(
       page.getByRole("heading", { name: "Available Models" }),
     ).toBeVisible();

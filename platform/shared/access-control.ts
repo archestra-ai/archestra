@@ -689,9 +689,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     agent: ["read"],
   },
 
-  "/logs": {
-    interaction: ["read"],
-  },
   "/llm/logs": {
     interaction: ["read"],
   },

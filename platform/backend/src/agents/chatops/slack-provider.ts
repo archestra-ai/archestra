@@ -341,24 +341,23 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
-    const agentButtons = params.agents.map((agent) => ({
-      type: "button" as const,
-      text: {
-        type: "plain_text" as const,
-        text: agent.name,
-      },
-      action_id: `select_agent_${agent.id}`,
-      value: agent.id,
-    }));
-
-    // Slack allows max 5 elements per actions block, split if needed
-    const actionBlocks: Record<string, unknown>[] = [];
-    for (let i = 0; i < agentButtons.length; i += 5) {
-      actionBlocks.push({
-        type: "actions" as const,
-        elements: agentButtons.slice(i, i + 5),
-      });
-    }
+    const agentDropdown = {
+      type: "actions" as const,
+      elements: [
+        {
+          type: "static_select" as const,
+          action_id: "select_agent",
+          placeholder: {
+            type: "plain_text" as const,
+            text: "Choose an agent…",
+          },
+          options: params.agents.map((agent) => ({
+            text: { type: "plain_text" as const, text: agent.name },
+            value: agent.id,
+          })),
+        },
+      ],
+    };
 
     const blocks: Record<string, unknown>[] = params.isWelcome
       ? [
@@ -391,7 +390,7 @@ class SlackProvider implements ChatOpsProvider {
               text: "*Let's set the default agent for this channel:*",
             },
           },
-          ...actionBlocks,
+          agentDropdown,
         ]
       : [
           {
@@ -401,7 +400,7 @@ class SlackProvider implements ChatOpsProvider {
               text: "*Change Default Agent*\nSelect a different agent to handle messages in this channel:",
             },
           },
-          ...actionBlocks,
+          agentDropdown,
         ];
 
     const isDM = params.message.metadata?.channelType === "im";
@@ -591,12 +590,12 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const action = p.actions[0];
-    if (!action.action_id?.startsWith("select_agent_") || !action.value) {
+    if (action.action_id !== "select_agent" || !action.selected_option?.value) {
       return null;
     }
 
     return {
-      agentId: action.value,
+      agentId: action.selected_option.value,
       channelId: p.channel?.id || "",
       workspaceId: p.team?.id || null,
       threadTs: p.message?.thread_ts || p.message?.ts,
@@ -1050,7 +1049,8 @@ interface SlackInteractivePayload {
   type: string;
   actions?: Array<{
     action_id: string;
-    value: string;
+    value?: string;
+    selected_option?: { value: string };
   }>;
   user?: { id: string; name: string };
   channel?: { id: string };

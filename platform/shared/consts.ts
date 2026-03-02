@@ -140,6 +140,15 @@ export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
   TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
 ];
 
+/**
+ * Tools that require a real conversation context to function.
+ * These are filtered out when executing outside of a chat conversation
+ * (e.g., direct A2A calls, ChatOps, email triggers).
+ */
+export const CONVERSATION_ONLY_TOOL_NAMES = [
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+];
+
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
   "https://archestra.ai/mcp-catalog/api";

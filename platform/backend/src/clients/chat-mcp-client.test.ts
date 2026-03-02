@@ -1,4 +1,5 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { TOOL_ARTIFACT_WRITE_FULL_NAME } from "@shared";
 import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -352,6 +353,184 @@ describe("chat-mcp-client tool caching", () => {
     );
     // Most importantly, listTools should only be called once due to caching
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+});
+
+describe("conversation-only tool filtering", () => {
+  test("filters out artifact_write when isConversationContext is false", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({
+        tools: [
+          {
+            name: TOOL_ARTIFACT_WRITE_FULL_NAME,
+            description: "Write artifact",
+            inputSchema: { type: "object", properties: {} },
+          },
+          {
+            name: "lookup_email",
+            description: "Lookup email",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      isConversationContext: false,
+    });
+
+    expect(Object.keys(tools)).toEqual(["lookup_email"]);
+    expect(tools[TOOL_ARTIFACT_WRITE_FULL_NAME]).toBeUndefined();
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+
+  test("includes artifact_write when isConversationContext is true", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({
+        tools: [
+          {
+            name: TOOL_ARTIFACT_WRITE_FULL_NAME,
+            description: "Write artifact",
+            inputSchema: { type: "object", properties: {} },
+          },
+          {
+            name: "lookup_email",
+            description: "Lookup email",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      isConversationContext: true,
+    });
+
+    expect(Object.keys(tools)).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    expect(Object.keys(tools)).toContain("lookup_email");
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+
+  test("includes artifact_write when isConversationContext is undefined (default)", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({
+        tools: [
+          {
+            name: TOOL_ARTIFACT_WRITE_FULL_NAME,
+            description: "Write artifact",
+            inputSchema: { type: "object", properties: {} },
+          },
+          {
+            name: "lookup_email",
+            description: "Lookup email",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+    });
+
+    expect(Object.keys(tools)).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    expect(Object.keys(tools)).toContain("lookup_email");
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);

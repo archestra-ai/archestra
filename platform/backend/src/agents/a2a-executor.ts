@@ -158,6 +158,7 @@ export async function executeA2AMessage(
       delegationChain,
       conversationId: isolationKey,
       abortSignal,
+      isConversationContext: !isDirectExecutionOutsideConversation,
     });
 
     logger.info(

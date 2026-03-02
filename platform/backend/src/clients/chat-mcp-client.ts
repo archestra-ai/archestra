@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
+  CONVERSATION_ONLY_TOOL_NAMES,
   isAgentTool,
   isArchestraMcpServerTool,
   isBrowserMcpTool,
@@ -609,6 +610,7 @@ export async function getChatMcpTools({
   delegationChain,
   abortSignal,
   user,
+  isConversationContext,
 }: {
   agentName: string;
   agentId: string;
@@ -625,6 +627,8 @@ export async function getChatMcpTools({
   abortSignal?: AbortSignal;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
+  /** Whether execution is within a real chat conversation (affects tool filtering) */
+  isConversationContext?: boolean;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -695,8 +699,15 @@ export async function getChatMcpTools({
     logger.info({ agentId, userId }, "MCP client available, listing tools...");
     const { tools: mcpTools } = await client.listTools();
 
-    // Filter out agent skills (tools starting with "agent__")
-    const filteredMcpTools = mcpTools.filter((tool) => !isAgentTool(tool.name));
+    // Filter out agent skills (tools starting with "agent__") and
+    // conversation-only tools when executing outside a real conversation
+    const filteredMcpTools = mcpTools
+      .filter((tool) => !isAgentTool(tool.name))
+      .filter(
+        (tool) =>
+          isConversationContext !== false ||
+          !CONVERSATION_ONLY_TOOL_NAMES.includes(tool.name),
+      );
 
     logger.info(
       {

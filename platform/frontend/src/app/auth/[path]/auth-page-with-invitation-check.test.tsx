@@ -41,6 +41,18 @@ vi.mock("@/app/auth/_components/auth-view-with-error-handling", () => ({
   ),
 }));
 
+// Mock AppLogo
+vi.mock("@/components/app-logo", () => ({
+  AppLogo: vi.fn(() => <div data-testid="app-logo">App Logo</div>),
+}));
+
+// Mock CommunityLinks
+vi.mock("@/components/community-links", () => ({
+  CommunityLinks: vi.fn(() => (
+    <div data-testid="community-links">Community Links</div>
+  )),
+}));
+
 // Mock DefaultCredentialsWarning
 vi.mock("@/components/default-credentials-warning", () => ({
   DefaultCredentialsWarning: vi.fn(() => (

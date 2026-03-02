@@ -362,6 +362,11 @@ export function RemoteServerInstallDialog({
                             updateVaultSecret(fieldName, "key", key)
                           }
                           disabled={isInstalling}
+                          noTeamMessage={
+                            credentialType === "personal"
+                              ? "Select a vault folder to pull secrets from"
+                              : undefined
+                          }
                         />
                       </Suspense>
                     ) : (

@@ -510,6 +510,11 @@ export function LocalServerInstallDialog({
                                     updateVaultSecret(env.key, "key", key)
                                   }
                                   disabled={isInstalling}
+                                  noTeamMessage={
+                                    credentialType === "personal"
+                                      ? "Select a vault folder to pull secrets from"
+                                      : undefined
+                                  }
                                 />
                               </Suspense>
                             ) : (
@@ -581,6 +586,11 @@ export function LocalServerInstallDialog({
                                     updateVaultSecret(env.key, "key", key)
                                   }
                                   disabled={isInstalling}
+                                  noTeamMessage={
+                                    credentialType === "personal"
+                                      ? "Select a vault folder to pull secrets from"
+                                      : undefined
+                                  }
                                 />
                               </Suspense>
                             ) : (

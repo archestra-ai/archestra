@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 
@@ -48,7 +47,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
   onCanInstallChange,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
-  const byosEnabled = useFeatureFlag("byosEnabled");
   const { data: installedServers } = useMcpServers();
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
@@ -99,7 +97,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     ? false
     : isReinstall
       ? !!existingTeamId // Reinstalling team server - can't switch to personal
-      : hasPersonalInstallation || byosEnabled;
+      : hasPersonalInstallation;
 
   // WHY: Team options are disabled if:
   // 1. personalOnly mode (e.g. Playwright - only personal installs allowed)
@@ -126,14 +124,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
     if (isReinstall) {
       return existingTeamId || PERSONAL_VALUE;
     }
-    // Force team selection when BYOS is enabled or personal is already installed
-    if ((byosEnabled || hasPersonalInstallation) && availableTeams.length > 0) {
+    // Force team selection when personal is already installed
+    if (hasPersonalInstallation && availableTeams.length > 0) {
       return availableTeams[0].id;
     }
     return PERSONAL_VALUE;
   }, [
     personalOnly,
-    byosEnabled,
     hasPersonalInstallation,
     availableTeams,
     isReinstall,
@@ -153,11 +150,8 @@ export function SelectMcpServerCredentialTypeAndTeams({
       return;
     }
 
-    // Force away from personal when BYOS is enabled or personal already installed
-    if (
-      (hasPersonalInstallation || byosEnabled) &&
-      selectedValue === PERSONAL_VALUE
-    ) {
+    // Force away from personal when personal already installed
+    if (hasPersonalInstallation && selectedValue === PERSONAL_VALUE) {
       if (availableTeams.length > 0) {
         setSelectedValue(availableTeams[0].id);
         onCredentialTypeChange?.("team");
@@ -172,7 +166,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
     onTeamChange(isTeam ? selectedValue : null);
   }, [
     hasPersonalInstallation,
-    byosEnabled,
     availableTeams,
     selectedValue,
     onCredentialTypeChange,
@@ -196,31 +189,15 @@ export function SelectMcpServerCredentialTypeAndTeams({
       <Alert>
         <AlertTriangle className="!text-amber-500 h-4 w-4" />
         <AlertDescription>
-          {isPersonalDisabled && byosEnabled ? (
-            <>
-              <span className="font-semibold">Insufficient permissions</span>
-              <p className="mt-1">
-                MCP servers can only be installed at the team level and require
-                the{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                  mcpServer:update
-                </code>{" "}
-                permission.
-              </p>
-            </>
-          ) : (
-            <>
-              <span className="font-semibold">Already installed</span>
-              <p className="mt-1">
-                You have already installed this MCP server for yourself. To
-                install for a team, you need the{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                  mcpServer:update
-                </code>{" "}
-                permission.
-              </p>
-            </>
-          )}
+          <span className="font-semibold">Already installed</span>
+          <p className="mt-1">
+            You have already installed this MCP server for yourself. To install
+            for a team, you need the{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+              mcpServer:update
+            </code>{" "}
+            permission.
+          </p>
         </AlertDescription>
       </Alert>
     );

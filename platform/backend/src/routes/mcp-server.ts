@@ -150,14 +150,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
-        // Reject personal installations when Readonly Vault is enabled
-        if (isByosEnabled() && !serverData.teamId) {
-          throw new ApiError(
-            400,
-            "Personal MCP server installations are not allowed when Readonly Vault is enabled. Please select a team.",
-          );
-        }
-
         // Validate permissions for team installations
         // WHY: We want to restrict who can create team-wide MCP server installations:
         // - Members should NOT be able to create team installations (they lack mcpServer:update)

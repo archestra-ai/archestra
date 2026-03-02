@@ -320,6 +320,14 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       )
       .click();
 
+    // Select team credential type (defaults to personal now, but we need team for vault secrets)
+    await adminPage
+      .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
+      .click();
+    await adminPage
+      .getByRole("option", { name: DEFAULT_TEAM_NAME })
+      .click();
+
     // install server
     await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("domcontentloaded");

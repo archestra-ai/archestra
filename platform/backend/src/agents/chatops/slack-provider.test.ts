@@ -440,15 +440,15 @@ describe("SlackProvider.parseWebhookNotification", () => {
 // =============================================================================
 
 describe("SlackProvider.parseInteractivePayload", () => {
-  test("valid block_actions with select_agent_ action returns agent ID and context", () => {
+  test("valid block_actions with select_agent dropdown returns agent ID and context", () => {
     const provider = createProvider();
 
     const result = provider.parseInteractivePayload({
       type: "block_actions",
       actions: [
         {
-          action_id: "select_agent_agent-uuid-123",
-          value: "agent-uuid-123",
+          action_id: "select_agent",
+          selected_option: { value: "agent-uuid-123" },
         },
       ],
       user: { id: "U_CLICKER", name: "Alice" },
@@ -475,7 +475,9 @@ describe("SlackProvider.parseInteractivePayload", () => {
 
     const result = provider.parseInteractivePayload({
       type: "view_submission",
-      actions: [{ action_id: "select_agent_abc", value: "abc" }],
+      actions: [
+        { action_id: "select_agent", selected_option: { value: "abc" } },
+      ],
     });
 
     expect(result).toBeNull();
@@ -513,12 +515,12 @@ describe("SlackProvider.parseInteractivePayload", () => {
     expect(result).toBeNull();
   });
 
-  test("block_actions with select_agent_ but no value returns null", () => {
+  test("block_actions with select_agent but no selected_option returns null", () => {
     const provider = createProvider();
 
     const result = provider.parseInteractivePayload({
       type: "block_actions",
-      actions: [{ action_id: "select_agent_abc", value: "" }],
+      actions: [{ action_id: "select_agent" }],
     });
 
     expect(result).toBeNull();
@@ -529,7 +531,9 @@ describe("SlackProvider.parseInteractivePayload", () => {
 
     const result = provider.parseInteractivePayload({
       type: "block_actions",
-      actions: [{ action_id: "select_agent_abc", value: "abc" }],
+      actions: [
+        { action_id: "select_agent", selected_option: { value: "abc" } },
+      ],
       message: { ts: "9999999999.000000" },
     });
 
@@ -542,7 +546,9 @@ describe("SlackProvider.parseInteractivePayload", () => {
 
     const result = provider.parseInteractivePayload({
       type: "block_actions",
-      actions: [{ action_id: "select_agent_abc", value: "abc" }],
+      actions: [
+        { action_id: "select_agent", selected_option: { value: "abc" } },
+      ],
     });
 
     expect(result).not.toBeNull();

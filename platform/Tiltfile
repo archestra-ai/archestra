@@ -14,6 +14,12 @@ else:
 # Load .env file FIRST, before any env var syncing
 dotenv('./.env')
 
+# Set default ARCHESTRA_AUTH_SECRET for local development if not configured in .env
+# "better-auth-secret-123456789" is the default set by better-auth when no secret is provided
+# https://better-auth.com/docs/reference/options#secret
+if not os.getenv('ARCHESTRA_AUTH_SECRET'):
+  os.putenv('ARCHESTRA_AUTH_SECRET', 'better-auth-secret-123456789')
+
 # Watch .env file for changes - triggers Tiltfile re-evaluation and restarts pnpm-dev
 watch_file('.env')
 

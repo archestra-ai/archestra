@@ -15,7 +15,9 @@ Check ../docs_writer_prompt.md before changing this file.
 Agents in Archestra provide a comprehensive no-code solution for building autonomous and semi-autonomous agents that can access your data and work together in swarms. Each agent consists of a User Prompt, System Prompt, assigned tools, and sub-agents, and can be triggered via:
 - Archestra Chat UI
 - A2A (Agent-to-Agent) protocol
-- [Triggers](/docs/platform-agent-triggers) — [Incoming Email](/docs/platform-agent-triggers-email), [Slack](/docs/platform-slack), [MS Teams](/docs/platform-ms-teams)
+- [Incoming Email](/docs/platform-agent-triggers-email)
+- [Slack](/docs/platform-slack)
+- [MS Teams](/docs/platform-ms-teams)
 
 ## A2A (Agent-to-Agent)
 

@@ -221,6 +221,14 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       .click();
     await adminPage.waitForTimeout(2_000);
 
+    // Select team credential type (defaults to personal now, but vault secrets need a team)
+    await adminPage
+      .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
+      .click();
+    await adminPage
+      .getByRole("option", { name: DEFAULT_TEAM_NAME })
+      .click();
+
     // Select secret from vault
     await adminPage
       .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
@@ -310,6 +318,14 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       .getByTestId(
         `${E2eTestId.ConnectCatalogItemButton}-${newCatalogItem.name}`,
       )
+      .click();
+
+    // Select team credential type (defaults to personal now, but we need team for vault secrets)
+    await adminPage
+      .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
+      .click();
+    await adminPage
+      .getByRole("option", { name: DEFAULT_TEAM_NAME })
       .click();
 
     // install server

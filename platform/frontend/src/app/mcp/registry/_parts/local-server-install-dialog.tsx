@@ -26,9 +26,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { useTeamsWithVaultFolders } from "@/lib/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
 
@@ -135,15 +143,35 @@ export function LocalServerInstallDialog({
     }, {}),
   );
 
+  // Vault team selection (separate from install team for personal + BYOS)
+  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
+
   // BYOS (Bring Your Own Secrets) state - per-field vault references
   const [vaultSecrets, setVaultSecrets] = useState<
     Record<string, { path: string | null; key: string | null }>
   >({});
 
   const byosEnabled = useFeatureFlag("byosEnabled");
+  const { data: teamsWithVault } = useTeamsWithVaultFolders();
+  const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 
-  // Show vault selector only for team installations when BYOS is enabled
-  const useVaultSecrets = credentialType === "team" && byosEnabled;
+  // Sync vaultTeamId from selectedTeamId when in team mode, reset when switching to personal
+  useEffect(() => {
+    if (credentialType === "team") {
+      setVaultTeamId(selectedTeamId);
+    } else {
+      setVaultTeamId(null);
+    }
+    setVaultSecrets({});
+  }, [credentialType, selectedTeamId]);
+
+  const handleVaultTeamChange = (teamId: string) => {
+    setVaultTeamId(teamId);
+    setVaultSecrets({});
+  };
+
+  // Show vault selector when BYOS is enabled (for both personal and team installations)
+  const useVaultSecrets = byosEnabled;
 
   // Helper to update vault secret for a specific field
   const updateVaultSecret = (
@@ -231,7 +259,8 @@ export function LocalServerInstallDialog({
       }, {}),
     );
     setSelectedTeamId(null);
-    setCredentialType(byosEnabled ? "team" : "personal");
+    setCredentialType("personal");
+    setVaultTeamId(null);
     setVaultSecrets({});
     setServiceAccount(catalogItem?.localConfig?.serviceAccount);
   };
@@ -304,6 +333,30 @@ export function LocalServerInstallDialog({
               catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
             }
           />
+
+          {useVaultSecrets && credentialType === "personal" && (
+            <div className="space-y-2">
+              <Label>Pull Vault secrets from:</Label>
+              <p className="text-xs text-muted-foreground">
+                Only folders associated with your teams are shown.
+              </p>
+              <Select
+                value={vaultTeamId ?? ""}
+                onValueChange={handleVaultTeamChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="-- Select Vault folder --" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vaultTeams?.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.vaultPath}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {canInstall &&
             catalogItem?.localConfig?.serviceAccount !== undefined && (
@@ -443,7 +496,7 @@ export function LocalServerInstallDialog({
                                 }
                               >
                                 <InlineVaultSecretSelector
-                                  teamId={selectedTeamId}
+                                  teamId={vaultTeamId}
                                   selectedSecretPath={
                                     vaultSecrets[env.key]?.path ?? null
                                   }
@@ -457,6 +510,11 @@ export function LocalServerInstallDialog({
                                     updateVaultSecret(env.key, "key", key)
                                   }
                                   disabled={isInstalling}
+                                  noTeamMessage={
+                                    credentialType === "personal"
+                                      ? "Select a vault folder to pull secrets from"
+                                      : undefined
+                                  }
                                 />
                               </Suspense>
                             ) : (
@@ -514,7 +572,7 @@ export function LocalServerInstallDialog({
                                 }
                               >
                                 <InlineVaultSecretSelector
-                                  teamId={selectedTeamId}
+                                  teamId={vaultTeamId}
                                   selectedSecretPath={
                                     vaultSecrets[env.key]?.path ?? null
                                   }
@@ -528,6 +586,11 @@ export function LocalServerInstallDialog({
                                     updateVaultSecret(env.key, "key", key)
                                   }
                                   disabled={isInstalling}
+                                  noTeamMessage={
+                                    credentialType === "personal"
+                                      ? "Select a vault folder to pull secrets from"
+                                      : undefined
+                                  }
                                 />
                               </Suspense>
                             ) : (

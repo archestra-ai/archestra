@@ -34,6 +34,8 @@ interface InlineVaultSecretSelectorProps {
   secretPlaceholder?: string;
   /** Placeholder text for the key dropdown */
   keyPlaceholder?: string;
+  /** Message to show when no team is selected */
+  noTeamMessage?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export default function InlineVaultSecretSelector({
   disabled = false,
   secretPlaceholder = "Select secret...",
   keyPlaceholder = "Select key...",
+  noTeamMessage = "Select a team above to choose a vault secret",
 }: InlineVaultSecretSelectorProps) {
   const {
     data: secrets,
@@ -90,7 +93,7 @@ export default function InlineVaultSecretSelector({
   if (!teamId) {
     return (
       <div className="text-sm text-muted-foreground italic">
-        Select a team above to choose a vault secret
+        {noTeamMessage}
       </div>
     );
   }

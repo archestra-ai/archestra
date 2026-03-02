@@ -190,7 +190,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await page.waitForLoadState("domcontentloaded");
 
   // Verify we're actually on the registry page (handle redirect issues)
-  await expect(page).toHaveURL(/\/mcp-catalog\/registry/, { timeout: 10000 });
+  await expect(page).toHaveURL(/\/mcp\/registry/, { timeout: 10000 });
 
   // Poll for manage-tools button to appear (MCP tool discovery is async)
   // After installing, the server needs to: start → connect → discover tools → save to DB

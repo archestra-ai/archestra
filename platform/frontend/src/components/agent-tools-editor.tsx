@@ -495,7 +495,7 @@ const AgentToolsEditorContent = forwardRef<
         emptyMessage="No MCP servers found."
         createAction={{
           label: "Install New MCP Server",
-          href: "/mcp-catalog/registry",
+          href: "/mcp/registry",
         }}
       />
     </div>

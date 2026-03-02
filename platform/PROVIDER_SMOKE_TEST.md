@@ -43,7 +43,7 @@ Before starting, verify the development environment is running:
 
 ### Steps
 
-1. Navigate to MCP Catalog (`http://localhost:3000/mcp-catalog`)
+1. Navigate to MCP Catalog (`http://localhost:3000/mcp/registry`)
 2. Search for "github" in the catalog
 3. Install the GitHub MCP server (if not already installed)
 4. Wait for installation to complete
@@ -65,7 +65,7 @@ Before starting, verify the development environment is running:
 
 ### Steps
 
-1. Navigate to Cost Settings → Optimization Rules (`http://localhost:3000/cost/optimization-rules`)
+1. Navigate to Cost Settings → Optimization Rules (`http://localhost:3000/llm/cost/optimization-rules`)
 2. Disable or delete any existing optimization rules
 3. Navigate to Organization Settings
 4. Ensure "Tool Result Compression (TOON)" is DISABLED at the organization level
@@ -93,12 +93,12 @@ Before starting, verify the development environment is running:
 
 - Chat invokes `list_issues` or `search_issues` tool
 - Returns a meaningful summary of issues (titles, counts, categories)
-- Tool calls visible in LLM Proxy Logs (`http://localhost:3000/logs/llm-proxy`)
+- Tool calls visible in LLM Proxy Logs (`http://localhost:3000/llm/logs`)
 
 ### Verification
 
 1. Check LLM Proxy Logs for the request
-2. Verify tool calls are recorded in MCP Gateway Logs (`http://localhost:3000/logs/mcp-gateway`)
+2. Verify tool calls are recorded in MCP Gateway Logs (`http://localhost:3000/mcp/logs`)
 3. Confirm response contains actual issue data
 
 ---
@@ -186,10 +186,10 @@ If `list_issues` is blocked in untrusted context due to Test 5:
 
 ### Steps
 
-1. Navigate to Cost Settings → Optimization Rules (`http://localhost:3000/cost/optimization-rules`)
+1. Navigate to Cost Settings → Optimization Rules (`http://localhost:3000/llm/cost/optimization-rules`)
 2. Create a new optimization rule:
-   - Provider: Based on the user prompt. 
-   - Condition: `maxLength < 10000` 
+   - Provider: Based on the user prompt.
+   - Condition: `maxLength < 10000`
    - Enabled: true
 3. Navigate to Chat and start a NEW conversation
 4. Send a short message that matches the rule condition:

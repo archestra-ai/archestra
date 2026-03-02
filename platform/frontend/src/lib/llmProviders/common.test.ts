@@ -60,7 +60,7 @@ describe("parseAuthRequired", () => {
     `Authentication required for "${catalogName}".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`;
 
   it("parses a direct text auth-required error", () => {
-    const url = "http://localhost:3000/mcp-catalog/registry?install=cat_abc";
+    const url = "http://localhost:3000/mcp/registry?install=cat_abc";
     const text = makeDirectErrorText("jira-atlassian-remote", url);
     const result = parseAuthRequired(text);
     expect(result).toEqual({
@@ -70,7 +70,7 @@ describe("parseAuthRequired", () => {
   });
 
   it("parses a JSON-wrapped auth-required error (originalError.message)", () => {
-    const url = "https://app.example.com/mcp-catalog/registry?install=cat_xyz";
+    const url = "https://app.example.com/mcp/registry?install=cat_xyz";
     const inner = makeDirectErrorText("slack-remote", url);
     const text = JSON.stringify({
       code: "unknown",
@@ -84,7 +84,7 @@ describe("parseAuthRequired", () => {
   });
 
   it("parses a JSON-wrapped auth-required error (message)", () => {
-    const url = "http://localhost:3000/mcp-catalog/registry?install=cat_123";
+    const url = "http://localhost:3000/mcp/registry?install=cat_123";
     const inner = makeDirectErrorText("github-remote", url);
     const text = JSON.stringify({ message: inner });
     const result = parseAuthRequired(text);
@@ -95,7 +95,7 @@ describe("parseAuthRequired", () => {
   });
 
   it("handles catalog names with special characters", () => {
-    const url = "http://localhost:3000/mcp-catalog/registry?install=cat_456";
+    const url = "http://localhost:3000/mcp/registry?install=cat_456";
     const text = makeDirectErrorText("my-org/custom-server", url);
     const result = parseAuthRequired(text);
     expect(result).toEqual({

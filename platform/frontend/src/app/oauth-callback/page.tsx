@@ -52,7 +52,7 @@ function OAuthCallbackContent() {
               ? "No authorization code received"
               : "Missing OAuth state",
         );
-        router.push("/mcp-catalog");
+        router.push("/mcp/registry");
         return;
       }
 
@@ -110,12 +110,12 @@ function OAuthCallbackContent() {
 
         // Redirect back to MCP catalog immediately
         // The mutation's onSuccess handler will show the success toast
-        router.push("/mcp-catalog");
+        router.push("/mcp/registry");
       } catch (error) {
         console.error("OAuth completion error:", error);
         // The mutation's onError handler will show the error toast
         // Redirect back to catalog
-        router.push("/mcp-catalog");
+        router.push("/mcp/registry");
       }
     };
 

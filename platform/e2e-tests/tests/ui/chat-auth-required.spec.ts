@@ -226,7 +226,7 @@ test.describe("Chat - Auth Required Tool", () => {
     });
     await expect(link).toBeVisible();
     const href = await link.getAttribute("href");
-    expect(href).toContain("/mcp-catalog/registry");
+    expect(href).toContain("/mcp/registry");
     expect(href).toContain(catalogItemId);
   });
 });

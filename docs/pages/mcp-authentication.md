@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-category: MCP Gateway
+category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
 lastUpdated: 2026-02-11
@@ -149,7 +149,7 @@ When no credential can be resolved for a caller, the gateway returns an actionab
 
 > Authentication required for "GitHub MCP Server".
 > No credentials found for your account (user: alice@company.com).
-> Set up credentials: https://archestra.company.com/mcp-catalog/registry?install=abc-123
+> Set up credentials: https://archestra.company.com/mcp/registry?install=abc-123
 
 The user follows the link, installs the server with their credentials, and retries the tool call.
 

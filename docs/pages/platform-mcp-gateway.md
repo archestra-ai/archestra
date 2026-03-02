@@ -1,6 +1,6 @@
 ---
 title: Overview
-category: MCP Gateway
+category: MCP
 order: 1
 description: Unified access point for all MCP servers
 lastUpdated: 2025-02-12

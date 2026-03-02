@@ -220,7 +220,7 @@ export function ProxyConnectionInstructions({
       <div className="mt-4 space-y-1">
         <p className="text-sm text-muted-foreground">
           <a
-            href="/llm-proxies/provider-settings?tab=virtual-keys"
+            href="/llm/providers?tab=virtual-keys"
             className="underline hover:text-foreground"
           >
             Virtual API Keys

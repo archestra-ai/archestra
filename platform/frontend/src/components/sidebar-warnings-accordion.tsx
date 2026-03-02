@@ -54,7 +54,7 @@ export function SidebarWarningsAccordion() {
             asChild
             className="text-destructive hover:text-destructive"
           >
-            <Link href="/tool-policies">
+            <Link href="/mcp/tool-policies">
               <AlertTriangle className="shrink-0" />
               <span>Enable security engine</span>
             </Link>

@@ -679,10 +679,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     conversation: ["read"],
   },
 
-  "/mcp-gateways": {
+  "/mcp/gateways": {
     mcpGateway: ["read"],
   },
-  "/llm-proxies": {
+  "/llm/proxies": {
     llmProxy: ["read"],
   },
   "/agents": {
@@ -692,24 +692,21 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/logs": {
     interaction: ["read"],
   },
-  "/logs/llm-proxy": {
+  "/llm/logs": {
     interaction: ["read"],
   },
-  "/logs/mcp-gateway": {
+  "/mcp/logs": {
     mcpToolCall: ["read"],
   },
 
-  "/tool-policies": {
+  "/mcp/tool-policies": {
     policy: ["read"],
   },
 
-  "/mcp-catalog": {
+  "/mcp/registry": {
     internalMcpCatalog: ["read"],
   },
-  "/mcp-catalog/registry": {
-    internalMcpCatalog: ["read"],
-  },
-  "/mcp-catalog/installation-requests": {
+  "/mcp/registry/installation-requests": {
     mcpServerInstallationRequest: ["read"],
   },
 
@@ -740,7 +737,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/appearance": {
     organization: ["read"],
   },
-  "/llm-proxies/provider-settings": {
+  "/llm/providers": {
     chatSettings: ["read"],
   },
   "/settings/identity-providers": {
@@ -750,30 +747,30 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     organization: ["read"],
   },
   // Agent Triggers
-  "/agent-triggers": {
+  "/agents/triggers": {
     organization: ["update"],
   },
-  "/agent-triggers/slack": {
+  "/agents/triggers/slack": {
     organization: ["update"],
   },
-  "/agent-triggers/ms-teams": {
+  "/agents/triggers/ms-teams": {
     organization: ["update"],
   },
-  "/agent-triggers/email": {
+  "/agents/triggers/email": {
     organization: ["update"],
   },
 
   // Cost & Limits
-  "/cost": {
+  "/llm/cost": {
     interaction: ["read"],
   },
-  "/cost/statistics": {
+  "/llm/cost/statistics": {
     interaction: ["read"],
   },
-  "/cost/limits": {
+  "/llm/cost/limits": {
     limit: ["read"],
   },
-  "/cost/optimization-rules": {
+  "/llm/cost/optimization-rules": {
     llmProxy: ["read"],
   },
 };

@@ -1,7 +1,7 @@
 "use client";
 
-import { ToolCallPolicies } from "@/app/tool-policies/_parts/tool-call-policies";
-import { ToolResultPolicies } from "@/app/tool-policies/_parts/tool-result-policies";
+import { ToolCallPolicies } from "@/app/mcp/tool-policies/_parts/tool-call-policies";
+import { ToolResultPolicies } from "@/app/mcp/tool-policies/_parts/tool-result-policies";
 import {
   Dialog,
   DialogContent,

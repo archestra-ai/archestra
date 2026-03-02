@@ -201,7 +201,7 @@ describe("WithAuthCheck", () => {
 
     it("should redirect to redirectTo param when accessing auth pages after login", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      setWindowLocation("/auth/sign-in", "?redirectTo=%2Flogs%2Fllm-proxy");
+      setWindowLocation("/auth/sign-in", "?redirectTo=%2Fllm%2Flogs");
 
       render(
         <WithAuthCheck>
@@ -209,7 +209,7 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(mockRouterPush).toHaveBeenCalledWith("/logs/llm-proxy");
+      expect(mockRouterPush).toHaveBeenCalledWith("/llm/logs");
     });
 
     it("should ignore malicious redirectTo param and redirect to home", () => {

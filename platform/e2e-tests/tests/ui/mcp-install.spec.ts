@@ -24,7 +24,7 @@ test.describe("MCP Install", () => {
         CONTEXT7_CATALOG_ITEM_NAME,
       );
 
-      await goToPage(adminPage, "/mcp-catalog/registry");
+      await goToPage(adminPage, "/mcp/registry");
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Open "Add MCP Server" dialog
@@ -102,7 +102,7 @@ test.describe("MCP Install", () => {
         extractCookieHeaders,
         HF_CATALOG_ITEM_NAME,
       );
-      await goToPage(adminPage, "/mcp-catalog/registry");
+      await goToPage(adminPage, "/mcp/registry");
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Open "Add MCP Server" dialog
@@ -157,7 +157,7 @@ test.describe("MCP Install", () => {
         extractCookieHeaders,
         HF_CATALOG_ITEM_NAME,
       );
-      await goToPage(adminPage, "/mcp-catalog/registry");
+      await goToPage(adminPage, "/mcp/registry");
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Open "Add MCP Server" dialog
@@ -231,7 +231,7 @@ test.describe("MCP Install", () => {
     // Cleanup any existing catalog item
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
 
-    await goToPage(adminPage, "/mcp-catalog/registry");
+    await goToPage(adminPage, "/mcp/registry");
     await adminPage.waitForLoadState("domcontentloaded");
 
     // ========================================
@@ -389,7 +389,7 @@ test.describe("MCP Install", () => {
     await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
 
     await expect(async () => {
-      await goToPage(adminPage, "/mcp-catalog/registry");
+      await goToPage(adminPage, "/mcp/registry");
       await adminPage.waitForLoadState("domcontentloaded");
 
       const refreshedServerCard = adminPage.getByTestId(

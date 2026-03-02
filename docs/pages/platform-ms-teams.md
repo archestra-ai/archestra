@@ -1,6 +1,7 @@
 ---
 title: MS Teams
 category: Agents
+subcategory: Agent Triggers
 order: 5
 description: Connect Archestra agents to Microsoft Teams channels
 lastUpdated: 2026-02-20
@@ -20,116 +21,13 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 
 ## Setup
 
-### Create Azure Bot
+The setup wizard in Archestra guides you through the entire MS Teams configuration. Navigate to **Agent Triggers** → **MS Teams** → **Setup MS Teams** and follow the step-by-step instructions.
 
-1. Go to [portal.azure.com](https://portal.azure.com) → **Create a resource** → **Azure Bot**
-2. Fill in **bot handle**, **subscription**, **resource group**
-3. Under **Type of App**, choose either:
-   - **Multi Tenant** (default) — bot can be used by any Azure AD tenant
-   - **Single Tenant** — bot restricted to your organization only
-4. Under **Microsoft App ID**, select **Create new Microsoft App ID** — this automatically creates an App Registration in Azure AD that provides the bot's identity (App ID and Secret). No API permissions need to be added to this App Registration.
-5. After creation, go to **Settings** → **Configuration**
-6. Copy the **Microsoft App ID** — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`
-7. If using **Single Tenant**, note your **Azure AD Tenant ID** (find in Azure AD → Overview) — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`
-8. Click **Manage Password** (opens the App Registration) → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`
-9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
-10. Go to **Channels** → add **Microsoft Teams**
+![MS Teams Setup Wizard](/docs/setup-msteams.png)
 
-### Configure Archestra
+The wizard will walk you through creating an Azure Bot, configuring the Teams app manifest, and installing it to your workspace. All required credentials are collected and saved automatically.
 
-Set these environment variables:
-
-```bash
-# Required
-ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true
-ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=<Microsoft App ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=<Client Secret>
-
-# Optional - for single-tenant Azure Bot (leave empty for multi-tenant)
-ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<Azure AD Tenant ID>
-```
-
-### Teams App Manifest
-
-Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png](/docs/outline.png)** (32x32) and **`manifest.json`**:
-
-```json
-{
-  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-  "manifestVersion": "1.16",
-  "version": "1.0.0",
-  "id": "{{BOT_MS_APP_ID}}",
-  "packageName": "com.archestra.bot",
-  "developer": {
-    "name": "Your Company",
-    "websiteUrl": "https://archestra.ai",
-    "privacyUrl": "https://archestra.ai/privacy",
-    "termsOfUseUrl": "https://archestra.ai/terms"
-  },
-  "name": { "short": "Archestra", "full": "Archestra Bot" },
-  "description": { "short": "Ask Archestra", "full": "Chat with Archestra agents" },
-  "icons": { "outline": "outline.png", "color": "color.png" },
-  "accentColor": "#FFFFFF",
-  "bots": [
-    {
-      "botId": "{{BOT_MS_APP_ID}}",
-      "scopes": ["team", "groupchat", "personal"],
-      "supportsFiles": false,
-      "isNotificationOnly": false,
-      "commandLists": [
-        {
-          "scopes": ["team", "groupchat", "personal"],
-          "commands": [
-            { "title": "/select-agent", "description": "Change which agent handles this conversation" },
-            { "title": "/status", "description": "Show current agent for this conversation" },
-            { "title": "/help", "description": "Show available commands" }
-          ]
-        }
-      ]
-    }
-  ],
-  "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": [],
-  "webApplicationInfo": {
-    "id": "{{BOT_MS_APP_ID}}",
-    "resource": "https://graph.microsoft.com"
-  },
-  "authorization": {
-    "permissions": {
-      "resourceSpecific": [
-        {
-          "name": "ChannelMessage.Read.Group",
-          "type": "Application"
-        },
-        {
-          "name": "ChatMessage.Read.Chat",
-          "type": "Application"
-        },
-        {
-          "name": "TeamMember.Read.Group",
-          "type": "Application"
-        },
-        {
-          "name": "ChatMember.Read.Chat",
-          "type": "Application"
-        }
-      ]
-    }
-  }
-}
-```
-
-Replace `{{BOT_MS_APP_ID}}` with your **Microsoft App ID**. **Zip the folder contents**.
-
-> **No Azure AD API permissions are required.** User identity is resolved via RSC permissions (`TeamMember.Read.Group`, `ChatMember.Read.Chat`) which allow the bot to look up member details. Thread history uses `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat`. All RSC permissions are **scoped to where the bot is installed** and require only **team owner consent** (no tenant admin).
->
-> **Alternative:** If you cannot use RSC (e.g., older Teams clients), you can use Azure AD application permissions for thread history instead. In Azure Portal, go to **App registrations** → find your bot's app → **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions** and add: `ChannelMessage.Read.All`, `Chat.Read.All`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`. Grant admin consent for all permissions. Configure the `ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_*` env vars (can point to the same App Registration the bot uses). This approach requires **tenant admin consent**, grants **tenant-wide access**, and the `authorization` section in the manifest is redundant.
-
-### Install in Teams
-
-1. In Teams: **Apps** → **Manage your apps** → **Upload an app**
-2. Select your **manifest zip**
-3. **Add the app** to a team/channel
+See [Deployment — Environment Variables](/docs/platform-deployment#environment-variables) for the full list of environment variables if you prefer manual configuration.
 
 ## Usage
 
@@ -155,7 +53,11 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 Each Teams channel requires a **default agent** to be bound to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
-Once set, the default agent processes all subsequent messages in that channel until you change it with `/select-agent`.
+You can manage the default agent for each channel from the **Agent Triggers** → **MS Teams** page in Archestra.
+
+![MS Teams Agent Selection](/docs/select-agent-msteams.png)
+
+Once set, the default agent processes all subsequent messages in that channel. You can also use the `/select-agent` command directly in Teams to change the default agent.
 
 ### Switching Agents Inline
 
@@ -183,9 +85,17 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 ### Direct Messages
 
-DMs work the same as channels. In the **Agent Triggers** → **MS Teams** page, click **Start DM** in the channels section to open a Teams DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/select-agent` to change it later.
+A DM with the bot behaves just like another channel — each user can choose which agent handles their DMs. On your first message, the bot shows an agent selection card. Use `/select-agent` to change it later.
 
 > If you update from a previous manifest without the `"personal"` scope, re-upload the updated manifest to enable DMs.
+
+## Autoprovisioning MS Teams Users
+
+When a user interacts with the bot but hasn't signed up in Archestra yet, they are automatically provisioned with the **Member** role and no teams assigned. The user receives a unique invitation link via Teams DM that they can use to complete sign-up and become a full Archestra user. Until they do, they cannot log in to the Archestra web app.
+
+Admins can view autoprovisioned users on the **Settings → Members** page — from there they can copy the invitation link or delete the user.
+
+![Autoprovisioned MS Teams Users](/docs/autoprovisioned-users-msteams.png)
 
 ## Troubleshooting
 

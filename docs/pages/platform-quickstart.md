@@ -59,7 +59,7 @@ docker run -p 9000:9000 -p 3000:3000 `
 
 ## Build Your First Agent `Easy`
 
-1. Go to **MCP Registry**, add new and search for `microsoft__playwright-mcp`, install it.
+1. Go to **MCP Registry**, search for `microsoft__playwright-mcp`, install it.
 2. Gaze at Archestra running the MCP server in Kubernetes cluster! (If you want to make sure: `kubectl get pods`)
 3. Go to **Agents** and create "Archestra Docs Reader Agent" with this system prompt: `You're using playwright to answer questions about Archestra based on https://archestra.ai/docs/`
 4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.

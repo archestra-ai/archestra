@@ -1,7 +1,8 @@
 ---
 title: Slack
 category: Agents
-order: 6
+subcategory: Agent Triggers
+order: 4
 description: Connect Archestra agents to Slack channels
 lastUpdated: 2026-02-23
 ---
@@ -17,230 +18,24 @@ Archestra can connect directly to Slack channels. When users mention the bot in 
 
 Archestra supports two modes for connecting to Slack:
 
-| | Webhook Mode | Socket Mode |
+| | Socket Mode (default) | Webhook Mode |
 |---|---|---|
-| **How it works** | Slack sends events to your public webhook URLs | Archestra opens an outbound WebSocket to Slack |
-| **Requires public URL** | Yes | No |
-| **Best for** | Production deployments with stable URLs | Local development, firewalled environments, VPN setups |
-| **Credentials needed** | Bot Token + Signing Secret + App ID | Bot Token + App-Level Token + App ID |
+| **How it works** | Archestra opens an outbound WebSocket to Slack | Slack sends events to your public webhook URLs |
+| **Requires public URL** | No | Yes |
+| **Best for** | Local development, firewalled environments, VPN setups | Production deployments with stable URLs |
+| **Credentials needed** | Bot Token + App-Level Token + App ID | Bot Token + Signing Secret + App ID |
 
 Choose the mode in the setup wizard (**Agent Triggers** → **Slack** → **Setup Slack**) or via environment variables.
 
 ## Setup
 
-### Create Slack App
+The setup wizard in Archestra guides you through the entire Slack configuration. Navigate to **Agent Triggers** → **Slack** → **Setup Slack** and follow the step-by-step instructions.
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**
-2. Select your workspace, then choose **JSON** and paste the manifest below
-3. Click **Create**
-4. Go to **Basic Information** → **Display Information** and upload an app icon ([download Archestra logo](/docs/color.png))
-5. Go to **Install App** → **Install to Workspace** and authorize
-6. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
+![Slack Setup Wizard](/docs/setup-slack.png)
 
-#### App Manifest
+The wizard will walk you through creating a Slack app, installing it to your workspace, and configuring the connection mode. All required credentials are collected and saved automatically.
 
-The manifest pre-configures all required scopes, event subscriptions, slash commands, and interactivity settings. The two modes differ only in the `settings` section — the rest is identical.
-
-Pick the manifest for your chosen connection mode:
-
-<details>
-<summary><strong>WebSocket mode</strong></summary>
-
-```json
-{
-  "display_information": {
-    "name": "Archestra",
-    "description": "Archestra AI Agent"
-  },
-  "features": {
-    "app_home": {
-      "messages_tab_enabled": true,
-      "messages_tab_read_only_enabled": false
-    },
-    "bot_user": {
-      "display_name": "Archestra",
-      "always_online": true
-    },
-    "assistant_view": {
-      "assistant_description": "Your AI-powered Archestra assistant"
-    },
-    "slash_commands": [
-      {
-        "command": "/archestra-select-agent",
-        "description": "Change which agent handles this channel"
-      },
-      {
-        "command": "/archestra-status",
-        "description": "Show current agent for this channel"
-      },
-      {
-        "command": "/archestra-help",
-        "description": "Show available commands"
-      }
-    ]
-  },
-  "oauth_config": {
-    "scopes": {
-      "bot": [
-        "assistant:write",
-        "commands",
-        "app_mentions:read",
-        "channels:history",
-        "channels:read",
-        "chat:write",
-        "groups:history",
-        "groups:read",
-        "im:history",
-        "im:read",
-        "im:write",
-        "users:read",
-        "users:read.email"
-      ]
-    }
-  },
-  "settings": {
-    "event_subscriptions": {
-      "bot_events": [
-        "app_mention",
-        "assistant_thread_started",
-        "assistant_thread_context_changed",
-        "message.channels",
-        "message.groups",
-        "message.im"
-      ]
-    },
-    "interactivity": {
-      "is_enabled": true
-    },
-    "org_deploy_enabled": false,
-    "socket_mode_enabled": true,
-    "token_rotation_enabled": false
-  }
-}
-```
-
-After creating the app, generate an **App-Level Token**:
-
-1. Go to **Basic Information** → **App-Level Tokens**
-2. Click **Generate Token and Scopes**
-3. Name it (e.g., "archestra-socket") and add the `connections:write` scope
-4. Copy the token (starts with `xapp-`)
-
-</details>
-
-<details>
-<summary><strong>Webhook mode</strong></summary>
-
-Replace the URLs with your Archestra domain.
-
-```json
-{
-  "display_information": {
-    "name": "Archestra",
-    "description": "Archestra AI Agent"
-  },
-  "features": {
-    "app_home": {
-      "messages_tab_enabled": true,
-      "messages_tab_read_only_enabled": false
-    },
-    "bot_user": {
-      "display_name": "Archestra",
-      "always_online": true
-    },
-    "assistant_view": {
-      "assistant_description": "Your AI-powered Archestra assistant"
-    },
-    "slash_commands": [
-      {
-        "command": "/archestra-select-agent",
-        "description": "Change which agent handles this channel",
-        "url": "https://your-archestra-domain/api/webhooks/chatops/slack/slash-command"
-      },
-      {
-        "command": "/archestra-status",
-        "description": "Show current agent for this channel",
-        "url": "https://your-archestra-domain/api/webhooks/chatops/slack/slash-command"
-      },
-      {
-        "command": "/archestra-help",
-        "description": "Show available commands",
-        "url": "https://your-archestra-domain/api/webhooks/chatops/slack/slash-command"
-      }
-    ]
-  },
-  "oauth_config": {
-    "scopes": {
-      "bot": [
-        "assistant:write",
-        "commands",
-        "app_mentions:read",
-        "channels:history",
-        "channels:read",
-        "chat:write",
-        "groups:history",
-        "groups:read",
-        "im:history",
-        "im:read",
-        "im:write",
-        "users:read",
-        "users:read.email"
-      ]
-    }
-  },
-  "settings": {
-    "event_subscriptions": {
-      "request_url": "https://your-archestra-domain/api/webhooks/chatops/slack",
-      "bot_events": [
-        "app_mention",
-        "assistant_thread_started",
-        "assistant_thread_context_changed",
-        "message.channels",
-        "message.groups",
-        "message.im"
-      ]
-    },
-    "interactivity": {
-      "is_enabled": true,
-      "request_url": "https://your-archestra-domain/api/webhooks/chatops/slack/interactive"
-    },
-    "org_deploy_enabled": false,
-    "socket_mode_enabled": false,
-    "token_rotation_enabled": false
-  }
-}
-```
-
-</details>
-
-> The setup wizard in Archestra generates this manifest automatically. Go to **Agent Triggers** → **Slack** → **Setup Slack** to use it.
-
-> If updating from a previous manifest, update it in your Slack app settings and **reinstall the app** to your workspace for changes to take effect.
-
-### Configure Archestra
-
-Set the following environment variables. The common variables apply to both modes — then add the mode-specific ones.
-
-```bash
-# Common (both modes)
-ARCHESTRA_CHATOPS_SLACK_ENABLED=true
-ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN=xoxb-your-bot-token
-ARCHESTRA_CHATOPS_SLACK_APP_ID=A12345678
-
-# WebSocket mode (default — add these)
-ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN=xapp-your-app-level-token
-
-# Webhook mode (add these instead)
-ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE=webhook
-ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET=your-signing-secret
-```
-
-Finding these values:
-
-- **Bot Token**: OAuth & Permissions page → Bot User OAuth Token
-- **App ID**: Basic Information page → App ID
-- **Signing Secret** (webhook only): Basic Information page → App Credentials → Signing Secret
-- **App-Level Token** (WebSocket only): Basic Information page → App-Level Tokens
+See [Deployment — Environment Variables](/docs/platform-deployment#environment-variables) for the full list of environment variables if you prefer manual configuration.
 
 ## Usage
 
@@ -268,7 +63,11 @@ Archestra uses native Slack slash commands — type them directly in the message
 
 Each Slack channel requires a **default agent** to be bound to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
-Once set, the default agent processes all subsequent messages in that channel until you change it with `/archestra-select-agent`.
+You can manage the default agent for each channel from the **Agent Triggers** → **Slack** page in Archestra.
+
+![Slack Agent Selection](/docs/select-agent-slack.png)
+
+Once set, the default agent processes all subsequent messages in that channel. You can also use the `/archestra-select-agent` command directly in Slack to change the default agent.
 
 ### Switching Agents Inline
 
@@ -296,14 +95,21 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 ### Direct Messages
 
-DMs work the same as channels. In the **Agent Triggers** → **Slack** page, click **Start DM** in the channels section to open a Slack DM with the bot. On your first message, the bot shows an agent selection card — pick an agent and the DM is bound. Use `/archestra-select-agent` to change it later.
+A DM with the bot behaves just like another channel — each user can choose which agent handles their DMs. On your first message, the bot shows an agent selection card. Use `/archestra-select-agent` to change it later.
 
 > The Slack app manifest already includes `im:history` and `message.im` scopes/events required for DMs.
+
+## Autoprovisioning Slack Users
+
+When a user interacts with the bot but hasn't signed up in Archestra yet, they are automatically provisioned with the **Member** role and no teams assigned. The user receives a unique invitation link via Slack DM that they can use to complete sign-up and become a full Archestra user. Until they do, they cannot log in to the Archestra web app.
+
+Admins can view autoprovisioned users on the **Settings → Members** page — from there they can copy the invitation link or delete the user.
+
+![Autoprovisioned Slack Users](/docs/autoprovisioned-users-slack.png)
 
 ## Troubleshooting
 
 **Bot not responding**
-- Verify `ARCHESTRA_CHATOPS_SLACK_ENABLED=true`
 - Webhook mode: check webhook URL is accessible externally
 - Socket mode: check backend logs for "Socket mode connected" message
 - Confirm the bot is added to the channel

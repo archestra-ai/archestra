@@ -821,7 +821,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 ### Incoming Email Configuration
 
-These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Agents - Incoming Email](/docs/platform-agents#incoming-email) for setup instructions.
+These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Incoming Email](/docs/platform-agent-triggers-email) for setup instructions.
 
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER`** - Email provider to use for incoming email.
   - Default: Not set (feature disabled)

@@ -644,10 +644,17 @@ export class ChatOpsManager {
           text: `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
         });
       } else {
-        // Fallback in channels: don't expose the signup link
+        // Fallback in channels: don't expose the signup link.
+        // MS Teams requires each user to install the app personally before DMs work.
         await provider.sendReply({
           originalMessage: message,
-          text: `${welcome.text} Send me a direct message and I'll send you a signup link.`,
+          text: [
+            welcome.text,
+            "",
+            "💡 To send me a direct message in Teams, you first need to install the Archestra app personally — click **Add** when Teams prompts you.",
+            "",
+            "Once installed, send me a direct message and I'll send you back a signup link.",
+          ].join("\n"),
         });
       }
     } catch (error) {

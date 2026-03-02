@@ -162,9 +162,7 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/logs",
         icon: MessagesSquare,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/logs") ||
-          pathname.startsWith("/mcp/logs") ||
-          pathname.startsWith("/logs/"),
+          pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
       {
         title: "Connect",

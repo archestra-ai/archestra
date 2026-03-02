@@ -328,7 +328,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         },
                         {
                           type: "TextBlock",
-                          text: "Or just send a message to interact with the bound agent.",
+                          text: "Or just send a message to interact with the assigned agent.",
                           wrap: true,
                           spacing: "Medium",
                         },
@@ -361,7 +361,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: `This channel is bound to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
+                            text: `This channel is assigned to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
                             wrap: true,
                           },
                           {
@@ -393,7 +393,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: "No agent is bound to this channel yet.",
+                            text: "No agent is assigned to this channel yet.",
                             wrap: true,
                           },
                           {
@@ -508,7 +508,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               awaitDiscovery(provider, context),
             ]);
 
-            // Process message through bound agent
+            // Process message through assigned agent
             await chatOpsManager.processMessage({
               message,
               provider,
@@ -1516,7 +1516,7 @@ async function handleAgentSelection(
       "[ChatOps] handleAgentSelection: about to send 'processing' message",
     );
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}. Processing your message...`,
+      `Agent **${agent.name}** is now assigned to this ${isTeamsDm ? "conversation" : "channel"}. Processing your message...`,
     );
     logger.debug(
       "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
@@ -1566,7 +1566,7 @@ async function handleAgentSelection(
     }
   } else {
     await context.sendActivity(
-      `Agent **${agent.name}** is now bound to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
+      `Agent **${agent.name}** is now assigned to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
         "Send a message (with @mention) to start interacting!",
     );
   }

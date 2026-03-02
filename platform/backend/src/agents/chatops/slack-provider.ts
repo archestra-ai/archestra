@@ -366,7 +366,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Each Slack channel needs a *default agent* bound to it. This agent will handle all your requests in this channel by default.",
+              text: "Each Slack channel needs a *default agent* assigned to it. This agent will handle all your requests in this channel by default.",
             },
           },
           {
@@ -679,7 +679,7 @@ class SlackProvider implements ChatOpsProvider {
             "`/archestra-select-agent` — Change the default agent\n" +
             "`/archestra-status` — Show current agent binding\n" +
             "`/archestra-help` — Show this help message\n\n" +
-            "Or just send a message to interact with the bound agent.",
+            "Or just send a message to interact with the assigned agent.",
         };
 
       case SLACK_SLASH_COMMANDS.STATUS: {
@@ -694,7 +694,7 @@ class SlackProvider implements ChatOpsProvider {
           return {
             response_type: "ephemeral",
             text:
-              `This channel is bound to agent: *${agent?.name || binding.agentId}*\n\n` +
+              `This channel is assigned to agent: *${agent?.name || binding.agentId}*\n\n` +
               "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
               "Use `/archestra-select-agent` to change the default agent.",
           };
@@ -702,7 +702,7 @@ class SlackProvider implements ChatOpsProvider {
 
         return {
           response_type: "ephemeral",
-          text: "No agent is bound to this channel yet.\nSend any message to set up an agent binding.",
+          text: "No agent is assigned to this channel yet.\nSend any message to set up an agent assignment.",
         };
       }
 

@@ -61,7 +61,7 @@ Archestra uses native Slack slash commands — type them directly in the message
 
 ### Default Agent
 
-Each Slack channel requires a **default agent** to be bound to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
+Each Slack channel requires a **default agent** to be assigned to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
 You can manage the default agent for each channel from the **Agent Triggers** → **Slack** page in Archestra.
 

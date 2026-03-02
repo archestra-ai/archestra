@@ -190,7 +190,7 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     expect(response.statusCode).toBe(200);
     const json = response.json();
     expect(json.response_type).toBe("ephemeral");
-    expect(json.text).toContain("No agent is bound");
+    expect(json.text).toContain("No agent is assigned");
 
     await app.close();
   });

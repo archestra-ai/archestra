@@ -758,7 +758,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       : [
           {
             type: "TextBlock",
-            text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
+            text: "Each Microsoft Teams channel needs a **default agent** assigned to it. This agent will handle all your requests in this channel by default.",
             wrap: true,
             spacing: "Small",
           },

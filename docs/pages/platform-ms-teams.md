@@ -51,7 +51,7 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 ### Default Agent
 
-Each Teams channel requires a **default agent** to be bound to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
+Each Teams channel requires a **default agent** to be assigned to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
 You can manage the default agent for each channel from the **Agent Triggers** → **MS Teams** page in Archestra.
 

@@ -394,7 +394,7 @@ export class ChatOpsManager {
       return;
     }
 
-    // Process message through bound agent
+    // Process message through assigned agent
     await this.processMessage({
       message,
       provider,
@@ -478,7 +478,7 @@ export class ChatOpsManager {
 
     await provider.sendReply({
       originalMessage: message,
-      text: `Agent *${agent.name}* is now bound to this ${isDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
+      text: `Agent *${agent.name}* is now assigned to this ${isDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
     });
   }
 

@@ -263,6 +263,84 @@ describe("ChatOpsChannelBindingModel", () => {
     });
   });
 
+  describe("findDmBindingByEmail", () => {
+    test("finds DM binding by provider and email", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ agentType: "agent" });
+
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "D123",
+        workspaceId: "T1",
+        agentId: agent.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      const found = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        "slack",
+        "user@example.com",
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.agentId).toBe(agent.id);
+      expect(found?.dmOwnerEmail).toBe("user@example.com");
+    });
+
+    test("returns null when no DM binding exists", async () => {
+      const found = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        "slack",
+        "nobody@example.com",
+      );
+
+      expect(found).toBeNull();
+    });
+
+    test("returns most recently updated binding when multiple exist", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent1 = await makeAgent({ agentType: "agent" });
+      const agent2 = await makeAgent({ agentType: "agent" });
+
+      // Create older binding
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "D-old",
+        workspaceId: "T1",
+        agentId: agent1.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      // Create newer binding
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "D-new",
+        workspaceId: "T1",
+        agentId: agent2.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      const found = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        "slack",
+        "user@example.com",
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.agentId).toBe(agent2.id);
+      expect(found?.channelId).toBe("D-new");
+    });
+  });
+
   describe("upsertByChannel", () => {
     test("creates new binding when none exists", async ({
       makeAgent,
@@ -316,6 +394,46 @@ describe("ChatOpsChannelBindingModel", () => {
         org.id,
       );
       expect(allBindings).toHaveLength(1);
+    });
+
+    test("inherits agentId from stale DM binding when creating new one", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ agentType: "agent" });
+
+      // Create DM binding with agent and old channelId
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "D-old-channel",
+        workspaceId: "T1",
+        agentId: agent.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      // Upsert with new channelId but NO agentId — should inherit from stale binding
+      const binding = await ChatOpsChannelBindingModel.upsertByChannel({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "D-new-channel",
+        workspaceId: "T1",
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      expect(binding.agentId).toBe(agent.id);
+      expect(binding.channelId).toBe("D-new-channel");
+
+      // Verify old binding was cleaned up
+      const old = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "slack",
+        channelId: "D-old-channel",
+        workspaceId: "T1",
+      });
+      expect(old).toBeNull();
     });
   });
 

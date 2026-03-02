@@ -370,6 +370,27 @@ export class ChatOpsManager {
       }
     }
 
+    // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
+    // the pending lookup above misses. Try to find an existing DM binding by
+    // email and update its channelId to the new one, preserving the agentId.
+    if (!binding && isDm && message.senderEmail) {
+      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        provider.providerId,
+        message.senderEmail,
+      );
+      if (existingDm) {
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding(
+          existingDm.id,
+          message.channelId,
+          message.workspaceId,
+        );
+        logger.info(
+          { bindingId: existingDm.id, channelId: message.channelId },
+          "[ChatOps] Updated existing DM binding with new channel ID",
+        );
+      }
+    }
+
     if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {

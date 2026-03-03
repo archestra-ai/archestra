@@ -59,6 +59,10 @@ export interface TestFixtures {
   getInteractions: typeof getInteractions;
   getWiremockRequests: typeof getWiremockRequests;
   clearWiremockRequests: typeof clearWiremockRequests;
+  createKnowledgeGraph: typeof createKnowledgeGraph;
+  deleteKnowledgeGraph: typeof deleteKnowledgeGraph;
+  createConnector: typeof createConnector;
+  deleteConnector: typeof deleteConnector;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -941,6 +945,90 @@ const clearWiremockRequests = async (request: APIRequestContext) => {
   await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
 };
 
+/**
+ * Create a knowledge graph
+ * (authnz is handled by the authenticated session)
+ */
+const createKnowledgeGraph = async (
+  request: APIRequestContext,
+  name?: string,
+  overrides?: { provider?: string; config?: Record<string, unknown> },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/knowledge-graphs",
+    data: {
+      name: name ?? `Test KG ${crypto.randomUUID().slice(0, 8)}`,
+      provider: overrides?.provider ?? "lightrag",
+      config: overrides?.config ?? { apiUrl: "http://localhost:9100" },
+    },
+  });
+
+/**
+ * Delete a knowledge graph by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteKnowledgeGraph = async (request: APIRequestContext, id: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/knowledge-graphs/${id}`,
+    ignoreStatusCheck: true,
+  });
+
+/**
+ * Create a connector for a knowledge graph
+ * (authnz is handled by the authenticated session)
+ */
+const createConnector = async (
+  request: APIRequestContext,
+  kgId: string,
+  name?: string,
+  overrides?: {
+    connectorType?: string;
+    config?: Record<string, unknown>;
+    credentials?: { email: string; apiToken: string };
+    schedule?: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/knowledge-graphs/${kgId}/connectors`,
+    data: {
+      name: name ?? `Test Connector ${crypto.randomUUID().slice(0, 8)}`,
+      connectorType: overrides?.connectorType ?? "jira",
+      config: overrides?.config ?? {
+        baseUrl: "https://test.atlassian.net",
+        projectKey: "TEST",
+      },
+      credentials: overrides?.credentials ?? {
+        email: "test@example.com",
+        apiToken: "test-token-123",
+      },
+      schedule: overrides?.schedule ?? "0 */6 * * *",
+      enabled: overrides?.enabled ?? true,
+    },
+  });
+
+/**
+ * Delete a connector by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteConnector = async (
+  request: APIRequestContext,
+  kgId: string,
+  connectorId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/knowledge-graphs/${kgId}/connectors/${connectorId}`,
+    ignoreStatusCheck: true,
+  });
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -1065,6 +1153,18 @@ export const test = base.extend<TestFixtures>({
   },
   clearWiremockRequests: async ({}, use) => {
     await use(clearWiremockRequests);
+  },
+  createKnowledgeGraph: async ({}, use) => {
+    await use(createKnowledgeGraph);
+  },
+  deleteKnowledgeGraph: async ({}, use) => {
+    await use(deleteKnowledgeGraph);
+  },
+  createConnector: async ({}, use) => {
+    await use(createConnector);
+  },
+  deleteConnector: async ({}, use) => {
+    await use(deleteConnector);
   },
   /**
    * Admin request - same auth as default `request` fixture

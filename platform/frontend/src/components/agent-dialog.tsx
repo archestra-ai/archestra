@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AgentBadge } from "@/components/agent-badge";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -40,7 +41,6 @@ import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -1045,22 +1045,7 @@ export function AgentDialog({
             {isBuiltIn
               ? `Edit ${agent?.name ?? "Built-In Agent"}`
               : getDialogTitle(agentType, !!agent)}
-            {!isBuiltIn &&
-              (scope === "personal" ? (
-                <Badge
-                  variant="outline"
-                  className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs font-normal"
-                >
-                  Personal
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="bg-green-500/10 text-green-600 border-green-500/30 text-xs font-normal"
-                >
-                  Shared
-                </Badge>
-              ))}
+            {!isBuiltIn && <AgentBadge type={scope} className="font-normal" />}
           </DialogTitle>
           {isBuiltIn && agent?.description && (
             <p className="text-sm text-muted-foreground">

@@ -30,7 +30,7 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
-import { errorMessage } from "./utils";
+import { errorMessage, isSlackDmChannel } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
@@ -64,18 +64,28 @@ export class ChatOpsManager {
    * If senderEmail is provided and resolves to a user, only returns agents
    * the user has team-based access to. Falls back to all agents if user
    * cannot be resolved (access check still happens at message processing time).
+   *
+   * When isDm=true, includes the user's own personal agents.
+   * When isDm=false (default), excludes all personal agents since channels are shared.
    */
-  async getAccessibleChatopsAgents(params: {
+  async getAccessibleChatopsAgents({
+    senderEmail,
+    isDm,
+  }: {
     senderEmail?: string;
+    isDm: boolean;
   }): Promise<{ id: string; name: string }[]> {
-    const agents = await AgentModel.findAllInternalAgents();
+    const user = senderEmail
+      ? await UserModel.findByEmail(senderEmail.toLowerCase())
+      : null;
 
-    if (!params.senderEmail || agents.length === 0) {
-      return agents;
-    }
+    // For DMs with a known user, include that user's personal agents
+    const agents =
+      isDm && user
+        ? await AgentModel.findAllInternalAgentsIncludingPersonal(user.id)
+        : await AgentModel.findAllInternalAgents();
 
-    const user = await UserModel.findByEmail(params.senderEmail.toLowerCase());
-    if (!user) {
+    if (!user || agents.length === 0) {
       return agents;
     }
 
@@ -411,7 +421,12 @@ export class ChatOpsManager {
       }
 
       // Show agent selection
-      await this.sendAgentSelectionCard(provider, message, true);
+      await this.sendAgentSelectionCard({
+        provider,
+        message,
+        isWelcome: true,
+        isDm,
+      });
       return;
     }
 
@@ -429,7 +444,7 @@ export class ChatOpsManager {
       if (isNew) {
         await provider.sendReply({
           originalMessage: message,
-          text: "I saw your mention. What would you like help with?",
+          text: "How can I help you?",
         });
       }
       return;
@@ -487,7 +502,7 @@ export class ChatOpsManager {
     const organizationId = await getDefaultOrganizationId();
 
     // Create or update binding
-    const isDm = selection.channelId.startsWith("D");
+    const isDm = isSlackDmChannel(selection.channelId);
     const channelName = isDm
       ? `Direct Message - ${senderEmail}`
       : await provider.getChannelName(selection.channelId);
@@ -706,13 +721,20 @@ export class ChatOpsManager {
     }
   }
 
-  private async sendAgentSelectionCard(
-    provider: ChatOpsProvider,
-    message: IncomingChatMessage,
-    isWelcome: boolean,
-  ): Promise<void> {
+  private async sendAgentSelectionCard({
+    provider,
+    message,
+    isWelcome,
+    isDm,
+  }: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    isWelcome: boolean;
+    isDm: boolean;
+  }): Promise<void> {
     const agents = await this.getAccessibleChatopsAgents({
       senderEmail: message.senderEmail,
+      isDm,
     });
 
     if (agents.length === 0) {

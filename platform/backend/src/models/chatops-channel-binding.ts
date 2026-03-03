@@ -565,6 +565,28 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Find multiple bindings by IDs within an organization.
+   */
+  static async findByIds(
+    ids: string[],
+    organizationId: string,
+  ): Promise<ChatOpsChannelBinding[]> {
+    if (ids.length === 0) return [];
+
+    const bindings = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          inArray(schema.chatopsChannelBindingsTable.id, ids),
+          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+        ),
+      );
+
+    return bindings as ChatOpsChannelBinding[];
+  }
+
+  /**
    * Deduplicate bindings for a batch of channels.
    * For each (provider, channelId) with multiple rows, keeps the one with an
    * agent assigned (preferring the most recently updated), and deletes the rest.

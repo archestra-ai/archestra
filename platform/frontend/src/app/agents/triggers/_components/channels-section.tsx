@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
+import { AgentBadge } from "@/components/agent-badge";
 import { DebouncedInput } from "@/components/debounced-input";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,8 @@ import type { ProviderConfig } from "./types";
 interface Agent {
   id: string;
   name: string;
+  scope: "personal" | "team" | "org";
+  authorId?: string | null;
 }
 
 type SortField = "channel" | "agent";
@@ -166,11 +169,38 @@ export function ChannelsSection({
 
   const hasMultipleWorkspaces = workspaces.length > 1;
 
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+
   // Agent list for picker + lookup map for sorting
   const agentList = useMemo(
-    () => (agents ?? []).map((a) => ({ id: a.id, name: a.name })),
+    () =>
+      (agents ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        scope: a.scope,
+        authorId: a.authorId,
+      })),
     [agents],
   );
+
+  // For channel rows: exclude personal agents
+  const channelAgentList = useMemo(
+    () => agentList.filter((a) => a.scope !== "personal"),
+    [agentList],
+  );
+
+  // For DM rows: include only the current user's personal agents + non-personal
+  const dmAgentList = useMemo(
+    () =>
+      agentList.filter(
+        (a) =>
+          a.scope !== "personal" ||
+          (a.scope === "personal" && a.authorId === currentUserId),
+      ),
+    [agentList, currentUserId],
+  );
+
   const agentMap = useMemo(() => {
     const m = new Map<string, string>();
     for (const a of agentList) m.set(a.id, a.name);
@@ -319,7 +349,7 @@ export function ChannelsSection({
             </div>
             <div className="ml-auto">
               <BulkAssignButton
-                agents={agentList}
+                agents={channelAgentList}
                 selectedCount={selectedIds.size}
                 isUpdating={bulkMutation.isPending}
                 onAssign={handleBulkAssign}
@@ -362,7 +392,8 @@ export function ChannelsSection({
               variant="configured"
               storageKey={`${providerConfig.provider}:configured`}
               bindings={configured}
-              agentList={agentList}
+              channelAgentList={channelAgentList}
+              dmAgentList={dmAgentList}
               providerConfig={providerConfig}
               providerStatus={providerStatus}
               onAssignAgent={handleAssignAgent}
@@ -381,7 +412,8 @@ export function ChannelsSection({
               variant="not-configured"
               storageKey={`${providerConfig.provider}:not-configured`}
               bindings={notConfigured}
-              agentList={agentList}
+              channelAgentList={channelAgentList}
+              dmAgentList={dmAgentList}
               providerConfig={providerConfig}
               providerStatus={providerStatus}
               onAssignAgent={handleAssignAgent}
@@ -493,6 +525,7 @@ function BulkAssignButton({
                   >
                     <Bot className="mr-2 h-4 w-4" />
                     <span className="truncate">{agent.name}</span>
+                    <AgentBadge type={agent.scope} />
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -522,7 +555,8 @@ function CollapsibleChannelTable({
   variant,
   storageKey,
   bindings,
-  agentList,
+  channelAgentList,
+  dmAgentList,
   providerConfig,
   providerStatus,
   onAssignAgent,
@@ -536,7 +570,8 @@ function CollapsibleChannelTable({
   variant: "configured" | "not-configured";
   storageKey: string;
   bindings: BindingRow[];
-  agentList: Agent[];
+  channelAgentList: Agent[];
+  dmAgentList: Agent[];
   providerConfig: ProviderConfig;
   providerStatus: {
     dmInfo?: { botUserId?: string; teamId?: string; appId?: string } | null;
@@ -706,7 +741,7 @@ function CollapsibleChannelTable({
                   </TableCell>
                   <TableCell>
                     <AgentPicker
-                      agents={agentList}
+                      agents={dmAgentList}
                       assignedAgent={undefined}
                       isUpdating={virtualDm.isUpdating}
                       onAssign={virtualDm.onAssignAgent}
@@ -753,8 +788,11 @@ function CollapsibleChannelTable({
                 </TableRow>
               )}
               {sortedBindings.map((binding) => {
+                const pickerAgents = binding.isDm
+                  ? dmAgentList
+                  : channelAgentList;
                 const assignedAgent = binding.agentId
-                  ? agentList.find((a) => a.id === binding.agentId)
+                  ? pickerAgents.find((a) => a.id === binding.agentId)
                   : undefined;
                 const deepLink = binding.isDm
                   ? providerStatus
@@ -789,7 +827,7 @@ function CollapsibleChannelTable({
                     </TableCell>
                     <TableCell>
                       <AgentPicker
-                        agents={agentList}
+                        agents={pickerAgents}
                         assignedAgent={assignedAgent}
                         isUpdating={isUpdating}
                         onAssign={(agentId) =>
@@ -885,11 +923,15 @@ function AgentPicker({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 text-xs"
+            className="h-7 gap-1.5 text-xs min-w-[180px]"
             disabled={isUpdating}
           >
             <Bot className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{assignedAgent.name}</span>
+            <AgentBadge
+              type={assignedAgent.scope}
+              className="px-1 py-0 ml-auto"
+            />
           </Button>
         </PopoverTrigger>
       ) : (
@@ -936,8 +978,9 @@ function AgentPicker({
                 >
                   <Bot className="mr-2 h-4 w-4" />
                   <span className="truncate">{agent.name}</span>
+                  <AgentBadge type={agent.scope} className="ml-auto" />
                   {assignedAgent?.id === agent.id && (
-                    <CheckIcon className="ml-auto h-4 w-4" />
+                    <CheckIcon className="h-4 w-4" />
                   )}
                 </CommandItem>
               ))}

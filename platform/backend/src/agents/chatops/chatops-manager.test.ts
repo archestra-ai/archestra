@@ -579,6 +579,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "teamuser@example.com",
+      isDm: false,
     });
 
     expect(agents).toHaveLength(1);
@@ -603,7 +604,10 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const manager = new ChatOpsManager();
-    const agents = await manager.getAccessibleChatopsAgents({});
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "admin@example.com",
+      isDm: false,
+    });
 
     expect(agents.length).toBeGreaterThanOrEqual(1);
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
@@ -628,6 +632,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "nonexistent@example.com",
+      isDm: false,
     });
 
     // Falls back to all agents when user can't be resolved
@@ -660,10 +665,136 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "fulladmin@example.com",
+      isDm: false,
     });
 
     // Admin should see all agents
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+});
+
+describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", () => {
+  test("excludes personal agents from channel (non-DM) context", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "channeluser@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const orgAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Org Agent",
+      scope: "org",
+    });
+    const personalAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+    });
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "channeluser@example.com",
+      isDm: false,
+    });
+
+    expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
+    expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
+  });
+
+  test("excludes personal agents when isDm is not specified", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "defaultuser@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const orgAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Org Agent",
+      scope: "org",
+    });
+    const personalAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+    });
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "defaultuser@example.com",
+      isDm: false,
+    });
+
+    expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
+    expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
+  });
+
+  test("includes user's own personal agents in DM context", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "dmuser@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const orgAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Org Agent",
+      scope: "org",
+    });
+    const ownPersonalAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "My Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+    });
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "dmuser@example.com",
+      isDm: true,
+    });
+
+    expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
+    expect(agents.some((a) => a.id === ownPersonalAgent.id)).toBe(true);
+  });
+
+  test("excludes other users' personal agents from DM context", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "dmuser2@example.com" });
+    const otherUser = await makeUser({ email: "otherauthor@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const otherPersonalAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Other Personal Agent",
+      scope: "personal",
+      authorId: otherUser.id,
+    });
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "dmuser2@example.com",
+      isDm: true,
+    });
+
+    expect(agents.some((a) => a.id === otherPersonalAgent.id)).toBe(false);
   });
 });
 

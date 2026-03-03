@@ -31,7 +31,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
 } from "./constants";
-import { EventDedupMap, errorMessage } from "./utils";
+import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -706,6 +706,7 @@ class SlackProvider implements ChatOpsProvider {
 
       case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
         // Send agent selection card (visible to all in channel)
+        const isDm = isSlackDmChannel(channelId);
         const message: IncomingChatMessage = {
           messageId: `slack-slash-${Date.now()}`,
           channelId,
@@ -723,6 +724,7 @@ class SlackProvider implements ChatOpsProvider {
         const agents =
           (await this.eventHandler?.getAccessibleChatopsAgents({
             senderEmail,
+            isDm,
           })) ?? [];
 
         if (agents.length === 0) {

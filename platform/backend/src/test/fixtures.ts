@@ -180,13 +180,17 @@ async function makeTeamMember(
  * Creates a test agent using the Agent model.
  * Auto-creates an organization if not provided.
  */
-async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
+async function makeAgent(
+  overrides: Partial<InsertAgent> & { authorId?: string } = {},
+): Promise<Agent> {
   // Auto-create organization if not provided
   let organizationId = overrides.organizationId;
   if (!organizationId) {
     const org = await makeOrganization();
     organizationId = org.id;
   }
+
+  const { authorId, ...agentOverrides } = overrides;
 
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
@@ -195,17 +199,20 @@ async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
     teams: [],
     labels: [],
   };
-  return await AgentModel.create({
-    ...defaults,
-    ...overrides,
-  });
+  return await AgentModel.create(
+    {
+      ...defaults,
+      ...agentOverrides,
+    },
+    authorId,
+  );
 }
 
 /**
  * Creates an internal test agent (with prompts/chat capabilities).
  */
 async function makeInternalAgent(
-  overrides: Partial<InsertAgent> = {},
+  overrides: Partial<InsertAgent> & { authorId?: string } = {},
 ): Promise<Agent> {
   return await makeAgent({
     agentType: "agent",

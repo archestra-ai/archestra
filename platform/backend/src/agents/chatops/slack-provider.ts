@@ -238,8 +238,9 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const cleanedText = this.cleanBotMention(text);
-
-    if (!cleanedText.trim()) {
+    const isEmptyAppMention =
+      event.type === "app_mention" && !cleanedText.trim();
+    if (!cleanedText.trim() && !isEmptyAppMention) {
       return null;
     }
 

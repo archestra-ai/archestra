@@ -82,3 +82,85 @@ The `query_knowledge_graph` tool supports different query modes:
 | `local`  | Uses only local context from the knowledge graph | Specific document lookups |
 | `global` | Uses global context across all documents         | Broad topic exploration   |
 | `naive`  | Simple RAG without graph-based retrieval         | Basic similarity search   |
+
+## Connectors
+
+Connectors are data sources that automatically ingest external content into a knowledge graph on a schedule. Instead of manually uploading documents via Chat, connectors pull data from tools your team already uses.
+
+Each connector runs as a Kubernetes CronJob that periodically fetches new and updated content, converts it to plain text, and sends it to the knowledge graph provider. Syncs are incremental -- connectors track a checkpoint so only changes since the last run are processed.
+
+**Requirements**: Connectors need a configured K8s runtime (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`).
+
+### Supported Connectors
+
+#### Jira
+
+Ingests issue descriptions, comments, and metadata from Jira Cloud or Server.
+
+| Field | Description |
+| --- | --- |
+| Base URL | Your Jira instance URL (e.g., `https://your-domain.atlassian.net`) |
+| Cloud Instance | Toggle on for Jira Cloud, off for Jira Server/Data Center |
+| Project Key | Filter issues to a single project (optional) |
+| JQL Query | Custom JQL to filter issues (optional, e.g., `project = PROJ AND status = "Done"`) |
+| Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional) |
+| Labels to Skip | Comma-separated issue labels to exclude (optional) |
+
+Authentication uses an Atlassian account email and [API token](https://id.atlassian.com/manage-profile/security/api-tokens).
+
+Incremental sync uses JQL time-range queries based on the `updated` field, so only issues modified since the last sync are fetched.
+
+#### Confluence
+
+Ingests page content (HTML converted to plain text) from Confluence Cloud or Server.
+
+| Field | Description |
+| --- | --- |
+| URL | Your Confluence instance URL (e.g., `https://your-domain.atlassian.net/wiki`) |
+| Cloud Instance | Toggle on for Confluence Cloud, off for Server/Data Center |
+| Space Keys | Comma-separated space keys to sync (optional, e.g., `ENG, DOCS`) |
+| Page IDs | Comma-separated specific page IDs to sync (optional) |
+| CQL Query | Custom CQL to filter content (optional, e.g., `space = "ENG" AND type = "page"`) |
+| Labels to Skip | Comma-separated labels to exclude (optional) |
+| Batch Size | Pages per batch (default: 50) |
+
+Authentication uses the same Atlassian email + API token as Jira.
+
+Incremental sync uses CQL `lastModified` queries to fetch only pages changed since the last run.
+
+### Schedules
+
+Connectors use cron expressions to define sync frequency. The UI provides common presets:
+
+| Preset | Cron Expression |
+| --- | --- |
+| Every 6 hours | `0 */6 * * *` |
+| Every 12 hours | `0 */12 * * *` |
+| Daily | `0 0 * * *` |
+| Weekly | `0 0 * * 0` |
+
+You can also enter a custom cron expression. The format is `minute hour day-of-month month day-of-week`.
+
+### Managing Connectors
+
+Connectors are managed from a knowledge graph's detail page:
+
+<!-- TODO: Add screenshot of connector creation dialog -->
+
+1. Navigate to the knowledge graph and click **Add Connector**
+2. Select a connector type (Jira or Confluence) and provide a name
+3. Configure the source-specific settings
+4. Enter your Atlassian email and API token
+5. Choose a sync schedule
+
+After creation, you can:
+
+- **Test Connection** -- verifies credentials and connectivity before waiting for the first scheduled sync
+- **Trigger Sync** -- runs an immediate sync outside the schedule
+- **View Runs** -- see the history of sync runs with status, documents processed, and errors
+
+### Environment Variables
+
+| Variable | Description | Default |
+| --- | --- |--- |
+| `ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE` | K8s namespace where connector CronJobs run | `archestra-connectors` |

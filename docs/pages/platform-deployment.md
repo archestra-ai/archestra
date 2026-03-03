@@ -941,3 +941,8 @@ These environment variables configure the Knowledge Graph feature, which automat
 - **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
   - Optional: Only required if your LightRAG server is configured with authentication
   - Note: Keep this value secure; do not commit to version control
+
+- **`ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
+  - Default: `archestra-connectors`
+  - Connectors (Jira, Confluence) use K8s CronJobs to run scheduled syncs into knowledge graphs
+  - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)

@@ -394,6 +394,16 @@ export class ChatOpsManager {
       return;
     }
 
+    // Always reply to direct bot mentions, even when no additional text is provided.
+    // This prevents empty-mention events from being silently ignored.
+    if (!message.text.trim()) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: "I saw your mention. What would you like help with?",
+      });
+      return;
+    }
+
     // Process message through assigned agent
     await this.processMessage({
       message,

@@ -185,6 +185,31 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Find any existing DM binding for a provider + email, regardless of
+   * channelId or pending status. Used as a fallback when the DM channel ID
+   * changes (e.g., after bot reinstallation) and the pending lookup misses.
+   */
+  static async findDmBindingByEmail(
+    provider: ChatOpsProviderType,
+    dmOwnerEmail: string,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .select()
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, provider),
+          eq(schema.chatopsChannelBindingsTable.isDm, true),
+          eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+        ),
+      )
+      .orderBy(desc(schema.chatopsChannelBindingsTable.updatedAt))
+      .limit(1);
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
    * Fulfill a pending DM binding by replacing the placeholder channelId
    * with the real one from the first DM interaction.
    */
@@ -328,6 +353,16 @@ class ChatOpsChannelBindingModel {
           },
           "[ChatOpsChannelBinding] Removed stale DM bindings",
         );
+
+        // Inherit agentId from the deleted stale binding if the caller
+        // didn't provide one. This prevents losing the agent assignment
+        // when the DM channel ID changes (e.g., after bot reinstallation).
+        if (!input.agentId) {
+          const inheritedAgentId = deleted.find((b) => b.agentId)?.agentId;
+          if (inheritedAgentId) {
+            input.agentId = inheritedAgentId;
+          }
+        }
       }
     }
 

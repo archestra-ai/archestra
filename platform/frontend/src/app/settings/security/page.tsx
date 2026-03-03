@@ -96,7 +96,7 @@ export default function SecuritySettingsPage() {
                     noPermissionHandle="hide"
                   >
                     <Link
-                      href="/tool-policies"
+                      href="/mcp/tool-policies"
                       className="text-primary hover:underline"
                     >
                       Click here to configure policies

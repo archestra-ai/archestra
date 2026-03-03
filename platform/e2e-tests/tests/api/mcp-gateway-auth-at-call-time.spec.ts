@@ -176,7 +176,7 @@ test.describe("MCP Gateway - Auth at Call Time", () => {
     expect(textContent).toBeDefined();
     expect(textContent.text).toContain("Authentication required for");
     expect(textContent.text).toContain(CATALOG_NAME);
-    expect(textContent.text).toContain("/mcp-catalog/registry?install=");
+    expect(textContent.text).toContain("/mcp/registry?install=");
     expect(textContent.text).toContain(catalogItemId);
   });
 });

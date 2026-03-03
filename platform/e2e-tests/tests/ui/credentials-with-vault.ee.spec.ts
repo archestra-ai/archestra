@@ -14,7 +14,7 @@ import {
  * Navigate to the LLM API Keys page and expand pagination to show all rows.
  */
 async function goToApiKeysPage(page: Page) {
-  await goToPage(page, "/llm-proxies/provider-settings");
+  await goToPage(page, "/llm/providers");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 
@@ -35,7 +35,7 @@ test("Check if BYOS Vault is enabled", async ({
   adminPage,
   extractCookieHeaders,
 }) => {
-  await goToPage(adminPage, "/mcp-catalog/registry");
+  await goToPage(adminPage, "/mcp/registry");
   await adminPage.waitForLoadState("domcontentloaded");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   const { data: config } = await archestraApiSdk.getConfig({
@@ -210,7 +210,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     });
 
     // Go to MCP Registry page
-    await goToPage(adminPage, "/mcp-catalog/registry");
+    await goToPage(adminPage, "/mcp/registry");
     await adminPage.waitForLoadState("domcontentloaded");
 
     // Click connect button for the catalog item
@@ -225,9 +225,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage
       .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
       .click();
-    await adminPage
-      .getByRole("option", { name: DEFAULT_TEAM_NAME })
-      .click();
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
 
     // Select secret from vault
     await adminPage
@@ -310,7 +308,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     });
 
     // Go to MCP Registry page
-    await goToPage(adminPage, "/mcp-catalog/registry");
+    await goToPage(adminPage, "/mcp/registry");
     await adminPage.waitForLoadState("domcontentloaded");
 
     // Click connect button for the catalog item
@@ -324,9 +322,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage
       .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
       .click();
-    await adminPage
-      .getByRole("option", { name: DEFAULT_TEAM_NAME })
-      .click();
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
 
     // install server
     await clickButton({ page: adminPage, options: { name: "Install" } });

@@ -667,6 +667,80 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
   });
 });
 
+describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
+  test("replies once for empty app_mention and skips processMessage on retries", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "slackuser@example.com" });
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Slack Agent",
+    });
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider: ChatOpsProvider = {
+      providerId: "slack",
+      displayName: "Slack",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async (payload) =>
+        payload as IncomingChatMessage,
+      sendReply: sendReplySpy,
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: async () => user.email,
+      getChannelName: async () => "test-channel",
+      getWorkspaceId: () => "T_TEST",
+      getWorkspaceName: () => "Test Workspace",
+      discoverChannels: async () => [],
+    };
+
+    const manager = new ChatOpsManager();
+    const processMessageSpy = vi
+      .spyOn(manager, "processMessage")
+      .mockResolvedValue({ success: true });
+
+    const message: IncomingChatMessage = {
+      messageId: "slack-empty-mention-1",
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      threadId: "1772498106.893979",
+      senderId: "U_TEST",
+      senderName: "Slack User",
+      text: "",
+      rawText: "<@UBOT123>",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: {
+        eventType: "app_mention",
+        channelType: "channel",
+      },
+    };
+
+    // Initial event + retry with same messageId
+    await manager.handleIncomingMessage(provider, message);
+    await manager.handleIncomingMessage(provider, message);
+
+    expect(sendReplySpy).toHaveBeenCalledTimes(1);
+    expect(processMessageSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("ChatOpsManager.initialize — partial config", () => {
   // Clear all chatops env vars to prevent seed logic from running
   beforeEach(() => {

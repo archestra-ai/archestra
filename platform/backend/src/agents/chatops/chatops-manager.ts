@@ -394,13 +394,23 @@ export class ChatOpsManager {
       return;
     }
 
-    // Always reply to direct bot mentions, even when no additional text is provided.
-    // This prevents empty-mention events from being silently ignored.
-    if (!message.text.trim()) {
-      await provider.sendReply({
-        originalMessage: message,
-        text: "I saw your mention. What would you like help with?",
-      });
+    // Always reply to empty Slack app mentions so users get a response even
+    // when they only tag the bot without additional text.
+    const isEmptySlackAppMention =
+      provider.providerId === "slack" &&
+      message.metadata?.eventType === "app_mention" &&
+      !message.text.trim();
+    if (isEmptySlackAppMention) {
+      // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
+      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
+        message.messageId,
+      );
+      if (isNew) {
+        await provider.sendReply({
+          originalMessage: message,
+          text: "I saw your mention. What would you like help with?",
+        });
+      }
       return;
     }
 

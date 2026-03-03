@@ -9,7 +9,7 @@ const TEST_API_KEY = "sk-ant-test-key-12345";
  * Navigate to the Provider Settings page (API Keys tab) and expand pagination.
  */
 async function goToApiKeysPage(page: Page) {
-  await goToPage(page, "/llm-proxies/provider-settings");
+  await goToPage(page, "/llm/providers");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 
@@ -17,7 +17,7 @@ async function goToApiKeysPage(page: Page) {
  * Navigate to the Provider Settings page (Virtual API Keys tab).
  */
 async function goToVirtualKeysPage(page: Page) {
-  await goToPage(page, "/llm-proxies/provider-settings?tab=virtual-keys");
+  await goToPage(page, "/llm/providers?tab=virtual-keys");
 }
 
 test.describe("Provider Settings - API Keys", () => {
@@ -338,19 +338,19 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
 test.describe("Provider Settings - Tab Navigation", () => {
   test("All three tabs are accessible", async ({ page }) => {
     // API Keys tab (default)
-    await goToPage(page, "/llm-proxies/provider-settings");
+    await goToPage(page, "/llm/providers");
     await expect(page.getByText("LLM API Keys")).toBeVisible();
 
     // Virtual API Keys tab
     await page.getByRole("link", { name: "Virtual API Keys" }).click();
-    await page.waitForURL("**/provider-settings?tab=virtual-keys");
+    await page.waitForURL("**/llm/providers?tab=virtual-keys");
     await expect(
       page.getByRole("heading", { name: "Virtual API Keys" }),
     ).toBeVisible();
 
     // Models tab
     await page.getByRole("link", { name: "Models" }).click();
-    await page.waitForURL("**/provider-settings?tab=models");
+    await page.waitForURL("**/llm/providers?tab=models");
     await expect(
       page.getByRole("heading", { name: "Available Models" }),
     ).toBeVisible();

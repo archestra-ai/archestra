@@ -6,7 +6,7 @@ describe("AuthRequiredTool", () => {
   const defaultProps = {
     toolName: "jira__create_issue",
     catalogName: "jira-atlassian-remote",
-    installUrl: "http://localhost:3000/mcp-catalog/registry?install=cat_abc123",
+    installUrl: "http://localhost:3000/mcp/registry?install=cat_abc123",
   };
 
   it("renders the Authentication Required alert", () => {
@@ -37,7 +37,7 @@ describe("AuthRequiredTool", () => {
       <AuthRequiredTool
         toolName="github__list_repos"
         catalogName="github-remote"
-        installUrl="http://localhost:3000/mcp-catalog/registry?install=cat_xyz"
+        installUrl="http://localhost:3000/mcp/registry?install=cat_xyz"
       />,
     );
 
@@ -48,7 +48,7 @@ describe("AuthRequiredTool", () => {
       screen.getByRole("link", { name: /Set up credentials/i }),
     ).toHaveAttribute(
       "href",
-      "http://localhost:3000/mcp-catalog/registry?install=cat_xyz",
+      "http://localhost:3000/mcp/registry?install=cat_xyz",
     );
   });
 });

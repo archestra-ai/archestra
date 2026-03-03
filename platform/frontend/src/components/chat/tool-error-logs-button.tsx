@@ -3,7 +3,7 @@
 import { parseFullToolName } from "@shared";
 import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
-import { McpLogsDialog } from "@/app/mcp-catalog/_parts/mcp-logs-dialog";
+import { McpLogsDialog } from "@/app/mcp/registry/_parts/mcp-logs-dialog";
 import { Button } from "@/components/ui/button";
 import {
   useMcpDeploymentStatuses,

@@ -54,7 +54,7 @@ test("Verify tool calling using dynamic credentials", async ({
 
   const install = async ({ page, user, team }: (typeof MATRIX_A)[number]) => {
     // Go to MCP Registry page
-    await goToPage(page, "/mcp-catalog/registry");
+    await goToPage(page, "/mcp/registry");
     await page.waitForLoadState("domcontentloaded");
     // Click connect button for the catalog item - wait for it to be visible
     const btn = page.getByTestId(
@@ -181,7 +181,7 @@ test("Verify tool calling using dynamic credentials", async ({
   }
 
   // Then we remove ALL personal credentials and verify it uses team credentials as second priority
-  await goToPage(adminPage, "/mcp-catalog/registry");
+  await goToPage(adminPage, "/mcp/registry");
   await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
   await adminPage
     .getByTestId(`${E2eTestId.RevokeCredentialButton}-${ADMIN_EMAIL}`)

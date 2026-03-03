@@ -24,8 +24,8 @@ import {
   useState,
 } from "react";
 import { useForm } from "react-hook-form";
-import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
-import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
+import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -1626,7 +1626,7 @@ export default function ChatPage() {
       <CreateCatalogDialog
         isOpen={isDialogOpened("create-catalog")}
         onClose={() => closeDialog("create-catalog")}
-        onSuccess={() => router.push("/mcp-catalog/registry")}
+        onSuccess={() => router.push("/mcp/registry")}
       />
       <AgentDialog
         open={isDialogOpened("edit-agent")}

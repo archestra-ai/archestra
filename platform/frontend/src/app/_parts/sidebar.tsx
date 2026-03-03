@@ -96,9 +96,9 @@ const contentNavGroups: NavGroup[] = [
         subItems: [
           {
             title: "Triggers",
-            url: "/agent-triggers/ms-teams",
+            url: "/agents/triggers/ms-teams",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/agent-triggers"),
+              pathname.startsWith("/agents/triggers"),
           },
         ],
       },
@@ -109,23 +109,23 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "MCPs",
-        url: "/mcp-catalog/registry",
+        url: "/mcp/registry",
         icon: Route,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp-catalog"),
+          pathname.startsWith("/mcp/registry"),
         subItems: [
           {
             title: "Gateways",
-            url: "/mcp-gateways",
+            url: "/mcp/gateways",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp-gateways"),
+              pathname.startsWith("/mcp/gateways"),
           },
           {
             title: "Guardrails",
-            url: "/tool-policies",
+            url: "/mcp/tool-policies",
             testId: E2eTestId.SidebarNavGuardrails,
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/tool-policies"),
+              pathname.startsWith("/mcp/tool-policies"),
           },
         ],
       },
@@ -136,19 +136,19 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "LLM Proxies",
-        url: "/llm-proxies",
+        url: "/llm/proxies",
         icon: Network,
-        customIsActive: (pathname: string) => pathname === "/llm-proxies",
+        customIsActive: (pathname: string) => pathname === "/llm/proxies",
         subItems: [
           {
             title: "Providers",
-            url: "/llm-proxies/provider-settings",
+            url: "/llm/providers",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm-proxies/provider-settings"),
+              pathname.startsWith("/llm/providers"),
           },
           {
             title: "Cost & Limits",
-            url: "/cost",
+            url: "/llm/cost",
           },
         ],
       },
@@ -159,9 +159,10 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "Logs",
-        url: "/logs/llm-proxy",
+        url: "/llm/logs",
         icon: MessagesSquare,
-        customIsActive: (pathname: string) => pathname.startsWith("/logs"),
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
       {
         title: "Connect",

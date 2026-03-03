@@ -2,7 +2,7 @@
 
 import { AlertCircle, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
-import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp-catalog/_parts/select-mcp-server-credential-type-and-teams";
+import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -47,7 +47,7 @@ export async function addCustomSelfHostedCatalogItem({
     };
   };
 }) {
-  await goToPage(page, "/mcp-catalog/registry");
+  await goToPage(page, "/mcp/registry");
   await page.waitForLoadState("domcontentloaded");
   // Wait for the Add MCP Server button to be visible (page fully rendered)
   const addButton = page.getByRole("button", { name: "Add MCP Server" });
@@ -186,11 +186,11 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 }) {
   const effectiveGatewayName = gatewayName ?? DEFAULT_MCP_GATEWAY_NAME;
   const waitTimeoutMs = timeoutMs ?? 60_000;
-  await goToPage(page, "/mcp-catalog/registry");
+  await goToPage(page, "/mcp/registry");
   await page.waitForLoadState("domcontentloaded");
 
   // Verify we're actually on the registry page (handle redirect issues)
-  await expect(page).toHaveURL(/\/mcp-catalog\/registry/, { timeout: 10000 });
+  await expect(page).toHaveURL(/\/mcp\/registry/, { timeout: 10000 });
 
   // Poll for manage-tools button to appear (MCP tool discovery is async)
   // After installing, the server needs to: start → connect → discover tools → save to DB
@@ -200,7 +200,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 
   await expect(async () => {
     // Re-navigate in case the page got stale
-    await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
+    await page.goto(`${UI_BASE_URL}/mcp/registry`);
     await page.waitForLoadState("domcontentloaded");
 
     // Fail fast if error message is present

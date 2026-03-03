@@ -1,43 +1,16 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
-const API_BASE = "/api/knowledge-graphs";
-
-// ===== Types (will be replaced with generated SDK types later) =====
-
-export interface KnowledgeGraphResponse {
-  id: string;
-  organizationId: string;
-  name: string;
-  provider: string;
-  config: Record<string, unknown>;
-  secretId: string | null;
-  status: string;
-  seededFromEnv: boolean;
-  connectorsCount?: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateKnowledgeGraphBody {
-  name: string;
-  provider: string;
-  config: Record<string, unknown>;
-  apiKey?: string;
-}
-
-export interface UpdateKnowledgeGraphBody {
-  name?: string;
-  config?: Record<string, unknown>;
-  apiKey?: string;
-  status?: string;
-}
-
-export interface HealthCheckResponse {
-  status: "healthy" | "unhealthy";
-  message?: string;
-}
+const {
+  getKnowledgeGraphs,
+  getKnowledgeGraph,
+  getKnowledgeGraphHealth,
+  createKnowledgeGraph,
+  updateKnowledgeGraph,
+  deleteKnowledgeGraph,
+} = archestraApiSdk;
 
 // ===== Query hooks =====
 
@@ -45,13 +18,12 @@ export function useKnowledgeGraphs() {
   return useQuery({
     queryKey: ["knowledge-graphs"],
     queryFn: async () => {
-      const response = await fetch(API_BASE);
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await getKnowledgeGraphs();
+      if (error) {
         handleApiError(error);
-        return [];
+        return null;
       }
-      return (await response.json()) as KnowledgeGraphResponse[];
+      return data;
     },
   });
 }
@@ -60,13 +32,12 @@ export function useKnowledgeGraph(id: string) {
   return useQuery({
     queryKey: ["knowledge-graphs", id],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${id}`);
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await getKnowledgeGraph({ path: { id } });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as KnowledgeGraphResponse;
+      return data;
     },
     enabled: !!id,
   });
@@ -76,13 +47,12 @@ export function useKnowledgeGraphHealth(id: string) {
   return useQuery({
     queryKey: ["knowledge-graphs", id, "health"],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${id}/health`);
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await getKnowledgeGraphHealth({ path: { id } });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as HealthCheckResponse;
+      return data;
     },
     enabled: false, // Only fetch on demand
   });
@@ -91,18 +61,15 @@ export function useKnowledgeGraphHealth(id: string) {
 export function useCreateKnowledgeGraph() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateKnowledgeGraphBody) => {
-      const response = await fetch(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
+    mutationFn: async (
+      body: archestraApiTypes.CreateKnowledgeGraphData["body"],
+    ) => {
+      const { data, error } = await createKnowledgeGraph({ body });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as KnowledgeGraphResponse;
+      return data;
     },
     onSuccess: (data) => {
       if (!data) return;
@@ -117,22 +84,20 @@ export function useUpdateKnowledgeGraph() {
   return useMutation({
     mutationFn: async ({
       id,
-      data,
+      body,
     }: {
       id: string;
-      data: UpdateKnowledgeGraphBody;
+      body: archestraApiTypes.UpdateKnowledgeGraphData["body"];
     }) => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+      const { data, error } = await updateKnowledgeGraph({
+        path: { id },
+        body,
       });
-      if (!response.ok) {
-        const error = await response.json();
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as KnowledgeGraphResponse;
+      return data;
     },
     onSuccess: (data, variables) => {
       if (!data) return;
@@ -149,15 +114,12 @@ export function useDeleteKnowledgeGraph() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await deleteKnowledgeGraph({ path: { id } });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return true;
+      return data;
     },
     onSuccess: (data) => {
       if (!data) return;

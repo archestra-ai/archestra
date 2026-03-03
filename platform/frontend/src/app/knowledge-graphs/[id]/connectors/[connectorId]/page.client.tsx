@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, Play, Plug } from "lucide-react";
 import Link from "next/link";
@@ -24,7 +25,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  type ConnectorRunResponse,
   useConnector,
   useConnectorRuns,
   useSyncConnector,
@@ -92,7 +92,10 @@ function ConnectorDetail({
     [],
   );
 
-  const columns: ColumnDef<ConnectorRunResponse>[] = [
+  type ConnectorRunItem =
+    archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number];
+
+  const columns: ColumnDef<ConnectorRunItem>[] = [
     {
       id: "status",
       accessorKey: "status",

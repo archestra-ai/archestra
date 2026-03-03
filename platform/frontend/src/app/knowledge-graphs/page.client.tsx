@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
-  type KnowledgeGraphResponse,
   useDeleteKnowledgeGraph,
   useKnowledgeGraphs,
 } from "@/lib/knowledge-graph.query";
@@ -44,7 +44,10 @@ function KnowledgeGraphsList() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const columns: ColumnDef<KnowledgeGraphResponse>[] = [
+  type KnowledgeGraphItem =
+    archestraApiTypes.GetKnowledgeGraphsResponses["200"]["data"][number];
+
+  const columns: ColumnDef<KnowledgeGraphItem>[] = [
     {
       id: "name",
       accessorKey: "name",
@@ -66,11 +69,6 @@ function KnowledgeGraphsList() {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    },
-    {
-      id: "connectors",
-      header: "Connectors",
-      cell: ({ row }) => <div>{row.original.connectorsCount ?? 0}</div>,
     },
     {
       id: "createdAt",
@@ -102,13 +100,13 @@ function KnowledgeGraphsList() {
   ];
 
   const handleRowClick = useCallback(
-    (row: KnowledgeGraphResponse) => {
+    (row: KnowledgeGraphItem) => {
       router.push(`/knowledge-graphs/${row.id}`);
     },
     [router],
   );
 
-  const items = knowledgeGraphs ?? [];
+  const items = knowledgeGraphs?.data ?? [];
 
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>

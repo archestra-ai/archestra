@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, Heart, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -32,7 +33,6 @@ import {
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
 import {
-  type ConnectorResponse,
   useConnectors,
   useDeleteConnector,
   useUpdateConnector,
@@ -69,24 +69,27 @@ function KnowledgeGraphDetail({ id }: { id: string }) {
     null,
   );
 
+  type ConnectorItem =
+    archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
+
   const handleToggleEnabled = useCallback(
     async (connectorId: string, enabled: boolean) => {
       await updateConnector.mutateAsync({
         id: connectorId,
-        data: { enabled },
+        body: { enabled },
       });
     },
     [updateConnector],
   );
 
   const handleRowClick = useCallback(
-    (row: ConnectorResponse) => {
+    (row: ConnectorItem) => {
       router.push(`/knowledge-graphs/${id}/connectors/${row.id}`);
     },
     [router, id],
   );
 
-  const columns: ColumnDef<ConnectorResponse>[] = [
+  const columns: ColumnDef<ConnectorItem>[] = [
     {
       id: "name",
       accessorKey: "name",
@@ -265,14 +268,14 @@ function KnowledgeGraphDetail({ id }: { id: string }) {
           isPending={isConnectorsPending}
           loadingFallback={<LoadingSpinner />}
         >
-          {(connectors ?? []).length === 0 ? (
+          {(connectors?.data ?? []).length === 0 ? (
             <div className="text-muted-foreground">
               No connectors yet. Add one to start syncing data.
             </div>
           ) : (
             <DataTable
               columns={columns}
-              data={connectors ?? []}
+              data={connectors?.data ?? []}
               onRowClick={handleRowClick}
             />
           )}

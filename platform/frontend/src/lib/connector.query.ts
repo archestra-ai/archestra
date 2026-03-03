@@ -1,76 +1,18 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
-const API_BASE = "/api/knowledge-graphs";
-
-// ===== Types (will be replaced with generated SDK types later) =====
-
-export interface ConnectorResponse {
-  id: string;
-  organizationId: string;
-  knowledgeGraphId: string;
-  name: string;
-  connectorType: string;
-  config: Record<string, unknown>;
-  secretId: string | null;
-  schedule: string;
-  enabled: boolean;
-  lastSyncAt: string | null;
-  lastSyncStatus: string | null;
-  lastSyncError: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateConnectorBody {
-  name: string;
-  connectorType: string;
-  config: Record<string, unknown>;
-  credentials?: {
-    email: string;
-    apiToken: string;
-  };
-  schedule: string;
-  enabled?: boolean;
-}
-
-export interface UpdateConnectorBody {
-  name?: string;
-  config?: Record<string, unknown>;
-  credentials?: {
-    email: string;
-    apiToken: string;
-  };
-  schedule?: string;
-  enabled?: boolean;
-}
-
-export interface ConnectorRunResponse {
-  id: string;
-  connectorId: string;
-  status: string;
-  startedAt: string;
-  completedAt: string | null;
-  documentsProcessed: number | null;
-  documentsIngested: number | null;
-  error: string | null;
-  createdAt: string;
-}
-
-export interface PaginatedConnectorRuns {
-  data: ConnectorRunResponse[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-  };
-}
-
-export interface TestConnectionResponse {
-  success: boolean;
-  message?: string;
-}
+const {
+  getConnectors,
+  getConnector,
+  createConnector,
+  updateConnector,
+  deleteConnector,
+  syncConnector,
+  testConnectorConnection,
+  getConnectorRuns,
+} = archestraApiSdk;
 
 // ===== Query hooks =====
 
@@ -78,13 +20,12 @@ export function useConnectors(kgId: string) {
   return useQuery({
     queryKey: ["knowledge-graphs", kgId, "connectors"],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${kgId}/connectors`);
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await getConnectors({ path: { kgId } });
+      if (error) {
         handleApiError(error);
-        return [];
+        return null;
       }
-      return (await response.json()) as ConnectorResponse[];
+      return data;
     },
     enabled: !!kgId,
   });
@@ -94,13 +35,12 @@ export function useConnector(kgId: string, id: string) {
   return useQuery({
     queryKey: ["knowledge-graphs", kgId, "connectors", id],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${kgId}/connectors/${id}`);
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await getConnector({ path: { kgId, id } });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as ConnectorResponse;
+      return data;
     },
     enabled: !!kgId && !!id,
   });
@@ -109,18 +49,13 @@ export function useConnector(kgId: string, id: string) {
 export function useCreateConnector(kgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateConnectorBody) => {
-      const response = await fetch(`${API_BASE}/${kgId}/connectors`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
+    mutationFn: async (body: archestraApiTypes.CreateConnectorData["body"]) => {
+      const { data, error } = await createConnector({ path: { kgId }, body });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as ConnectorResponse;
+      return data;
     },
     onSuccess: (data) => {
       if (!data) return;
@@ -138,22 +73,20 @@ export function useUpdateConnector(kgId: string) {
   return useMutation({
     mutationFn: async ({
       id,
-      data,
+      body,
     }: {
       id: string;
-      data: UpdateConnectorBody;
+      body: archestraApiTypes.UpdateConnectorData["body"];
     }) => {
-      const response = await fetch(`${API_BASE}/${kgId}/connectors/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+      const { data, error } = await updateConnector({
+        path: { kgId, id },
+        body,
       });
-      if (!response.ok) {
-        const error = await response.json();
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as ConnectorResponse;
+      return data;
     },
     onSuccess: (data, variables) => {
       if (!data) return;
@@ -172,15 +105,12 @@ export function useDeleteConnector(kgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`${API_BASE}/${kgId}/connectors/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await deleteConnector({ path: { kgId, id } });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return true;
+      return data;
     },
     onSuccess: (data) => {
       if (!data) return;
@@ -197,16 +127,14 @@ export function useSyncConnector(kgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (connectorId: string) => {
-      const response = await fetch(
-        `${API_BASE}/${kgId}/connectors/${connectorId}/sync`,
-        { method: "POST" },
-      );
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await syncConnector({
+        path: { kgId, id: connectorId },
+      });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as ConnectorRunResponse;
+      return data;
     },
     onSuccess: (data, connectorId) => {
       if (!data) return;
@@ -224,23 +152,21 @@ export function useSyncConnector(kgId: string) {
 export function useTestConnectorConnection(kgId: string) {
   return useMutation({
     mutationFn: async (connectorId: string) => {
-      const response = await fetch(
-        `${API_BASE}/${kgId}/connectors/${connectorId}/test`,
-        { method: "POST" },
-      );
-      if (!response.ok) {
-        const error = await response.json();
+      const { data, error } = await testConnectorConnection({
+        path: { kgId, id: connectorId },
+      });
+      if (error) {
         handleApiError(error);
         return null;
       }
-      return (await response.json()) as TestConnectionResponse;
+      return data;
     },
     onSuccess: (data) => {
       if (!data) return;
       if (data.success) {
         toast.success("Connection test successful");
       } else {
-        toast.error(data.message || "Connection test failed");
+        toast.error(data.error || "Connection test failed");
       }
     },
   });
@@ -263,19 +189,15 @@ export function useConnectorRuns(params: {
       { limit, offset },
     ],
     queryFn: async () => {
-      const searchParams = new URLSearchParams({
-        limit: String(limit),
-        offset: String(offset),
+      const { data, error } = await getConnectorRuns({
+        path: { kgId, id: connectorId },
+        query: { limit, offset },
       });
-      const response = await fetch(
-        `${API_BASE}/${kgId}/connectors/${connectorId}/runs?${searchParams}`,
-      );
-      if (!response.ok) {
-        const error = await response.json();
+      if (error) {
         handleApiError(error);
-        return { data: [], pagination: { total: 0, limit, offset } };
+        return null;
       }
-      return (await response.json()) as PaginatedConnectorRuns;
+      return data;
     },
     enabled: !!kgId && !!connectorId,
   });

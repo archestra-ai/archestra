@@ -58,8 +58,10 @@ export function CreateKnowledgeGraphDialog({
     const result = await createKnowledgeGraph.mutateAsync({
       name: values.name,
       provider: values.provider,
-      config: { apiUrl: values.apiUrl },
-      apiKey: values.apiKey || undefined,
+      config: {
+        apiUrl: values.apiUrl,
+        ...(values.apiKey ? { apiKey: values.apiKey } : {}),
+      },
     });
     if (result) {
       form.reset();

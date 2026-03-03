@@ -429,7 +429,7 @@ export class ChatOpsManager {
       if (isNew) {
         await provider.sendReply({
           originalMessage: message,
-          text: "I saw your mention. What would you like help with?",
+          text: "How can I help you?",
         });
       }
       return;

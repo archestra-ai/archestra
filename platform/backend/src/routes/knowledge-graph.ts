@@ -4,7 +4,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { getConnector } from "@/connectors/registry";
-import type { ConnectorCredentials } from "@/connectors/types";
 import { cronJobManager } from "@/k8s/cron-job";
 import { createKnowledgeGraphProvider } from "@/knowledge-graph";
 import logger from "@/logging";
@@ -26,6 +25,10 @@ import {
   SelectKnowledgeGraphConnectorSchema,
   SelectKnowledgeGraphSchema,
 } from "@/types";
+import {
+  type ConnectorCredentials,
+  ConnectorTypeSchema,
+} from "@/types/knowledge-connectors/connector";
 
 const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // ===== Knowledge Graph CRUD =====
@@ -285,7 +288,7 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ kgId: z.string() }),
         body: z.object({
           name: z.string().min(1),
-          connectorType: z.string().min(1),
+          connectorType: ConnectorTypeSchema,
           config: z.record(z.string(), z.unknown()),
           credentials: z.object({
             email: z.string(),

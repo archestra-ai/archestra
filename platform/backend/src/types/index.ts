@@ -12,6 +12,7 @@ export * from "./identity-provider";
 export * from "./incoming-email";
 export * from "./interaction";
 export * from "./invitation";
+export * from "./knowledge-connectors";
 export * from "./knowledge-graph";
 export * from "./knowledge-graph-connector";
 export * from "./label";

@@ -1,15 +1,15 @@
-import { BaseConnector } from "../base-connector";
-import type {
-  ConnectorCredentials,
-  ConnectorDocument,
-  ConnectorSyncBatch,
-} from "../types";
 import type {
   ConfluenceCheckpoint,
   ConfluenceConfig,
   ConfluencePage,
   ConfluenceSearchResponse,
-} from "./types";
+} from "@/types/knowledge-connectors/confluence";
+import type {
+  ConnectorCredentials,
+  ConnectorDocument,
+  ConnectorSyncBatch,
+} from "@/types/knowledge-connectors/connector";
+import { BaseConnector } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
 

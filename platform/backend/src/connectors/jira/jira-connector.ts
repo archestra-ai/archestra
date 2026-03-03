@@ -1,16 +1,16 @@
-import { BaseConnector } from "../base-connector";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
-} from "../types";
+} from "@/types/knowledge-connectors/connector";
 import type {
   JiraCheckpoint,
   JiraComment,
   JiraConfig,
   JiraIssue,
   JiraSearchResponse,
-} from "./types";
+} from "@/types/knowledge-connectors/jira";
+import { BaseConnector } from "../base-connector";
 
 const BATCH_SIZE = 50;
 const SEARCH_FIELDS = [

@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { JiraSearchResponse } from "@/types/knowledge-connectors/jira";
 import { extractTextFromAdf, JiraConnector } from "./jira-connector";
-import type { JiraSearchResponse } from "./types";
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -542,4 +542,4 @@ describe("JiraConnector", () => {
 });
 
 // Import the sync batch type for typing
-import type { ConnectorSyncBatch } from "../types";
+import type { ConnectorSyncBatch } from "@/types/knowledge-connectors/connector";

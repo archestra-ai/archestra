@@ -1,3 +1,8 @@
+import { z } from "zod";
+
+export const ConnectorTypeSchema = z.enum(["jira", "confluence"]);
+export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
+
 export interface ConnectorCredentials {
   email: string;
   apiToken: string;
@@ -19,7 +24,7 @@ export interface ConnectorSyncBatch {
 }
 
 export interface Connector {
-  type: "jira" | "confluence";
+  type: ConnectorType;
 
   validateConfig(
     config: Record<string, unknown>,

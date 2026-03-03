@@ -1,5 +1,4 @@
 import { getConnector } from "@/connectors/registry";
-import type { ConnectorCredentials } from "@/connectors/types";
 import { createKnowledgeGraphProvider } from "@/knowledge-graph";
 import logger from "@/logging";
 import {
@@ -9,6 +8,7 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { KnowledgeGraphConfig } from "@/types";
+import type { ConnectorCredentials } from "@/types/knowledge-connectors/connector";
 
 /**
  * Service that orchestrates the sync of data from external connectors

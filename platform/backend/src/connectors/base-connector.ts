@@ -3,7 +3,8 @@ import type {
   Connector,
   ConnectorCredentials,
   ConnectorSyncBatch,
-} from "./types";
+  ConnectorType,
+} from "@/types/knowledge-connectors/connector";
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
@@ -12,7 +13,7 @@ const DEFAULT_RATE_LIMIT_DELAY_MS = 100;
 const REQUEST_TIMEOUT_MS = 30000;
 
 export abstract class BaseConnector implements Connector {
-  abstract type: "jira" | "confluence";
+  abstract type: ConnectorType;
 
   private rateLimitDelayMs: number;
 

@@ -576,7 +576,7 @@ async function seedPolicyConfigAgent(): Promise<void> {
  * Seeds a knowledge graph from environment variables if configured.
  * Creates or updates a seededFromEnv=true row for the default organization.
  */
-async function seedKnowledgeGraphFromEnv(): Promise<void> {
+export async function seedKnowledgeGraphFromEnv(): Promise<void> {
   const { default: config } = await import("@/config");
 
   if (!config.knowledgeGraph.provider) {

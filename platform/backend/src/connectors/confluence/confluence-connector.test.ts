@@ -1,8 +1,11 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { ConnectorSyncBatch } from "../types";
+import type {
+  ConfluencePage,
+  ConfluenceSearchResponse,
+} from "@/types/knowledge-connectors/confluence";
+import type { ConnectorSyncBatch } from "@/types/knowledge-connectors/connector";
 import { ConfluenceConnector, stripHtmlTags } from "./confluence-connector";
-import type { ConfluencePage, ConfluenceSearchResponse } from "./types";
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;

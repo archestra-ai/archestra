@@ -7,7 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import knowledgeGraphConnectorsTable from "./knowledge-graph-connector";
+import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 const connectorRunsTable = pgTable(
   "connector_runs",
@@ -15,7 +15,7 @@ const connectorRunsTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     connectorId: uuid("connector_id")
       .notNull()
-      .references(() => knowledgeGraphConnectorsTable.id, {
+      .references(() => knowledgeBaseConnectorsTable.id, {
         onDelete: "cascade",
       }),
     status: text("status").notNull(),

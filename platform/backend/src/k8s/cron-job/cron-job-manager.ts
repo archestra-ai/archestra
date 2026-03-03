@@ -49,7 +49,7 @@ class CronJobManager {
     if (!containerImage) {
       logger.warn(
         { connectorId: params.connectorId },
-        "Skipping CronJob creation: ARCHESTRA_KNOWLEDGE_GRAPH_CONNECTOR_CRONJOB_IMAGE is not configured",
+        "Skipping CronJob creation: ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE is not configured",
       );
       return;
     }

@@ -13,9 +13,9 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Create a new agent
     const agent = await makeAgent({ name: "New Agent" });
 
-    // Create a knowledge graph and assign to agent so KG tool is visible
+    // Create a knowledge base and assign to agent so KG tool is visible
     const [kg] = await db
-      .insert(schema.knowledgeGraphsTable)
+      .insert(schema.knowledgeBasesTable)
       .values({
         name: "Test KG",
         provider: "lightrag",
@@ -25,7 +25,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       .returning();
     await db
       .update(schema.agentsTable)
-      .set({ knowledgeGraphId: kg.id })
+      .set({ knowledgeBaseId: kg.id })
       .where(eq(schema.agentsTable.id, agent.id));
 
     // Explicitly seed and assign Archestra tools
@@ -54,9 +54,9 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
-    // Create a knowledge graph and assign to agent so KG tool is visible
+    // Create a knowledge base and assign to agent so KG tool is visible
     const [kg] = await db
-      .insert(schema.knowledgeGraphsTable)
+      .insert(schema.knowledgeBasesTable)
       .values({
         name: "Test KG",
         provider: "lightrag",
@@ -66,7 +66,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       .returning();
     await db
       .update(schema.agentsTable)
-      .set({ knowledgeGraphId: kg.id })
+      .set({ knowledgeBaseId: kg.id })
       .where(eq(schema.agentsTable.id, agent.id));
 
     // Seed and assign Archestra tools first
@@ -95,9 +95,9 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const user = await makeUser();
     const agent = await makeAgent({ name: "Test Agent" });
 
-    // Create a knowledge graph and assign to agent so KG tool is visible
+    // Create a knowledge base and assign to agent so KG tool is visible
     const [kg] = await db
-      .insert(schema.knowledgeGraphsTable)
+      .insert(schema.knowledgeBasesTable)
       .values({
         name: "Test KG",
         provider: "lightrag",
@@ -107,7 +107,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       .returning();
     await db
       .update(schema.agentsTable)
-      .set({ knowledgeGraphId: kg.id })
+      .set({ knowledgeBaseId: kg.id })
       .where(eq(schema.agentsTable.id, agent.id));
 
     // Seed and assign Archestra tools first
@@ -160,9 +160,9 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
-    // Create a knowledge graph and assign to agent so KG tool is visible
+    // Create a knowledge base and assign to agent so KG tool is visible
     const [kg] = await db
-      .insert(schema.knowledgeGraphsTable)
+      .insert(schema.knowledgeBasesTable)
       .values({
         name: "Test KG",
         provider: "lightrag",
@@ -172,7 +172,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       .returning();
     await db
       .update(schema.agentsTable)
-      .set({ knowledgeGraphId: kg.id })
+      .set({ knowledgeBaseId: kg.id })
       .where(eq(schema.agentsTable.id, agent.id));
 
     // Seed and assign Archestra tools first

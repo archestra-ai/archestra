@@ -4,11 +4,11 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import * as knowledgeGraph from "@/knowledge-graph";
+import * as knowledgeBase from "@/knowledge-base";
 import {
   AgentModel,
   InternalMcpCatalogModel,
-  KnowledgeGraphModel,
+  KnowledgeBaseModel,
 } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
@@ -129,19 +129,19 @@ describe("getArchestraMcpTools", () => {
     expect(tool?.title).toBe("Get LLM Proxy Token Usage");
   });
 
-  test("should have query_knowledge_graph tool", () => {
+  test("should have query_knowledge_base tool", () => {
     const tools = getArchestraMcpTools();
-    const tool = tools.find((t) => t.name.endsWith("query_knowledge_graph"));
+    const tool = tools.find((t) => t.name.endsWith("query_knowledge_base"));
 
     expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Query Knowledge Graph");
+    expect(tool?.title).toBe("Query Knowledge Base");
     expect(tool?.inputSchema).toEqual({
       type: "object",
       properties: {
         query: {
           type: "string",
           description:
-            "A natural language query about the content stored in the knowledge graph. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
+            "A natural language query about the content stored in the knowledge base. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
         },
         mode: {
           type: "string",
@@ -723,10 +723,10 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  describe("query_knowledge_graph tool", () => {
+  describe("query_knowledge_base tool", () => {
     test("should return error when query is empty", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
         { query: "" },
         mockContext,
       );
@@ -739,7 +739,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when query is not provided", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
         {},
         mockContext,
       );
@@ -752,7 +752,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when invalid mode is provided", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
         { query: "test query", mode: "invalid_mode" },
         mockContext,
       );
@@ -766,47 +766,47 @@ describe("executeArchestraTool", () => {
       );
     });
 
-    test("should return error when no knowledge graph is assigned to the agent", async () => {
-      // Mock AgentModel.findById to return agent without knowledgeGraphId
+    test("should return error when no knowledge base is assigned to the agent", async () => {
+      // Mock AgentModel.findById to return agent without knowledgeBaseId
       const agentSpy = vi
         .spyOn(AgentModel, "findById")
-        .mockResolvedValue({ id: testAgent.id, knowledgeGraphId: null } as any);
+        .mockResolvedValue({ id: testAgent.id, knowledgeBaseId: null } as any);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "test query" },
           mockContext,
         );
 
         expect(result.isError).toBe(true);
         expect((result.content[0] as any).text).toContain(
-          "No knowledge graph assigned to this agent",
+          "No knowledge base assigned to this agent",
         );
       } finally {
         agentSpy.mockRestore();
       }
     });
 
-    test("should return error when assigned knowledge graph is not found", async () => {
+    test("should return error when assigned knowledge base is not found", async () => {
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-nonexistent",
+        knowledgeBaseId: "kg-nonexistent",
       } as any);
       const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
+        .spyOn(KnowledgeBaseModel, "findById")
         .mockResolvedValue(null);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "test query" },
           mockContext,
         );
 
         expect(result.isError).toBe(true);
         expect((result.content[0] as any).text).toContain(
-          "The assigned knowledge graph could not be found",
+          "The assigned knowledge base could not be found",
         );
       } finally {
         agentSpy.mockRestore();
@@ -827,8 +827,7 @@ describe("executeArchestraTool", () => {
           documentId: "doc-123",
         }),
         queryDocument: vi.fn().mockResolvedValue({
-          answer:
-            "This is the answer from the knowledge graph about AI agents.",
+          answer: "This is the answer from the knowledge base about AI agents.",
           sources: [
             { documentId: "source1.txt" },
             { documentId: "source2.pdf" },
@@ -840,22 +839,20 @@ describe("executeArchestraTool", () => {
       // Mock agent lookup, KG lookup, and provider creation
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "What are AI agents?", mode: "hybrid" },
           mockContext,
         );
@@ -863,7 +860,7 @@ describe("executeArchestraTool", () => {
         expect(result.isError).toBe(false);
         expect(result.content).toHaveLength(1);
         expect((result.content[0] as any).text).toContain(
-          "This is the answer from the knowledge graph about AI agents.",
+          "This is the answer from the knowledge base about AI agents.",
         );
         expect(mockProvider.queryDocument).toHaveBeenCalledWith(
           "What are AI agents?",
@@ -895,22 +892,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "Test query without mode" },
           mockContext,
         );
@@ -950,29 +945,27 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "Test query with error" },
           mockContext,
         );
 
         expect(result.isError).toBe(true);
         expect((result.content[0] as any).text).toContain(
-          "Error querying knowledge graph",
+          "Error querying knowledge base",
         );
         expect((result.content[0] as any).text).toContain(
           "Connection to LightRAG failed",
@@ -1008,22 +1001,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "get information from jira" },
           mockContext,
         );
@@ -1065,7 +1056,7 @@ describe("executeArchestraTool", () => {
         queryDocument: vi
           .fn()
           .mockResolvedValueOnce({
-            answer: "There is no relevant information in the knowledge graph.",
+            answer: "There is no relevant information in the knowledge base.",
           })
           .mockResolvedValueOnce({
             answer: "Found relevant documents about the project.",
@@ -1075,22 +1066,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "project overview", mode: "global" },
           mockContext,
         );
@@ -1136,22 +1125,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "some query", mode: "naive" },
           mockContext,
         );
@@ -1188,22 +1175,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "completely unknown topic" },
           mockContext,
         );
@@ -1246,22 +1231,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "some query" },
           mockContext,
         );
@@ -1298,22 +1281,20 @@ describe("executeArchestraTool", () => {
 
       const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
         id: testAgent.id,
-        knowledgeGraphId: "kg-123",
+        knowledgeBaseId: "kg-123",
       } as any);
-      const kgSpy = vi
-        .spyOn(KnowledgeGraphModel, "findById")
-        .mockResolvedValue({
-          id: "kg-123",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9621" },
-        } as any);
+      const kgSpy = vi.spyOn(KnowledgeBaseModel, "findById").mockResolvedValue({
+        id: "kg-123",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+      } as any);
       const createProviderSpy = vi
-        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
+        .spyOn(knowledgeBase, "createKnowledgeBaseProvider")
         .mockReturnValue(mockProvider);
 
       try {
         const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
           { query: "what tasks are in progress" },
           mockContext,
         );

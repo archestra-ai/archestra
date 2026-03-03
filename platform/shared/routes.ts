@@ -339,15 +339,15 @@ export const RouteId = {
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
-  // Knowledge Graph Routes
-  GetKnowledgeGraphs: "getKnowledgeGraphs",
-  CreateKnowledgeGraph: "createKnowledgeGraph",
-  GetKnowledgeGraph: "getKnowledgeGraph",
-  UpdateKnowledgeGraph: "updateKnowledgeGraph",
-  DeleteKnowledgeGraph: "deleteKnowledgeGraph",
-  GetKnowledgeGraphHealth: "getKnowledgeGraphHealth",
+  // Knowledge Base Routes
+  GetKnowledgeBases: "getKnowledgeBases",
+  CreateKnowledgeBase: "createKnowledgeBase",
+  GetKnowledgeBase: "getKnowledgeBase",
+  UpdateKnowledgeBase: "updateKnowledgeBase",
+  DeleteKnowledgeBase: "deleteKnowledgeBase",
+  GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
 
-  // Knowledge Graph Connector Routes
+  // Knowledge Base Connector Routes
   GetConnectors: "getConnectors",
   CreateConnector: "createConnector",
   GetConnector: "getConnector",

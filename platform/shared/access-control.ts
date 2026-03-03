@@ -29,7 +29,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
-  knowledgeGraph: ["create", "read", "update", "delete"],
+  knowledgeBase: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete", "admin"],
   team: ["create", "read", "update", "delete", "admin"],
@@ -58,7 +58,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
-  knowledgeGraph: ["create", "read", "update", "delete"],
+  knowledgeBase: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
   organization: ["read"],
@@ -85,7 +85,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
   internalMcpCatalog: ["read"],
-  knowledgeGraph: ["read"],
+  knowledgeBase: ["read"],
   mcpServer: ["create", "read", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update"],
   organization: ["read"],
@@ -669,26 +669,26 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     organization: ["update"],
   },
-  // Knowledge Graph Routes
-  [RouteId.GetKnowledgeGraphs]: { knowledgeGraph: ["read"] },
-  [RouteId.CreateKnowledgeGraph]: { knowledgeGraph: ["create"] },
-  [RouteId.GetKnowledgeGraph]: { knowledgeGraph: ["read"] },
-  [RouteId.UpdateKnowledgeGraph]: { knowledgeGraph: ["update"] },
-  [RouteId.DeleteKnowledgeGraph]: { knowledgeGraph: ["delete"] },
-  [RouteId.GetKnowledgeGraphHealth]: { knowledgeGraph: ["read"] },
+  // Knowledge Base Routes
+  [RouteId.GetKnowledgeBases]: { knowledgeBase: ["read"] },
+  [RouteId.CreateKnowledgeBase]: { knowledgeBase: ["create"] },
+  [RouteId.GetKnowledgeBase]: { knowledgeBase: ["read"] },
+  [RouteId.UpdateKnowledgeBase]: { knowledgeBase: ["update"] },
+  [RouteId.DeleteKnowledgeBase]: { knowledgeBase: ["delete"] },
+  [RouteId.GetKnowledgeBaseHealth]: { knowledgeBase: ["read"] },
 
-  // Knowledge Graph Connector Routes
-  [RouteId.GetConnectors]: { knowledgeGraph: ["read"] },
-  [RouteId.CreateConnector]: { knowledgeGraph: ["create"] },
-  [RouteId.GetConnector]: { knowledgeGraph: ["read"] },
-  [RouteId.UpdateConnector]: { knowledgeGraph: ["update"] },
-  [RouteId.DeleteConnector]: { knowledgeGraph: ["delete"] },
-  [RouteId.SyncConnector]: { knowledgeGraph: ["update"] },
-  [RouteId.TestConnectorConnection]: { knowledgeGraph: ["read"] },
+  // Knowledge Base Connector Routes
+  [RouteId.GetConnectors]: { knowledgeBase: ["read"] },
+  [RouteId.CreateConnector]: { knowledgeBase: ["create"] },
+  [RouteId.GetConnector]: { knowledgeBase: ["read"] },
+  [RouteId.UpdateConnector]: { knowledgeBase: ["update"] },
+  [RouteId.DeleteConnector]: { knowledgeBase: ["delete"] },
+  [RouteId.SyncConnector]: { knowledgeBase: ["update"] },
+  [RouteId.TestConnectorConnection]: { knowledgeBase: ["read"] },
 
   // Connector Run Routes
-  [RouteId.GetConnectorRuns]: { knowledgeGraph: ["read"] },
-  [RouteId.GetConnectorRun]: { knowledgeGraph: ["read"] },
+  [RouteId.GetConnectorRuns]: { knowledgeBase: ["read"] },
+  [RouteId.GetConnectorRun]: { knowledgeBase: ["read"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
@@ -794,7 +794,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/cost/optimization-rules": {
     llmProxy: ["read"],
   },
-  "/knowledge-graphs": {
-    knowledgeGraph: ["read"],
+  "/knowledge-bases": {
+    knowledgeBase: ["read"],
   },
 };

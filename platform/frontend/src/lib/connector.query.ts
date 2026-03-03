@@ -18,7 +18,7 @@ const {
 
 export function useConnectors(kgId: string) {
   return useQuery({
-    queryKey: ["knowledge-graphs", kgId, "connectors"],
+    queryKey: ["knowledge-bases", kgId, "connectors"],
     queryFn: async () => {
       const { data, error } = await getConnectors({ path: { kgId } });
       if (error) {
@@ -33,7 +33,7 @@ export function useConnectors(kgId: string) {
 
 export function useConnector(kgId: string, id: string) {
   return useQuery({
-    queryKey: ["knowledge-graphs", kgId, "connectors", id],
+    queryKey: ["knowledge-bases", kgId, "connectors", id],
     queryFn: async () => {
       const { data, error } = await getConnector({ path: { kgId, id } });
       if (error) {
@@ -60,9 +60,9 @@ export function useCreateConnector(kgId: string) {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-graphs", kgId, "connectors"],
+        queryKey: ["knowledge-bases", kgId, "connectors"],
       });
-      queryClient.invalidateQueries({ queryKey: ["knowledge-graphs"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Connector created successfully");
     },
   });
@@ -91,10 +91,10 @@ export function useUpdateConnector(kgId: string) {
     onSuccess: (data, variables) => {
       if (!data) return;
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-graphs", kgId, "connectors"],
+        queryKey: ["knowledge-bases", kgId, "connectors"],
       });
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-graphs", kgId, "connectors", variables.id],
+        queryKey: ["knowledge-bases", kgId, "connectors", variables.id],
       });
       toast.success("Connector updated successfully");
     },
@@ -115,9 +115,9 @@ export function useDeleteConnector(kgId: string) {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-graphs", kgId, "connectors"],
+        queryKey: ["knowledge-bases", kgId, "connectors"],
       });
-      queryClient.invalidateQueries({ queryKey: ["knowledge-graphs"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Connector deleted successfully");
     },
   });
@@ -139,10 +139,10 @@ export function useSyncConnector(kgId: string) {
     onSuccess: (data, connectorId) => {
       if (!data) return;
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-graphs", kgId, "connectors", connectorId],
+        queryKey: ["knowledge-bases", kgId, "connectors", connectorId],
       });
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-graphs", kgId, "connectors", connectorId, "runs"],
+        queryKey: ["knowledge-bases", kgId, "connectors", connectorId, "runs"],
       });
       toast.success("Sync started successfully");
     },
@@ -181,7 +181,7 @@ export function useConnectorRuns(params: {
   const { kgId, connectorId, limit = 10, offset = 0 } = params;
   return useQuery({
     queryKey: [
-      "knowledge-graphs",
+      "knowledge-bases",
       kgId,
       "connectors",
       connectorId,

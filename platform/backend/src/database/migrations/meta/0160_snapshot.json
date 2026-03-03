@@ -1,6 +1,6 @@
 {
-  "id": "88c81afb-ff25-4701-a39e-4e7581c09ec7",
-  "prevId": "1b7f0cd9-22b7-4cab-8b25-71169ca345a2",
+  "id": "861357bf-6dee-4dd5-967a-90ffff4bd2b6",
+  "prevId": "88c81afb-ff25-4701-a39e-4e7581c09ec7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -531,6 +531,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "knowledge_base_id": {
+          "name": "knowledge_base_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
           "type": "jsonb",
@@ -672,6 +678,19 @@
           "tableTo": "identity_provider",
           "columnsFrom": [
             "identity_provider_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_knowledge_base_id_knowledge_bases_id_fk": {
+          "name": "agents_knowledge_base_id_knowledge_bases_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "knowledge_bases",
+          "columnsFrom": [
+            "knowledge_base_id"
           ],
           "columnsTo": [
             "id"
@@ -1695,10 +1714,10 @@
         }
       },
       "foreignKeys": {
-        "connector_runs_connector_id_knowledge_graph_connectors_id_fk": {
-          "name": "connector_runs_connector_id_knowledge_graph_connectors_id_fk",
+        "connector_runs_connector_id_knowledge_base_connectors_id_fk": {
+          "name": "connector_runs_connector_id_knowledge_base_connectors_id_fk",
           "tableFrom": "connector_runs",
-          "tableTo": "knowledge_graph_connectors",
+          "tableTo": "knowledge_base_connectors",
           "columnsFrom": [
             "connector_id"
           ],
@@ -2829,8 +2848,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.knowledge_graph_connectors": {
-      "name": "knowledge_graph_connectors",
+    "public.knowledge_base_connectors": {
+      "name": "knowledge_base_connectors",
       "schema": "",
       "columns": {
         "id": {
@@ -2846,8 +2865,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "knowledge_graph_id": {
-          "name": "knowledge_graph_id",
+        "knowledge_base_id": {
+          "name": "knowledge_base_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -2930,11 +2949,11 @@
         }
       },
       "indexes": {
-        "knowledge_graph_connectors_knowledge_graph_id_idx": {
-          "name": "knowledge_graph_connectors_knowledge_graph_id_idx",
+        "knowledge_base_connectors_knowledge_base_id_idx": {
+          "name": "knowledge_base_connectors_knowledge_base_id_idx",
           "columns": [
             {
-              "expression": "knowledge_graph_id",
+              "expression": "knowledge_base_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2945,8 +2964,8 @@
           "method": "btree",
           "with": {}
         },
-        "knowledge_graph_connectors_organization_id_idx": {
-          "name": "knowledge_graph_connectors_organization_id_idx",
+        "knowledge_base_connectors_organization_id_idx": {
+          "name": "knowledge_base_connectors_organization_id_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -2962,12 +2981,12 @@
         }
       },
       "foreignKeys": {
-        "knowledge_graph_connectors_knowledge_graph_id_knowledge_graphs_id_fk": {
-          "name": "knowledge_graph_connectors_knowledge_graph_id_knowledge_graphs_id_fk",
-          "tableFrom": "knowledge_graph_connectors",
-          "tableTo": "knowledge_graphs",
+        "knowledge_base_connectors_knowledge_base_id_knowledge_bases_id_fk": {
+          "name": "knowledge_base_connectors_knowledge_base_id_knowledge_bases_id_fk",
+          "tableFrom": "knowledge_base_connectors",
+          "tableTo": "knowledge_bases",
           "columnsFrom": [
-            "knowledge_graph_id"
+            "knowledge_base_id"
           ],
           "columnsTo": [
             "id"
@@ -2975,9 +2994,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "knowledge_graph_connectors_secret_id_secret_id_fk": {
-          "name": "knowledge_graph_connectors_secret_id_secret_id_fk",
-          "tableFrom": "knowledge_graph_connectors",
+        "knowledge_base_connectors_secret_id_secret_id_fk": {
+          "name": "knowledge_base_connectors_secret_id_secret_id_fk",
+          "tableFrom": "knowledge_base_connectors",
           "tableTo": "secret",
           "columnsFrom": [
             "secret_id"
@@ -2995,8 +3014,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.knowledge_graphs": {
-      "name": "knowledge_graphs",
+    "public.knowledge_bases": {
+      "name": "knowledge_bases",
       "schema": "",
       "columns": {
         "id": {
@@ -3059,8 +3078,8 @@
         }
       },
       "indexes": {
-        "knowledge_graphs_organization_id_idx": {
-          "name": "knowledge_graphs_organization_id_idx",
+        "knowledge_bases_organization_id_idx": {
+          "name": "knowledge_bases_organization_id_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -3076,9 +3095,9 @@
         }
       },
       "foreignKeys": {
-        "knowledge_graphs_secret_id_secret_id_fk": {
-          "name": "knowledge_graphs_secret_id_secret_id_fk",
-          "tableFrom": "knowledge_graphs",
+        "knowledge_bases_secret_id_secret_id_fk": {
+          "name": "knowledge_bases_secret_id_secret_id_fk",
+          "tableFrom": "knowledge_bases",
           "tableTo": "secret",
           "columnsFrom": [
             "secret_id"

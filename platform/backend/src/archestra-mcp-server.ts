@@ -5,20 +5,20 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
-import { createKnowledgeGraphProvider } from "@/knowledge-graph";
+import { createKnowledgeBaseProvider } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
   InternalMcpCatalogModel,
-  KnowledgeGraphModel,
+  KnowledgeBaseModel,
   LimitModel,
   McpServerModel,
   ToolInvocationPolicyModel,
@@ -36,7 +36,7 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
-import { type QueryMode, QueryModeSchema } from "@/types/knowledge-graph";
+import { type QueryMode, QueryModeSchema } from "@/types/knowledge-base";
 
 /**
  * Constants for Archestra MCP server
@@ -1749,10 +1749,10 @@ export async function executeArchestraTool(
     }
   }
 
-  if (toolName === TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME) {
+  if (toolName === TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME) {
     logger.info(
       { agentId: contextAgent.id, queryArgs: args },
-      "query_knowledge_graph tool called",
+      "query_knowledge_base tool called",
     );
 
     try {
@@ -1789,38 +1789,38 @@ export async function executeArchestraTool(
         mode = parseResult.data;
       }
 
-      // Look up the agent's assigned knowledge graph
+      // Look up the agent's assigned knowledge base
       const agentRow = await AgentModel.findById(contextAgent.id);
-      if (!agentRow?.knowledgeGraphId) {
+      if (!agentRow?.knowledgeBaseId) {
         return {
           content: [
             {
               type: "text",
-              text: "Error: No knowledge graph assigned to this agent. Assign a knowledge graph in the agent settings.",
+              text: "Error: No knowledge base assigned to this agent. Assign a knowledge base in the agent settings.",
             },
           ],
           isError: true,
         };
       }
 
-      const knowledgeGraph = await KnowledgeGraphModel.findById(
-        agentRow.knowledgeGraphId,
+      const knowledgeBase = await KnowledgeBaseModel.findById(
+        agentRow.knowledgeBaseId,
       );
-      if (!knowledgeGraph) {
+      if (!knowledgeBase) {
         return {
           content: [
             {
               type: "text",
-              text: "Error: The assigned knowledge graph could not be found.",
+              text: "Error: The assigned knowledge base could not be found.",
             },
           ],
           isError: true,
         };
       }
 
-      const provider = createKnowledgeGraphProvider(
-        knowledgeGraph.provider,
-        knowledgeGraph.config,
+      const provider = createKnowledgeBaseProvider(
+        knowledgeBase.provider,
+        knowledgeBase.config,
       );
 
       logger.info(
@@ -1829,7 +1829,7 @@ export async function executeArchestraTool(
           agentName: contextAgent.name,
           mode,
         },
-        "Querying knowledge graph",
+        "Querying knowledge base",
       );
 
       // Execute the query
@@ -1842,7 +1842,7 @@ export async function executeArchestraTool(
           content: [
             {
               type: "text",
-              text: `Error querying knowledge graph: ${result.error}`,
+              text: `Error querying knowledge base: ${result.error}`,
             },
           ],
           isError: true,
@@ -1890,12 +1890,12 @@ export async function executeArchestraTool(
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error querying knowledge graph");
+      logger.error({ err: error }, "Error querying knowledge base");
       return {
         content: [
           {
             type: "text",
-            text: `Error querying knowledge graph: ${
+            text: `Error querying knowledge base: ${
               error instanceof Error ? error.message : "Unknown error"
             }`,
           },
@@ -2915,17 +2915,17 @@ export function getArchestraMcpTools(): Tool[] {
       _meta: {},
     },
     {
-      name: TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
-      title: "Query Knowledge Graph",
+      name: TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+      title: "Query Knowledge Base",
       description:
-        "Query the organization's knowledge graph to retrieve information from ingested documents (uploaded files, Jira issues, Confluence pages, etc.). Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results. IMPORTANT: formulate queries about the actual content you are looking for, not about the source system. For example, instead of 'get information from jira', ask 'what tasks or issues are being tracked' or 'what are the open bugs'.",
+        "Query the organization's knowledge base to retrieve information from ingested documents (uploaded files, Jira issues, Confluence pages, etc.). Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results. IMPORTANT: formulate queries about the actual content you are looking for, not about the source system. For example, instead of 'get information from jira', ask 'what tasks or issues are being tracked' or 'what are the open bugs'.",
       inputSchema: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "A natural language query about the content stored in the knowledge graph. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
+              "A natural language query about the content stored in the knowledge base. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
           },
           mode: {
             type: "string",

@@ -2,19 +2,19 @@
 title: Adding Knowledge Connectors
 category: Development
 order: 3
-description: Developer guide for implementing new knowledge graph connectors in Archestra Platform
+description: Developer guide for implementing new knowledge base connectors in Archestra Platform
 lastUpdated: 2026-03-03
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 
-This is a development guide for adding new knowledge graph connectors to Archestra.
+This is a development guide for adding new knowledge base connectors to Archestra.
 -->
 
 ## Overview
 
-This guide covers how to add a new knowledge connector to Archestra Platform. Connectors pull data from external tools (Jira, Confluence, etc.) into knowledge graphs on a schedule. Each connector requires:
+This guide covers how to add a new knowledge connector to Archestra Platform. Connectors pull data from external tools (Jira, Confluence, etc.) into knowledge bases on a schedule. Each connector requires:
 
 1. **Zod schemas** for config, checkpoint, and the `type` literal
 2. **Connector class** extending `BaseConnector` with `validateConfig`, `testConnection`, and `sync`
@@ -85,7 +85,7 @@ No changes needed to `ConnectorDocument`, `ConnectorSyncBatch`, or the `Connecto
 
 ## Connector Implementation
 
-Create a new directory `backend/src/knowledge-graph/connectors/github/` with a `github-connector.ts` file.
+Create a new directory `backend/src/knowledge-base/connectors/github/` with a `github-connector.ts` file.
 
 ### The Connector interface
 
@@ -243,7 +243,7 @@ Key points:
 
 ## Connector Registry
 
-Register the connector in `backend/src/knowledge-graph/connectors/registry.ts`:
+Register the connector in `backend/src/knowledge-base/connectors/registry.ts`:
 
 ```typescript
 import { GithubConnector } from "./github/github-connector";
@@ -259,7 +259,7 @@ The `Record<ConnectorType, ...>` type ensures TypeScript will error if you add a
 
 ## Frontend Config Fields
 
-Create `frontend/src/app/knowledge-graphs/_parts/github-config-fields.tsx`. This component renders form fields for the connector-specific config. It receives a `react-hook-form` `UseFormReturn` and an optional field name prefix (defaults to `"config"`).
+Create `frontend/src/app/knowledge-bases/_parts/github-config-fields.tsx`. This component renders form fields for the connector-specific config. It receives a `react-hook-form` `UseFormReturn` and an optional field name prefix (defaults to `"config"`).
 
 ```tsx
 "use client";
@@ -311,7 +311,7 @@ export function GithubConfigFields({
 
 ### Wire into the create connector dialog
 
-In `frontend/src/app/knowledge-graphs/_parts/create-connector-dialog.tsx`:
+In `frontend/src/app/knowledge-bases/_parts/create-connector-dialog.tsx`:
 
 1. Import the new config fields component.
 2. Add a `<SelectItem>` for the new connector type.
@@ -335,13 +335,13 @@ Update the `CreateConnectorFormValues` type to include the new connector type in
 
 ## Database Schema
 
-The database schema in `backend/src/database/schemas/knowledge-graph-connector.ts` does not need changes when adding a new connector. The `config` and `checkpoint` columns use `jsonb` typed with the discriminated union types, so any new variant is stored automatically.
+The database schema in `backend/src/database/schemas/knowledge-base-connector.ts` does not need changes when adding a new connector. The `config` and `checkpoint` columns use `jsonb` typed with the discriminated union types, so any new variant is stored automatically.
 
 If your connector needs a migration (e.g., a new column), follow the standard Drizzle migration workflow described in `CLAUDE.md`.
 
 ## Testing
 
-Create `backend/src/knowledge-graph/connectors/github/github-connector.test.ts`. Mock the external SDK or HTTP calls; test the three interface methods.
+Create `backend/src/knowledge-base/connectors/github/github-connector.test.ts`. Mock the external SDK or HTTP calls; test the three interface methods.
 
 Structure your test file with three `describe` blocks matching the interface:
 
@@ -351,13 +351,13 @@ Structure your test file with three `describe` blocks matching the interface:
 | `testConnection` | Successful API response returns `{ success: true }`, auth failures return errors, invalid config returns errors                                                   |
 | `sync`           | Single-page results, pagination across multiple pages, incremental sync using checkpoint, label/filter exclusion, document metadata mapping, API errors propagate |
 
-Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-graph/connectors/jira/jira-connector.test.ts` for a complete example.
+Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-base/connectors/jira/jira-connector.test.ts` for a complete example.
 
 ## Reference Implementations
 
 | Connector  | Files                                                                                                                                |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Jira       | `backend/src/knowledge-graph/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge-graphs/_parts/jira-config-fields.tsx`                   |
-| Confluence | `backend/src/knowledge-graph/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge-graphs/_parts/confluence-config-fields.tsx` |
+| Jira       | `backend/src/knowledge-base/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge-bases/_parts/jira-config-fields.tsx`                   |
+| Confluence | `backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge-bases/_parts/confluence-config-fields.tsx` |
 
 The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync.

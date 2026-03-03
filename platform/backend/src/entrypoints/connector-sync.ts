@@ -5,7 +5,7 @@
  * Usage: node dist/entrypoints/connector-sync.mjs --connector-id=<uuid>
  */
 
-import { connectorSyncService } from "@/knowledge-graph/connector-sync";
+import { connectorSyncService } from "@/knowledge-base/connector-sync";
 import { bootstrap, parseArg } from "./_shared/bootstrap";
 import { createCapturingLogger } from "./_shared/log-capture";
 

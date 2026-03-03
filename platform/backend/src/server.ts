@@ -51,7 +51,7 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
-import KnowledgeGraphConnectorModel from "@/models/knowledge-graph-connector";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import OrganizationModel from "@/models/organization";
 import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -542,7 +542,7 @@ const reconcileConnectorCronJobs = async () => {
     return;
   }
 
-  const connectors = await KnowledgeGraphConnectorModel.findAllEnabled();
+  const connectors = await KnowledgeBaseConnectorModel.findAllEnabled();
   if (connectors.length === 0) {
     return;
   }
@@ -688,7 +688,7 @@ const start = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
-    // Reconcile CronJobs for knowledge graph connectors
+    // Reconcile CronJobs for knowledge base connectors
     // Ensures CronJobs exist for all enabled connectors (e.g., if a CronJob was deleted)
     reconcileConnectorCronJobs().catch((error) => {
       logger.error(

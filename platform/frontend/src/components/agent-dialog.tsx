@@ -98,7 +98,7 @@ import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
-import { useKnowledgeGraphs } from "@/lib/knowledge-graph.query";
+import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { cn } from "@/lib/utils";
 
 const { useIdentityProviders } = config.enterpriseLicenseActivated
@@ -573,8 +573,8 @@ export function AgentDialog({
   );
   const { data: features } = useFeatures();
   const { data: identityProviders = [] } = useIdentityProviders();
-  const { data: knowledgeGraphsData } = useKnowledgeGraphs();
-  const knowledgeGraphs = knowledgeGraphsData?.data ?? [];
+  const { data: knowledgeBasesData } = useKnowledgeBases();
+  const knowledgeBases = knowledgeBasesData?.data ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
     includeKeyId: agentLlmApiKeyId,
@@ -622,7 +622,7 @@ export function AgentDialog({
     null,
   );
   const [scope, setScope] = useState<"personal" | "team" | "org">("personal");
-  const [knowledgeGraphId, setKnowledgeGraphId] = useState<string | null>(null);
+  const [knowledgeBaseId, setKnowledgeBaseId] = useState<string | null>(null);
   const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
     useState(false);
 
@@ -670,8 +670,8 @@ export function AgentDialog({
         // Identity provider ID (for MCP Gateway JWKS auth)
         setIdentityProviderId(agentData.identityProviderId ?? null);
         // Knowledge graph
-        setKnowledgeGraphId(
-          ((agentData as Record<string, unknown>).knowledgeGraphId as
+        setKnowledgeBaseId(
+          ((agentData as Record<string, unknown>).knowledgeBaseId as
             | string
             | null) ?? null,
         );
@@ -707,7 +707,7 @@ export function AgentDialog({
         setLabels([]);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(null);
-        setKnowledgeGraphId(null);
+        setKnowledgeBaseId(null);
         setScope("personal");
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
@@ -939,7 +939,7 @@ export function AgentDialog({
               identityProviderId: identityProviderId || null,
             }),
             ...(agentType !== "llm_proxy" && {
-              knowledgeGraphId: knowledgeGraphId || null,
+              knowledgeBaseId: knowledgeBaseId || null,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -968,7 +968,7 @@ export function AgentDialog({
             identityProviderId: identityProviderId || null,
           }),
           ...(agentType !== "llm_proxy" && {
-            knowledgeGraphId: knowledgeGraphId || null,
+            knowledgeBaseId: knowledgeBaseId || null,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1030,7 +1030,7 @@ export function AgentDialog({
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
     identityProviderId,
-    knowledgeGraphId,
+    knowledgeBaseId,
     scope,
     agentType,
     agent,
@@ -1597,27 +1597,27 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* Knowledge Graph (not for LLM Proxy) */}
-              {agentType !== "llm_proxy" && knowledgeGraphs.length > 0 && (
+              {/* Knowledge Base (not for LLM Proxy) */}
+              {agentType !== "llm_proxy" && knowledgeBases.length > 0 && (
                 <div className="space-y-2">
-                  <Label>Knowledge Graph</Label>
+                  <Label>Knowledge Base</Label>
                   <p className="text-sm text-muted-foreground">
-                    Assign a knowledge graph to enable the{" "}
-                    <code className="text-xs">query_knowledge_graph</code> tool
+                    Assign a knowledge base to enable the{" "}
+                    <code className="text-xs">query_knowledge_base</code> tool
                     and automatic document ingestion from chat uploads.
                   </p>
                   <Select
-                    value={knowledgeGraphId ?? "none"}
+                    value={knowledgeBaseId ?? "none"}
                     onValueChange={(value) =>
-                      setKnowledgeGraphId(value === "none" ? null : value)
+                      setKnowledgeBaseId(value === "none" ? null : value)
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="No Knowledge Graph" />
+                      <SelectValue placeholder="No Knowledge Base" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No Knowledge Graph</SelectItem>
-                      {knowledgeGraphs.map((kg) => (
+                      <SelectItem value="none">No Knowledge Base</SelectItem>
+                      {knowledgeBases.map((kg) => (
                         <SelectItem key={kg.id} value={kg.id}>
                           {kg.name}
                         </SelectItem>

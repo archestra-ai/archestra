@@ -1,0 +1,113 @@
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
+import type { z } from "zod";
+import { schema } from "@/database";
+import {
+  KnowledgeBaseProviderTypeSchema,
+  LightragConfigSchema,
+} from "./knowledge-base";
+import {
+  ConnectorCheckpointSchema,
+  ConnectorConfigSchema,
+  ConnectorTypeSchema,
+} from "./knowledge-connector";
+
+// ===== Knowledge Base Schemas =====
+
+export const SelectKnowledgeBaseSchema = createSelectSchema(
+  schema.knowledgeBasesTable,
+  {
+    provider: KnowledgeBaseProviderTypeSchema,
+    config: LightragConfigSchema,
+  },
+);
+export const InsertKnowledgeBaseSchema = createInsertSchema(
+  schema.knowledgeBasesTable,
+  {
+    provider: KnowledgeBaseProviderTypeSchema,
+    config: LightragConfigSchema,
+  },
+).omit({ id: true, createdAt: true, updatedAt: true });
+export const UpdateKnowledgeBaseSchema = createUpdateSchema(
+  schema.knowledgeBasesTable,
+  {
+    config: LightragConfigSchema.optional(),
+  },
+).pick({ name: true, config: true, secretId: true, status: true });
+
+export type KnowledgeBase = z.infer<typeof SelectKnowledgeBaseSchema>;
+export type InsertKnowledgeBase = z.infer<typeof InsertKnowledgeBaseSchema>;
+export type UpdateKnowledgeBase = z.infer<typeof UpdateKnowledgeBaseSchema>;
+
+// ===== Knowledge Base Connector Schemas =====
+
+export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
+  schema.knowledgeBaseConnectorsTable,
+  {
+    connectorType: ConnectorTypeSchema,
+    config: ConnectorConfigSchema,
+  },
+);
+export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
+  schema.knowledgeBaseConnectorsTable,
+  {
+    connectorType: ConnectorTypeSchema,
+    config: ConnectorConfigSchema,
+    checkpoint: ConnectorCheckpointSchema.optional(),
+  },
+).omit({ id: true, createdAt: true, updatedAt: true });
+export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
+  schema.knowledgeBaseConnectorsTable,
+  {
+    connectorType: ConnectorTypeSchema.optional(),
+    config: ConnectorConfigSchema.optional(),
+    checkpoint: ConnectorCheckpointSchema.nullable().optional(),
+  },
+).pick({
+  name: true,
+  config: true,
+  secretId: true,
+  schedule: true,
+  enabled: true,
+  lastSyncAt: true,
+  lastSyncStatus: true,
+  lastSyncError: true,
+  checkpoint: true,
+});
+
+export type KnowledgeBaseConnector = z.infer<
+  typeof SelectKnowledgeBaseConnectorSchema
+>;
+export type InsertKnowledgeBaseConnector = z.infer<
+  typeof InsertKnowledgeBaseConnectorSchema
+>;
+export type UpdateKnowledgeBaseConnector = z.infer<
+  typeof UpdateKnowledgeBaseConnectorSchema
+>;
+
+// ===== Connector Run Schemas =====
+
+export const SelectConnectorRunSchema = createSelectSchema(
+  schema.connectorRunsTable,
+);
+export const InsertConnectorRunSchema = createInsertSchema(
+  schema.connectorRunsTable,
+).omit({ id: true, createdAt: true });
+export const UpdateConnectorRunSchema = createUpdateSchema(
+  schema.connectorRunsTable,
+).pick({
+  status: true,
+  completedAt: true,
+  documentsProcessed: true,
+  documentsIngested: true,
+  error: true,
+  logs: true,
+  checkpoint: true,
+});
+
+export type ConnectorRun = z.infer<typeof SelectConnectorRunSchema>;
+export type InsertConnectorRun = z.infer<typeof InsertConnectorRunSchema>;
+export type UpdateConnectorRun = z.infer<typeof UpdateConnectorRunSchema>;

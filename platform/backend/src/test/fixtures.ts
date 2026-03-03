@@ -29,8 +29,8 @@ import type {
   InsertInteraction,
   InsertInternalMcpCatalog,
   InsertInvitation,
-  InsertKnowledgeGraph,
-  InsertKnowledgeGraphConnector,
+  InsertKnowledgeBase,
+  InsertKnowledgeBaseConnector,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -38,8 +38,8 @@ import type {
   InsertSession,
   InsertTeam,
   InsertUser,
-  KnowledgeGraph,
-  KnowledgeGraphConnector,
+  KnowledgeBase,
+  KnowledgeBaseConnector,
   OrganizationRole,
   TeamMember,
   Tool,
@@ -75,8 +75,8 @@ interface TestFixtures {
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
   makeAuthHeaders: typeof makeAuthHeaders;
-  makeKnowledgeGraph: typeof makeKnowledgeGraph;
-  makeKnowledgeGraphConnector: typeof makeKnowledgeGraphConnector;
+  makeKnowledgeBase: typeof makeKnowledgeBase;
+  makeKnowledgeBaseConnector: typeof makeKnowledgeBaseConnector;
   makeConnectorRun: typeof makeConnectorRun;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
@@ -817,16 +817,16 @@ async function makeOAuthRefreshToken(
 }
 
 /**
- * Creates a test knowledge graph in the database
+ * Creates a test knowledge base in the database
  */
-async function makeKnowledgeGraph(
+async function makeKnowledgeBase(
   organizationId: string,
   overrides: Partial<
-    Pick<InsertKnowledgeGraph, "name" | "provider" | "config" | "status">
+    Pick<InsertKnowledgeBase, "name" | "provider" | "config" | "status">
   > = {},
-): Promise<KnowledgeGraph> {
+): Promise<KnowledgeBase> {
   const [result] = await db
-    .insert(schema.knowledgeGraphsTable)
+    .insert(schema.knowledgeBasesTable)
     .values({
       organizationId,
       name: `Test KG ${crypto.randomUUID().substring(0, 8)}`,
@@ -839,22 +839,22 @@ async function makeKnowledgeGraph(
 }
 
 /**
- * Creates a test knowledge graph connector in the database
+ * Creates a test knowledge base connector in the database
  */
-async function makeKnowledgeGraphConnector(
-  knowledgeGraphId: string,
+async function makeKnowledgeBaseConnector(
+  knowledgeBaseId: string,
   organizationId: string,
   overrides: Partial<
     Pick<
-      InsertKnowledgeGraphConnector,
+      InsertKnowledgeBaseConnector,
       "name" | "connectorType" | "config" | "schedule" | "enabled"
     >
   > = {},
-): Promise<KnowledgeGraphConnector> {
+): Promise<KnowledgeBaseConnector> {
   const [result] = await db
-    .insert(schema.knowledgeGraphConnectorsTable)
+    .insert(schema.knowledgeBaseConnectorsTable)
     .values({
-      knowledgeGraphId,
+      knowledgeBaseId,
       organizationId,
       name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
       connectorType: "jira",
@@ -978,11 +978,11 @@ export const test = baseTest.extend<TestFixtures>({
   makeAuthHeaders: async ({}, use) => {
     await use(makeAuthHeaders);
   },
-  makeKnowledgeGraph: async ({}, use) => {
-    await use(makeKnowledgeGraph);
+  makeKnowledgeBase: async ({}, use) => {
+    await use(makeKnowledgeBase);
   },
-  makeKnowledgeGraphConnector: async ({}, use) => {
-    await use(makeKnowledgeGraphConnector);
+  makeKnowledgeBaseConnector: async ({}, use) => {
+    await use(makeKnowledgeBaseConnector);
   },
   makeConnectorRun: async ({}, use) => {
     await use(makeConnectorRun);

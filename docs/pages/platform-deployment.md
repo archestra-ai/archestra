@@ -924,11 +924,11 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
-### Knowledge Graph Configuration
+### Knowledge Base Configuration
 
-These environment variables configure the Knowledge Graph feature. Knowledge graphs are configured per-agent in the Archestra UI — see [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.
+These environment variables configure the Knowledge Base feature. Knowledge graphs are configured per-agent in the Archestra UI — see [Knowledge Bases](/docs/platform-knowledge-bases) for setup instructions.
 
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
   - Default: `archestra-connectors`
-  - Connectors (Jira, Confluence) use K8s CronJobs to run scheduled syncs into knowledge graphs
+  - Connectors (Jira, Confluence) use K8s CronJobs to run scheduled syncs into knowledge bases
   - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)

@@ -36771,7 +36771,7 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "knowledgeGraphId": {
+                          "knowledgeBaseId": {
                             "nullable": true,
                             "type": "string",
                             "format": "uuid",
@@ -36982,7 +36982,7 @@
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
-                          "knowledgeGraphId",
+                          "knowledgeBaseId",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -37341,7 +37341,7 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "knowledgeGraphId": {
+                  "knowledgeBaseId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
@@ -37544,7 +37544,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -37755,7 +37755,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38164,7 +38164,7 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "knowledgeGraphId": {
+                      "knowledgeBaseId": {
                         "nullable": true,
                         "type": "string",
                         "format": "uuid",
@@ -38375,7 +38375,7 @@
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
-                      "knowledgeGraphId",
+                      "knowledgeBaseId",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -38739,7 +38739,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -38950,7 +38950,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39313,7 +39313,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -39524,7 +39524,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39899,7 +39899,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -40110,7 +40110,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -40421,7 +40421,7 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "knowledgeGraphId": {
+                  "knowledgeBaseId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
@@ -40630,7 +40630,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -40841,7 +40841,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -41469,7 +41469,7 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "knowledgeGraphId": {
+                        "knowledgeBaseId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -41680,7 +41680,7 @@
                         "llmApiKeyId",
                         "llmModel",
                         "identityProviderId",
-                        "knowledgeGraphId",
+                        "knowledgeBaseId",
                         "builtInAgentConfig",
                         "builtIn",
                         "createdAt",
@@ -42112,7 +42112,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -42323,7 +42323,7 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -91234,13 +91234,13 @@
         }
       }
     },
-    "/api/knowledge-graphs": {
+    "/api/knowledge-bases": {
       "get": {
-        "operationId": "getKnowledgeGraphs",
+        "operationId": "getKnowledgeBases",
         "tags": [
-          "Knowledge Graphs"
+          "Knowledge Bases"
         ],
-        "description": "List all knowledge graphs for the organization",
+        "description": "List all knowledge bases for the organization",
         "parameters": [
           {
             "schema": {
@@ -91605,11 +91605,11 @@
         }
       },
       "post": {
-        "operationId": "createKnowledgeGraph",
+        "operationId": "createKnowledgeBase",
         "tags": [
-          "Knowledge Graphs"
+          "Knowledge Bases"
         ],
-        "description": "Create a new knowledge graph",
+        "description": "Create a new knowledge base",
         "requestBody": {
           "content": {
             "application/json": {
@@ -91938,13 +91938,13 @@
         }
       }
     },
-    "/api/knowledge-graphs/{id}": {
+    "/api/knowledge-bases/{id}": {
       "get": {
-        "operationId": "getKnowledgeGraph",
+        "operationId": "getKnowledgeBase",
         "tags": [
-          "Knowledge Graphs"
+          "Knowledge Bases"
         ],
-        "description": "Get a knowledge graph by ID",
+        "description": "Get a knowledge base by ID",
         "parameters": [
           {
             "schema": {
@@ -92242,11 +92242,11 @@
         }
       },
       "put": {
-        "operationId": "updateKnowledgeGraph",
+        "operationId": "updateKnowledgeBase",
         "tags": [
-          "Knowledge Graphs"
+          "Knowledge Bases"
         ],
-        "description": "Update a knowledge graph",
+        "description": "Update a knowledge base",
         "requestBody": {
           "content": {
             "application/json": {
@@ -92573,11 +92573,11 @@
         }
       },
       "delete": {
-        "operationId": "deleteKnowledgeGraph",
+        "operationId": "deleteKnowledgeBase",
         "tags": [
-          "Knowledge Graphs"
+          "Knowledge Bases"
         ],
-        "description": "Delete a knowledge graph and all its connectors",
+        "description": "Delete a knowledge base and all its connectors",
         "parameters": [
           {
             "schema": {
@@ -92821,13 +92821,13 @@
         }
       }
     },
-    "/api/knowledge-graphs/{id}/health": {
+    "/api/knowledge-bases/{id}/health": {
       "get": {
-        "operationId": "getKnowledgeGraphHealth",
+        "operationId": "getKnowledgeBaseHealth",
         "tags": [
-          "Knowledge Graphs"
+          "Knowledge Bases"
         ],
-        "description": "Check the health of a knowledge graph",
+        "description": "Check the health of a knowledge base",
         "parameters": [
           {
             "schema": {
@@ -93078,13 +93078,13 @@
         }
       }
     },
-    "/api/knowledge-graphs/{kgId}/connectors": {
+    "/api/knowledge-bases/{kgId}/connectors": {
       "get": {
         "operationId": "getConnectors",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
-        "description": "List connectors for a knowledge graph",
+        "description": "List connectors for a knowledge base",
         "parameters": [
           {
             "schema": {
@@ -93138,7 +93138,7 @@
                           "organizationId": {
                             "type": "string"
                           },
-                          "knowledgeGraphId": {
+                          "knowledgeBaseId": {
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -93324,7 +93324,7 @@
                         "required": [
                           "id",
                           "organizationId",
-                          "knowledgeGraphId",
+                          "knowledgeBaseId",
                           "name",
                           "connectorType",
                           "config",
@@ -93606,9 +93606,9 @@
       "post": {
         "operationId": "createConnector",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
-        "description": "Create a new connector for a knowledge graph",
+        "description": "Create a new connector for a knowledge base",
         "requestBody": {
           "content": {
             "application/json": {
@@ -93784,7 +93784,7 @@
                     "organizationId": {
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -93970,7 +93970,7 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "name",
                     "connectorType",
                     "config",
@@ -94202,11 +94202,11 @@
         }
       }
     },
-    "/api/knowledge-graphs/{kgId}/connectors/{id}": {
+    "/api/knowledge-bases/{kgId}/connectors/{id}": {
       "get": {
         "operationId": "getConnector",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "Get a connector by ID",
         "parameters": [
@@ -94243,7 +94243,7 @@
                     "organizationId": {
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -94429,7 +94429,7 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "name",
                     "connectorType",
                     "config",
@@ -94663,7 +94663,7 @@
       "put": {
         "operationId": "updateConnector",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "Update a connector",
         "requestBody": {
@@ -94811,7 +94811,7 @@
                     "organizationId": {
                       "type": "string"
                     },
-                    "knowledgeGraphId": {
+                    "knowledgeBaseId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -94997,7 +94997,7 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "knowledgeGraphId",
+                    "knowledgeBaseId",
                     "name",
                     "connectorType",
                     "config",
@@ -95231,7 +95231,7 @@
       "delete": {
         "operationId": "deleteConnector",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "Delete a connector",
         "parameters": [
@@ -95485,11 +95485,11 @@
         }
       }
     },
-    "/api/knowledge-graphs/{kgId}/connectors/{id}/sync": {
+    "/api/knowledge-bases/{kgId}/connectors/{id}/sync": {
       "post": {
         "operationId": "syncConnector",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "Manually trigger a connector sync",
         "parameters": [
@@ -95747,11 +95747,11 @@
         }
       }
     },
-    "/api/knowledge-graphs/{kgId}/connectors/{id}/test": {
+    "/api/knowledge-bases/{kgId}/connectors/{id}/test": {
       "post": {
         "operationId": "testConnectorConnection",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "Test a connector connection",
         "parameters": [
@@ -96008,11 +96008,11 @@
         }
       }
     },
-    "/api/knowledge-graphs/{kgId}/connectors/{id}/runs": {
+    "/api/knowledge-bases/{kgId}/connectors/{id}/runs": {
       "get": {
         "operationId": "getConnectorRuns",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "List connector runs",
         "parameters": [
@@ -96427,11 +96427,11 @@
         }
       }
     },
-    "/api/knowledge-graphs/{kgId}/connectors/{id}/runs/{runId}": {
+    "/api/knowledge-bases/{kgId}/connectors/{id}/runs/{runId}": {
       "get": {
         "operationId": "getConnectorRun",
         "tags": [
-          "Knowledge Graph Connectors"
+          "Knowledge Base Connectors"
         ],
         "description": "Get a single connector run (including logs)",
         "parameters": [

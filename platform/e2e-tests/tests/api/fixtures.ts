@@ -59,8 +59,8 @@ export interface TestFixtures {
   getInteractions: typeof getInteractions;
   getWiremockRequests: typeof getWiremockRequests;
   clearWiremockRequests: typeof clearWiremockRequests;
-  createKnowledgeGraph: typeof createKnowledgeGraph;
-  deleteKnowledgeGraph: typeof deleteKnowledgeGraph;
+  createKnowledgeBase: typeof createKnowledgeBase;
+  deleteKnowledgeBase: typeof deleteKnowledgeBase;
   createConnector: typeof createConnector;
   deleteConnector: typeof deleteConnector;
   /** API request context authenticated as admin (same as default `request`) */
@@ -946,10 +946,10 @@ const clearWiremockRequests = async (request: APIRequestContext) => {
 };
 
 /**
- * Create a knowledge graph
+ * Create a knowledge base
  * (authnz is handled by the authenticated session)
  */
-const createKnowledgeGraph = async (
+const createKnowledgeBase = async (
   request: APIRequestContext,
   name?: string,
   overrides?: { provider?: string; config?: Record<string, unknown> },
@@ -957,7 +957,7 @@ const createKnowledgeGraph = async (
   makeApiRequest({
     request,
     method: "post",
-    urlSuffix: "/api/knowledge-graphs",
+    urlSuffix: "/api/knowledge-bases",
     data: {
       name: name ?? `Test KG ${crypto.randomUUID().slice(0, 8)}`,
       provider: overrides?.provider ?? "lightrag",
@@ -966,19 +966,19 @@ const createKnowledgeGraph = async (
   });
 
 /**
- * Delete a knowledge graph by ID
+ * Delete a knowledge base by ID
  * (authnz is handled by the authenticated session)
  */
-const deleteKnowledgeGraph = async (request: APIRequestContext, id: string) =>
+const deleteKnowledgeBase = async (request: APIRequestContext, id: string) =>
   makeApiRequest({
     request,
     method: "delete",
-    urlSuffix: `/api/knowledge-graphs/${id}`,
+    urlSuffix: `/api/knowledge-bases/${id}`,
     ignoreStatusCheck: true,
   });
 
 /**
- * Create a connector for a knowledge graph
+ * Create a connector for a knowledge base
  * (authnz is handled by the authenticated session)
  */
 const createConnector = async (
@@ -996,7 +996,7 @@ const createConnector = async (
   makeApiRequest({
     request,
     method: "post",
-    urlSuffix: `/api/knowledge-graphs/${kgId}/connectors`,
+    urlSuffix: `/api/knowledge-bases/${kgId}/connectors`,
     data: {
       name: name ?? `Test Connector ${crypto.randomUUID().slice(0, 8)}`,
       connectorType: overrides?.connectorType ?? "jira",
@@ -1025,7 +1025,7 @@ const deleteConnector = async (
   makeApiRequest({
     request,
     method: "delete",
-    urlSuffix: `/api/knowledge-graphs/${kgId}/connectors/${connectorId}`,
+    urlSuffix: `/api/knowledge-bases/${kgId}/connectors/${connectorId}`,
     ignoreStatusCheck: true,
   });
 
@@ -1154,11 +1154,11 @@ export const test = base.extend<TestFixtures>({
   clearWiremockRequests: async ({}, use) => {
     await use(clearWiremockRequests);
   },
-  createKnowledgeGraph: async ({}, use) => {
-    await use(createKnowledgeGraph);
+  createKnowledgeBase: async ({}, use) => {
+    await use(createKnowledgeBase);
   },
-  deleteKnowledgeGraph: async ({}, use) => {
-    await use(deleteKnowledgeGraph);
+  deleteKnowledgeBase: async ({}, use) => {
+    await use(deleteKnowledgeBase);
   },
   createConnector: async ({}, use) => {
     await use(createConnector);

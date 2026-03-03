@@ -32,6 +32,8 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
+const packageJsonVersion = packageJson.version;
+
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 
@@ -425,13 +427,35 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
+/**
+ * Resolve the connector CronJob image.
+ * If explicitly set via env var, use that. Otherwise, if K8s is configured,
+ * default to the platform image (`archestra/platform:<version>`).
+ * If K8s is not configured, return empty string (connector syncs run in-process).
+ */
+const getConnectorImage = (): string => {
+  const explicit = process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE;
+  if (explicit) return explicit;
+
+  const k8sConfigured =
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
+      "true" ||
+    (!!process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG &&
+      process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG.trim().length > 0);
+
+  if (k8sConfigured) {
+    return `archestra/platform:${packageJsonVersion}`;
+  }
+  return "";
+};
+
 const config = {
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra",
-    version: process.env.ARCHESTRA_VERSION || packageJson.version,
+    version: process.env.ARCHESTRA_VERSION || packageJsonVersion,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
     /**
@@ -661,11 +685,9 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
-    // The MCP server base image version is automatically updated by release-please during releases.
-    // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.52", // x-release-please-version
+      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${packageJsonVersion}`,
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -677,10 +699,9 @@ const config = {
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST || undefined,
     },
     connectorNamespace:
-      process.env.ARCHESTRA_KNOWLEDGE_GRAPH_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
       DEFAULT_CONNECTOR_NAMESPACE,
-    connectorImage:
-      process.env.ARCHESTRA_KNOWLEDGE_GRAPH_CONNECTOR_CRONJOB_IMAGE || "",
+    connectorImage: getConnectorImage(),
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

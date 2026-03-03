@@ -160,10 +160,10 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "Knowledge",
-        url: "/knowledge-graphs",
+        url: "/knowledge-bases",
         icon: Database,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/knowledge-graphs"),
+          pathname.startsWith("/knowledge-bases"),
       },
       {
         title: "Logs",

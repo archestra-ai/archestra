@@ -905,6 +905,78 @@ describe("getCorsOrigins", () => {
   });
 });
 
+describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.resetModules();
+    // Clear K8s env vars by default
+    delete process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE;
+    delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
+    delete process.env
+      .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("should use explicit env var when set", async () => {
+    process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE =
+      "my-registry/my-image:v1";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.connectorImage).toBe("my-registry/my-image:v1");
+  });
+
+  test("should use explicit env var even when K8s is configured", async () => {
+    process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE =
+      "custom/image:latest";
+    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.connectorImage).toBe("custom/image:latest");
+  });
+
+  test("should default to platform image when K8s is configured via kubeconfig", async () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.connectorImage).toMatch(
+      /^archestra\/platform:\d+\.\d+\.\d+$/,
+    );
+  });
+
+  test("should default to platform image when K8s is configured via in-cluster", async () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
+      "true";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.connectorImage).toMatch(
+      /^archestra\/platform:\d+\.\d+\.\d+$/,
+    );
+  });
+
+  test("should return empty string when K8s is not configured", async () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "";
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
+      "false";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.connectorImage).toBe("");
+  });
+
+  test("should return empty string when kubeconfig is whitespace only", async () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "   ";
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
+      "false";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.connectorImage).toBe("");
+  });
+});
+
 describe("parseVirtualKeyDefaultExpiration", () => {
   test("should return default 2592000 when undefined", () => {
     expect(parseVirtualKeyDefaultExpiration(undefined)).toBe(2592000);

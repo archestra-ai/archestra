@@ -5,7 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
   slugify,
-  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -337,7 +337,7 @@ class ToolModel {
     }
 
     const results = await query;
-    return ToolModel.filterUnavailableTools(results);
+    return results;
   }
 
   // TODO: used only in tests and should be removed.
@@ -375,9 +375,9 @@ class ToolModel {
    * All tools are linked via the agent_tools junction table.
    */
   static async getToolsByAgent(agentId: string): Promise<Tool[]> {
-    const [assignedToolIds, knowledgeGraphId] = await Promise.all([
+    const [assignedToolIds, knowledgeBaseId] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentKnowledgeGraphId(agentId),
+      ToolModel.getAgentKnowledgeBaseId(agentId),
     ]);
 
     if (assignedToolIds.length === 0) {
@@ -390,7 +390,7 @@ class ToolModel {
       .where(inArray(schema.toolsTable.id, assignedToolIds))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return ToolModel.filterUnavailableTools(tools, knowledgeGraphId);
+    return ToolModel.filterUnavailableTools(tools, knowledgeBaseId);
   }
 
   /**
@@ -403,9 +403,9 @@ class ToolModel {
    */
   static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
     // Get tool IDs assigned via junction table (MCP tools) and agent's KG assignment
-    const [assignedToolIds, knowledgeGraphId] = await Promise.all([
+    const [assignedToolIds, knowledgeBaseId] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentKnowledgeGraphId(agentId),
+      ToolModel.getAgentKnowledgeBaseId(agentId),
     ]);
 
     if (assignedToolIds.length === 0) {
@@ -430,7 +430,7 @@ class ToolModel {
       )
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return ToolModel.filterUnavailableTools(tools, knowledgeGraphId);
+    return ToolModel.filterUnavailableTools(tools, knowledgeBaseId);
   }
 
   /**
@@ -631,21 +631,13 @@ class ToolModel {
     agentId: string,
     catalogId: string,
   ): Promise<void> {
-    // Get all Archestra tools from the catalog and agent's KG assignment
-    const [archestraTools, knowledgeGraphId] = await Promise.all([
-      db
-        .select()
-        .from(schema.toolsTable)
-        .where(eq(schema.toolsTable.catalogId, catalogId)),
-      ToolModel.getAgentKnowledgeGraphId(agentId),
-    ]);
+    // Get all Archestra tools from the catalog
+    const archestraTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
 
-    // Filter out unavailable tools (e.g. query_knowledge_graph when agent has no KG assigned)
-    const availableTools = ToolModel.filterUnavailableTools(
-      archestraTools,
-      knowledgeGraphId,
-    );
-    const toolIds = availableTools.map((t) => t.id);
+    const toolIds = archestraTools.map((t) => t.id);
 
     // Assign all tools to agent in bulk to avoid N+1
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -657,10 +649,10 @@ class ToolModel {
    * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
-   * - query_knowledge_graph: for querying the knowledge graph
+   * - query_knowledge_base: for querying the knowledge base
    *
-   * All default tools are always assigned. The query_knowledge_graph tool
-   * is filtered out at query time if the agent has no knowledge graph assigned.
+   * All default tools are always assigned. The query_knowledge_base tool
+   * is filtered out at query time if the agent has no knowledge base assigned.
    *
    * Only tools that have already been seeded (via {@link seedArchestraTools})
    * will be assigned. If none of the default tools exist, this method skips assignment.
@@ -799,8 +791,7 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, catalogId))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    const tools = ToolModel.filterUnavailableTools(allTools);
-    const toolIds = tools.map((tool) => tool.id);
+    const toolIds = allTools.map((tool) => tool.id);
 
     if (toolIds.length === 0) {
       return [];
@@ -840,7 +831,7 @@ class ToolModel {
     }
 
     // Build tools with their assigned agents
-    const toolsWithAgents = tools.map((tool) => {
+    const toolsWithAgents = allTools.map((tool) => {
       const assignedAgents = assignmentsByTool.get(tool.id) || [];
 
       return {
@@ -1541,10 +1532,10 @@ class ToolModel {
       );
     }
 
-    // Hide knowledge graph tool in global tool listings (no agent context).
+    // Hide knowledge base tool in global tool listings (no agent context).
     // The tool is only visible when queried per-agent and the agent has a KG assigned.
     toolWhereConditions.push(
-      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME),
+      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME),
     );
 
     // Apply access control filtering for users that are not agent admins
@@ -1794,33 +1785,33 @@ class ToolModel {
   // =============================================================================
 
   /**
-   * Look up an agent's knowledgeGraphId.
+   * Look up an agent's knowledgeBaseId.
    */
-  private static async getAgentKnowledgeGraphId(
+  private static async getAgentKnowledgeBaseId(
     agentId: string,
   ): Promise<string | null> {
     const [row] = await db
-      .select({ knowledgeGraphId: schema.agentsTable.knowledgeGraphId })
+      .select({ knowledgeBaseId: schema.agentsTable.knowledgeBaseId })
       .from(schema.agentsTable)
       .where(eq(schema.agentsTable.id, agentId));
-    return row?.knowledgeGraphId ?? null;
+    return row?.knowledgeBaseId ?? null;
   }
 
   /**
    * Filter out tools that should not be visible based on current configuration.
-   * Filters out the query_knowledge_graph tool when the agent has no knowledge graph assigned.
+   * Filters out the query_knowledge_base tool when the agent has no knowledge base assigned.
    *
    * @param tools - Tools to filter
-   * @param agentKnowledgeGraphId - The agent's knowledgeGraphId (null/undefined = no KG assigned)
+   * @param agentKnowledgeBaseId - The agent's knowledgeBaseId (null/undefined = no KG assigned)
    */
   private static filterUnavailableTools<T extends { name: string }>(
     tools: T[],
-    agentKnowledgeGraphId?: string | null,
+    agentKnowledgeBaseId?: string | null,
   ): T[] {
-    if (agentKnowledgeGraphId) {
+    if (agentKnowledgeBaseId) {
       return tools;
     }
-    return tools.filter((t) => t.name !== TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+    return tools.filter((t) => t.name !== TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
   }
 }
 

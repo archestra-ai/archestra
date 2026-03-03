@@ -25,7 +25,7 @@ export const agentScopeEnum = pgEnum("agent_scope", [
 
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
-import knowledgeGraphsTable from "./knowledge-graph";
+import knowledgeBasesTable from "./knowledge-base";
 import usersTable from "./user";
 
 /**
@@ -105,9 +105,9 @@ const agentsTable = pgTable(
       { onDelete: "set null" },
     ),
 
-    /** Optional Knowledge Graph assigned to this agent for querying/ingestion */
-    knowledgeGraphId: uuid("knowledge_graph_id").references(
-      () => knowledgeGraphsTable.id,
+    /** Optional Knowledge Base assigned to this agent for querying/ingestion */
+    knowledgeBaseId: uuid("knowledge_base_id").references(
+      () => knowledgeBasesTable.id,
       { onDelete: "set null" },
     ),
 

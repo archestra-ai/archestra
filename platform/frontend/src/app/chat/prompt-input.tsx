@@ -33,7 +33,7 @@ import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
-import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
+import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { Button } from "@/components/ui/button";
@@ -130,7 +130,7 @@ const PromptInputContent = ({
   const supportedTypesDescription =
     getSupportedFileTypesDescription(inputModalities);
 
-  // Check if agent has tools, delegations, or a knowledge graph
+  // Check if agent has tools, delegations, or a knowledge base
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
   const { data: agentData } = useProfile(agentId);
@@ -364,11 +364,11 @@ const PromptInputContent = ({
           )}
         </PromptInputTools>
         <div className="flex items-center gap-2">
-          <KnowledgeGraphUploadIndicator
+          <KnowledgeBaseUploadIndicator
             attachmentCount={controller.attachments.files.length}
-            hasKnowledgeGraph={
+            hasKnowledgeBase={
               !!(agentData as Record<string, unknown> | null | undefined)
-                ?.knowledgeGraphId
+                ?.knowledgeBaseId
             }
           />
           <PromptInputSpeechButton

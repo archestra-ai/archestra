@@ -11734,7 +11734,7 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
-            knowledgeGraphId: string | null;
+            knowledgeBaseId: string | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
@@ -11815,7 +11815,7 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
-        knowledgeGraphId?: string | null;
+        knowledgeBaseId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -11919,7 +11919,7 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12079,7 +12079,7 @@ export type GetAllAgentsResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12226,7 +12226,7 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12373,7 +12373,7 @@ export type GetDefaultLlmProxyResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12601,7 +12601,7 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12673,7 +12673,7 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
-        knowledgeGraphId?: string | null;
+        knowledgeBaseId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12779,7 +12779,7 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12929,7 +12929,7 @@ export type GetAgentVersionsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
-            knowledgeGraphId: string | null;
+            knowledgeBaseId: string | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
@@ -13090,7 +13090,7 @@ export type RollbackAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeGraphId: string | null;
+        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -26237,17 +26237,17 @@ export type CheckInvitationResponses = {
 
 export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
 
-export type GetKnowledgeGraphsData = {
+export type GetKnowledgeBasesData = {
     body?: never;
     path?: never;
     query?: {
         limit?: number;
         offset?: number;
     };
-    url: '/api/knowledge-graphs';
+    url: '/api/knowledge-bases';
 };
 
-export type GetKnowledgeGraphsErrors = {
+export type GetKnowledgeBasesErrors = {
     /**
      * Default Response
      */
@@ -26304,9 +26304,9 @@ export type GetKnowledgeGraphsErrors = {
     };
 };
 
-export type GetKnowledgeGraphsError = GetKnowledgeGraphsErrors[keyof GetKnowledgeGraphsErrors];
+export type GetKnowledgeBasesError = GetKnowledgeBasesErrors[keyof GetKnowledgeBasesErrors];
 
-export type GetKnowledgeGraphsResponses = {
+export type GetKnowledgeBasesResponses = {
     /**
      * Default Response
      */
@@ -26336,9 +26336,9 @@ export type GetKnowledgeGraphsResponses = {
     };
 };
 
-export type GetKnowledgeGraphsResponse = GetKnowledgeGraphsResponses[keyof GetKnowledgeGraphsResponses];
+export type GetKnowledgeBasesResponse = GetKnowledgeBasesResponses[keyof GetKnowledgeBasesResponses];
 
-export type CreateKnowledgeGraphData = {
+export type CreateKnowledgeBaseData = {
     body: {
         name: string;
         provider: 'lightrag';
@@ -26349,10 +26349,10 @@ export type CreateKnowledgeGraphData = {
     };
     path?: never;
     query?: never;
-    url: '/api/knowledge-graphs';
+    url: '/api/knowledge-bases';
 };
 
-export type CreateKnowledgeGraphErrors = {
+export type CreateKnowledgeBaseErrors = {
     /**
      * Default Response
      */
@@ -26409,9 +26409,9 @@ export type CreateKnowledgeGraphErrors = {
     };
 };
 
-export type CreateKnowledgeGraphError = CreateKnowledgeGraphErrors[keyof CreateKnowledgeGraphErrors];
+export type CreateKnowledgeBaseError = CreateKnowledgeBaseErrors[keyof CreateKnowledgeBaseErrors];
 
-export type CreateKnowledgeGraphResponses = {
+export type CreateKnowledgeBaseResponses = {
     /**
      * Default Response
      */
@@ -26431,18 +26431,18 @@ export type CreateKnowledgeGraphResponses = {
     };
 };
 
-export type CreateKnowledgeGraphResponse = CreateKnowledgeGraphResponses[keyof CreateKnowledgeGraphResponses];
+export type CreateKnowledgeBaseResponse = CreateKnowledgeBaseResponses[keyof CreateKnowledgeBaseResponses];
 
-export type DeleteKnowledgeGraphData = {
+export type DeleteKnowledgeBaseData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{id}';
+    url: '/api/knowledge-bases/{id}';
 };
 
-export type DeleteKnowledgeGraphErrors = {
+export type DeleteKnowledgeBaseErrors = {
     /**
      * Default Response
      */
@@ -26499,9 +26499,9 @@ export type DeleteKnowledgeGraphErrors = {
     };
 };
 
-export type DeleteKnowledgeGraphError = DeleteKnowledgeGraphErrors[keyof DeleteKnowledgeGraphErrors];
+export type DeleteKnowledgeBaseError = DeleteKnowledgeBaseErrors[keyof DeleteKnowledgeBaseErrors];
 
-export type DeleteKnowledgeGraphResponses = {
+export type DeleteKnowledgeBaseResponses = {
     /**
      * Default Response
      */
@@ -26510,18 +26510,18 @@ export type DeleteKnowledgeGraphResponses = {
     };
 };
 
-export type DeleteKnowledgeGraphResponse = DeleteKnowledgeGraphResponses[keyof DeleteKnowledgeGraphResponses];
+export type DeleteKnowledgeBaseResponse = DeleteKnowledgeBaseResponses[keyof DeleteKnowledgeBaseResponses];
 
-export type GetKnowledgeGraphData = {
+export type GetKnowledgeBaseData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{id}';
+    url: '/api/knowledge-bases/{id}';
 };
 
-export type GetKnowledgeGraphErrors = {
+export type GetKnowledgeBaseErrors = {
     /**
      * Default Response
      */
@@ -26578,9 +26578,9 @@ export type GetKnowledgeGraphErrors = {
     };
 };
 
-export type GetKnowledgeGraphError = GetKnowledgeGraphErrors[keyof GetKnowledgeGraphErrors];
+export type GetKnowledgeBaseError = GetKnowledgeBaseErrors[keyof GetKnowledgeBaseErrors];
 
-export type GetKnowledgeGraphResponses = {
+export type GetKnowledgeBaseResponses = {
     /**
      * Default Response
      */
@@ -26600,9 +26600,9 @@ export type GetKnowledgeGraphResponses = {
     };
 };
 
-export type GetKnowledgeGraphResponse = GetKnowledgeGraphResponses[keyof GetKnowledgeGraphResponses];
+export type GetKnowledgeBaseResponse = GetKnowledgeBaseResponses[keyof GetKnowledgeBaseResponses];
 
-export type UpdateKnowledgeGraphData = {
+export type UpdateKnowledgeBaseData = {
     body?: {
         name?: string;
         config?: {
@@ -26614,10 +26614,10 @@ export type UpdateKnowledgeGraphData = {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{id}';
+    url: '/api/knowledge-bases/{id}';
 };
 
-export type UpdateKnowledgeGraphErrors = {
+export type UpdateKnowledgeBaseErrors = {
     /**
      * Default Response
      */
@@ -26674,9 +26674,9 @@ export type UpdateKnowledgeGraphErrors = {
     };
 };
 
-export type UpdateKnowledgeGraphError = UpdateKnowledgeGraphErrors[keyof UpdateKnowledgeGraphErrors];
+export type UpdateKnowledgeBaseError = UpdateKnowledgeBaseErrors[keyof UpdateKnowledgeBaseErrors];
 
-export type UpdateKnowledgeGraphResponses = {
+export type UpdateKnowledgeBaseResponses = {
     /**
      * Default Response
      */
@@ -26696,18 +26696,18 @@ export type UpdateKnowledgeGraphResponses = {
     };
 };
 
-export type UpdateKnowledgeGraphResponse = UpdateKnowledgeGraphResponses[keyof UpdateKnowledgeGraphResponses];
+export type UpdateKnowledgeBaseResponse = UpdateKnowledgeBaseResponses[keyof UpdateKnowledgeBaseResponses];
 
-export type GetKnowledgeGraphHealthData = {
+export type GetKnowledgeBaseHealthData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{id}/health';
+    url: '/api/knowledge-bases/{id}/health';
 };
 
-export type GetKnowledgeGraphHealthErrors = {
+export type GetKnowledgeBaseHealthErrors = {
     /**
      * Default Response
      */
@@ -26764,9 +26764,9 @@ export type GetKnowledgeGraphHealthErrors = {
     };
 };
 
-export type GetKnowledgeGraphHealthError = GetKnowledgeGraphHealthErrors[keyof GetKnowledgeGraphHealthErrors];
+export type GetKnowledgeBaseHealthError = GetKnowledgeBaseHealthErrors[keyof GetKnowledgeBaseHealthErrors];
 
-export type GetKnowledgeGraphHealthResponses = {
+export type GetKnowledgeBaseHealthResponses = {
     /**
      * Default Response
      */
@@ -26776,7 +26776,7 @@ export type GetKnowledgeGraphHealthResponses = {
     };
 };
 
-export type GetKnowledgeGraphHealthResponse = GetKnowledgeGraphHealthResponses[keyof GetKnowledgeGraphHealthResponses];
+export type GetKnowledgeBaseHealthResponse = GetKnowledgeBaseHealthResponses[keyof GetKnowledgeBaseHealthResponses];
 
 export type GetConnectorsData = {
     body?: never;
@@ -26787,7 +26787,7 @@ export type GetConnectorsData = {
         limit?: number;
         offset?: number;
     };
-    url: '/api/knowledge-graphs/{kgId}/connectors';
+    url: '/api/knowledge-bases/{kgId}/connectors';
 };
 
 export type GetConnectorsErrors = {
@@ -26857,7 +26857,7 @@ export type GetConnectorsResponses = {
         data: Array<{
             id: string;
             organizationId: string;
-            knowledgeGraphId: string;
+            knowledgeBaseId: string;
             name: string;
             connectorType: 'jira' | 'confluence';
             config: {
@@ -26936,7 +26936,7 @@ export type CreateConnectorData = {
         kgId: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors';
+    url: '/api/knowledge-bases/{kgId}/connectors';
 };
 
 export type CreateConnectorErrors = {
@@ -27005,7 +27005,7 @@ export type CreateConnectorResponses = {
     200: {
         id: string;
         organizationId: string;
-        knowledgeGraphId: string;
+        knowledgeBaseId: string;
         name: string;
         connectorType: 'jira' | 'confluence';
         config: {
@@ -27049,7 +27049,7 @@ export type DeleteConnectorData = {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}';
 };
 
 export type DeleteConnectorErrors = {
@@ -27129,7 +27129,7 @@ export type GetConnectorData = {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}';
 };
 
 export type GetConnectorErrors = {
@@ -27198,7 +27198,7 @@ export type GetConnectorResponses = {
     200: {
         id: string;
         organizationId: string;
-        knowledgeGraphId: string;
+        knowledgeBaseId: string;
         name: string;
         connectorType: 'jira' | 'confluence';
         config: {
@@ -27264,7 +27264,7 @@ export type UpdateConnectorData = {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}';
 };
 
 export type UpdateConnectorErrors = {
@@ -27333,7 +27333,7 @@ export type UpdateConnectorResponses = {
     200: {
         id: string;
         organizationId: string;
-        knowledgeGraphId: string;
+        knowledgeBaseId: string;
         name: string;
         connectorType: 'jira' | 'confluence';
         config: {
@@ -27377,7 +27377,7 @@ export type SyncConnectorData = {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}/sync';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}/sync';
 };
 
 export type SyncConnectorErrors = {
@@ -27458,7 +27458,7 @@ export type TestConnectorConnectionData = {
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}/test';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}/test';
 };
 
 export type TestConnectorConnectionErrors = {
@@ -27542,7 +27542,7 @@ export type GetConnectorRunsData = {
         limit?: number;
         offset?: number;
     };
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}/runs';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}/runs';
 };
 
 export type GetConnectorRunsErrors = {
@@ -27645,7 +27645,7 @@ export type GetConnectorRunData = {
         runId: string;
     };
     query?: never;
-    url: '/api/knowledge-graphs/{kgId}/connectors/{id}/runs/{runId}';
+    url: '/api/knowledge-bases/{kgId}/connectors/{id}/runs/{runId}';
 };
 
 export type GetConnectorRunErrors = {

@@ -1,7 +1,7 @@
 import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { eq } from "drizzle-orm";
@@ -1350,7 +1350,7 @@ describe("ToolModel", () => {
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {
-    test("assigns all default tools including query_knowledge_graph, but getMcpToolsByAgent filters it out when agent has no KG", async ({
+    test("assigns all default tools including query_knowledge_base, but getMcpToolsByAgent filters it out when agent has no KG", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1358,10 +1358,10 @@ describe("ToolModel", () => {
       const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
       await seedAndAssignArchestraTools(tempAgent.id);
 
-      // Create a new agent WITHOUT a knowledgeGraphId
+      // Create a new agent WITHOUT a knowledgeBaseId
       const agent = await makeAgent({ name: "Test Agent" });
 
-      // Assign default tools (always includes query_knowledge_graph now)
+      // Assign default tools (always includes query_knowledge_base now)
       await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
 
       // Verify the tool was assigned in the junction table
@@ -1376,23 +1376,23 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
 
-      // query_knowledge_graph is filtered out at query time because agent has no KG
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      // query_knowledge_base is filtered out at query time because agent has no KG
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
     });
 
-    test("includes query_knowledge_graph when agent has a knowledge graph assigned", async ({
+    test("includes query_knowledge_base when agent has a knowledge base assigned", async ({
       makeAgent,
       makeOrganization,
-      makeKnowledgeGraph,
+      makeKnowledgeBase,
       seedAndAssignArchestraTools,
     }) => {
       // First seed Archestra tools
       const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
       await seedAndAssignArchestraTools(tempAgent.id);
 
-      // Create an organization and knowledge graph
+      // Create an organization and knowledge base
       const org = await makeOrganization();
-      const kg = await makeKnowledgeGraph(org.id);
+      const kg = await makeKnowledgeBase(org.id);
 
       // Create a new agent and assign the KG
       const agent = await makeAgent({
@@ -1401,7 +1401,7 @@ describe("ToolModel", () => {
       });
       await db
         .update(schema.agentsTable)
-        .set({ knowledgeGraphId: kg.id })
+        .set({ knowledgeBaseId: kg.id })
         .where(eq(schema.agentsTable.id, agent.id));
 
       // Assign default tools
@@ -1411,10 +1411,10 @@ describe("ToolModel", () => {
       const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = mcpTools.map((t) => t.name);
 
-      // Should have all three default tools including query_knowledge_graph
+      // Should have all three default tools including query_knowledge_base
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
     });
 
     test("is idempotent - does not create duplicates", async ({
@@ -1451,39 +1451,39 @@ describe("ToolModel", () => {
     });
   });
 
-  describe("knowledge graph tool visibility", () => {
-    test("getMcpToolsByAgent excludes query_knowledge_graph when agent has no KG assigned", async ({
+  describe("knowledge base tool visibility", () => {
+    test("getMcpToolsByAgent excludes query_knowledge_base when agent has no KG assigned", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      // Create agent WITHOUT a knowledgeGraphId
+      // Create agent WITHOUT a knowledgeBaseId
       const agent = await makeAgent();
       await seedAndAssignArchestraTools(agent.id);
 
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
       // Other Archestra tools should still be present
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
-    test("getMcpToolsByAgent includes query_knowledge_graph when agent has a KG assigned", async ({
+    test("getMcpToolsByAgent includes query_knowledge_base when agent has a KG assigned", async ({
       makeAgent,
       makeOrganization,
-      makeKnowledgeGraph,
+      makeKnowledgeBase,
       seedAndAssignArchestraTools,
     }) => {
-      // Create an organization and knowledge graph
+      // Create an organization and knowledge base
       const org = await makeOrganization();
-      const kg = await makeKnowledgeGraph(org.id);
+      const kg = await makeKnowledgeBase(org.id);
 
       // Create agent and assign the KG
       const agent = await makeAgent({ organizationId: org.id });
       await db
         .update(schema.agentsTable)
-        .set({ knowledgeGraphId: kg.id })
+        .set({ knowledgeBaseId: kg.id })
         .where(eq(schema.agentsTable.id, agent.id));
 
       await seedAndAssignArchestraTools(agent.id);
@@ -1491,10 +1491,10 @@ describe("ToolModel", () => {
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
     });
 
-    test("findByCatalogId always excludes query_knowledge_graph (no agent context)", async ({
+    test("findByCatalogId includes query_knowledge_base (always visible in catalog)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1505,32 +1505,11 @@ describe("ToolModel", () => {
       const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
 
-    test("findByCatalogId excludes query_knowledge_graph even when KG exists in the system", async ({
-      makeAgent,
-      makeOrganization,
-      makeKnowledgeGraph,
-      seedAndAssignArchestraTools,
-    }) => {
-      // Even with a KG in the system, findByCatalogId has no agent context
-      // so it always filters out the KG tool
-      const org = await makeOrganization();
-      await makeKnowledgeGraph(org.id);
-
-      const agent = await makeAgent({ organizationId: org.id });
-      await seedAndAssignArchestraTools(agent.id);
-
-      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
-      const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
-      const toolNames = tools.map((t) => t.name);
-
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-    });
-
-    test("assignArchestraToolsToAgent excludes query_knowledge_graph when agent has no KG assigned", async ({
+    test("assignArchestraToolsToAgent always assigns query_knowledge_base (filtered at query time)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1538,7 +1517,7 @@ describe("ToolModel", () => {
       const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
       await seedAndAssignArchestraTools(tempAgent.id);
 
-      // Create a new agent WITHOUT a knowledgeGraphId and assign all Archestra tools
+      // Create a new agent WITHOUT a knowledgeBaseId and assign all Archestra tools
       const agent = await makeAgent({ name: "Test Agent" });
       const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
       await ToolModel.assignArchestraToolsToAgent(
@@ -1546,10 +1525,12 @@ describe("ToolModel", () => {
         ARCHESTRA_MCP_CATALOG_ID,
       );
 
+      // Tool is assigned (in junction table) but filtered out by getMcpToolsByAgent
+      // since the agent has no KG assigned
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
   });

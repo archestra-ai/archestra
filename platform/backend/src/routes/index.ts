@@ -34,7 +34,7 @@ export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
-export { default as knowledgeGraphRoutes } from "./knowledge-graph";
+export { default as knowledgeBaseRoutes } from "./knowledge-base";
 export { default as limitsRoutes } from "./limits";
 export { mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";

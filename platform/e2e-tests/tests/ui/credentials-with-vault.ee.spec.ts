@@ -225,9 +225,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage
       .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
       .click();
-    await adminPage
-      .getByRole("option", { name: DEFAULT_TEAM_NAME })
-      .click();
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
 
     // Select secret from vault
     await adminPage
@@ -324,9 +322,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage
       .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
       .click();
-    await adminPage
-      .getByRole("option", { name: DEFAULT_TEAM_NAME })
-      .click();
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
 
     // install server
     await clickButton({ page: adminPage, options: { name: "Install" } });

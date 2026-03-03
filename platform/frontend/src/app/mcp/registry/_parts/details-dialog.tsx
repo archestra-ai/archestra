@@ -698,7 +698,11 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                     `}</style>
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
-                        rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeHighlight]}
+                        rehypePlugins={[
+                          rehypeRaw,
+                          rehypeSanitize,
+                          rehypeHighlight,
+                        ]}
                         components={markdownComponents}
                       >
                         {content}

@@ -1,5 +1,17 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useTriggerStatuses } from "./_components/use-trigger-statuses";
 
 export default function AgentTriggersPage() {
-  redirect("/agents/triggers/ms-teams");
+  const router = useRouter();
+  const { isLoading, firstActiveHref } = useTriggerStatuses();
+
+  useEffect(() => {
+    if (isLoading) return;
+    router.replace(firstActiveHref);
+  }, [isLoading, firstActiveHref, router]);
+
+  return null;
 }

@@ -1,5 +1,10 @@
 import { archestraApiSdk } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
@@ -13,12 +18,37 @@ export function useChatOpsStatus() {
   });
 }
 
-export function useChatOpsBindings() {
+export function useChatOpsBindings(params: {
+  provider?: "ms-teams" | "slack";
+  limit?: number;
+  offset?: number;
+  sortBy?: "channelName" | "createdAt";
+  sortDirection?: "asc" | "desc";
+  search?: string;
+  workspaceId?: string;
+  status?: "configured" | "unassigned";
+}) {
   return useQuery({
-    queryKey: ["chatops", "bindings"],
+    queryKey: ["chatops", "bindings", params],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const response = await archestraApiSdk.listChatOpsBindings();
-      return response.data ?? [];
+      const { data, error } = await archestraApiSdk.listChatOpsBindings({
+        query: {
+          provider: params.provider,
+          limit: params.limit ?? 20,
+          offset: params.offset ?? 0,
+          sortBy: params.sortBy,
+          sortDirection: params.sortDirection,
+          search: params.search || undefined,
+          workspaceId: params.workspaceId || undefined,
+          status: params.status,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
   });
 }

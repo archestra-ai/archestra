@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
+import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
@@ -37,7 +38,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -336,19 +336,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <div className="font-medium">
             <div className="flex items-start gap-2">
               <span className="break-words min-w-0">{agent.name}</span>
-              {agent.builtIn ? (
-                <InlineTag className="bg-purple-500/10 text-purple-600 border border-purple-500/30 shrink-0">
-                  Built-In
-                </InlineTag>
-              ) : scope === "personal" ? (
-                <InlineTag className="bg-blue-500/10 text-blue-600 border border-blue-500/30 shrink-0">
-                  Personal
-                </InlineTag>
-              ) : (
-                <InlineTag className="bg-green-500/10 text-green-600 border border-green-500/30 shrink-0">
-                  Shared
-                </InlineTag>
-              )}
+              <AgentBadge type={agent.builtIn ? "builtIn" : scope} />
               {agent.labels && agent.labels.length > 0 && (
                 <LabelTags labels={agent.labels} />
               )}

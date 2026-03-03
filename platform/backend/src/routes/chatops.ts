@@ -27,7 +27,13 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
-import { ApiError, constructResponseSchema } from "@/types";
+import {
+  ApiError,
+  constructResponseSchema,
+  createPaginatedResponseSchema,
+  createSortingQuerySchema,
+  PaginationQuerySchema,
+} from "@/types";
 import {
   type ChatOpsProvider,
   type ChatOpsProviderType,
@@ -413,11 +419,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
               // Send agent selection card
+              const isTeamsDm =
+                context.activity.conversation?.conversationType === "personal";
               await sendAgentSelectionCard({
                 provider,
                 message,
                 isWelcome: false,
                 providerContext: context,
+                isDm: isTeamsDm,
               });
               return;
             }
@@ -498,6 +507,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 message,
                 isWelcome: true,
                 providerContext: context,
+                isDm: isTeamsDm,
               });
               return;
             }
@@ -907,39 +917,71 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * List all channel bindings for the organization
+   * List channel bindings for the organization with server-side pagination
    */
   fastify.get(
     "/api/chatops/bindings",
     {
       schema: {
         operationId: RouteId.ListChatOpsBindings,
-        description: "List all chatops channel bindings",
+        description: "List chatops channel bindings with pagination",
         tags: ["ChatOps"],
+        querystring: z
+          .object({
+            provider: ChatOpsProviderTypeSchema.optional(),
+            workspaceId: z.string().optional(),
+            search: z.string().optional(),
+            status: z.enum(["configured", "unassigned"]).optional(),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema(["channelName", "createdAt"] as const),
+          ),
         response: constructResponseSchema(
-          z.array(ChatOpsChannelBindingResponseSchema),
+          createPaginatedResponseSchema(
+            ChatOpsChannelBindingResponseSchema,
+          ).extend({
+            counts: z.object({
+              configured: z.number(),
+              unassigned: z.number(),
+            }),
+            workspaces: z.array(z.object({ id: z.string(), name: z.string() })),
+            hasDmBinding: z.boolean(),
+          }),
         ),
       },
     },
     async (request, reply) => {
-      const bindings = await ChatOpsChannelBindingModel.findByOrganization(
-        request.organizationId,
-      );
+      const {
+        limit,
+        offset,
+        sortBy,
+        sortDirection,
+        provider,
+        workspaceId,
+        search,
+        status,
+      } = request.query;
 
-      // Filter out DM bindings that belong to other users
-      const userEmail = request.user.email;
-      const visibleBindings = bindings.filter((b) => {
-        if (!b.isDm) return true;
-        return b.dmOwnerEmail === userEmail;
+      const result = await ChatOpsChannelBindingModel.findAllPaginated({
+        organizationId: request.organizationId,
+        userEmail: request.user.email,
+        pagination: { limit, offset },
+        sorting: { sortBy, sortDirection },
+        filters: { provider, workspaceId, search, status },
       });
 
-      return reply.send(
-        visibleBindings.map((b) => ({
+      return reply.send({
+        data: result.data.map((b) => ({
           ...b,
           createdAt: b.createdAt.toISOString(),
           updatedAt: b.updatedAt.toISOString(),
         })),
-      );
+        pagination: result.pagination,
+        counts: result.counts,
+        workspaces: result.workspaces,
+        hasDmBinding: result.hasDmBinding,
+      });
     },
   );
 
@@ -1005,6 +1047,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Binding not found");
       }
 
+      // Validate personal agent assignment
+      if (request.body.agentId) {
+        await validateAgentChannelAssignment({
+          agentId: request.body.agentId,
+          isDm: existing.isDm,
+          userId: request.user.id,
+        });
+      }
+
       const updated = await ChatOpsChannelBindingModel.update(id, request.body);
 
       if (!updated) {
@@ -1042,14 +1093,19 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { provider, agentId } = request.body;
       const userEmail = request.user.email;
 
+      // Validate personal agent assignment for DM
+      if (agentId) {
+        await validateAgentChannelAssignment({
+          agentId,
+          isDm: true,
+          userId: request.user.id,
+        });
+      }
+
       // Check if user already has a DM binding (real or pending) for this provider
-      const existingBindings =
-        await ChatOpsChannelBindingModel.findByOrganization(
-          request.organizationId,
-        );
-      const existingDm = existingBindings.find(
-        (b) =>
-          b.provider === provider && b.isDm && b.dmOwnerEmail === userEmail,
+      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        provider,
+        userEmail,
       );
 
       if (existingDm) {
@@ -1109,6 +1165,32 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { ids, agentId } = request.body;
+
+      // Validate personal agent cannot be assigned to channel bindings
+      if (agentId) {
+        // Fetch all bindings to check which are DMs
+        const bindings = await ChatOpsChannelBindingModel.findByIds(
+          ids,
+          request.organizationId,
+        );
+        const hasChannelBindings = bindings.some((b) => !b.isDm);
+        if (hasChannelBindings) {
+          await validateAgentChannelAssignment({
+            agentId,
+            isDm: false,
+            userId: request.user.id,
+          });
+        }
+        // For DM bindings, validate the user owns them
+        const dmBindings = bindings.filter((b) => b.isDm);
+        if (dmBindings.length > 0) {
+          await validateAgentChannelAssignment({
+            agentId,
+            isDm: true,
+            userId: request.user.id,
+          });
+        }
+      }
 
       const updated = await ChatOpsChannelBindingModel.bulkUpdateAgent(
         ids,
@@ -1398,6 +1480,34 @@ function maskValue(value: string): string {
 }
 
 /**
+ * Validate that a personal agent is not assigned to a shared channel.
+ * Personal agents may only be assigned to DM bindings owned by the agent's author.
+ */
+async function validateAgentChannelAssignment(params: {
+  agentId: string;
+  isDm: boolean;
+  userId: string;
+}): Promise<void> {
+  const agent = await AgentModel.findById(params.agentId);
+  if (!agent || agent.scope !== "personal") return;
+
+  if (!params.isDm) {
+    throw new ApiError(
+      400,
+      "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
+    );
+  }
+
+  // For DMs, only the author can assign their own personal agent
+  if (agent.authorId !== params.userId) {
+    throw new ApiError(
+      403,
+      "You can only assign your own personal agents to your DM.",
+    );
+  }
+}
+
+/**
  * Shared helper: get accessible agents and send agent selection card via the provider.
  * Both MS Teams and Slack handlers call this instead of provider-specific functions.
  */
@@ -1406,9 +1516,11 @@ async function sendAgentSelectionCard(params: {
   message: IncomingChatMessage;
   isWelcome: boolean;
   providerContext?: unknown;
+  isDm: boolean;
 }): Promise<void> {
   const agents = await chatOpsManager.getAccessibleChatopsAgents({
     senderEmail: params.message.senderEmail,
+    isDm: params.isDm,
   });
 
   if (agents.length === 0) {

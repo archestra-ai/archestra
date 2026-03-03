@@ -35,10 +35,19 @@ export function useTriggerStatuses() {
   const emailActive =
     !!features?.incomingEmail?.enabled && !!emailStatus?.isActive;
 
+  const triggers = [
+    { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
+    { active: slackActive, href: "/agents/triggers/slack" },
+    { active: emailActive, href: "/agents/triggers/email" },
+  ] as const;
+  const firstActiveHref =
+    triggers.find((t) => t.active)?.href ?? triggers[0].href;
+
   return {
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
+    firstActiveHref,
     isLoading:
       chatOpsLoading || featuresLoading || emailLoading || apiKeysLoading,
   };

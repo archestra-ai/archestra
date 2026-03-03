@@ -11,13 +11,14 @@ import {
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
-import { getKnowledgeGraphProvider } from "@/knowledge-graph";
+import { createKnowledgeGraphProvider } from "@/knowledge-graph";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
   InternalMcpCatalogModel,
+  KnowledgeGraphModel,
   LimitModel,
   McpServerModel,
   ToolInvocationPolicyModel,
@@ -1788,19 +1789,39 @@ export async function executeArchestraTool(
         mode = parseResult.data;
       }
 
-      // Get the knowledge graph provider
-      const provider = getKnowledgeGraphProvider();
-      if (!provider) {
+      // Look up the agent's assigned knowledge graph
+      const agentRow = await AgentModel.findById(contextAgent.id);
+      if (!agentRow?.knowledgeGraphId) {
         return {
           content: [
             {
               type: "text",
-              text: "Error: Knowledge graph provider is not configured. Please configure the ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER environment variable.",
+              text: "Error: No knowledge graph assigned to this agent. Assign a knowledge graph in the agent settings.",
             },
           ],
           isError: true,
         };
       }
+
+      const knowledgeGraph = await KnowledgeGraphModel.findById(
+        agentRow.knowledgeGraphId,
+      );
+      if (!knowledgeGraph) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: The assigned knowledge graph could not be found.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const provider = createKnowledgeGraphProvider(
+        knowledgeGraph.provider,
+        knowledgeGraph.config,
+      );
 
       logger.info(
         {

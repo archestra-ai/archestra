@@ -119,15 +119,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationId,
       });
 
-      // Extract and ingest documents to knowledge graph (fire and forget)
-      // This runs asynchronously to avoid blocking the chat response
-      extractAndIngestDocuments(messages).catch((error) => {
-        logger.warn(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[Chat] Background document ingestion failed",
-        );
-      });
-
       const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
         organizationId,
@@ -153,6 +144,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { agentId, agent } = conversation;
+
+      // Extract and ingest documents to agent's knowledge graph (fire and forget)
+      // This runs asynchronously to avoid blocking the chat response
+      extractAndIngestDocuments(messages, agentId).catch((error) => {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[Chat] Background document ingestion failed",
+        );
+      });
 
       const externalAgentId = agentId;
 

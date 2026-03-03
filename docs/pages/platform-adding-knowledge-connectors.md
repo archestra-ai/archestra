@@ -85,7 +85,7 @@ No changes needed to `ConnectorDocument`, `ConnectorSyncBatch`, or the `Connecto
 
 ## Connector Implementation
 
-Create a new directory `backend/src/connectors/github/` with a `github-connector.ts` file.
+Create a new directory `backend/src/knowledge-graph/connectors/github/` with a `github-connector.ts` file.
 
 ### The Connector interface
 
@@ -243,7 +243,7 @@ Key points:
 
 ## Connector Registry
 
-Register the connector in `backend/src/connectors/registry.ts`:
+Register the connector in `backend/src/knowledge-graph/connectors/registry.ts`:
 
 ```typescript
 import { GithubConnector } from "./github/github-connector";
@@ -341,7 +341,7 @@ If your connector needs a migration (e.g., a new column), follow the standard Dr
 
 ## Testing
 
-Create `backend/src/connectors/github/github-connector.test.ts`. Mock the external SDK or HTTP calls; test the three interface methods.
+Create `backend/src/knowledge-graph/connectors/github/github-connector.test.ts`. Mock the external SDK or HTTP calls; test the three interface methods.
 
 Structure your test file with three `describe` blocks matching the interface:
 
@@ -351,13 +351,13 @@ Structure your test file with three `describe` blocks matching the interface:
 | `testConnection` | Successful API response returns `{ success: true }`, auth failures return errors, invalid config returns errors                                                   |
 | `sync`           | Single-page results, pagination across multiple pages, incremental sync using checkpoint, label/filter exclusion, document metadata mapping, API errors propagate |
 
-Use `vi.mock()` to mock the external client library. See `backend/src/connectors/jira/jira-connector.test.ts` for a complete example.
+Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-graph/connectors/jira/jira-connector.test.ts` for a complete example.
 
 ## Reference Implementations
 
 | Connector  | Files                                                                                                                                |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Jira       | `backend/src/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge-graphs/_parts/jira-config-fields.tsx`                   |
-| Confluence | `backend/src/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge-graphs/_parts/confluence-config-fields.tsx` |
+| Jira       | `backend/src/knowledge-graph/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge-graphs/_parts/jira-config-fields.tsx`                   |
+| Confluence | `backend/src/knowledge-graph/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge-graphs/_parts/confluence-config-fields.tsx` |
 
 The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync.

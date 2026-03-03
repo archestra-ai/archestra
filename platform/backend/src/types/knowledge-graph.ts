@@ -135,18 +135,3 @@ export interface KnowledgeGraphProvider {
    */
   getHealth(): Promise<HealthCheckResult>;
 }
-
-/**
- * Knowledge graph provider configuration from environment variables
- */
-export interface KnowledgeGraphConfig {
-  /** The provider type to use (undefined = feature disabled) */
-  provider: KnowledgeGraphProviderType | undefined;
-  /** LightRAG-specific configuration */
-  lightrag?: {
-    /** The LightRAG API server URL (e.g., http://localhost:9621) */
-    apiUrl: string;
-    /** Optional API key for authentication */
-    apiKey?: string;
-  };
-}

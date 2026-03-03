@@ -1,14 +1,9 @@
-import { vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
-import * as knowledgeGraph from "@/knowledge-graph";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 import ToolModel from "./tool";
-
-// Mock knowledge graph as configured so all Archestra tools (including query_knowledge_graph) are available
-vi.spyOn(knowledgeGraph, "getKnowledgeGraphProviderType").mockReturnValue(
-  "lightrag",
-);
 
 describe("Archestra Tools Dynamic Assignment", () => {
   test("agents get Archestra tools after explicit assignment", async ({
@@ -17,6 +12,21 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     // Create a new agent
     const agent = await makeAgent({ name: "New Agent" });
+
+    // Create a knowledge graph and assign to agent so KG tool is visible
+    const [kg] = await db
+      .insert(schema.knowledgeGraphsTable)
+      .values({
+        name: "Test KG",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+        organizationId: agent.organizationId,
+      })
+      .returning();
+    await db
+      .update(schema.agentsTable)
+      .set({ knowledgeGraphId: kg.id })
+      .where(eq(schema.agentsTable.id, agent.id));
 
     // Explicitly seed and assign Archestra tools
     await seedAndAssignArchestraTools(agent.id);
@@ -44,6 +54,21 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
+    // Create a knowledge graph and assign to agent so KG tool is visible
+    const [kg] = await db
+      .insert(schema.knowledgeGraphsTable)
+      .values({
+        name: "Test KG",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+        organizationId: agent.organizationId,
+      })
+      .returning();
+    await db
+      .update(schema.agentsTable)
+      .set({ knowledgeGraphId: kg.id })
+      .where(eq(schema.agentsTable.id, agent.id));
+
     // Seed and assign Archestra tools first
     await seedAndAssignArchestraTools(agent.id);
 
@@ -69,6 +94,21 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     const user = await makeUser();
     const agent = await makeAgent({ name: "Test Agent" });
+
+    // Create a knowledge graph and assign to agent so KG tool is visible
+    const [kg] = await db
+      .insert(schema.knowledgeGraphsTable)
+      .values({
+        name: "Test KG",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+        organizationId: agent.organizationId,
+      })
+      .returning();
+    await db
+      .update(schema.agentsTable)
+      .set({ knowledgeGraphId: kg.id })
+      .where(eq(schema.agentsTable.id, agent.id));
 
     // Seed and assign Archestra tools first
     await seedAndAssignArchestraTools(agent.id);
@@ -119,6 +159,21 @@ describe("Archestra Tools Dynamic Assignment", () => {
     seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
+
+    // Create a knowledge graph and assign to agent so KG tool is visible
+    const [kg] = await db
+      .insert(schema.knowledgeGraphsTable)
+      .values({
+        name: "Test KG",
+        provider: "lightrag",
+        config: { apiUrl: "http://localhost:9621" },
+        organizationId: agent.organizationId,
+      })
+      .returning();
+    await db
+      .update(schema.agentsTable)
+      .set({ knowledgeGraphId: kg.id })
+      .where(eq(schema.agentsTable.id, agent.id));
 
     // Seed and assign Archestra tools first
     await seedAndAssignArchestraTools(agent.id);

@@ -6,11 +6,9 @@ import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { getKnowledgeGraphProviderInfo } from "@/knowledge-graph";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
-import { KnowledgeGraphProviderTypeSchema } from "@/types/knowledge-graph";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -34,11 +32,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 provider: EmailProviderTypeSchema.optional(),
                 displayName: z.string().optional(),
                 emailDomain: z.string().optional(),
-              }),
-              knowledgeGraph: z.object({
-                enabled: z.boolean(),
-                provider: KnowledgeGraphProviderTypeSchema.optional(),
-                displayName: z.string().optional(),
               }),
               mcpServerBaseImage: z.string(),
               orchestratorK8sNamespace: z.string(),
@@ -69,7 +62,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),
-          knowledgeGraph: getKnowledgeGraphProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
           isQuickstart: config.isQuickstart,

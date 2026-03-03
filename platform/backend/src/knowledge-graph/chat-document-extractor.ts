@@ -1,11 +1,14 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import logger from "@/logging";
+import { KnowledgeGraphModel } from "@/models";
 import {
   MAX_CONCURRENT_INGESTIONS,
   MAX_DOCUMENT_SIZE_BYTES,
   SUPPORTED_DOCUMENT_TYPES,
   SUPPORTED_EXTENSIONS,
 } from "./constants";
-import { ingestDocument, isKnowledgeGraphEnabled } from "./index";
+import { createKnowledgeGraphProvider } from "./index";
 
 /**
  * Message part structure from AI SDK UIMessage
@@ -222,22 +225,80 @@ function extractDocumentContent(part: MessagePart): {
 }
 
 /**
+ * Ingest a single document into a knowledge graph provider
+ */
+async function ingestDocument(
+  provider: {
+    insertDocument: (params: {
+      content: string;
+      filename?: string;
+    }) => Promise<{ status: string; documentId?: string; error?: string }>;
+  },
+  params: { content: string; filename?: string },
+): Promise<boolean> {
+  try {
+    const result = await provider.insertDocument(params);
+
+    if (result.status === "failed") {
+      logger.warn(
+        { filename: params.filename, error: result.error },
+        "[KnowledgeGraph] Document ingestion failed",
+      );
+      return false;
+    }
+
+    logger.info(
+      {
+        filename: params.filename,
+        documentId: result.documentId,
+        status: result.status,
+      },
+      "[KnowledgeGraph] Document ingested successfully",
+    );
+    return true;
+  } catch (error) {
+    logger.error(
+      {
+        filename: params.filename,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[KnowledgeGraph] Error during document ingestion",
+    );
+    return false;
+  }
+}
+
+/**
  * Extract and ingest documents from chat messages into the knowledge graph
  *
  * This function processes messages sent to the chat endpoint, finds any
  * file attachments that are text-based documents, and ingests them into
- * the configured knowledge graph provider.
+ * the agent's assigned knowledge graph.
  *
  * The ingestion happens asynchronously (fire and forget) to avoid blocking
  * the chat response.
  *
  * @param messages - Array of messages from the chat request
+ * @param agentId - The agent ID to look up the assigned knowledge graph
  */
 export async function extractAndIngestDocuments(
   messages: unknown[],
+  agentId: string,
 ): Promise<void> {
-  // Check if knowledge graph is enabled
-  if (!isKnowledgeGraphEnabled()) {
+  // Look up the agent's assigned knowledge graph
+  const [agentRow] = await db
+    .select({ knowledgeGraphId: schema.agentsTable.knowledgeGraphId })
+    .from(schema.agentsTable)
+    .where(eq(schema.agentsTable.id, agentId));
+
+  if (!agentRow?.knowledgeGraphId) {
+    return;
+  }
+
+  const knowledgeGraph = await KnowledgeGraphModel.findById(
+    agentRow.knowledgeGraphId,
+  );
+  if (!knowledgeGraph) {
     return;
   }
 
@@ -282,8 +343,14 @@ export async function extractAndIngestDocuments(
   }
 
   logger.info(
-    { documentCount: documentsToIngest.length },
+    { documentCount: documentsToIngest.length, agentId },
     "[KnowledgeGraph] Ingesting documents from chat",
+  );
+
+  // Create a provider instance for this agent's knowledge graph
+  const provider = createKnowledgeGraphProvider(
+    knowledgeGraph.provider,
+    knowledgeGraph.config,
   );
 
   // Ingest documents asynchronously with concurrency limit
@@ -294,7 +361,7 @@ export async function extractAndIngestDocuments(
     const inProgress = new Set<Promise<void>>();
 
     for (const doc of documentsToIngest) {
-      const promise: Promise<void> = ingestDocument({
+      const promise: Promise<void> = ingestDocument(provider, {
         content: doc.content,
         filename: doc.filename,
       })

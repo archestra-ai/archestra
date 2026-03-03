@@ -48,10 +48,6 @@ import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { cronJobManager } from "@/k8s/cron-job";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import {
-  cleanupKnowledgeGraphProvider,
-  initializeKnowledgeGraphProvider,
-} from "@/knowledge-graph";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
@@ -692,10 +688,6 @@ const start = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
-    // Initialize knowledge graph provider (if configured)
-    // This enables automatic document ingestion from chat uploads
-    await initializeKnowledgeGraphProvider();
-
     // Reconcile CronJobs for knowledge graph connectors
     // Ensures CronJobs exist for all enabled connectors (e.g., if a CronJob was deleted)
     reconcileConnectorCronJobs().catch((error) => {
@@ -821,19 +813,13 @@ const start = async () => {
         cacheManager.shutdown();
 
         // Track which cleanup operations have completed
-        const completedCleanups = new Set<
-          "emailProvider" | "knowledgeGraph" | "chatOps"
-        >();
+        const completedCleanups = new Set<"emailProvider" | "chatOps">();
 
         // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
         const cleanupPromise = Promise.allSettled([
           cleanupEmailProvider().then(() => {
             completedCleanups.add("emailProvider");
             fastify.log.info("Email provider cleanup completed");
-          }),
-          cleanupKnowledgeGraphProvider().then(() => {
-            completedCleanups.add("knowledgeGraph");
-            fastify.log.info("Knowledge graph provider cleanup completed");
           }),
           chatOpsManager.cleanup().then(() => {
             completedCleanups.add("chatOps");
@@ -842,11 +828,7 @@ const start = async () => {
         ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
-        const allCleanupNames = [
-          "emailProvider",
-          "knowledgeGraph",
-          "chatOps",
-        ] as const;
+        const allCleanupNames = ["emailProvider", "chatOps"] as const;
         const result = await Promise.race([
           cleanupPromise,
           new Promise<"timeout">((resolve) =>

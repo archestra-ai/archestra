@@ -36,17 +36,13 @@ Binary files (images, PDFs, etc.) are not currently supported.
 
 ## Configuration
 
-Enable the feature by setting environment variables. See [Deployment - Knowledge Graph Configuration](/docs/platform-deployment#knowledge-graph-configuration) for details.
+Knowledge graphs are configured per Agent or MCP Gateway in the Archestra UI. Each Agent / MCP Gateway can be assigned a single knowledge graph.
+
+Once assigned a knowledge graph, the `query_knowledge_graph` tool becomes available and, for Agents, documents uploaded via chat are automatically ingested into the Agent's assigned knowledge graph.
 
 ### LightRAG Provider
 
 [LightRAG](https://github.com/HKUDS/LightRAG) combines vector similarity search with graph-based retrieval for more accurate and contextual results.
-
-```bash
-ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag
-ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL=http://lightrag:9621
-ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY=your-api-key  # Optional
-```
 
 LightRAG requires:
 
@@ -56,17 +52,14 @@ LightRAG requires:
 
 ## Using the Knowledge Graph
 
-Once configured, documents are automatically ingested. There are two ways to query the knowledge graph from agents:
-
 ### Built-in Query Tool (Recommended)
 
 Archestra includes a built-in `query_knowledge_graph` tool. To use it:
 
-1. Go to **MCP Catalog** and find "Archestra"
-2. Assign the `query_knowledge_graph` tool to your profile
-3. The tool will be available to agents using that profile
-
-The tool is also automatically assigned to new profiles when a knowledge graph provider is configured.
+1. Assign a knowledge graph to your Agent or MCP Gateway (see above)
+2. Go to **MCP Catalog** and find "Archestra"
+3. Assign the `query_knowledge_graph` tool to your agent
+4. The tool will be available to agents using that profile
 
 ### External MCP Server
 
@@ -97,14 +90,14 @@ Each connector runs as a Kubernetes CronJob that periodically fetches new and up
 
 Ingests issue descriptions, comments, and metadata from Jira Cloud or Server.
 
-| Field | Description |
-| --- | --- |
-| Base URL | Your Jira instance URL (e.g., `https://your-domain.atlassian.net`) |
-| Cloud Instance | Toggle on for Jira Cloud, off for Jira Server/Data Center |
-| Project Key | Filter issues to a single project (optional) |
-| JQL Query | Custom JQL to filter issues (optional, e.g., `project = PROJ AND status = "Done"`) |
-| Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional) |
-| Labels to Skip | Comma-separated issue labels to exclude (optional) |
+| Field                   | Description                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| Base URL                | Your Jira instance URL (e.g., `https://your-domain.atlassian.net`)                 |
+| Cloud Instance          | Toggle on for Jira Cloud, off for Jira Server/Data Center                          |
+| Project Key             | Filter issues to a single project (optional)                                       |
+| JQL Query               | Custom JQL to filter issues (optional, e.g., `project = PROJ AND status = "Done"`) |
+| Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional)                      |
+| Labels to Skip          | Comma-separated issue labels to exclude (optional)                                 |
 
 Authentication uses an Atlassian account email and [API token](https://id.atlassian.com/manage-profile/security/api-tokens).
 
@@ -114,15 +107,15 @@ Incremental sync uses JQL time-range queries based on the `updated` field, so on
 
 Ingests page content (HTML converted to plain text) from Confluence Cloud or Server.
 
-| Field | Description |
-| --- | --- |
-| URL | Your Confluence instance URL (e.g., `https://your-domain.atlassian.net/wiki`) |
-| Cloud Instance | Toggle on for Confluence Cloud, off for Server/Data Center |
-| Space Keys | Comma-separated space keys to sync (optional, e.g., `ENG, DOCS`) |
-| Page IDs | Comma-separated specific page IDs to sync (optional) |
-| CQL Query | Custom CQL to filter content (optional, e.g., `space = "ENG" AND type = "page"`) |
-| Labels to Skip | Comma-separated labels to exclude (optional) |
-| Batch Size | Pages per batch (default: 50) |
+| Field          | Description                                                                      |
+| -------------- | -------------------------------------------------------------------------------- |
+| URL            | Your Confluence instance URL (e.g., `https://your-domain.atlassian.net/wiki`)    |
+| Cloud Instance | Toggle on for Confluence Cloud, off for Server/Data Center                       |
+| Space Keys     | Comma-separated space keys to sync (optional, e.g., `ENG, DOCS`)                 |
+| Page IDs       | Comma-separated specific page IDs to sync (optional)                             |
+| CQL Query      | Custom CQL to filter content (optional, e.g., `space = "ENG" AND type = "page"`) |
+| Labels to Skip | Comma-separated labels to exclude (optional)                                     |
+| Batch Size     | Pages per batch (default: 50)                                                    |
 
 Authentication uses the same Atlassian email + API token as Jira.
 
@@ -130,37 +123,12 @@ Incremental sync uses CQL `lastModified` queries to fetch only pages changed sin
 
 ### Schedules
 
-Connectors use cron expressions to define sync frequency. The UI provides common presets:
-
-| Preset | Cron Expression |
-| --- | --- |
-| Every 6 hours | `0 */6 * * *` |
-| Every 12 hours | `0 */12 * * *` |
-| Daily | `0 0 * * *` |
-| Weekly | `0 0 * * 0` |
-
-You can also enter a custom cron expression. The format is `minute hour day-of-month month day-of-week`.
+Connectors use cron expressions to define sync frequency.
 
 ### Managing Connectors
 
-Connectors are managed from a knowledge graph's detail page:
-
-<!-- TODO: Add screenshot of connector creation dialog -->
-
-1. Navigate to the knowledge graph and click **Add Connector**
-2. Select a connector type (Jira or Confluence) and provide a name
-3. Configure the source-specific settings
-4. Enter your Atlassian email and API token
-5. Choose a sync schedule
-
-After creation, you can:
+Connectors are managed from a knowledge graph's detail page. After creation, you can:
 
 - **Test Connection** -- verifies credentials and connectivity before waiting for the first scheduled sync
 - **Trigger Sync** -- runs an immediate sync outside the schedule
 - **View Runs** -- see the history of sync runs with status, documents processed, and errors
-
-### Environment Variables
-
-| Variable | Description | Default |
-| --- | --- |--- |
-| `ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE` | K8s namespace where connector CronJobs run | `archestra-connectors` |

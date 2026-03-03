@@ -4,8 +4,8 @@ import {
   TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
-import { vi } from "vitest";
-import * as knowledgeGraph from "@/knowledge-graph";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 import TeamModel from "./team";
@@ -1350,72 +1350,71 @@ describe("ToolModel", () => {
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {
-    test("assigns artifact_write and todo_write tools by default (without query_knowledge_graph when KG not configured)", async ({
+    test("assigns all default tools including query_knowledge_graph, but getMcpToolsByAgent filters it out when agent has no KG", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      // Mock getKnowledgeGraphProviderType to return undefined (no knowledge graph configured)
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue(undefined);
+      // First seed Archestra tools (but don't assign to agent)
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
 
-      try {
-        // First seed Archestra tools (but don't assign to agent)
-        const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
-        await seedAndAssignArchestraTools(tempAgent.id);
+      // Create a new agent WITHOUT a knowledgeGraphId
+      const agent = await makeAgent({ name: "Test Agent" });
 
-        // Create a new agent
-        const agent = await makeAgent({ name: "Test Agent" });
+      // Assign default tools (always includes query_knowledge_graph now)
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
 
-        // Assign default tools (not all Archestra tools)
-        await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+      // Verify the tool was assigned in the junction table
+      const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(assignedToolIds.length).toBeGreaterThanOrEqual(3);
 
-        // Get the tools assigned to the agent
-        const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
-        const toolNames = mcpTools.map((t) => t.name);
+      // But getMcpToolsByAgent filters it out because the agent has no KG
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = mcpTools.map((t) => t.name);
 
-        // Should have artifact_write and todo_write
-        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+      // Should have artifact_write and todo_write
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
 
-        // By default (no knowledge graph configured), should NOT have query_knowledge_graph
-        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      // query_knowledge_graph is filtered out at query time because agent has no KG
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     });
 
-    test("includes query_knowledge_graph when knowledge graph is configured", async ({
+    test("includes query_knowledge_graph when agent has a knowledge graph assigned", async ({
       makeAgent,
+      makeOrganization,
+      makeKnowledgeGraph,
       seedAndAssignArchestraTools,
     }) => {
       // First seed Archestra tools
       const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
       await seedAndAssignArchestraTools(tempAgent.id);
 
-      // Mock getKnowledgeGraphProviderType to return "lightrag"
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue("lightrag");
+      // Create an organization and knowledge graph
+      const org = await makeOrganization();
+      const kg = await makeKnowledgeGraph(org.id);
 
-      try {
-        // Create a new agent
-        const agent = await makeAgent({ name: "KG Enabled Agent" });
+      // Create a new agent and assign the KG
+      const agent = await makeAgent({
+        name: "KG Enabled Agent",
+        organizationId: org.id,
+      });
+      await db
+        .update(schema.agentsTable)
+        .set({ knowledgeGraphId: kg.id })
+        .where(eq(schema.agentsTable.id, agent.id));
 
-        // Assign default tools
-        await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+      // Assign default tools
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
 
-        // Get the tools assigned to the agent
-        const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
-        const toolNames = mcpTools.map((t) => t.name);
+      // Get the tools assigned to the agent
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = mcpTools.map((t) => t.name);
 
-        // Should have all three default tools including query_knowledge_graph
-        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      // Should have all three default tools including query_knowledge_graph
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     });
 
     test("is idempotent - does not create duplicates", async ({
@@ -1453,125 +1452,105 @@ describe("ToolModel", () => {
   });
 
   describe("knowledge graph tool visibility", () => {
-    test("getMcpToolsByAgent excludes query_knowledge_graph when KG is not configured", async ({
+    test("getMcpToolsByAgent excludes query_knowledge_graph when agent has no KG assigned", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue(undefined);
+      // Create agent WITHOUT a knowledgeGraphId
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
 
-      try {
-        const agent = await makeAgent();
-        await seedAndAssignArchestraTools(agent.id);
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
 
-        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
-        const toolNames = tools.map((t) => t.name);
-
-        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-        // Other Archestra tools should still be present
-        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      // Other Archestra tools should still be present
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
-    test("getMcpToolsByAgent includes query_knowledge_graph when KG is configured", async ({
+    test("getMcpToolsByAgent includes query_knowledge_graph when agent has a KG assigned", async ({
       makeAgent,
+      makeOrganization,
+      makeKnowledgeGraph,
       seedAndAssignArchestraTools,
     }) => {
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue("lightrag");
+      // Create an organization and knowledge graph
+      const org = await makeOrganization();
+      const kg = await makeKnowledgeGraph(org.id);
 
-      try {
-        const agent = await makeAgent();
-        await seedAndAssignArchestraTools(agent.id);
+      // Create agent and assign the KG
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .update(schema.agentsTable)
+        .set({ knowledgeGraphId: kg.id })
+        .where(eq(schema.agentsTable.id, agent.id));
 
-        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
-        const toolNames = tools.map((t) => t.name);
+      await seedAndAssignArchestraTools(agent.id);
 
-        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
+
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     });
 
-    test("findByCatalogId excludes query_knowledge_graph when KG is not configured", async ({
+    test("findByCatalogId always excludes query_knowledge_graph (no agent context)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue(undefined);
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
 
-      try {
-        const agent = await makeAgent();
-        await seedAndAssignArchestraTools(agent.id);
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+      const toolNames = tools.map((t) => t.name);
 
-        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
-        const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
-        const toolNames = tools.map((t) => t.name);
-
-        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
 
-    test("findByCatalogId includes query_knowledge_graph when KG is configured", async ({
+    test("findByCatalogId excludes query_knowledge_graph even when KG exists in the system", async ({
       makeAgent,
+      makeOrganization,
+      makeKnowledgeGraph,
       seedAndAssignArchestraTools,
     }) => {
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue("lightrag");
+      // Even with a KG in the system, findByCatalogId has no agent context
+      // so it always filters out the KG tool
+      const org = await makeOrganization();
+      await makeKnowledgeGraph(org.id);
 
-      try {
-        const agent = await makeAgent();
-        await seedAndAssignArchestraTools(agent.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await seedAndAssignArchestraTools(agent.id);
 
-        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
-        const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
-        const toolNames = tools.map((t) => t.name);
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+      const toolNames = tools.map((t) => t.name);
 
-        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     });
 
-    test("assignArchestraToolsToAgent excludes query_knowledge_graph when KG is not configured", async ({
+    test("assignArchestraToolsToAgent excludes query_knowledge_graph when agent has no KG assigned", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      const getProviderTypeSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
-        .mockReturnValue(undefined);
+      // Seed tools first (seeding is independent of visibility filtering)
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
 
-      try {
-        // Seed tools first (seeding is independent of visibility filtering)
-        const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
-        await seedAndAssignArchestraTools(tempAgent.id);
+      // Create a new agent WITHOUT a knowledgeGraphId and assign all Archestra tools
+      const agent = await makeAgent({ name: "Test Agent" });
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      await ToolModel.assignArchestraToolsToAgent(
+        agent.id,
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
 
-        // Create a new agent and assign all Archestra tools
-        const agent = await makeAgent({ name: "Test Agent" });
-        const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
-        await ToolModel.assignArchestraToolsToAgent(
-          agent.id,
-          ARCHESTRA_MCP_CATALOG_ID,
-        );
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
 
-        const tools = await ToolModel.getMcpToolsByAgent(agent.id);
-        const toolNames = tools.map((t) => t.name);
-
-        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
-        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-      } finally {
-        getProviderTypeSpy.mockRestore();
-      }
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
   });
 

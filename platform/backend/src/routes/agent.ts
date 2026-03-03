@@ -6,7 +6,7 @@ import {
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
 } from "@/auth";
-import { AgentLabelModel, AgentModel } from "@/models";
+import { AgentLabelModel, AgentModel, KnowledgeGraphModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   AgentVersionsResponseSchema,
@@ -275,6 +275,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Validate knowledgeGraphId if provided
+      if (body.knowledgeGraphId) {
+        if (agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge graphs cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const kg = await KnowledgeGraphModel.findById(body.knowledgeGraphId);
+        if (!kg || kg.organizationId !== organizationId) {
+          throw new ApiError(404, "Knowledge graph not found");
+        }
+      }
+
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
@@ -402,6 +416,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Prevent downgrading shared agents to personal
       if (body.scope === "personal" && existingAgent.scope !== "personal") {
         throw new ApiError(400, "Shared agents cannot be made personal");
+      }
+
+      // Validate knowledgeGraphId if provided
+      if (body.knowledgeGraphId) {
+        if (existingAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge graphs cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const kg = await KnowledgeGraphModel.findById(body.knowledgeGraphId);
+        if (!kg || kg.organizationId !== organizationId) {
+          throw new ApiError(404, "Knowledge graph not found");
+        }
       }
 
       // Built-in agent guard: restrict which fields can be modified

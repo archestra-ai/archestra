@@ -42,6 +42,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/agent.query";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
@@ -129,9 +130,10 @@ const PromptInputContent = ({
   const supportedTypesDescription =
     getSupportedFileTypesDescription(inputModalities);
 
-  // Check if agent has tools or delegations
+  // Check if agent has tools, delegations, or a knowledge graph
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
+  const { data: agentData } = useProfile(agentId);
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
@@ -364,6 +366,10 @@ const PromptInputContent = ({
         <div className="flex items-center gap-2">
           <KnowledgeGraphUploadIndicator
             attachmentCount={controller.attachments.files.length}
+            hasKnowledgeGraph={
+              !!(agentData as Record<string, unknown> | null | undefined)
+                ?.knowledgeGraphId
+            }
           />
           <PromptInputSpeechButton
             textareaRef={textareaRef}

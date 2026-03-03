@@ -926,23 +926,9 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 ### Knowledge Graph Configuration
 
-These environment variables configure the Knowledge Graph feature, which automatically ingests documents uploaded via chat into a knowledge graph for enhanced retrieval. See [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.
+These environment variables configure the Knowledge Graph feature. Knowledge graphs are configured per-agent in the Archestra UI — see [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.
 
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER`** - Knowledge graph provider to use.
-  - Default: Not set (feature disabled)
-  - Options: `lightrag`
-  - Required to enable the knowledge graph feature
-
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL`** - URL of the LightRAG API server.
-  - Required when: `ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag`
-  - Example: `http://lightrag:9621`
-  - The LightRAG server must be accessible from the Archestra backend
-
-- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
-  - Optional: Only required if your LightRAG server is configured with authentication
-  - Note: Keep this value secure; do not commit to version control
-
-- **`ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
   - Default: `archestra-connectors`
   - Connectors (Jira, Confluence) use K8s CronJobs to run scheduled syncs into knowledge graphs
   - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)

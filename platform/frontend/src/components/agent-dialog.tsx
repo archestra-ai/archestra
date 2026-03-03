@@ -98,6 +98,7 @@ import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
+import { useKnowledgeGraphs } from "@/lib/knowledge-graph.query";
 import { cn } from "@/lib/utils";
 
 const { useIdentityProviders } = config.enterpriseLicenseActivated
@@ -572,6 +573,8 @@ export function AgentDialog({
   );
   const { data: features } = useFeatures();
   const { data: identityProviders = [] } = useIdentityProviders();
+  const { data: knowledgeGraphsData } = useKnowledgeGraphs();
+  const knowledgeGraphs = knowledgeGraphsData?.data ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
     includeKeyId: agentLlmApiKeyId,
@@ -619,6 +622,7 @@ export function AgentDialog({
     null,
   );
   const [scope, setScope] = useState<"personal" | "team" | "org">("personal");
+  const [knowledgeGraphId, setKnowledgeGraphId] = useState<string | null>(null);
   const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
     useState(false);
 
@@ -665,6 +669,12 @@ export function AgentDialog({
         );
         // Identity provider ID (for MCP Gateway JWKS auth)
         setIdentityProviderId(agentData.identityProviderId ?? null);
+        // Knowledge graph
+        setKnowledgeGraphId(
+          ((agentData as Record<string, unknown>).knowledgeGraphId as
+            | string
+            | null) ?? null,
+        );
         // Scope
         setScope(
           ((agentData as Record<string, unknown>).scope as
@@ -697,6 +707,7 @@ export function AgentDialog({
         setLabels([]);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(null);
+        setKnowledgeGraphId(null);
         setScope("personal");
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
@@ -927,6 +938,9 @@ export function AgentDialog({
             ...(agentType === "mcp_gateway" && {
               identityProviderId: identityProviderId || null,
             }),
+            ...(agentType !== "llm_proxy" && {
+              knowledgeGraphId: knowledgeGraphId || null,
+            }),
             teams: assignedTeamIds,
             labels: updatedLabels,
             scope,
@@ -952,6 +966,9 @@ export function AgentDialog({
           }),
           ...(agentType === "mcp_gateway" && {
             identityProviderId: identityProviderId || null,
+          }),
+          ...(agentType !== "llm_proxy" && {
+            knowledgeGraphId: knowledgeGraphId || null,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1013,6 +1030,7 @@ export function AgentDialog({
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
     identityProviderId,
+    knowledgeGraphId,
     scope,
     agentType,
     agent,
@@ -1572,6 +1590,36 @@ export function AgentDialog({
                       {identityProviders.map((provider) => (
                         <SelectItem key={provider.id} value={provider.id}>
                           {provider.providerId} ({provider.issuer})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Knowledge Graph (not for LLM Proxy) */}
+              {agentType !== "llm_proxy" && knowledgeGraphs.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Knowledge Graph</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Assign a knowledge graph to enable the{" "}
+                    <code className="text-xs">query_knowledge_graph</code> tool
+                    and automatic document ingestion from chat uploads.
+                  </p>
+                  <Select
+                    value={knowledgeGraphId ?? "none"}
+                    onValueChange={(value) =>
+                      setKnowledgeGraphId(value === "none" ? null : value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="No Knowledge Graph" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Knowledge Graph</SelectItem>
+                      {knowledgeGraphs.map((kg) => (
+                        <SelectItem key={kg.id} value={kg.id}>
+                          {kg.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

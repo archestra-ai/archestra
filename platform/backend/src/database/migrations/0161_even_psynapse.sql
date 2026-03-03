@@ -1,0 +1,2 @@
+ALTER TABLE "agents" ADD COLUMN "knowledge_graph_id" uuid;--> statement-breakpoint
+ALTER TABLE "agents" ADD CONSTRAINT "agents_knowledge_graph_id_knowledge_graphs_id_fk" FOREIGN KEY ("knowledge_graph_id") REFERENCES "public"."knowledge_graphs"("id") ON DELETE set null ON UPDATE no action;

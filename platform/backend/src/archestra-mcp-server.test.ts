@@ -5,7 +5,11 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import * as knowledgeGraph from "@/knowledge-graph";
-import { AgentModel, InternalMcpCatalogModel } from "@/models";
+import {
+  AgentModel,
+  InternalMcpCatalogModel,
+  KnowledgeGraphModel,
+} from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
 import {
@@ -762,11 +766,11 @@ describe("executeArchestraTool", () => {
       );
     });
 
-    test("should return error when provider is not configured", async () => {
-      // Mock getKnowledgeGraphProvider to return null (not configured)
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
-        .mockReturnValue(null);
+    test("should return error when no knowledge graph is assigned to the agent", async () => {
+      // Mock AgentModel.findById to return agent without knowledgeGraphId
+      const agentSpy = vi
+        .spyOn(AgentModel, "findById")
+        .mockResolvedValue({ id: testAgent.id, knowledgeGraphId: null } as any);
 
       try {
         const result = await executeArchestraTool(
@@ -777,10 +781,36 @@ describe("executeArchestraTool", () => {
 
         expect(result.isError).toBe(true);
         expect((result.content[0] as any).text).toContain(
-          "Knowledge graph provider is not configured",
+          "No knowledge graph assigned to this agent",
         );
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+      }
+    });
+
+    test("should return error when assigned knowledge graph is not found", async () => {
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-nonexistent",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue(null);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "test query" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          "The assigned knowledge graph could not be found",
+        );
+      } finally {
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
       }
     });
 
@@ -807,9 +837,20 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      // Mock getKnowledgeGraphProvider to return our mock provider
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      // Mock agent lookup, KG lookup, and provider creation
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -829,8 +870,9 @@ describe("executeArchestraTool", () => {
           { mode: "hybrid" },
         );
       } finally {
-        // Restore the original implementation
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -851,8 +893,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -872,7 +925,9 @@ describe("executeArchestraTool", () => {
           { mode: "hybrid" },
         );
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -893,8 +948,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -912,7 +978,9 @@ describe("executeArchestraTool", () => {
           "Connection to LightRAG failed",
         );
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -938,8 +1006,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -966,7 +1045,9 @@ describe("executeArchestraTool", () => {
           { mode: "naive" },
         );
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -992,8 +1073,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -1019,7 +1111,9 @@ describe("executeArchestraTool", () => {
           { mode: "naive" },
         );
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -1040,8 +1134,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -1058,7 +1163,9 @@ describe("executeArchestraTool", () => {
         // Should only call once — no fallback since already naive
         expect(mockProvider.queryDocument).toHaveBeenCalledTimes(1);
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -1079,8 +1186,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -1097,7 +1215,9 @@ describe("executeArchestraTool", () => {
         // Should call twice: hybrid then naive fallback
         expect(mockProvider.queryDocument).toHaveBeenCalledTimes(2);
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -1124,8 +1244,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -1142,7 +1273,9 @@ describe("executeArchestraTool", () => {
         );
         expect(mockProvider.queryDocument).toHaveBeenCalledTimes(2);
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
 
@@ -1163,8 +1296,19 @@ describe("executeArchestraTool", () => {
         getHealth: vi.fn().mockResolvedValue({ healthy: true }),
       };
 
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+      const agentSpy = vi.spyOn(AgentModel, "findById").mockResolvedValue({
+        id: testAgent.id,
+        knowledgeGraphId: "kg-123",
+      } as any);
+      const kgSpy = vi
+        .spyOn(KnowledgeGraphModel, "findById")
+        .mockResolvedValue({
+          id: "kg-123",
+          provider: "lightrag",
+          config: { apiUrl: "http://localhost:9621" },
+        } as any);
+      const createProviderSpy = vi
+        .spyOn(knowledgeGraph, "createKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
       try {
@@ -1181,7 +1325,9 @@ describe("executeArchestraTool", () => {
         // Should only call once — no fallback needed
         expect(mockProvider.queryDocument).toHaveBeenCalledTimes(1);
       } finally {
-        getProviderSpy.mockRestore();
+        agentSpy.mockRestore();
+        kgSpy.mockRestore();
+        createProviderSpy.mockRestore();
       }
     });
   });

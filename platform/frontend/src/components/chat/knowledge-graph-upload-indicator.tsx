@@ -6,28 +6,26 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFeatureValue } from "@/lib/features.hook";
 
 interface KnowledgeGraphUploadIndicatorProps {
   /** Number of files attached */
   attachmentCount: number;
+  /** Whether the current agent has a knowledge graph assigned */
+  hasKnowledgeGraph: boolean;
 }
 
 /**
- * Shows a small indicator when files are attached and a knowledge graph provider is configured.
+ * Shows a small indicator when files are attached and the agent has a knowledge graph assigned.
  * Displays a database icon with short text, and a tooltip with more details on hover.
  */
 export function KnowledgeGraphUploadIndicator({
   attachmentCount,
+  hasKnowledgeGraph,
 }: KnowledgeGraphUploadIndicatorProps) {
-  const knowledgeGraph = useFeatureValue("knowledgeGraph");
-
-  // Don't show if no knowledge graph is configured or no files are attached
-  if (!knowledgeGraph?.enabled || attachmentCount === 0) {
+  // Don't show if no knowledge graph is assigned or no files are attached
+  if (!hasKnowledgeGraph || attachmentCount === 0) {
     return null;
   }
-
-  const displayName = knowledgeGraph.displayName ?? "Knowledge Graph";
 
   return (
     <Tooltip>
@@ -40,8 +38,8 @@ export function KnowledgeGraphUploadIndicator({
       <TooltipContent side="top" className="max-w-xs">
         <p>
           {attachmentCount === 1
-            ? `This file will be ingested into ${displayName} for enhanced search and retrieval.`
-            : `These ${attachmentCount} files will be ingested into ${displayName} for enhanced search and retrieval.`}
+            ? "This file will be ingested into the Knowledge Graph for enhanced search and retrieval."
+            : `These ${attachmentCount} files will be ingested into the Knowledge Graph for enhanced search and retrieval.`}
         </p>
       </TooltipContent>
     </Tooltip>

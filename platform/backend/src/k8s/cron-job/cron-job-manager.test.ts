@@ -152,32 +152,19 @@ describe("CronJobManager", () => {
     });
 
     test("skips CronJob creation when connector image is not configured", async () => {
-      vi.resetModules();
-      vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
-        return {
-          default: {
-            ...actual.default,
-            orchestrator: {
-              kubernetes: {
-                namespace: "test-connector-namespace",
-                kubeconfig: undefined,
-                loadKubeconfigFromCurrentCluster: false,
-              },
-              connectorNamespace: "test-connector-namespace",
-              connectorImage: "",
-            },
-          },
-        };
-      });
+      const manager = await getManager();
+      const { default: mockedConfig } = await import("@/config");
+      const original = mockedConfig.orchestrator.connectorImage;
+      mockedConfig.orchestrator.connectorImage = "";
 
-      const { cronJobManager } = await import("./cron-job-manager");
-      cronJobManager.initialize();
+      try {
+        await manager.createOrUpdateCronJob(defaultParams);
 
-      await cronJobManager.createOrUpdateCronJob(defaultParams);
-
-      expect(mockReadNamespacedCronJob).not.toHaveBeenCalled();
-      expect(mockCreateNamespacedCronJob).not.toHaveBeenCalled();
+        expect(mockReadNamespacedCronJob).not.toHaveBeenCalled();
+        expect(mockCreateNamespacedCronJob).not.toHaveBeenCalled();
+      } finally {
+        mockedConfig.orchestrator.connectorImage = original;
+      }
     });
 
     test("forwards ARCHESTRA_* and DATABASE_URL env vars to CronJob containers", async () => {

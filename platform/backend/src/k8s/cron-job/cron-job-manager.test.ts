@@ -45,10 +45,11 @@ vi.mock("@/config", async (importOriginal) => {
       ...actual.default,
       orchestrator: {
         kubernetes: {
-          namespace: "test-namespace",
+          namespace: "test-connector-namespace",
           kubeconfig: undefined,
           loadKubeconfigFromCurrentCluster: false,
         },
+        connectorNamespace: "test-connector-namespace",
       },
     },
   };
@@ -84,7 +85,7 @@ describe("CronJobManager", () => {
 
       expect(mockCreateNamespacedCronJob).toHaveBeenCalledTimes(1);
       const call = mockCreateNamespacedCronJob.mock.calls[0][0];
-      expect(call.namespace).toBe("test-namespace");
+      expect(call.namespace).toBe("test-connector-namespace");
       expect(call.body.metadata.name).toContain("archestra-connector");
       expect(call.body.spec.schedule).toBe("0 */6 * * *");
       expect(call.body.spec.concurrencyPolicy).toBe("Forbid");
@@ -142,7 +143,7 @@ describe("CronJobManager", () => {
       const container =
         call.body.spec.jobTemplate.spec.template.spec.containers[0];
       expect(container.image).toBe("curlimages/curl:latest");
-      expect(container.name).toBe("sync");
+      expect(container.name).toBe("worker");
     });
   });
 
@@ -158,7 +159,7 @@ describe("CronJobManager", () => {
       expect(mockDeleteNamespacedCronJob).toHaveBeenCalledWith(
         expect.objectContaining({
           name: expect.stringContaining("archestra-connector"),
-          namespace: "test-namespace",
+          namespace: "test-connector-namespace",
         }),
       );
     });
@@ -195,7 +196,7 @@ describe("CronJobManager", () => {
       expect(mockPatchNamespacedCronJob).toHaveBeenCalledWith(
         expect.objectContaining({
           body: { spec: { suspend: true } },
-          namespace: "test-namespace",
+          namespace: "test-connector-namespace",
         }),
       );
     });
@@ -212,7 +213,7 @@ describe("CronJobManager", () => {
       expect(mockPatchNamespacedCronJob).toHaveBeenCalledWith(
         expect.objectContaining({
           body: { spec: { suspend: false } },
-          namespace: "test-namespace",
+          namespace: "test-connector-namespace",
         }),
       );
     });

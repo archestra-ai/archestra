@@ -133,3 +133,74 @@ export function isK8sConfigured(): boolean {
 export function getK8sNamespace(): string {
   return namespace || "default";
 }
+
+/**
+ * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
+ * K8s client errors can have `statusCode`, `code`, or `response.statusCode` set to 404.
+ */
+export function isK8sNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  if ("statusCode" in error && error.statusCode === 404) {
+    return true;
+  }
+
+  if ("code" in error && error.code === 404) {
+    return true;
+  }
+
+  if (
+    "response" in error &&
+    (error as { response: { statusCode: number } }).response?.statusCode === 404
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Ensures a string is RFC 1123 compliant for Kubernetes DNS subdomain names and label values.
+ *
+ * According to RFC 1123, Kubernetes DNS subdomain names must:
+ * - contain no more than 253 characters
+ * - contain only lowercase alphanumeric characters, '-' or '.'
+ * - start with an alphanumeric character
+ * - end with an alphanumeric character
+ */
+export function ensureStringIsRfc1123Compliant(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9.-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/\.+/g, ".")
+    .replace(/^[^a-z0-9]+/, "")
+    .replace(/[^a-z0-9]+$/, "");
+}
+
+/**
+ * Sanitizes a single label value to ensure it's RFC 1123 compliant,
+ * no longer than 63 characters, and ends with an alphanumeric character.
+ */
+export function sanitizeLabelValue(value: string): string {
+  return ensureStringIsRfc1123Compliant(value)
+    .substring(0, 63)
+    .replace(/[^a-z0-9]+$/, "");
+}
+
+/**
+ * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
+ * Also ensures values are no longer than 63 characters as per Kubernetes label requirements.
+ */
+export function sanitizeMetadataLabels(
+  labels: Record<string, string>,
+): Record<string, string> {
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(labels)) {
+    sanitized[ensureStringIsRfc1123Compliant(key)] = sanitizeLabelValue(value);
+  }
+  return sanitized;
+}

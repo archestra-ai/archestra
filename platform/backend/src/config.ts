@@ -698,6 +698,9 @@ const config = {
       k8sNodeHost:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST || undefined,
     },
+    connectorNamespace:
+      process.env.ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE ||
+      "archestra-connectors",
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

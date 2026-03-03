@@ -10,6 +10,12 @@ import {
 } from "@shared";
 import type z from "zod";
 import config from "@/config";
+import {
+  ensureStringIsRfc1123Compliant,
+  isK8sNotFoundError,
+  sanitizeLabelValue,
+  sanitizeMetadataLabels,
+} from "@/k8s/shared";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
@@ -30,19 +36,6 @@ const {
 interface ContainerEnvResult {
   envVars: k8s.V1EnvVar[];
   mountedSecrets: Array<{ key: string }>;
-}
-
-/**
- * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
- * K8s client errors can have either `statusCode` or `code` property set to 404.
- */
-function isK8s404Error(error: unknown): boolean {
-  return (
-    error !== null &&
-    typeof error === "object" &&
-    (("statusCode" in error && error.statusCode === 404) ||
-      ("code" in error && error.code === 404))
-  );
 }
 
 /**
@@ -277,39 +270,17 @@ export default class K8sDeployment {
    * - end with an alphanumeric character
    */
   static ensureStringIsRfc1123Compliant(input: string): string {
-    return input
-      .toLowerCase()
-      .replace(/\s+/g, "-") // replace any whitespace with hyphens
-      .replace(/[^a-z0-9.-]/g, "") // remove invalid characters
-      .replace(/-+/g, "-") // collapse consecutive hyphens
-      .replace(/\.+/g, ".") // collapse consecutive dots
-      .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
-      .replace(/[^a-z0-9]+$/, ""); // remove trailing non-alphanumeric
+    return ensureStringIsRfc1123Compliant(input);
   }
 
-  /**
-   * Sanitizes a single label value to ensure it's RFC 1123 compliant,
-   * no longer than 63 characters, and ends with an alphanumeric character.
-   */
   static sanitizeLabelValue(value: string): string {
-    return K8sDeployment.ensureStringIsRfc1123Compliant(value)
-      .substring(0, 63)
-      .replace(/[^a-z0-9]+$/, "");
+    return sanitizeLabelValue(value);
   }
 
-  /**
-   * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
-   * Also ensures values are no longer than 63 characters as per Kubernetes label requirements.
-   */
   static sanitizeMetadataLabels(
     labels: Record<string, string>,
   ): Record<string, string> {
-    const sanitized: Record<string, string> = {};
-    for (const [key, value] of Object.entries(labels)) {
-      sanitized[K8sDeployment.ensureStringIsRfc1123Compliant(key)] =
-        K8sDeployment.sanitizeLabelValue(value);
-    }
-    return sanitized;
+    return sanitizeMetadataLabels(labels);
   }
 
   /**
@@ -456,7 +427,7 @@ export default class K8sDeployment {
       );
     } catch (error: unknown) {
       // If secret doesn't exist (404), that's okay - it may have been deleted already or never created
-      if (isK8s404Error(error)) {
+      if (isK8sNotFoundError(error)) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -501,7 +472,7 @@ export default class K8sDeployment {
       );
     } catch (error: unknown) {
       // If service doesn't exist (404), that's okay - it may have been deleted already or never created
-      if (isK8s404Error(error)) {
+      if (isK8sNotFoundError(error)) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -676,7 +647,7 @@ export default class K8sDeployment {
         }
       }
     } catch (error: unknown) {
-      if (isK8s404Error(error)) {
+      if (isK8sNotFoundError(error)) {
         return;
       }
       logger.error(
@@ -1481,7 +1452,7 @@ export default class K8sDeployment {
         }
       } catch (error: unknown) {
         // Ignore 404, propagate others
-        if (!isK8s404Error(error)) {
+        if (!isK8sNotFoundError(error)) {
           logger.warn(
             { err: error },
             `Error checking for legacy pod ${this.deploymentName}`,
@@ -1524,7 +1495,7 @@ export default class K8sDeployment {
         return;
       } catch (error: unknown) {
         // Deployment doesn't exist, we'll create it below
-        if (!isK8s404Error(error)) {
+        if (!isK8sNotFoundError(error)) {
           throw error;
         }
         // 404 means deployment doesn't exist
@@ -1947,7 +1918,7 @@ export default class K8sDeployment {
         return;
       } catch (error: unknown) {
         // Service doesn't exist, we'll create it below
-        if (!isK8s404Error(error)) {
+        if (!isK8sNotFoundError(error)) {
           throw error;
         }
       }
@@ -2170,7 +2141,7 @@ export default class K8sDeployment {
       this.state = "not_created";
     } catch (error: unknown) {
       // If deployment doesn't exist (404), that's okay - it may have been deleted already
-      if (isK8s404Error(error)) {
+      if (isK8sNotFoundError(error)) {
         logger.info(`Deployment ${this.deploymentName} already deleted`);
         this.state = "not_created";
         return;
@@ -2217,7 +2188,7 @@ export default class K8sDeployment {
       );
 
       // If pod doesn't exist (404), return a helpful message
-      if (isK8s404Error(error)) {
+      if (isK8sNotFoundError(error)) {
         return "Pod not found";
       }
       throw error;

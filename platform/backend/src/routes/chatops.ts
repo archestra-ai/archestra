@@ -1486,7 +1486,7 @@ async function sendAgentSelectionCard(params: {
   message: IncomingChatMessage;
   isWelcome: boolean;
   providerContext?: unknown;
-  isDm?: boolean;
+  isDm: boolean;
 }): Promise<void> {
   const agents = await chatOpsManager.getAccessibleChatopsAgents({
     senderEmail: params.message.senderEmail,

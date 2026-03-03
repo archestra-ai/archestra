@@ -68,17 +68,20 @@ export class ChatOpsManager {
    * When isDm=true, includes the user's own personal agents.
    * When isDm=false (default), excludes all personal agents since channels are shared.
    */
-  async getAccessibleChatopsAgents(params: {
+  async getAccessibleChatopsAgents({
+    senderEmail,
+    isDm,
+  }: {
     senderEmail?: string;
-    isDm?: boolean;
+    isDm: boolean;
   }): Promise<{ id: string; name: string }[]> {
-    const user = params.senderEmail
-      ? await UserModel.findByEmail(params.senderEmail.toLowerCase())
+    const user = senderEmail
+      ? await UserModel.findByEmail(senderEmail.toLowerCase())
       : null;
 
     // For DMs with a known user, include that user's personal agents
     const agents =
-      params.isDm && user
+      isDm && user
         ? await AgentModel.findAllInternalAgentsIncludingPersonal(user.id)
         : await AgentModel.findAllInternalAgents();
 

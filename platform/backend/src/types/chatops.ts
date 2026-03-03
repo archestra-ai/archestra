@@ -331,9 +331,12 @@ export interface ChatOpsEventHandler {
     provider: ChatOpsProvider,
     payload: unknown,
   ): Promise<void>;
-  getAccessibleChatopsAgents(params: {
+  getAccessibleChatopsAgents({
+    senderEmail,
+    isDm,
+  }: {
     senderEmail?: string;
-    isDm?: boolean;
+    isDm: boolean;
   }): Promise<{ id: string; name: string }[]>;
 }
 

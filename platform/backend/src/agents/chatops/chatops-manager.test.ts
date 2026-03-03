@@ -579,6 +579,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "teamuser@example.com",
+      isDm: false,
     });
 
     expect(agents).toHaveLength(1);
@@ -603,7 +604,10 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const manager = new ChatOpsManager();
-    const agents = await manager.getAccessibleChatopsAgents({});
+    const agents = await manager.getAccessibleChatopsAgents({
+      senderEmail: "admin@example.com",
+      isDm: false,
+    });
 
     expect(agents.length).toBeGreaterThanOrEqual(1);
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
@@ -628,6 +632,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "nonexistent@example.com",
+      isDm: false,
     });
 
     // Falls back to all agents when user can't be resolved
@@ -660,6 +665,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "fulladmin@example.com",
+      isDm: false,
     });
 
     // Admin should see all agents
@@ -725,6 +731,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "defaultuser@example.com",
+      isDm: false,
     });
 
     expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);

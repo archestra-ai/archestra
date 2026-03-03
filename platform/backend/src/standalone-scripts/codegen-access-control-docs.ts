@@ -26,6 +26,7 @@ function getResourceDescription(resource: Resource): string {
     member: "Organization members and their roles",
     invitation: "Member invitations and onboarding",
     internalMcpCatalog: "Internal MCP server catalog management",
+    knowledgeGraph: "Knowledge graphs for RAG-based document retrieval",
     mcpServer: "MCP servers for tool integration",
     mcpServerInstallationRequest: "Requests for new MCP server installations",
     mcpToolCall: "Tool execution logs and results",

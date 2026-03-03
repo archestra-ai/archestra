@@ -3,13 +3,13 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import config from "@/config";
-import logger from "@/logging";
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
-} from "@/mcp-server-runtime/k8s-yaml-generator";
-import mcpServerRuntimeManager from "@/mcp-server-runtime/manager";
+} from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import logger from "@/logging";
 import {
   InternalMcpCatalogModel,
   McpCatalogLabelModel,

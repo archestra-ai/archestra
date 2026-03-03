@@ -46,12 +46,12 @@ import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   cleanupKnowledgeGraphProvider,
   initializeKnowledgeGraphProvider,
 } from "@/knowledge-graph";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";

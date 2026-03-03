@@ -28,7 +28,7 @@ const { browserStreamFeature } = await import(
 );
 const { default: websocketService } = await import("@/websocket");
 const { default: McpServerRuntimeManager } = await import(
-  "@/mcp-server-runtime/manager"
+  "@/k8s/mcp-server-runtime/manager"
 );
 
 interface WebSocketClientContext {

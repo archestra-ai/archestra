@@ -10,6 +10,7 @@ export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding
 export type { MsTeamsConfig, SlackConfig } from "./chatops-config";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
+export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as DualLlmConfigModel } from "./dual-llm-config";
@@ -18,6 +19,8 @@ export { default as IncomingEmailSubscriptionModel } from "./incoming-email-subs
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
+export { default as KnowledgeGraphModel } from "./knowledge-graph";
+export { default as KnowledgeGraphConnectorModel } from "./knowledge-graph-connector";
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpHttpSessionModel } from "./mcp-http-session";

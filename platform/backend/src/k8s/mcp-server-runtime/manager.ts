@@ -1,7 +1,9 @@
-import * as fs from "node:fs";
-import * as k8s from "@kubernetes/client-node";
-import { Attach } from "@kubernetes/client-node";
-import config from "@/config";
+import type * as k8s from "@kubernetes/client-node";
+import {
+  createK8sClients,
+  loadKubeConfig,
+  validateKubeconfig,
+} from "@/k8s/shared";
 import logger from "@/logging";
 import {
   InternalMcpCatalogModel,
@@ -21,76 +23,16 @@ import type {
   McpServerContainerLogs,
 } from "./schemas";
 
-const {
-  orchestrator: {
-    kubernetes: { namespace, kubeconfig, loadKubeconfigFromCurrentCluster },
-  },
-} = config;
-
-/**
- * Validates kubeconfig file and throws descriptive errors for various failure scenarios
- */
-export function validateKubeconfig(path?: string) {
-  /**
-   * CASE 1 — No kubeconfig provided
-   */
-  if (!path) {
-    return;
-  }
-
-  /**
-   * CASE 2 — Developer explicitly provided a custom kubeconfig
-   */
-
-  if (!fs.existsSync(path)) {
-    throw new Error(`❌ Kubeconfig file not found at ${path}`);
-  }
-
-  const content = fs.readFileSync(path, "utf8");
-
-  // Try parsing with the official Kubernetes parser
-  const kc = new k8s.KubeConfig();
-  try {
-    kc.loadFromString(content);
-  } catch {
-    throw new Error(`❌ Malformed kubeconfig: could not parse YAML`);
-  }
-
-  // Structural validation
-  if (!kc.clusters || kc.clusters.length === 0) {
-    throw new Error(`❌ Invalid kubeconfig: clusters section missing`);
-  }
-
-  const c0 = kc.clusters[0];
-  if (!c0) {
-    throw new Error(`❌ Invalid kubeconfig: clusters[0] is missing`);
-  }
-
-  if (!c0.name || !c0.server) {
-    throw new Error(
-      `❌ Invalid kubeconfig: cluster entry is missing required fields`,
-    );
-  }
-
-  if (!kc.contexts || kc.contexts.length === 0) {
-    throw new Error(`❌ Invalid kubeconfig: contexts section missing`);
-  }
-
-  if (!kc.users || kc.users.length === 0) {
-    throw new Error(`❌ Invalid kubeconfig: users section missing`);
-  }
-
-  logger.info("✓ Custom kubeconfig validated successfully.");
-}
+// Re-export for backward compatibility
+export { validateKubeconfig };
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
  */
 export class McpServerRuntimeManager {
-  private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
-  private k8sAttach?: Attach;
+  private k8sAttach?: k8s.Attach;
   private k8sLog?: k8s.Log;
   private namespace: string = "default";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
@@ -101,33 +43,15 @@ export class McpServerRuntimeManager {
   onRuntimeStartupError: (error: Error) => void = () => {};
 
   constructor() {
-    this.k8sConfig = new k8s.KubeConfig();
-
-    // Normalize kubeconfig input: treat empty string as undefined
-    const kubeconfigPath =
-      kubeconfig && kubeconfig.trim().length > 0
-        ? kubeconfig.trim()
-        : undefined;
-
     try {
-      // Validate and load kubeconfig based on configuration
-      if (loadKubeconfigFromCurrentCluster) {
-        this.k8sConfig.loadFromCluster();
-        logger.info("Loaded kubeconfig from current cluster");
-      } else if (kubeconfigPath) {
-        validateKubeconfig(kubeconfigPath);
-        this.k8sConfig.loadFromFile(kubeconfigPath);
-        logger.info(`Loaded kubeconfig from ${kubeconfigPath}`);
-      } else {
-        this.k8sConfig.loadFromDefault();
-        logger.info("No kubeconfig provided — using default kubeconfig");
-      }
+      const { kubeConfig, namespace } = loadKubeConfig();
+      const clients = createK8sClients(kubeConfig, namespace);
 
-      this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
-      this.k8sAppsApi = this.k8sConfig.makeApiClient(k8s.AppsV1Api);
-      this.k8sAttach = new Attach(this.k8sConfig);
-      this.k8sLog = new k8s.Log(this.k8sConfig);
-      this.namespace = namespace || this.namespace;
+      this.k8sApi = clients.coreApi;
+      this.k8sAppsApi = clients.appsApi;
+      this.k8sAttach = clients.attach;
+      this.k8sLog = clients.log;
+      this.namespace = clients.namespace;
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";

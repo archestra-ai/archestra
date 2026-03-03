@@ -1,5 +1,5 @@
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { McpServerModel, ToolModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 

@@ -12,6 +12,7 @@ export {
 } from "./chat-api-key";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
+export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
@@ -22,6 +23,8 @@ export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
+export { default as knowledgeGraphsTable } from "./knowledge-graph";
+export { default as knowledgeGraphConnectorsTable } from "./knowledge-graph-connector";
 export { default as labelKeysTable } from "./label-key";
 export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";

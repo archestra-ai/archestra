@@ -13,6 +13,7 @@ export * from "./incoming-email";
 export * from "./interaction";
 export * from "./invitation";
 export * from "./knowledge-graph";
+export * from "./knowledge-graph-connector";
 export * from "./label";
 export * from "./limit";
 export * from "./llm-provider";

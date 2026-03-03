@@ -20,13 +20,17 @@ import {
 import type {
   Agent,
   AgentTool,
+  ConnectorRun,
   InsertAccount,
   InsertAgent,
   InsertChatApiKey,
+  InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
   InsertInvitation,
+  InsertKnowledgeGraph,
+  InsertKnowledgeGraphConnector,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -34,6 +38,8 @@ import type {
   InsertSession,
   InsertTeam,
   InsertUser,
+  KnowledgeGraph,
+  KnowledgeGraphConnector,
   OrganizationRole,
   TeamMember,
   Tool,
@@ -69,6 +75,9 @@ interface TestFixtures {
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
   makeAuthHeaders: typeof makeAuthHeaders;
+  makeKnowledgeGraph: typeof makeKnowledgeGraph;
+  makeKnowledgeGraphConnector: typeof makeKnowledgeGraphConnector;
+  makeConnectorRun: typeof makeConnectorRun;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
@@ -808,6 +817,76 @@ async function makeOAuthRefreshToken(
 }
 
 /**
+ * Creates a test knowledge graph in the database
+ */
+async function makeKnowledgeGraph(
+  organizationId: string,
+  overrides: Partial<
+    Pick<InsertKnowledgeGraph, "name" | "provider" | "config" | "status">
+  > = {},
+): Promise<KnowledgeGraph> {
+  const [result] = await db
+    .insert(schema.knowledgeGraphsTable)
+    .values({
+      organizationId,
+      name: `Test KG ${crypto.randomUUID().substring(0, 8)}`,
+      provider: "lightrag",
+      config: { apiUrl: "http://localhost:9621" },
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Creates a test knowledge graph connector in the database
+ */
+async function makeKnowledgeGraphConnector(
+  knowledgeGraphId: string,
+  organizationId: string,
+  overrides: Partial<
+    Pick<
+      InsertKnowledgeGraphConnector,
+      "name" | "connectorType" | "config" | "schedule" | "enabled"
+    >
+  > = {},
+): Promise<KnowledgeGraphConnector> {
+  const [result] = await db
+    .insert(schema.knowledgeGraphConnectorsTable)
+    .values({
+      knowledgeGraphId,
+      organizationId,
+      name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
+      connectorType: "jira",
+      config: { baseUrl: "https://test.atlassian.net", projectKey: "TEST" },
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Creates a test connector run in the database
+ */
+async function makeConnectorRun(
+  connectorId: string,
+  overrides: Partial<
+    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+  > = {},
+): Promise<ConnectorRun> {
+  const [result] = await db
+    .insert(schema.connectorRunsTable)
+    .values({
+      connectorId,
+      status: "running",
+      startedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
  * Seeds and assigns Archestra tools to an agent.
  * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
  * This is useful for tests that need Archestra tools to be available.
@@ -893,6 +972,15 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAuthHeaders: async ({}, use) => {
     await use(makeAuthHeaders);
+  },
+  makeKnowledgeGraph: async ({}, use) => {
+    await use(makeKnowledgeGraph);
+  },
+  makeKnowledgeGraphConnector: async ({}, use) => {
+    await use(makeKnowledgeGraphConnector);
+  },
+  makeConnectorRun: async ({}, use) => {
+    await use(makeConnectorRun);
   },
   makeConversation: async ({}, use) => {
     await use(makeConversation);

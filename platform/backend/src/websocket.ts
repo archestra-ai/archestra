@@ -17,8 +17,8 @@ import {
 } from "@/auth";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
+import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
-import McpServerRuntimeManager from "@/mcp-server-runtime/manager";
 import { McpServerModel, UserModel } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 

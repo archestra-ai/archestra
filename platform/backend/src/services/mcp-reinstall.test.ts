@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
 // Mock dependencies before other imports
-vi.mock("@/mcp-server-runtime", () => ({
+vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     restartServer: vi.fn(),
     getOrLoadDeployment: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock("@/models", async (importOriginal) => {
   };
 });
 
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";

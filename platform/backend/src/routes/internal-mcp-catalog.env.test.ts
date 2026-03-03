@@ -1,7 +1,7 @@
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
-} from "@/mcp-server-runtime/k8s-yaml-generator";
+} from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import { InternalMcpCatalogModel } from "@/models";
 import { describe, expect, test } from "@/test";
 

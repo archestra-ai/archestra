@@ -58,7 +58,7 @@ const {
   mockGetOrLoadDeployment: vi.fn(),
 }));
 
-vi.mock("@/mcp-server-runtime", () => ({
+vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,

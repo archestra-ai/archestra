@@ -189,7 +189,7 @@ For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we i
 
 ### Frontend: Logs UI
 
-Interaction handlers parse stored request/response data for display in the LLM Proxy Logs UI (`/logs/llm-proxy`).
+Interaction handlers parse stored request/response data for display in the LLM Proxy Logs UI (`/llm/logs`).
 
 | File                                          | Description                                                                                |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------ |

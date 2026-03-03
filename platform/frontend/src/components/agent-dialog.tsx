@@ -1518,7 +1518,7 @@ export function AgentDialog({
                             Users can interact with this agent via email, first
                             run initial set up in{" "}
                             <Link
-                              href="/agent-triggers/email"
+                              href="/agents/triggers/email"
                               className="underline hover:text-foreground"
                             >
                               Agent Triggers

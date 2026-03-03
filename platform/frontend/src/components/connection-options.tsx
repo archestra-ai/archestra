@@ -232,7 +232,7 @@ export function ConnectionOptions({
               {llmProxies && llmProxies.length === 0 ? (
                 <NoAccessMessage
                   canCreate={canCreateLlmProxy}
-                  createHref="/llm-proxies"
+                  createHref="/llm/proxies"
                   createLabel="LLM Proxies"
                 />
               ) : (
@@ -286,7 +286,7 @@ export function ConnectionOptions({
               {mcpGateways && mcpGateways.length === 0 ? (
                 <NoAccessMessage
                   canCreate={canCreateMcpGateway}
-                  createHref="/mcp-gateways"
+                  createHref="/mcp/gateways"
                   createLabel="MCP Gateways"
                 />
               ) : (

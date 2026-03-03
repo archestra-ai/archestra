@@ -1,6 +1,6 @@
 ---
-title: Overview
-category: MCP Gateway
+title: MCP Gateway
+category: MCP
 order: 1
 description: Unified access point for all MCP servers
 lastUpdated: 2025-02-12
@@ -19,8 +19,8 @@ MCP Gateway is the unified access point for all MCP servers in Archestra Platfor
 
 ## To use MCP Gateway:
 
-1. Go to **MCP Registry** and make sure you have at least one MCP server installed.
-2. Go to **MCP Gateways** and create a new gateway or use an existing one.
+1. Go to **MCPs** and make sure you have at least one MCP server installed.
+2. Go to **MCPs > Gateways** and create a new gateway or use an existing one.
 3. Click the pencil icon to open the **Edit MCP Gateway** form.
 4. In the **Tools** section, assign MCP server tools to the MCP Gateway and save the changes by pressing **Update**.
 5. Click the **Connect** icon to get connection instructions.

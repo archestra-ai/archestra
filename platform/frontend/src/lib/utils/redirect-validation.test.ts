@@ -32,9 +32,7 @@ describe("redirect-validation", () => {
       expect(getValidatedRedirectPath("%2Fsettings%2Fteams%2F123")).toBe(
         "/settings/teams/123",
       );
-      expect(getValidatedRedirectPath("%2Flogs%2Fllm-proxy")).toBe(
-        "/logs/llm-proxy",
-      );
+      expect(getValidatedRedirectPath("%2Fllm%2Flogs")).toBe("/llm/logs");
     });
 
     it("should handle paths with query parameters", () => {

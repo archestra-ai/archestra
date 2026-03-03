@@ -375,7 +375,7 @@ export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
  * Used by backend error messages and frontend routing.
  * Append `?install={catalogId}` to auto-open the install dialog.
  */
-export const MCP_CATALOG_INSTALL_PATH = "/mcp-catalog/registry";
+export const MCP_CATALOG_INSTALL_PATH = "/mcp/registry";
 export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
 
 /**

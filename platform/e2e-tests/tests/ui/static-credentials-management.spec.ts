@@ -73,7 +73,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       });
 
       // Go to MCP Registry page
-      await goToPage(page, "/mcp-catalog/registry");
+      await goToPage(page, "/mcp/registry");
 
       // Click connect button for the catalog item
       await page
@@ -207,7 +207,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         }
 
         // Then we revoke first credential in Manage Credentials dialog, then close dialog
-        await goToPage(page, "/mcp-catalog/registry");
+        await goToPage(page, "/mcp/registry");
         await openManageCredentialsDialog(page, catalogItemName);
         await clickButton({ page, options: { name: "Revoke" }, first: true });
         await page.waitForLoadState("domcontentloaded");
@@ -223,7 +223,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           expectedCredentialsAfterRevoke[user].length - 1;
 
         await expect(async () => {
-          await goToPage(page, "/mcp-catalog/registry");
+          await goToPage(page, "/mcp/registry");
           await openManageCredentialsDialog(page, catalogItemName);
           const visibleCredentialsAfterRevoke =
             await getVisibleCredentials(page);
@@ -278,7 +278,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
 
   const install = async (page: Page, canCreateTeamCredential: boolean) => {
     // Go to MCP Registry page
-    await goToPage(page, "/mcp-catalog/registry");
+    await goToPage(page, "/mcp/registry");
     await page.waitForLoadState("domcontentloaded");
     // Click connect button for the catalog item
     await page
@@ -332,7 +332,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     page: Page,
     user: "Admin" | "Editor" | "Member",
   ) => {
-    await goToPage(page, "/mcp-catalog/registry");
+    await goToPage(page, "/mcp/registry");
     await page.waitForLoadState("domcontentloaded");
     // Members can't create team installations (they lack mcpServer:update permission)
     // Both Admin and Editor are in Default Team, so both auto-select Default Team for team install.
@@ -401,7 +401,7 @@ test("Verify tool calling using different static credentials", async ({
   await adminPage.waitForLoadState("domcontentloaded");
 
   // Install test server for editor
-  await goToPage(editorPage, "/mcp-catalog/registry");
+  await goToPage(editorPage, "/mcp/registry");
   await editorPage
     .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
     .click({ timeout: CONNECT_BUTTON_TIMEOUT });

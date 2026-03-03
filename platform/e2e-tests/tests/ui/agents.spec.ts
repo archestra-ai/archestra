@@ -52,7 +52,7 @@ test(
     test.setTimeout(120_000);
 
     const PROXY_NAME = makeRandomString(10, "Test LLM Proxy");
-    await goToPage(page, "/llm-proxies");
+    await goToPage(page, "/llm/proxies");
 
     await page.waitForLoadState("domcontentloaded");
 
@@ -103,7 +103,7 @@ test(
     test.setTimeout(120_000);
 
     const GATEWAY_NAME = makeRandomString(10, "Test MCP Gateway");
-    await goToPage(page, "/mcp-gateways");
+    await goToPage(page, "/mcp/gateways");
 
     await page.waitForLoadState("domcontentloaded");
 

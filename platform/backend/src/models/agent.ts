@@ -12,6 +12,8 @@ import {
   ilike,
   inArray,
   min,
+  ne,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -356,20 +358,60 @@ class AgentModel {
   }
 
   /**
-   * Find all internal agents (excluding built-in agents).
-   * Used to populate the agent selection dropdown in Teams/Slack/etc.
+   * Find all non-personal internal agents (excluding built-in agents).
+   * Used to populate the agent selection dropdown in Teams/Slack/etc channels.
+   * Personal agents are excluded because channels are shared — only org/team
+   * scoped agents make sense for channel assignment.
    */
-  static async findAllInternalAgents(): Promise<Pick<Agent, "id" | "name">[]> {
+  static async findAllInternalAgents(): Promise<
+    Pick<Agent, "id" | "name" | "scope" | "authorId">[]
+  > {
     const agents = await db
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
       })
       .from(schema.agentsTable)
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
           eq(schema.agentsTable.builtIn, false),
+          ne(schema.agentsTable.scope, "personal"),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
+
+    return agents;
+  }
+
+  /**
+   * Find all internal agents including personal ones authored by a specific user.
+   * Used for DM agent selection where personal agents of the current user are allowed.
+   */
+  static async findAllInternalAgentsIncludingPersonal(
+    userId: string,
+  ): Promise<Pick<Agent, "id" | "name" | "scope" | "authorId">[]> {
+    const agents = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          or(
+            ne(schema.agentsTable.scope, "personal"),
+            and(
+              eq(schema.agentsTable.scope, "personal"),
+              eq(schema.agentsTable.authorId, userId),
+            ),
+          ),
         ),
       )
       .orderBy(asc(schema.agentsTable.name));

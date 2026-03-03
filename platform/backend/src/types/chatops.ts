@@ -333,6 +333,7 @@ export interface ChatOpsEventHandler {
   ): Promise<void>;
   getAccessibleChatopsAgents(params: {
     senderEmail?: string;
+    isDm?: boolean;
   }): Promise<{ id: string; name: string }[]>;
 }
 

@@ -1014,7 +1014,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await validateAgentChannelAssignment({
           agentId: request.body.agentId,
           isDm: existing.isDm,
-          dmOwnerEmail: existing.dmOwnerEmail,
           userId: request.user.id,
         });
       }
@@ -1061,7 +1060,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await validateAgentChannelAssignment({
           agentId,
           isDm: true,
-          dmOwnerEmail: userEmail,
           userId: request.user.id,
         });
       }
@@ -1155,7 +1153,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await validateAgentChannelAssignment({
             agentId,
             isDm: true,
-            dmOwnerEmail: request.user.email,
             userId: request.user.id,
           });
         }
@@ -1455,7 +1452,6 @@ function maskValue(value: string): string {
 async function validateAgentChannelAssignment(params: {
   agentId: string;
   isDm: boolean;
-  dmOwnerEmail?: string | null;
   userId: string;
 }): Promise<void> {
   const agent = await AgentModel.findById(params.agentId);

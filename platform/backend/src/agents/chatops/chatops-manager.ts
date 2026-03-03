@@ -30,7 +30,7 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
-import { errorMessage } from "./utils";
+import { errorMessage, isSlackDmChannel } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
@@ -64,18 +64,28 @@ export class ChatOpsManager {
    * If senderEmail is provided and resolves to a user, only returns agents
    * the user has team-based access to. Falls back to all agents if user
    * cannot be resolved (access check still happens at message processing time).
+   *
+   * When isDm=true, includes the user's own personal agents.
+   * When isDm=false (default), excludes all personal agents since channels are shared.
    */
-  async getAccessibleChatopsAgents(params: {
+  async getAccessibleChatopsAgents({
+    senderEmail,
+    isDm,
+  }: {
     senderEmail?: string;
+    isDm: boolean;
   }): Promise<{ id: string; name: string }[]> {
-    const agents = await AgentModel.findAllInternalAgents();
+    const user = senderEmail
+      ? await UserModel.findByEmail(senderEmail.toLowerCase())
+      : null;
 
-    if (!params.senderEmail || agents.length === 0) {
-      return agents;
-    }
+    // For DMs with a known user, include that user's personal agents
+    const agents =
+      isDm && user
+        ? await AgentModel.findAllInternalAgentsIncludingPersonal(user.id)
+        : await AgentModel.findAllInternalAgents();
 
-    const user = await UserModel.findByEmail(params.senderEmail.toLowerCase());
-    if (!user) {
+    if (!user || agents.length === 0) {
       return agents;
     }
 
@@ -370,6 +380,27 @@ export class ChatOpsManager {
       }
     }
 
+    // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
+    // the pending lookup above misses. Try to find an existing DM binding by
+    // email and update its channelId to the new one, preserving the agentId.
+    if (!binding && isDm && message.senderEmail) {
+      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        provider.providerId,
+        message.senderEmail,
+      );
+      if (existingDm) {
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding(
+          existingDm.id,
+          message.channelId,
+          message.workspaceId,
+        );
+        logger.info(
+          { bindingId: existingDm.id, channelId: message.channelId },
+          "[ChatOps] Updated existing DM binding with new channel ID",
+        );
+      }
+    }
+
     if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
@@ -390,7 +421,32 @@ export class ChatOpsManager {
       }
 
       // Show agent selection
-      await this.sendAgentSelectionCard(provider, message, true);
+      await this.sendAgentSelectionCard({
+        provider,
+        message,
+        isWelcome: true,
+        isDm,
+      });
+      return;
+    }
+
+    // Always reply to empty Slack app mentions so users get a response even
+    // when they only tag the bot without additional text.
+    const isEmptySlackAppMention =
+      provider.providerId === "slack" &&
+      message.metadata?.eventType === "app_mention" &&
+      !message.text.trim();
+    if (isEmptySlackAppMention) {
+      // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
+      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
+        message.messageId,
+      );
+      if (isNew) {
+        await provider.sendReply({
+          originalMessage: message,
+          text: "How can I help you?",
+        });
+      }
       return;
     }
 
@@ -446,7 +502,7 @@ export class ChatOpsManager {
     const organizationId = await getDefaultOrganizationId();
 
     // Create or update binding
-    const isDm = selection.channelId.startsWith("D");
+    const isDm = isSlackDmChannel(selection.channelId);
     const channelName = isDm
       ? `Direct Message - ${senderEmail}`
       : await provider.getChannelName(selection.channelId);
@@ -665,13 +721,20 @@ export class ChatOpsManager {
     }
   }
 
-  private async sendAgentSelectionCard(
-    provider: ChatOpsProvider,
-    message: IncomingChatMessage,
-    isWelcome: boolean,
-  ): Promise<void> {
+  private async sendAgentSelectionCard({
+    provider,
+    message,
+    isWelcome,
+    isDm,
+  }: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    isWelcome: boolean;
+    isDm: boolean;
+  }): Promise<void> {
     const agents = await this.getAccessibleChatopsAgents({
       senderEmail: message.senderEmail,
+      isDm,
     });
 
     if (agents.length === 0) {

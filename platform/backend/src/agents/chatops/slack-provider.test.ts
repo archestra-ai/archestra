@@ -320,22 +320,24 @@ describe("SlackProvider.parseWebhookNotification", () => {
     expect(result).toBeNull();
   });
 
-  test("empty text after cleaning bot mention returns null", async () => {
+  test("empty text after cleaning bot mention for app_mention is still processed", async () => {
     const provider = createProvider();
     const payload = makeEventPayload({}, { text: "<@UBOT123>" });
 
     const result = await provider.parseWebhookNotification(payload, {});
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
   });
 
-  test("whitespace-only text after cleaning returns null", async () => {
+  test("whitespace-only text after app_mention is still processed", async () => {
     const provider = createProvider();
     const payload = makeEventPayload({}, { text: "<@UBOT123>   " });
 
     const result = await provider.parseWebhookNotification(payload, {});
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("");
   });
 
   test("thread reply (has thread_ts) returns isThreadReply=true with correct threadId", async () => {

@@ -31,7 +31,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
 } from "./constants";
-import { EventDedupMap, errorMessage } from "./utils";
+import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
 
 /**
  * Slack provider using Slack Web API.
@@ -238,8 +238,7 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const cleanedText = this.cleanBotMention(text);
-
-    if (!cleanedText.trim()) {
+    if (!cleanedText && event.type !== "app_mention") {
       return null;
     }
 
@@ -546,15 +545,26 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     try {
-      const result = await this.client.conversations.list({
-        types: "public_channel,private_channel",
-        exclude_archived: true,
-        limit: 999,
-      });
+      // Paginate through all channels using cursor-based pagination.
+      // Slack API returns at most `limit` channels per page (max 999).
+      const allChannels: NonNullable<
+        Awaited<ReturnType<WebClient["conversations"]["list"]>>["channels"]
+      > = [];
+      let cursor: string | undefined;
 
-      const channels = result.channels || [];
+      do {
+        const result = await this.client.conversations.list({
+          types: "public_channel,private_channel",
+          exclude_archived: true,
+          limit: 999,
+          cursor,
+        });
+        allChannels.push(...(result.channels || []));
+        cursor = result.response_metadata?.next_cursor || undefined;
+      } while (cursor);
+
       // Only include channels where the bot is a member
-      return channels
+      return allChannels
         .filter((ch) => ch.id && ch.is_member)
         .map((ch) => ({
           channelId: ch.id as string,
@@ -707,6 +717,7 @@ class SlackProvider implements ChatOpsProvider {
 
       case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
         // Send agent selection card (visible to all in channel)
+        const isDm = isSlackDmChannel(channelId);
         const message: IncomingChatMessage = {
           messageId: `slack-slash-${Date.now()}`,
           channelId,
@@ -724,6 +735,7 @@ class SlackProvider implements ChatOpsProvider {
         const agents =
           (await this.eventHandler?.getAccessibleChatopsAgents({
             senderEmail,
+            isDm,
           })) ?? [];
 
         if (agents.length === 0) {

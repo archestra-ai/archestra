@@ -441,10 +441,9 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     try {
-      // List all teams the app has access to and find the one containing this channel
-      // Requires Team.ReadBasic.All and Channel.ReadBasic.All application permissions
-      const teamsResponse = await this.graphClient.teams.get();
-      const teams = teamsResponse?.value || [];
+      // List all teams the app has access to and find the one containing this channel.
+      // Requires Team.ReadBasic.All and Channel.ReadBasic.All application permissions.
+      // Paginate through all teams since Graph API defaults to 20 per page.
 
       // Build set of channel IDs to match - both the specific channel and the team hint (often General channel)
       const channelsToMatch = new Set([channelId]);
@@ -452,37 +451,54 @@ class MSTeamsProvider implements ChatOpsProvider {
         channelsToMatch.add(teamChannelHint);
       }
 
-      for (const team of teams) {
-        if (!team.id) continue;
+      let teamsResponse = await this.graphClient.teams.get({
+        queryParameters: { top: 999 },
+      });
 
-        try {
-          const channelsResponse = await this.graphClient.teams
-            .byTeamId(team.id)
-            .channels.get();
-          const channels = channelsResponse?.value || [];
+      while (teamsResponse) {
+        const teams = teamsResponse.value || [];
 
-          // Check if any of the team's channels matches either channelId or teamChannelHint
-          const matchedChannel = channels.find(
-            (ch) => ch.id && channelsToMatch.has(ch.id),
-          );
-          if (matchedChannel) {
-            logger.info(
-              {
-                channelId,
-                matchedChannelId: matchedChannel.id,
-                teamId: team.id,
-                teamName: team.displayName,
-              },
-              "[MSTeamsProvider] Found team for channel",
+        for (const team of teams) {
+          if (!team.id) continue;
+
+          try {
+            const channelsResponse = await this.graphClient.teams
+              .byTeamId(team.id)
+              .channels.get();
+            const channels = channelsResponse?.value || [];
+
+            // Check if any of the team's channels matches either channelId or teamChannelHint
+            const matchedChannel = channels.find(
+              (ch) => ch.id && channelsToMatch.has(ch.id),
             );
-            this.teamIdCache.set(cacheKey, team.id);
-            return team.id;
+            if (matchedChannel) {
+              logger.info(
+                {
+                  channelId,
+                  matchedChannelId: matchedChannel.id,
+                  teamId: team.id,
+                  teamName: team.displayName,
+                },
+                "[MSTeamsProvider] Found team for channel",
+              );
+              this.teamIdCache.set(cacheKey, team.id);
+              return team.id;
+            }
+          } catch (err) {
+            logger.debug(
+              { teamId: team.id, error: errorMessage(err) },
+              "[MSTeamsProvider] Could not access team channels",
+            );
           }
-        } catch (err) {
-          logger.debug(
-            { teamId: team.id, error: errorMessage(err) },
-            "[MSTeamsProvider] Could not access team channels",
-          );
+        }
+
+        // Follow @odata.nextLink for the next page of teams
+        if (teamsResponse.odataNextLink) {
+          teamsResponse = await this.graphClient.teams
+            .withUrl(teamsResponse.odataNextLink)
+            .get();
+        } else {
+          break;
         }
       }
 

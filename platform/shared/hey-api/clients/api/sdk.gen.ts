@@ -708,7 +708,7 @@ export const postApiWebhooksChatopsSlackSlashCommand = <ThrowOnError extends boo
 export const getChatOpsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetChatOpsStatusData, ThrowOnError>) => (options?.client ?? client).get<GetChatOpsStatusResponses, GetChatOpsStatusErrors, ThrowOnError>({ url: '/api/chatops/status', ...options });
 
 /**
- * List all chatops channel bindings
+ * List chatops channel bindings with pagination
  */
 export const listChatOpsBindings = <ThrowOnError extends boolean = false>(options?: Options<ListChatOpsBindingsData, ThrowOnError>) => (options?.client ?? client).get<ListChatOpsBindingsResponses, ListChatOpsBindingsErrors, ThrowOnError>({ url: '/api/chatops/bindings', ...options });
 

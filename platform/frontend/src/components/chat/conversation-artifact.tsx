@@ -1,5 +1,6 @@
 "use client";
 
+import DOMPurify from "dompurify";
 import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
@@ -128,8 +129,8 @@ export function ConversationArtifactPanel({
       return;
     }
 
-    // Get the content HTML
-    const content = contentRef.current.innerHTML;
+    // Get the content HTML and sanitize it before writing to the print window
+    const content = DOMPurify.sanitize(contentRef.current.innerHTML);
 
     // Create a complete HTML document with print-optimized styles
     const printDocument = `

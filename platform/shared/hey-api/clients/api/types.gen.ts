@@ -19817,7 +19817,16 @@ export type GetChatOpsStatusResponse = GetChatOpsStatusResponses[keyof GetChatOp
 export type ListChatOpsBindingsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        provider?: 'ms-teams' | 'slack';
+        workspaceId?: string;
+        search?: string;
+        status?: 'configured' | 'unassigned';
+        limit?: number;
+        offset?: number;
+        sortBy?: 'channelName' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/chatops/bindings';
 };
 
@@ -19884,20 +19893,39 @@ export type ListChatOpsBindingsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        provider: 'ms-teams' | 'slack';
-        channelId: string;
-        workspaceId: string | null;
-        channelName: string | null;
-        workspaceName: string | null;
-        isDm: boolean;
-        dmOwnerEmail: string | null;
-        agentId: string | null;
-        createdAt: string;
-        updatedAt: string;
-    }>;
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            provider: 'ms-teams' | 'slack';
+            channelId: string;
+            workspaceId: string | null;
+            channelName: string | null;
+            workspaceName: string | null;
+            isDm: boolean;
+            dmOwnerEmail: string | null;
+            agentId: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        counts: {
+            configured: number;
+            unassigned: number;
+        };
+        workspaces: Array<{
+            id: string;
+            name: string;
+        }>;
+        hasDmBinding: boolean;
+    };
 };
 
 export type ListChatOpsBindingsResponse = ListChatOpsBindingsResponses[keyof ListChatOpsBindingsResponses];

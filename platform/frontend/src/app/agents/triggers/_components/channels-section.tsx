@@ -11,9 +11,12 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { AgentBadge } from "@/components/agent-badge";
 import { DebouncedInput } from "@/components/debounced-input";
 import Divider from "@/components/divider";
+import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -38,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { useProfiles } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth.query";
 import {
@@ -55,47 +59,56 @@ import type { ProviderConfig } from "./types";
 interface Agent {
   id: string;
   name: string;
+  scope: "personal" | "team" | "org";
+  authorId?: string | null;
 }
-
-type SortField = "channel" | "agent";
-type SortDir = "asc" | "desc";
 
 const VIRTUAL_DM_ID = "__virtual-dm__";
-const STORAGE_PREFIX = "triggers:collapse:";
+const DEFAULT_PAGE_SIZE = 20;
 
-function useCollapsed(key: string, defaultValue: boolean) {
-  const storageKey = STORAGE_PREFIX + key;
-  const [collapsed, setCollapsedState] = useState(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored !== null) return stored === "1";
-    } catch {
-      // SSR or unavailable
-    }
-    return defaultValue;
-  });
-
-  const setCollapsed = useCallback(
-    (value: boolean) => {
-      setCollapsedState(value);
-      try {
-        localStorage.setItem(storageKey, value ? "1" : "0");
-      } catch {
-        // ignore
-      }
-    },
-    [storageKey],
-  );
-
-  return [collapsed, setCollapsed] as const;
-}
+type StatusFilter = "all" | "configured" | "unassigned";
+type SortByColumn = "channelName" | "createdAt";
 
 export function ChannelsSection({
   providerConfig,
 }: {
   providerConfig: ProviderConfig;
 }) {
-  const { data: bindings, isLoading } = useChatOpsBindings();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Read pagination/filter state from URL params
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const searchFromUrl = searchParams.get("search") || "";
+  const statusFromUrl = (searchParams.get("status") as StatusFilter) || "all";
+  const sortByFromUrl =
+    (searchParams.get("sortBy") as SortByColumn) || "channelName";
+  const sortDirectionFromUrl =
+    (searchParams.get("sortDirection") as "asc" | "desc") || "asc";
+  const workspaceIdFromUrl = searchParams.get("workspaceId") || "";
+
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_PAGE_SIZE);
+  const offset = pageIndex * pageSize;
+
+  // Data queries
+  const {
+    data: bindingsResponse,
+    isLoading,
+    isFetching,
+  } = useChatOpsBindings({
+    provider: providerConfig.provider,
+    limit: pageSize,
+    offset,
+    sortBy: sortByFromUrl,
+    sortDirection: sortDirectionFromUrl,
+    search: searchFromUrl || undefined,
+    workspaceId: workspaceIdFromUrl || undefined,
+    status: statusFromUrl !== "all" ? statusFromUrl : undefined,
+  });
+
   const { data: agents } = useProfiles({ filters: { agentType: "agent" } });
   const { data: chatOpsProviders } = useChatOpsStatus();
   const updateMutation = useUpdateChatOpsBinding();
@@ -103,27 +116,8 @@ export function ChannelsSection({
   const dmMutation = useCreateChatOpsDmBinding();
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
 
-  const [selectedWorkspace, setSelectedWorkspaceRaw] = useState<string | null>(
-    null,
-  );
-  const [searchQuery, setSearchQueryRaw] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
-  const setSelectedWorkspace = useCallback(
-    (ws: string | null) => {
-      setSelectedWorkspaceRaw(ws);
-      clearSelection();
-    },
-    [clearSelection],
-  );
-  const setSearchQuery = useCallback(
-    (q: string) => {
-      setSearchQueryRaw(q);
-      clearSelection();
-    },
-    [clearSelection],
-  );
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -148,92 +142,134 @@ export function ChannelsSection({
   const providerStatus =
     chatOpsProviders?.find((p) => p.id === providerConfig.provider) ?? null;
 
-  const providerBindings = useMemo(
-    () => bindings?.filter((b) => b.provider === providerConfig.provider) ?? [],
-    [bindings, providerConfig.provider],
-  );
-
-  // Collect unique workspaces
-  const workspaces = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const b of providerBindings) {
-      if (b.workspaceId && b.workspaceName) {
-        map.set(b.workspaceId, b.workspaceName);
-      }
-    }
-    return Array.from(map, ([id, name]) => ({ id, name }));
-  }, [providerBindings]);
-
+  const bindings = bindingsResponse?.data ?? [];
+  const pagination = bindingsResponse?.pagination;
+  const counts = bindingsResponse?.counts;
+  const workspaces = bindingsResponse?.workspaces ?? [];
+  const hasDmBinding = bindingsResponse?.hasDmBinding ?? false;
   const hasMultipleWorkspaces = workspaces.length > 1;
 
-  // Agent list for picker + lookup map for sorting
+  const totalCount = (counts?.configured ?? 0) + (counts?.unassigned ?? 0);
+
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+
+  // Agent list + map
   const agentList = useMemo(
-    () => (agents ?? []).map((a) => ({ id: a.id, name: a.name })),
+    () =>
+      (agents ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        scope: a.scope,
+        authorId: a.authorId,
+      })),
     [agents],
   );
-  const agentMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const a of agentList) m.set(a.id, a.name);
-    return m;
-  }, [agentList]);
 
-  // Filter by workspace
-  const workspaceBindings = useMemo(() => {
-    if (hasMultipleWorkspaces && selectedWorkspace) {
-      return providerBindings.filter(
-        (b) => b.isDm || b.workspaceId === selectedWorkspace,
-      );
-    }
-    return providerBindings;
-  }, [providerBindings, hasMultipleWorkspaces, selectedWorkspace]);
-
-  // Counters from unfiltered (workspace-filtered + sorted) data — not affected by search
-  const configuredCount = useMemo(
-    () => workspaceBindings.filter((b) => b.agentId).length,
-    [workspaceBindings],
-  );
-  const notConfiguredCount = useMemo(
-    () => workspaceBindings.filter((b) => !b.agentId).length,
-    [workspaceBindings],
+  // For channel rows: exclude personal agents
+  const channelAgentList = useMemo(
+    () => agentList.filter((a) => a.scope !== "personal"),
+    [agentList],
   );
 
-  // Apply search filter (does NOT affect counters)
-  const lowerSearch = searchQuery.toLowerCase();
-  const filteredBindings = useMemo(() => {
-    if (!lowerSearch) return workspaceBindings;
-    return workspaceBindings.filter((b) => {
-      const name = b.isDm
-        ? "direct message"
-        : (b.channelName ?? b.channelId).toLowerCase();
-      return name.includes(lowerSearch);
-    });
-  }, [workspaceBindings, lowerSearch]);
-
-  // Split filtered results into configured / not configured
-  const configured = useMemo(
-    () => filteredBindings.filter((b) => b.agentId),
-    [filteredBindings],
-  );
-  const notConfigured = useMemo(
-    () => filteredBindings.filter((b) => !b.agentId),
-    [filteredBindings],
+  // For DM rows: include only the current user's personal agents + non-personal
+  const dmAgentList = useMemo(
+    () =>
+      agentList.filter(
+        (a) =>
+          a.scope !== "personal" ||
+          (a.scope === "personal" && a.authorId === currentUserId),
+      ),
+    [agentList, currentUserId],
   );
 
-  // Show a virtual DM row when the provider is configured but no DM binding exists yet
-  const hasDmBinding = providerBindings.some((b) => b.isDm);
+  // Virtual DM row logic
   const providerConfigured = providerStatus
     ? !!(providerStatus as { configured?: boolean }).configured
     : false;
+  // Show virtual DM only when: no DM binding exists globally, first page, no search/workspace filter
   const showVirtualDmRow =
     !hasDmBinding &&
     providerConfigured &&
-    (!lowerSearch || "direct message".includes(lowerSearch));
+    pageIndex === 0 &&
+    !searchFromUrl &&
+    statusFromUrl !== "configured" &&
+    !workspaceIdFromUrl;
   const dmDeepLink = providerStatus
     ? (providerConfig.getDmDeepLink?.(providerStatus) ?? null)
     : null;
 
-  // Count virtual DM row in not-configured if shown
-  const virtualDmCount = showVirtualDmRow ? 1 : 0;
+  // URL param updaters
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      // Skip if the value matches what's already in the URL (avoids
+      // React Strict Mode double-effect in DebouncedInput resetting the page)
+      if ((value || "") === searchFromUrl) return;
+      clearSelection();
+      updateUrlParams({ search: value || null, page: "1" });
+    },
+    [updateUrlParams, clearSelection, searchFromUrl],
+  );
+
+  const handleStatusChange = useCallback(
+    (status: StatusFilter) => {
+      clearSelection();
+      updateUrlParams({
+        status: status === "all" ? null : status,
+        page: "1",
+      });
+    },
+    [updateUrlParams, clearSelection],
+  );
+
+  const handleWorkspaceChange = useCallback(
+    (wsId: string | null) => {
+      clearSelection();
+      updateUrlParams({ workspaceId: wsId, page: "1" });
+    },
+    [updateUrlParams, clearSelection],
+  );
+
+  const handleSortToggle = useCallback(
+    (column: SortByColumn) => {
+      clearSelection();
+      if (sortByFromUrl === column) {
+        updateUrlParams({
+          sortDirection: sortDirectionFromUrl === "asc" ? "desc" : "asc",
+          page: "1",
+        });
+      } else {
+        updateUrlParams({ sortBy: column, sortDirection: "asc", page: "1" });
+      }
+    },
+    [sortByFromUrl, sortDirectionFromUrl, updateUrlParams, clearSelection],
+  );
+
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      clearSelection();
+      updateUrlParams({
+        page: String(newPagination.pageIndex + 1),
+        pageSize: String(newPagination.pageSize),
+      });
+    },
+    [updateUrlParams, clearSelection],
+  );
 
   const handleAssignAgent = (bindingId: string, agentId: string | null) => {
     updateMutation.mutate({ id: bindingId, agentId });
@@ -263,28 +299,47 @@ export function ChannelsSection({
     clearSelection();
   };
 
-  const hasAnyChannels = workspaceBindings.length > 0 || showVirtualDmRow;
+  const hasActiveFilters =
+    !!searchFromUrl || statusFromUrl !== "all" || !!workspaceIdFromUrl;
+  const hasAnyChannels = totalCount > 0 || showVirtualDmRow || hasActiveFilters;
+
+  // Selectable IDs on current page
+  const selectableIds = useMemo(() => {
+    const ids = bindings.map((b) => b.id);
+    if (showVirtualDmRow) ids.push(VIRTUAL_DM_ID);
+    return ids;
+  }, [bindings, showVirtualDmRow]);
+  const allChecked =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.has(id));
+  const someChecked =
+    !allChecked && selectableIds.some((id) => selectedIds.has(id));
 
   return (
     <section className="flex flex-col gap-4">
       <div>
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">Channels</h2>
-          {!isLoading && hasAnyChannels && (
-            <div className="flex items-end gap-3 text-xs text-muted-foreground ml-1">
+          <h2 className="text-lg font-semibold relative">
+            Channels
+            {isFetching && (
+              <LoadingSpinner className="h-3 w-3 animate-spin text-muted-foreground absolute right-[-20px] top-[7px]" />
+            )}
+          </h2>
+          {hasAnyChannels && counts && (
+            <div className="flex items-end gap-3 text-xs text-muted-foreground ml-4">
               <span className="inline-flex items-center gap-1.5 text-xs font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                Total: {configuredCount + notConfiguredCount + virtualDmCount}
+                Total: {totalCount}
               </span>
               |
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 opacity-90">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Configured: {configuredCount}
+                Configured: {counts.configured}
               </span>
               |
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 opacity-90">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Unassigned: {notConfiguredCount + virtualDmCount}
+                Unassigned: {counts.unassigned}
               </span>
             </div>
           )}
@@ -302,24 +357,25 @@ export function ChannelsSection({
         </p>
       </div>
 
-      {isLoading ? (
-        <ChannelTableLoading />
+      {isLoading && !bindingsResponse ? (
+        <ChannelTableSkeleton />
       ) : hasAnyChannels ? (
         <>
+          {/* Search + bulk assign */}
           <div className="flex items-center gap-3">
             <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <DebouncedInput
                 placeholder="Search channels..."
-                initialValue={searchQuery}
-                onChange={setSearchQuery}
-                debounceMs={200}
+                initialValue={searchFromUrl}
+                onChange={handleSearchChange}
+                debounceMs={300}
                 className="pl-9"
               />
             </div>
             <div className="ml-auto">
               <BulkAssignButton
-                agents={agentList}
+                agents={channelAgentList}
                 selectedCount={selectedIds.size}
                 isUpdating={bulkMutation.isPending}
                 onAssign={handleBulkAssign}
@@ -327,78 +383,135 @@ export function ChannelsSection({
             </div>
           </div>
 
-          {hasMultipleWorkspaces && (
-            <div className="flex gap-1">
+          {/* Status filter pills */}
+          <div className="flex gap-1 flex-wrap">
+            {(["all", "configured", "unassigned"] as const).map((status) => (
               <Button
+                key={status}
                 variant="ghost"
                 size="sm"
                 className={cn(
                   "h-7 text-xs rounded-full",
-                  !selectedWorkspace && "bg-muted",
+                  statusFromUrl === status && "bg-primary/10 text-primary",
                 )}
-                onClick={() => setSelectedWorkspace(null)}
+                onClick={() => handleStatusChange(status)}
               >
-                All
+                {status === "all"
+                  ? "All"
+                  : status === "configured"
+                    ? "Configured"
+                    : "Unassigned"}
               </Button>
-              {workspaces.map((ws) => (
+            ))}
+
+            {/* Workspace filter */}
+            {hasMultipleWorkspaces && (
+              <>
+                <span className="border-l border-border mx-1 self-stretch" />
                 <Button
-                  key={ws.id}
                   variant="ghost"
                   size="sm"
                   className={cn(
                     "h-7 text-xs rounded-full",
-                    selectedWorkspace === ws.id && "bg-muted",
+                    !workspaceIdFromUrl && "bg-muted",
                   )}
-                  onClick={() => setSelectedWorkspace(ws.id)}
+                  onClick={() => handleWorkspaceChange(null)}
                 >
-                  {ws.name}
+                  All workspaces
                 </Button>
-              ))}
-            </div>
-          )}
+                {workspaces.map((ws) => (
+                  <Button
+                    key={ws.id}
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 text-xs rounded-full",
+                      workspaceIdFromUrl === ws.id && "bg-muted",
+                    )}
+                    onClick={() => handleWorkspaceChange(ws.id)}
+                  >
+                    {ws.name}
+                  </Button>
+                ))}
+              </>
+            )}
+          </div>
 
-          {(configured.length > 0 || (configuredCount > 0 && lowerSearch)) && (
-            <CollapsibleChannelTable
-              variant="configured"
-              storageKey={`${providerConfig.provider}:configured`}
-              bindings={configured}
-              agentList={agentList}
-              providerConfig={providerConfig}
-              providerStatus={providerStatus}
-              onAssignAgent={handleAssignAgent}
-              isUpdating={updateMutation.isPending}
-              agentMap={agentMap}
-              selectedIds={selectedIds}
-              onToggleSelected={toggleSelected}
-              onToggleAll={toggleAll}
-            />
-          )}
+          {/* Table */}
+          <div className="overflow-hidden rounded-md border">
+            <Table>
+              <TableHeader className="bg-muted border-b-2 border-border">
+                <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={
+                        allChecked
+                          ? true
+                          : someChecked
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(checked) =>
+                        toggleAll(selectableIds, !!checked)
+                      }
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      className="h-auto !p-0 font-medium hover:bg-transparent"
+                      onClick={() => handleSortToggle("channelName")}
+                    >
+                      Channel
+                      <SortIcon
+                        isSorted={
+                          sortByFromUrl === "channelName"
+                            ? sortDirectionFromUrl
+                            : false
+                        }
+                      />
+                    </Button>
+                  </TableHead>
+                  <TableHead>Default Agent</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <ChannelRows
+                  bindings={bindings}
+                  channelAgentList={channelAgentList}
+                  dmAgentList={dmAgentList}
+                  providerConfig={providerConfig}
+                  providerStatus={providerStatus}
+                  onAssignAgent={handleAssignAgent}
+                  isUpdating={updateMutation.isPending}
+                  selectedIds={selectedIds}
+                  onToggleSelected={toggleSelected}
+                  showVirtualDmRow={showVirtualDmRow}
+                  dmDeepLink={dmDeepLink}
+                  onDmAssignAgent={handleDmAssignAgent}
+                  isDmUpdating={dmMutation.isPending}
+                />
+              </TableBody>
+            </Table>
+          </div>
 
-          {(notConfigured.length > 0 ||
-            showVirtualDmRow ||
-            (notConfiguredCount > 0 && lowerSearch)) && (
-            <CollapsibleChannelTable
-              variant="not-configured"
-              storageKey={`${providerConfig.provider}:not-configured`}
-              bindings={notConfigured}
-              agentList={agentList}
-              providerConfig={providerConfig}
-              providerStatus={providerStatus}
-              onAssignAgent={handleAssignAgent}
-              isUpdating={updateMutation.isPending}
-              virtualDm={
-                showVirtualDmRow
-                  ? {
-                      deepLink: dmDeepLink,
-                      onAssignAgent: handleDmAssignAgent,
-                      isUpdating: dmMutation.isPending,
-                    }
-                  : undefined
+          {/* Pagination */}
+          {pagination && (
+            <TablePagination
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              total={pagination.total}
+              onPaginationChange={handlePaginationChange}
+              leftContent={
+                selectedIds.size > 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    {selectedIds.size} selected
+                  </span>
+                ) : undefined
               }
-              agentMap={agentMap}
-              selectedIds={selectedIds}
-              onToggleSelected={toggleSelected}
-              onToggleAll={toggleAll}
             />
           )}
         </>
@@ -410,6 +523,195 @@ export function ChannelsSection({
         />
       )}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Channel rows (extracted to keep main component clean)
+// ---------------------------------------------------------------------------
+
+function ChannelRows({
+  bindings,
+  channelAgentList,
+  dmAgentList,
+  providerConfig,
+  providerStatus,
+  onAssignAgent,
+  isUpdating,
+  selectedIds,
+  onToggleSelected,
+  showVirtualDmRow,
+  dmDeepLink,
+  onDmAssignAgent,
+  isDmUpdating,
+}: {
+  bindings: Array<{
+    id: string;
+    channelId: string;
+    channelName?: string | null;
+    workspaceId?: string | null;
+    workspaceName?: string | null;
+    isDm?: boolean;
+    agentId?: string | null;
+  }>;
+  channelAgentList: Agent[];
+  dmAgentList: Agent[];
+  providerConfig: ProviderConfig;
+  providerStatus: {
+    dmInfo?: { botUserId?: string; teamId?: string; appId?: string } | null;
+  } | null;
+  onAssignAgent: (bindingId: string, agentId: string | null) => void;
+  isUpdating: boolean;
+  selectedIds: Set<string>;
+  onToggleSelected: (id: string) => void;
+  showVirtualDmRow: boolean;
+  dmDeepLink: string | null;
+  onDmAssignAgent: (agentId: string | null) => void;
+  isDmUpdating: boolean;
+}) {
+  const { data: session } = useSession();
+  const user = session?.user;
+
+  return (
+    <>
+      {showVirtualDmRow && (
+        <TableRow>
+          <TableCell>
+            <Checkbox
+              checked={selectedIds.has(VIRTUAL_DM_ID)}
+              onCheckedChange={() => onToggleSelected(VIRTUAL_DM_ID)}
+              aria-label="Select Direct Message"
+            />
+          </TableCell>
+          <TableCell>
+            <span className="text-sm font-medium">
+              Direct Message ({user?.email})
+            </span>
+          </TableCell>
+          <TableCell>
+            <AgentPicker
+              agents={dmAgentList}
+              assignedAgent={undefined}
+              isUpdating={isDmUpdating}
+              onAssign={onDmAssignAgent}
+            />
+          </TableCell>
+          <TableCell>
+            <StatusBadge assigned={false} />
+          </TableCell>
+          <TableCell className="pr-2">
+            {dmDeepLink && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                asChild
+              >
+                <a
+                  href={dmDeepLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="!bg-transparent !px-0"
+                >
+                  <Image
+                    src={providerConfig.providerIcon}
+                    alt={providerConfig.providerLabel}
+                    width={14}
+                    height={14}
+                  />
+                  Open
+                </a>
+              </Button>
+            )}
+          </TableCell>
+        </TableRow>
+      )}
+      {bindings.length === 0 && !showVirtualDmRow && (
+        <TableRow>
+          <TableCell
+            colSpan={5}
+            className="h-16 text-center text-sm text-muted-foreground"
+          >
+            No matching channels
+          </TableCell>
+        </TableRow>
+      )}
+      {bindings.map((binding) => {
+        const pickerAgents = binding.isDm ? dmAgentList : channelAgentList;
+        const assignedAgent = binding.agentId
+          ? pickerAgents.find((a) => a.id === binding.agentId)
+          : undefined;
+        const deepLink = binding.isDm
+          ? providerStatus
+            ? providerConfig.getDmDeepLink?.(providerStatus)
+            : null
+          : providerConfig.buildDeepLink(binding);
+
+        return (
+          <TableRow key={binding.id}>
+            <TableCell>
+              <Checkbox
+                checked={selectedIds.has(binding.id)}
+                onCheckedChange={() => onToggleSelected(binding.id)}
+                aria-label={`Select ${binding.channelName ?? binding.channelId}`}
+              />
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-1.5">
+                {binding.isDm ? (
+                  <span className="text-sm font-medium">
+                    Direct Message ({user?.email})
+                  </span>
+                ) : (
+                  <>
+                    <Hash className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="text-sm font-medium truncate">
+                      {binding.channelName ?? binding.channelId}
+                    </span>
+                  </>
+                )}
+              </div>
+            </TableCell>
+            <TableCell>
+              <AgentPicker
+                agents={pickerAgents}
+                assignedAgent={assignedAgent}
+                isUpdating={isUpdating}
+                onAssign={(agentId) => onAssignAgent(binding.id, agentId)}
+              />
+            </TableCell>
+            <TableCell>
+              <StatusBadge assigned={!!binding.agentId} />
+            </TableCell>
+            <TableCell className="pr-2">
+              {deepLink && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  asChild
+                >
+                  <a
+                    href={deepLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="!bg-transparent !px-0"
+                  >
+                    <Image
+                      src={providerConfig.providerIcon}
+                      alt={providerConfig.providerLabel}
+                      width={14}
+                      height={14}
+                    />
+                    Open
+                  </a>
+                </Button>
+              )}
+            </TableCell>
+          </TableRow>
+        );
+      })}
+    </>
   );
 }
 
@@ -493,6 +795,7 @@ function BulkAssignButton({
                   >
                     <Bot className="mr-2 h-4 w-4" />
                     <span className="truncate">{agent.name}</span>
+                    <AgentBadge type={agent.scope} />
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -500,338 +803,6 @@ function BulkAssignButton({
           </Command>
         </PopoverContent>
       </Popover>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Collapsible table section
-// ---------------------------------------------------------------------------
-
-interface BindingRow {
-  id: string;
-  channelId: string;
-  channelName?: string | null;
-  workspaceId?: string | null;
-  workspaceName?: string | null;
-  isDm?: boolean;
-  agentId?: string | null;
-}
-
-function CollapsibleChannelTable({
-  variant,
-  storageKey,
-  bindings,
-  agentList,
-  providerConfig,
-  providerStatus,
-  onAssignAgent,
-  isUpdating,
-  virtualDm,
-  agentMap,
-  selectedIds,
-  onToggleSelected,
-  onToggleAll,
-}: {
-  variant: "configured" | "not-configured";
-  storageKey: string;
-  bindings: BindingRow[];
-  agentList: Agent[];
-  providerConfig: ProviderConfig;
-  providerStatus: {
-    dmInfo?: { botUserId?: string; teamId?: string; appId?: string } | null;
-  } | null;
-  onAssignAgent: (bindingId: string, agentId: string | null) => void;
-  isUpdating: boolean;
-  virtualDm?: {
-    deepLink: string | null;
-    onAssignAgent: (agentId: string | null) => void;
-    isUpdating: boolean;
-  };
-  agentMap: Map<string, string>;
-  selectedIds: Set<string>;
-  onToggleSelected: (id: string) => void;
-  onToggleAll: (ids: string[], checked: boolean) => void;
-}) {
-  const { data: session } = useSession();
-  const user = session?.user;
-  const [collapsed, setCollapsed] = useCollapsed(storageKey, false);
-  const isConfigured = variant === "configured";
-
-  const [sortField, setSortField] = useState<SortField | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  const handleToggleSort = useCallback(
-    (field: SortField) => {
-      if (sortField === field) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      } else {
-        setSortField(field);
-        setSortDir("asc");
-      }
-    },
-    [sortField],
-  );
-
-  const sortedBindings = useMemo(() => {
-    const items = [...bindings];
-    return items.sort((a, b) => {
-      if (a.isDm && !b.isDm) return -1;
-      if (!a.isDm && b.isDm) return 1;
-      if (sortField) {
-        let cmp = 0;
-        if (sortField === "channel") {
-          cmp = (a.channelName ?? a.channelId).localeCompare(
-            b.channelName ?? b.channelId,
-          );
-        } else {
-          const agentA = a.agentId ? (agentMap.get(a.agentId) ?? "") : "";
-          const agentB = b.agentId ? (agentMap.get(b.agentId) ?? "") : "";
-          cmp = agentA.localeCompare(agentB);
-        }
-        return sortDir === "desc" ? -cmp : cmp;
-      }
-      return (a.channelName ?? a.channelId).localeCompare(
-        b.channelName ?? b.channelId,
-      );
-    });
-  }, [bindings, sortField, sortDir, agentMap]);
-
-  const selectableIds = useMemo(() => {
-    const ids = sortedBindings.map((b) => b.id);
-    if (virtualDm) ids.push(VIRTUAL_DM_ID);
-    return ids;
-  }, [sortedBindings, virtualDm]);
-  const allChecked =
-    selectableIds.length > 0 &&
-    selectableIds.every((id) => selectedIds.has(id));
-  const someChecked =
-    !allChecked && selectableIds.some((id) => selectedIds.has(id));
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2 !px-0 !bg-transparent"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <span
-            className={cn(
-              "text-sm font-semibold",
-              isConfigured
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-amber-600 dark:text-amber-400",
-            )}
-          >
-            {isConfigured ? "Configured" : "Unassigned"}
-          </span>
-          {/* <span
-            className={cn(
-              "text-xs px-1.5 py-0.5 rounded-full font-medium w-5 h-5 flex items-center justify-center border border-border",
-              isConfigured
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
-            )}
-          >
-            {count}
-          </span> */}
-          {collapsed ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </Button>
-      </div>
-
-      {!collapsed && (
-        <div className="overflow-hidden rounded-md border">
-          <Table>
-            <TableHeader className="bg-muted border-b-2 border-border">
-              <TableRow>
-                <TableHead className="w-[40px]">
-                  <Checkbox
-                    checked={
-                      allChecked ? true : someChecked ? "indeterminate" : false
-                    }
-                    onCheckedChange={(checked) =>
-                      onToggleAll(selectableIds, !!checked)
-                    }
-                    aria-label="Select all"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    className="h-auto !p-0 font-medium hover:bg-transparent"
-                    onClick={() => handleToggleSort("channel")}
-                  >
-                    Channel
-                    <SortIcon
-                      isSorted={sortField === "channel" ? sortDir : false}
-                    />
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    className="h-auto !p-0 font-medium hover:bg-transparent"
-                    onClick={() => handleToggleSort("agent")}
-                  >
-                    Default Agent
-                    <SortIcon
-                      isSorted={sortField === "agent" ? sortDir : false}
-                    />
-                  </Button>
-                </TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[80px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {virtualDm && (
-                <TableRow>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(VIRTUAL_DM_ID)}
-                      onCheckedChange={() => onToggleSelected(VIRTUAL_DM_ID)}
-                      aria-label="Select Direct Message"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm font-medium">
-                      Direct Message ({user?.email})
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <AgentPicker
-                      agents={agentList}
-                      assignedAgent={undefined}
-                      isUpdating={virtualDm.isUpdating}
-                      onAssign={virtualDm.onAssignAgent}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge assigned={false} />
-                  </TableCell>
-                  <TableCell className="pr-2">
-                    {virtualDm.deepLink && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1.5 text-xs"
-                        asChild
-                      >
-                        <a
-                          href={virtualDm.deepLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="!bg-transparent !px-0"
-                        >
-                          <Image
-                            src={providerConfig.providerIcon}
-                            alt={providerConfig.providerLabel}
-                            width={14}
-                            height={14}
-                          />
-                          Open
-                        </a>
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
-              {sortedBindings.length === 0 && !virtualDm && (
-                <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className="h-16 text-center text-sm text-muted-foreground"
-                  >
-                    No matching channels
-                  </TableCell>
-                </TableRow>
-              )}
-              {sortedBindings.map((binding) => {
-                const assignedAgent = binding.agentId
-                  ? agentList.find((a) => a.id === binding.agentId)
-                  : undefined;
-                const deepLink = binding.isDm
-                  ? providerStatus
-                    ? providerConfig.getDmDeepLink?.(providerStatus)
-                    : null
-                  : providerConfig.buildDeepLink(binding);
-
-                return (
-                  <TableRow key={binding.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.has(binding.id)}
-                        onCheckedChange={() => onToggleSelected(binding.id)}
-                        aria-label={`Select ${binding.channelName ?? binding.channelId}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        {binding.isDm ? (
-                          <span className="text-sm font-medium">
-                            Direct Message ({user?.email})
-                          </span>
-                        ) : (
-                          <>
-                            <Hash className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="text-sm font-medium truncate">
-                              {binding.channelName ?? binding.channelId}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <AgentPicker
-                        agents={agentList}
-                        assignedAgent={assignedAgent}
-                        isUpdating={isUpdating}
-                        onAssign={(agentId) =>
-                          onAssignAgent(binding.id, agentId)
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge assigned={!!binding.agentId} />
-                    </TableCell>
-                    <TableCell className="pr-2">
-                      {deepLink && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1.5 text-xs"
-                          asChild
-                        >
-                          <a
-                            href={deepLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="!bg-transparent !px-0"
-                          >
-                            <Image
-                              src={providerConfig.providerIcon}
-                              alt={providerConfig.providerLabel}
-                              width={14}
-                              height={14}
-                            />
-                            Open
-                          </a>
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
     </div>
   );
 }
@@ -885,11 +856,15 @@ function AgentPicker({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 text-xs"
+            className="h-7 gap-1.5 text-xs min-w-[180px]"
             disabled={isUpdating}
           >
             <Bot className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{assignedAgent.name}</span>
+            <AgentBadge
+              type={assignedAgent.scope}
+              className="px-1 py-0 ml-auto"
+            />
           </Button>
         </PopoverTrigger>
       ) : (
@@ -936,8 +911,9 @@ function AgentPicker({
                 >
                   <Bot className="mr-2 h-4 w-4" />
                   <span className="truncate">{agent.name}</span>
+                  <AgentBadge type={agent.scope} className="ml-auto" />
                   {assignedAgent?.id === agent.id && (
-                    <CheckIcon className="ml-auto h-4 w-4" />
+                    <CheckIcon className="h-4 w-4" />
                   )}
                 </CommandItem>
               ))}
@@ -953,7 +929,7 @@ function AgentPicker({
 // Loading skeleton
 // ---------------------------------------------------------------------------
 
-function ChannelTableLoading() {
+function ChannelTableSkeleton() {
   return (
     <div className="overflow-hidden rounded-md border">
       <Table>

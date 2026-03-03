@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.0.53](https://github.com/archestra-ai/archestra/compare/platform-v1.0.52...platform-v1.0.53) (2026-03-03)
+
+
+### Features
+
+* add automatic retry for transient database connection errors ([#3051](https://github.com/archestra-ai/archestra/issues/3051)) ([db9730f](https://github.com/archestra-ai/archestra/commit/db9730fcdf76d135336cf47017fbf3dcc1fd7f79))
+* add x.ai (grok) LLM provider support ([#3056](https://github.com/archestra-ai/archestra/issues/3056)) ([69ceed9](https://github.com/archestra-ai/archestra/commit/69ceed951895674f1ae5e814b1b5b2a40fdcd840))
+* autoprovision users from slack and msteams ([#3043](https://github.com/archestra-ai/archestra/issues/3043)) ([e9b3f10](https://github.com/archestra-ai/archestra/commit/e9b3f10da4d013f2d94da39b804ccbe03d749562))
+* built-in agents, LLM client refactor, excludeBuiltIn query param ([#3066](https://github.com/archestra-ai/archestra/issues/3066)) ([cc686af](https://github.com/archestra-ai/archestra/commit/cc686afd840e6b649bc93a472aab194dce55c137))
+* encrypt secret column at rest with AES-256-GCM ([#3046](https://github.com/archestra-ai/archestra/issues/3046)) ([0e11a7e](https://github.com/archestra-ai/archestra/commit/0e11a7eb97da55ef3ce6b82645b22899fa947263))
+* hide sidebar on login page, move logo to login form ([#3058](https://github.com/archestra-ai/archestra/issues/3058)) ([3fc113f](https://github.com/archestra-ai/archestra/commit/3fc113f0ed525887f6c2183c449c1f78e3ae0cc6)), closes [#3052](https://github.com/archestra-ai/archestra/issues/3052)
+* tie image pull secrets to teams ([#3055](https://github.com/archestra-ai/archestra/issues/3055)) ([119c5fa](https://github.com/archestra-ai/archestra/commit/119c5fac3a99c7f5ecf086d35d342be8dd713456))
+
+
+### Bug Fixes
+
+* Agents nav item active state to exclude Triggers submenu ([#3091](https://github.com/archestra-ai/archestra/issues/3091)) ([1c5f146](https://github.com/archestra-ai/archestra/commit/1c5f1463094484e15c1ac64ffc94bbd525f83f8c))
+* fix mermaid issues ([#3087](https://github.com/archestra-ai/archestra/issues/3087)) ([4ef0be8](https://github.com/archestra-ai/archestra/commit/4ef0be8b509c509f824a854706b6e1cc183169f0))
+* fix minimatch cves ([#3062](https://github.com/archestra-ai/archestra/issues/3062)) ([bb44a5b](https://github.com/archestra-ai/archestra/commit/bb44a5bbb3e590964047ea4f93e74d6516c759b9))
+* minor agent trigger improvements ([#3075](https://github.com/archestra-ai/archestra/issues/3075)) ([c94aece](https://github.com/archestra-ai/archestra/commit/c94aece39f8bf28c48886c633f273d65c0739d8b))
+* preserve agent assignment when Slack DM channel ID changes ([#3086](https://github.com/archestra-ai/archestra/issues/3086)) ([049aa5f](https://github.com/archestra-ai/archestra/commit/049aa5faee2961cba1e2e34023cc7dd22bd892bc))
+* set default `ARCHESTRA_AUTH_SECRET` in `.env.example` for local dev ([#3079](https://github.com/archestra-ai/archestra/issues/3079)) ([a3f70ef](https://github.com/archestra-ai/archestra/commit/a3f70efa8de197ec4ab641a7dc1efbc72b7c0969)), closes [#3077](https://github.com/archestra-ai/archestra/issues/3077)
+* show error details when testProviderApiKey fails ([#3050](https://github.com/archestra-ai/archestra/issues/3050)) ([c59c78f](https://github.com/archestra-ai/archestra/commit/c59c78fe61b7b4e7e6fa9c3df1e39e5b482b6c57))
+* slack empty mention reply ([#3089](https://github.com/archestra-ai/archestra/issues/3089)) ([4cfa19d](https://github.com/archestra-ai/archestra/commit/4cfa19d99cc63010a9b767a776a95098d993864a))
+* use user-provided baseUrl when testing provider API keys ([#3053](https://github.com/archestra-ai/archestra/issues/3053)) ([7237f71](https://github.com/archestra-ai/archestra/commit/7237f715a66ac926f8c18b65e5713a0dd1bbea42))
+
+
+### Code Refactoring
+
+* restructure frontend URLs under /llm, /mcp, /agents groups ([#3085](https://github.com/archestra-ai/archestra/issues/3085)) ([b13d653](https://github.com/archestra-ai/archestra/commit/b13d6534852e7713e98eb20ca645f89756c19948))
+
+
+### Miscellaneous Chores
+
+* dont show personal agents in channels ([#3093](https://github.com/archestra-ai/archestra/issues/3093)) ([6e8f960](https://github.com/archestra-ai/archestra/commit/6e8f9603c04fd7e68eaae63ffac83cc10fe02fc6))
+* enable personal installations for the readonly vault ([#3082](https://github.com/archestra-ai/archestra/issues/3082)) ([3692748](https://github.com/archestra-ai/archestra/commit/3692748d7f8c17b3202611df1a8c4f68ce8fe994))
+* remove key rotation script, warn against rotating ARCHESTRA_AUTH_SECRET ([#3049](https://github.com/archestra-ai/archestra/issues/3049)) ([0a38e7b](https://github.com/archestra-ai/archestra/commit/0a38e7baaef19ad77295758bc2d05de03cdf30ea))
+* remove whitespace-only line from .env.example ([#3069](https://github.com/archestra-ai/archestra/issues/3069)) ([4317886](https://github.com/archestra-ai/archestra/commit/431788667bd2af372b042bd1a2d18eaff56b02f5))
+* support large nb of discovered channels on agent triggers ([#3094](https://github.com/archestra-ai/archestra/issues/3094)) ([9ff217a](https://github.com/archestra-ai/archestra/commit/9ff217ac1d88cb6b15107447993bad94ac844ec1))
+
 ## [1.0.52](https://github.com/archestra-ai/archestra/compare/platform-v1.0.51...platform-v1.0.52) (2026-02-27)
 
 

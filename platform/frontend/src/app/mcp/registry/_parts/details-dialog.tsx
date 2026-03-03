@@ -21,6 +21,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
@@ -697,7 +698,11 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                     `}</style>
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
-                        rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                        rehypePlugins={[
+                          rehypeRaw,
+                          rehypeSanitize,
+                          rehypeHighlight,
+                        ]}
                         components={markdownComponents}
                       >
                         {content}

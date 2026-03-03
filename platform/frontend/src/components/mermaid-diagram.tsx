@@ -53,19 +53,24 @@ export function MermaidDiagram({
 
     const renderDiagram = async () => {
       if (ref.current) {
-        ref.current.innerHTML = "";
+        ref.current.replaceChildren();
         try {
           // Generate a unique ID to avoid conflicts
           const uniqueId = `${id}-${Date.now()}`;
           const { svg } = await mermaid.render(uniqueId, chart);
           if (ref.current) {
-            ref.current.innerHTML = svg;
+            // Parse SVG string via DOMParser to avoid innerHTML
+            const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+            const svgElement = doc.documentElement;
+            ref.current.replaceChildren(svgElement);
             requestAnimationFrame(() => setIsLoaded(true));
           }
         } catch (error) {
           console.error("Error rendering mermaid diagram:", error);
           if (ref.current) {
-            ref.current.innerHTML = `<pre>${chart}</pre>`;
+            const pre = document.createElement("pre");
+            pre.textContent = chart;
+            ref.current.replaceChildren(pre);
             setIsLoaded(true);
           }
         }

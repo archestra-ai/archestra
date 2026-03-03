@@ -21,6 +21,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -328,27 +329,12 @@ function McpGateways({
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = (agent as unknown as Record<string, unknown>)
-          .scope as string;
+        const scope = agent.scope;
         return (
           <div className="font-medium">
             <div className="flex items-center gap-2">
               {agent.name}
-              {scope === "personal" ? (
-                <Badge
-                  variant="outline"
-                  className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs shrink-0"
-                >
-                  Personal
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="bg-green-500/10 text-green-600 border-green-500/30 text-xs shrink-0"
-                >
-                  Shared
-                </Badge>
-              )}
+              <AgentBadge type={scope} />
               {agent.agentType === "profile" && (
                 <TooltipProvider>
                   <Tooltip>

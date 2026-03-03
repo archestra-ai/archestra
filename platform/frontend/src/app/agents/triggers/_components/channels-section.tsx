@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
+import { AgentBadge } from "@/components/agent-badge";
 import { DebouncedInput } from "@/components/debounced-input";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,7 @@ import type { ProviderConfig } from "./types";
 interface Agent {
   id: string;
   name: string;
-  scope?: string;
+  scope: "personal" | "team" | "org";
   authorId?: string | null;
 }
 
@@ -524,6 +525,7 @@ function BulkAssignButton({
                   >
                     <Bot className="mr-2 h-4 w-4" />
                     <span className="truncate">{agent.name}</span>
+                    <AgentBadge type={agent.scope} />
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -921,11 +923,15 @@ function AgentPicker({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 text-xs"
+            className="h-7 gap-1.5 text-xs min-w-[180px]"
             disabled={isUpdating}
           >
             <Bot className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{assignedAgent.name}</span>
+            <AgentBadge
+              type={assignedAgent.scope}
+              className="px-1 py-0 ml-auto"
+            />
           </Button>
         </PopoverTrigger>
       ) : (
@@ -972,8 +978,9 @@ function AgentPicker({
                 >
                   <Bot className="mr-2 h-4 w-4" />
                   <span className="truncate">{agent.name}</span>
+                  <AgentBadge type={agent.scope} className="ml-auto" />
                   {assignedAgent?.id === agent.id && (
-                    <CheckIcon className="ml-auto h-4 w-4" />
+                    <CheckIcon className="h-4 w-4" />
                   )}
                 </CommandItem>
               ))}

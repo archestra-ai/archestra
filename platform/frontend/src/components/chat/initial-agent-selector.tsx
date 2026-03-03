@@ -2,7 +2,7 @@
 
 import { Bot, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { AgentBadge } from "@/components/agent-badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -88,22 +88,10 @@ export function InitialAgentSelector({
                   onSelect={() => handleAgentSelect(agent.id)}
                 >
                   <span className="truncate">{agent.name}</span>
-                  {(agent as unknown as Record<string, unknown>).scope ===
-                  "personal" ? (
-                    <Badge
-                      variant="outline"
-                      className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-[10px] px-1 py-0 shrink-0"
-                    >
-                      Personal
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="bg-green-500/10 text-green-600 border-green-500/30 text-[10px] px-1 py-0 shrink-0"
-                    >
-                      Shared
-                    </Badge>
-                  )}
+                  <AgentBadge
+                    type={agent.scope}
+                    className="text-[10px] px-1 py-0"
+                  />
                   <Check
                     className={cn(
                       "ml-auto h-4 w-4 shrink-0",

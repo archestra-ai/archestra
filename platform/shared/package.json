@@ -32,7 +32,6 @@
     "@hey-api/openapi-ts": "^0.92.3",
     "@types/node": "^25",
     "knip": "^5.83.0",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.2",
     "vitest": "^4.0.18"
   }

@@ -46,6 +46,7 @@ import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
+import { cronJobManager } from "@/k8s/cron-job";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   cleanupKnowledgeGraphProvider,
@@ -54,6 +55,7 @@ import {
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
+import KnowledgeGraphConnectorModel from "@/models/knowledge-graph-connector";
 import OrganizationModel from "@/models/organization";
 import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -529,6 +531,58 @@ const startMcpServerRuntime = async (
   }
 };
 
+/**
+ * Reconcile CronJobs for enabled connectors.
+ * Ensures that every enabled connector has a corresponding K8s CronJob.
+ * Runs on server startup to handle cases where CronJobs were deleted externally.
+ */
+const reconcileConnectorCronJobs = async () => {
+  try {
+    cronJobManager.initialize();
+  } catch {
+    logger.info(
+      "[CronJobReconcile] CronJobManager not available, skipping reconciliation",
+    );
+    return;
+  }
+
+  const connectors = await KnowledgeGraphConnectorModel.findAllEnabled();
+  if (connectors.length === 0) {
+    return;
+  }
+
+  const hmacSecret = config.auth.secret || "";
+  const backendUrl = `http://localhost:${config.api.port}`;
+
+  let reconciled = 0;
+  for (const connector of connectors) {
+    try {
+      await cronJobManager.createOrUpdateCronJob({
+        connectorId: connector.id,
+        schedule: connector.schedule,
+        backendUrl,
+        hmacSecret,
+      });
+      reconciled++;
+    } catch (error) {
+      logger.warn(
+        {
+          connectorId: connector.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[CronJobReconcile] Failed to reconcile CronJob",
+      );
+    }
+  }
+
+  if (reconciled > 0) {
+    logger.info(
+      { reconciled, total: connectors.length },
+      "[CronJobReconcile] Connector CronJobs reconciled",
+    );
+  }
+};
+
 const start = async () => {
   const fastify = createFastifyInstance();
 
@@ -646,6 +700,15 @@ const start = async () => {
     // Initialize knowledge graph provider (if configured)
     // This enables automatic document ingestion from chat uploads
     await initializeKnowledgeGraphProvider();
+
+    // Reconcile CronJobs for knowledge graph connectors
+    // Ensures CronJobs exist for all enabled connectors (e.g., if a CronJob was deleted)
+    reconcileConnectorCronJobs().catch((error) => {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Failed to reconcile connector CronJobs on startup",
+      );
+    });
 
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {

@@ -7,6 +7,7 @@ import {
   Bot,
   Bug,
   Cable,
+  Database,
   Github,
   type LucideIcon,
   MessageCircle,
@@ -157,6 +158,13 @@ const contentNavGroups: NavGroup[] = [
   {
     label: "Other",
     items: [
+      {
+        title: "Knowledge",
+        url: "/knowledge-graphs",
+        icon: Database,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/knowledge-graphs"),
+      },
       {
         title: "Logs",
         url: "/llm/logs",

@@ -139,11 +139,8 @@ describe("createKnowledgeGraphProvider", () => {
 
   test("creates LightRAGProvider with valid config", () => {
     const provider = createKnowledgeGraphProvider("lightrag", {
-      provider: "lightrag",
-      lightrag: {
-        apiUrl: "http://localhost:9621",
-        apiKey: "test-key",
-      },
+      apiUrl: "http://localhost:9621",
+      apiKey: "test-key",
     });
 
     expect(LightRAGProvider).toHaveBeenCalledWith({
@@ -154,19 +151,10 @@ describe("createKnowledgeGraphProvider", () => {
     expect(provider.providerId).toBe("lightrag");
   });
 
-  test("throws error when lightrag config is missing", () => {
-    expect(() =>
-      createKnowledgeGraphProvider("lightrag", {
-        provider: "lightrag",
-        lightrag: undefined,
-      }),
-    ).toThrow("LightRAG provider configuration is missing");
-  });
-
   test("throws error for unknown provider type", () => {
     expect(() =>
       createKnowledgeGraphProvider("unknown" as "lightrag", {
-        provider: "unknown" as "lightrag",
+        apiUrl: "http://localhost:9621",
       }),
     ).toThrow("Unknown knowledge graph provider type: unknown");
   });

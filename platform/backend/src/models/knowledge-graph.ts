@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeGraph,
@@ -77,49 +77,6 @@ class KnowledgeGraphModel {
       .where(eq(schema.knowledgeGraphsTable.organizationId, organizationId));
 
     return result?.count ?? 0;
-  }
-
-  static async findByOrgAndSeededFromEnv(
-    organizationId: string,
-  ): Promise<KnowledgeGraph | null> {
-    const [result] = await db
-      .select()
-      .from(schema.knowledgeGraphsTable)
-      .where(
-        and(
-          eq(schema.knowledgeGraphsTable.organizationId, organizationId),
-          eq(schema.knowledgeGraphsTable.seededFromEnv, true),
-        ),
-      )
-      .limit(1);
-
-    return result ?? null;
-  }
-
-  static async seedFromEnv(params: {
-    organizationId: string;
-    name: string;
-    provider: string;
-    config: Record<string, unknown>;
-  }): Promise<KnowledgeGraph> {
-    const existing = await KnowledgeGraphModel.findByOrgAndSeededFromEnv(
-      params.organizationId,
-    );
-
-    if (existing) {
-      const updated = await KnowledgeGraphModel.update(existing.id, {
-        config: params.config,
-      });
-      return updated ?? existing;
-    }
-
-    return await KnowledgeGraphModel.create({
-      organizationId: params.organizationId,
-      name: params.name,
-      provider: params.provider,
-      config: params.config,
-      seededFromEnv: true,
-    });
   }
 }
 

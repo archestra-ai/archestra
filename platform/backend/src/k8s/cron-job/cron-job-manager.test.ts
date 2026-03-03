@@ -85,7 +85,7 @@ describe("CronJobManager", () => {
       expect(mockCreateNamespacedCronJob).toHaveBeenCalledTimes(1);
       const call = mockCreateNamespacedCronJob.mock.calls[0][0];
       expect(call.namespace).toBe("test-connector-namespace");
-      expect(call.body.metadata.name).toContain("archestra-connector");
+      expect(call.body.metadata.name).toContain("ac-sync");
       expect(call.body.spec.schedule).toBe("0 */6 * * *");
       expect(call.body.spec.concurrencyPolicy).toBe("Forbid");
       expect(call.body.spec.jobTemplate.spec.activeDeadlineSeconds).toBe(3600);
@@ -95,7 +95,7 @@ describe("CronJobManager", () => {
       const manager = await getManager();
 
       mockReadNamespacedCronJob.mockResolvedValue({
-        metadata: { name: "archestra-connector-connector-123" },
+        metadata: { name: "ac-sync-connector-123" },
       });
       mockReplaceNamespacedCronJob.mockResolvedValue({});
 
@@ -150,6 +150,152 @@ describe("CronJobManager", () => {
       ]);
       expect(container.workingDir).toBe("/app/backend");
     });
+
+    test("skips CronJob creation when connector image is not configured", async () => {
+      vi.resetModules();
+      vi.doMock("@/config", async (importOriginal) => {
+        const actual = await importOriginal<typeof originalConfigModule>();
+        return {
+          default: {
+            ...actual.default,
+            orchestrator: {
+              kubernetes: {
+                namespace: "test-connector-namespace",
+                kubeconfig: undefined,
+                loadKubeconfigFromCurrentCluster: false,
+              },
+              connectorNamespace: "test-connector-namespace",
+              connectorImage: "",
+            },
+          },
+        };
+      });
+
+      const { cronJobManager } = await import("./cron-job-manager");
+      cronJobManager.initialize();
+
+      await cronJobManager.createOrUpdateCronJob(defaultParams);
+
+      expect(mockReadNamespacedCronJob).not.toHaveBeenCalled();
+      expect(mockCreateNamespacedCronJob).not.toHaveBeenCalled();
+    });
+
+    test("forwards ARCHESTRA_* and DATABASE_URL env vars to CronJob containers", async () => {
+      const originalEnv = process.env;
+      process.env = {
+        ...originalEnv,
+        ARCHESTRA_DATABASE_URL: "postgresql://test:5432/db",
+        ARCHESTRA_AUTH_SECRET: "test-secret",
+        DATABASE_URL: "postgresql://test:5432/db",
+        HOME: "/home/user",
+        PATH: "/usr/bin",
+        UNRELATED_VAR: "should-not-appear",
+      };
+
+      try {
+        const manager = await getManager();
+
+        mockReadNamespacedCronJob.mockRejectedValue({ statusCode: 404 });
+        mockCreateNamespacedCronJob.mockResolvedValue({});
+
+        await manager.createOrUpdateCronJob(defaultParams);
+
+        const call = mockCreateNamespacedCronJob.mock.calls[0][0];
+        const container =
+          call.body.spec.jobTemplate.spec.template.spec.containers[0];
+        const envNames = container.env.map((e: { name: string }) => e.name);
+
+        expect(envNames).toContain("ARCHESTRA_DATABASE_URL");
+        expect(envNames).toContain("ARCHESTRA_AUTH_SECRET");
+        expect(envNames).toContain("DATABASE_URL");
+        expect(envNames).not.toContain("HOME");
+        expect(envNames).not.toContain("PATH");
+        expect(envNames).not.toContain("UNRELATED_VAR");
+      } finally {
+        process.env = originalEnv;
+      }
+    });
+  });
+
+  describe("buildConnectorSyncEnv", () => {
+    test("includes ARCHESTRA_* env vars", async () => {
+      const originalEnv = process.env;
+      process.env = {
+        ARCHESTRA_FOO: "bar",
+        ARCHESTRA_BAZ: "qux",
+      };
+
+      try {
+        const { buildConnectorSyncEnv } = await import("./cron-job-manager");
+        const env = buildConnectorSyncEnv();
+
+        expect(env).toEqual([
+          { name: "ARCHESTRA_FOO", value: "bar" },
+          { name: "ARCHESTRA_BAZ", value: "qux" },
+        ]);
+      } finally {
+        process.env = originalEnv;
+      }
+    });
+
+    test("includes DATABASE_URL", async () => {
+      const originalEnv = process.env;
+      process.env = {
+        DATABASE_URL: "postgresql://localhost:5432/test",
+      };
+
+      try {
+        const { buildConnectorSyncEnv } = await import("./cron-job-manager");
+        const env = buildConnectorSyncEnv();
+
+        expect(env).toEqual([
+          { name: "DATABASE_URL", value: "postgresql://localhost:5432/test" },
+        ]);
+      } finally {
+        process.env = originalEnv;
+      }
+    });
+
+    test("excludes non-ARCHESTRA vars other than DATABASE_URL", async () => {
+      const originalEnv = process.env;
+      process.env = {
+        HOME: "/home/user",
+        PATH: "/usr/bin",
+        NODE_ENV: "test",
+        ARCHESTRA_SECRET: "keep-me",
+      };
+
+      try {
+        const { buildConnectorSyncEnv } = await import("./cron-job-manager");
+        const env = buildConnectorSyncEnv();
+
+        expect(env).toHaveLength(1);
+        expect(env[0]).toEqual({
+          name: "ARCHESTRA_SECRET",
+          value: "keep-me",
+        });
+      } finally {
+        process.env = originalEnv;
+      }
+    });
+
+    test("excludes vars with empty values", async () => {
+      const originalEnv = process.env;
+      process.env = {
+        ARCHESTRA_EMPTY: "",
+        ARCHESTRA_PRESENT: "value",
+        DATABASE_URL: "",
+      };
+
+      try {
+        const { buildConnectorSyncEnv } = await import("./cron-job-manager");
+        const env = buildConnectorSyncEnv();
+
+        expect(env).toEqual([{ name: "ARCHESTRA_PRESENT", value: "value" }]);
+      } finally {
+        process.env = originalEnv;
+      }
+    });
   });
 
   describe("deleteCronJob", () => {
@@ -163,7 +309,7 @@ describe("CronJobManager", () => {
       expect(mockDeleteNamespacedCronJob).toHaveBeenCalledTimes(1);
       expect(mockDeleteNamespacedCronJob).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: expect.stringContaining("archestra-connector"),
+          name: expect.stringContaining("ac-sync"),
           namespace: "test-connector-namespace",
         }),
       );
@@ -295,8 +441,10 @@ describe("CronJobManager", () => {
       vi.resetModules();
       const { cronJobManager } = await import("./cron-job-manager");
 
+      // deleteCronJob doesn't have the early-return for missing image,
+      // so it still hits the uninitialized guard
       await expect(
-        cronJobManager.createOrUpdateCronJob(defaultParams),
+        cronJobManager.deleteCronJob("connector-123"),
       ).rejects.toThrow("CronJobManager not initialized");
     });
   });

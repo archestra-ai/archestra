@@ -91237,39 +91237,25 @@
                             "type": "string"
                           },
                           "provider": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "lightrag"
+                            ]
                           },
                           "config": {
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
+                            "type": "object",
+                            "properties": {
+                              "apiUrl": {
+                                "type": "string"
                               },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
+                              "apiKey": {
+                                "type": "string"
                               }
-                            ]
+                            },
+                            "required": [
+                              "apiUrl"
+                            ],
+                            "additionalProperties": false
                           },
                           "secretId": {
                             "nullable": true,
@@ -91279,9 +91265,6 @@
                           },
                           "status": {
                             "type": "string"
-                          },
-                          "seededFromEnv": {
-                            "type": "boolean"
                           },
                           "createdAt": {
                             "type": "string",
@@ -91300,7 +91283,6 @@
                           "config",
                           "secretId",
                           "status",
-                          "seededFromEnv",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -91587,11 +91569,23 @@
                   },
                   "provider": {
                     "type": "string",
-                    "minLength": 1
+                    "enum": [
+                      "lightrag"
+                    ]
                   },
                   "config": {
                     "type": "object",
-                    "additionalProperties": {}
+                    "properties": {
+                      "apiUrl": {
+                        "type": "string"
+                      },
+                      "apiKey": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "apiUrl"
+                    ]
                   }
                 },
                 "required": [
@@ -91624,39 +91618,25 @@
                       "type": "string"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "lightrag"
+                      ]
                     },
                     "config": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
+                      "type": "object",
+                      "properties": {
+                        "apiUrl": {
+                          "type": "string"
                         },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
+                        "apiKey": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "apiUrl"
+                      ],
+                      "additionalProperties": false
                     },
                     "secretId": {
                       "nullable": true,
@@ -91666,9 +91646,6 @@
                     },
                     "status": {
                       "type": "string"
-                    },
-                    "seededFromEnv": {
-                      "type": "boolean"
                     },
                     "createdAt": {
                       "type": "string",
@@ -91687,7 +91664,6 @@
                     "config",
                     "secretId",
                     "status",
-                    "seededFromEnv",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -91946,39 +91922,25 @@
                       "type": "string"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "lightrag"
+                      ]
                     },
                     "config": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
+                      "type": "object",
+                      "properties": {
+                        "apiUrl": {
+                          "type": "string"
                         },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
+                        "apiKey": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "apiUrl"
+                      ],
+                      "additionalProperties": false
                     },
                     "secretId": {
                       "nullable": true,
@@ -91988,9 +91950,6 @@
                     },
                     "status": {
                       "type": "string"
-                    },
-                    "seededFromEnv": {
-                      "type": "boolean"
                     },
                     "createdAt": {
                       "type": "string",
@@ -92009,7 +91968,6 @@
                     "config",
                     "secretId",
                     "status",
-                    "seededFromEnv",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -92248,7 +92206,17 @@
                   },
                   "config": {
                     "type": "object",
-                    "additionalProperties": {}
+                    "properties": {
+                      "apiUrl": {
+                        "type": "string"
+                      },
+                      "apiKey": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "apiUrl"
+                    ]
                   }
                 }
               }
@@ -92285,39 +92253,25 @@
                       "type": "string"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "lightrag"
+                      ]
                     },
                     "config": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
+                      "type": "object",
+                      "properties": {
+                        "apiUrl": {
+                          "type": "string"
                         },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
+                        "apiKey": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "apiUrl"
+                      ],
+                      "additionalProperties": false
                     },
                     "secretId": {
                       "nullable": true,
@@ -92327,9 +92281,6 @@
                     },
                     "status": {
                       "type": "string"
-                    },
-                    "seededFromEnv": {
-                      "type": "boolean"
                     },
                     "createdAt": {
                       "type": "string",
@@ -92348,7 +92299,6 @@
                     "config",
                     "secretId",
                     "status",
-                    "seededFromEnv",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -93278,48 +93228,34 @@
                           },
                           "checkpoint": {
                             "nullable": true,
-                            "oneOf": [
+                            "anyOf": [
                               {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
                                     "type": "string",
+                                    "nullable": true,
                                     "enum": [
-                                      "jira"
+                                      null
                                     ]
-                                  },
-                                  "lastSyncedAt": {
-                                    "type": "string"
-                                  },
-                                  "lastIssueKey": {
-                                    "type": "string"
                                   }
-                                },
-                                "required": [
-                                  "type"
-                                ],
-                                "additionalProperties": false
+                                ]
                               },
                               {
                                 "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "confluence"
-                                    ]
-                                  },
-                                  "lastSyncedAt": {
-                                    "type": "string"
-                                  },
-                                  "lastPageId": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type"
-                                ],
-                                "additionalProperties": false
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
                               }
                             ]
                           },
@@ -93938,48 +93874,34 @@
                     },
                     "checkpoint": {
                       "nullable": true,
-                      "oneOf": [
+                      "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "type": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
                               "type": "string",
+                              "nullable": true,
                               "enum": [
-                                "jira"
+                                null
                               ]
-                            },
-                            "lastSyncedAt": {
-                              "type": "string"
-                            },
-                            "lastIssueKey": {
-                              "type": "string"
                             }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "additionalProperties": false
+                          ]
                         },
                         {
                           "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "enum": [
-                                "confluence"
-                              ]
-                            },
-                            "lastSyncedAt": {
-                              "type": "string"
-                            },
-                            "lastPageId": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "additionalProperties": false
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
                         }
                       ]
                     },
@@ -94411,48 +94333,34 @@
                     },
                     "checkpoint": {
                       "nullable": true,
-                      "oneOf": [
+                      "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "type": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
                               "type": "string",
+                              "nullable": true,
                               "enum": [
-                                "jira"
+                                null
                               ]
-                            },
-                            "lastSyncedAt": {
-                              "type": "string"
-                            },
-                            "lastIssueKey": {
-                              "type": "string"
                             }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "additionalProperties": false
+                          ]
                         },
                         {
                           "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "enum": [
-                                "confluence"
-                              ]
-                            },
-                            "lastSyncedAt": {
-                              "type": "string"
-                            },
-                            "lastPageId": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "additionalProperties": false
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
                         }
                       ]
                     },
@@ -94993,48 +94901,34 @@
                     },
                     "checkpoint": {
                       "nullable": true,
-                      "oneOf": [
+                      "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "type": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
                               "type": "string",
+                              "nullable": true,
                               "enum": [
-                                "jira"
+                                null
                               ]
-                            },
-                            "lastSyncedAt": {
-                              "type": "string"
-                            },
-                            "lastIssueKey": {
-                              "type": "string"
                             }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "additionalProperties": false
+                          ]
                         },
                         {
                           "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "enum": [
-                                "confluence"
-                              ]
-                            },
-                            "lastSyncedAt": {
-                              "type": "string"
-                            },
-                            "lastPageId": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "additionalProperties": false
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
                         }
                       ]
                     },

@@ -1,9 +1,10 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getConnector } from "@/connectors/registry";
 import { cronJobManager } from "@/k8s/cron-job";
 import { createKnowledgeGraphProvider } from "@/knowledge-graph";
+import { connectorSyncService } from "@/knowledge-graph/connector-sync";
+import { getConnector } from "@/knowledge-graph/connectors/registry";
 import logger from "@/logging";
 import {
   ConnectorRunModel,
@@ -11,13 +12,11 @@ import {
   KnowledgeGraphModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { connectorSyncService } from "@/services/connector-sync";
 import {
   ApiError,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
-  type KnowledgeGraphConfig,
   PaginationQuerySchema,
   SelectConnectorRunSchema,
   SelectKnowledgeGraphConnectorSchema,
@@ -29,6 +28,10 @@ import {
   ConnectorCredentialsSchema,
   ConnectorTypeSchema,
 } from "@/types/knowledge-connector";
+import {
+  KnowledgeGraphProviderTypeSchema,
+  LightragConfigSchema,
+} from "@/types/knowledge-graph";
 
 const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // ===== Knowledge Graph CRUD =====
@@ -82,8 +85,8 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Knowledge Graphs"],
         body: z.object({
           name: z.string().min(1),
-          provider: z.string().min(1),
-          config: z.record(z.string(), z.unknown()),
+          provider: KnowledgeGraphProviderTypeSchema,
+          config: LightragConfigSchema,
         }),
         response: constructResponseSchema(SelectKnowledgeGraphSchema),
       },
@@ -127,7 +130,7 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string() }),
         body: z.object({
           name: z.string().min(1).optional(),
-          config: z.record(z.string(), z.unknown()).optional(),
+          config: LightragConfigSchema.optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeGraphSchema),
       },
@@ -206,18 +209,7 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const kg = await findKnowledgeGraphOrThrow(id, organizationId);
 
       try {
-        const kgConfig: KnowledgeGraphConfig = {
-          provider: kg.provider as KnowledgeGraphConfig["provider"],
-          lightrag:
-            kg.provider === "lightrag"
-              ? (kg.config as KnowledgeGraphConfig["lightrag"])
-              : undefined,
-        };
-
-        const provider = createKnowledgeGraphProvider(
-          kg.provider as NonNullable<KnowledgeGraphConfig["provider"]>,
-          kgConfig,
-        );
+        const provider = createKnowledgeGraphProvider(kg.provider, kg.config);
 
         const health = await provider.getHealth();
         return reply.send(health);

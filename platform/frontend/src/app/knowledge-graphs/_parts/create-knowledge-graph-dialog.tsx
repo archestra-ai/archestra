@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +32,7 @@ import { useCreateKnowledgeGraph } from "@/lib/knowledge-graph.query";
 
 interface CreateKnowledgeGraphFormValues {
   name: string;
-  provider: string;
+  provider: archestraApiTypes.CreateKnowledgeGraphData["body"]["provider"];
   apiUrl: string;
   apiKey: string;
 }

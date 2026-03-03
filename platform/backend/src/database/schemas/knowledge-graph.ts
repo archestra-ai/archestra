@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   jsonb,
   pgTable,
@@ -7,6 +6,10 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type {
+  KnowledgeGraphProviderType,
+  LightragConfig,
+} from "@/types/knowledge-graph";
 import secretTable from "./secret";
 
 const knowledgeGraphsTable = pgTable(
@@ -15,13 +18,12 @@ const knowledgeGraphsTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
-    provider: text("provider").notNull(),
-    config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+    provider: text("provider").$type<KnowledgeGraphProviderType>().notNull(),
+    config: jsonb("config").$type<LightragConfig>().notNull(),
     secretId: uuid("secret_id").references(() => secretTable.id, {
       onDelete: "set null",
     }),
     status: text("status").notNull().default("active"),
-    seededFromEnv: boolean("seeded_from_env").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

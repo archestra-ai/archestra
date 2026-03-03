@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ import { SchedulePicker } from "./schedule-picker";
 interface CreateConnectorFormValues {
   name: string;
   connectorType: "jira" | "confluence";
-  config: Record<string, unknown>;
+  config: Record<string, unknown>; // cast to discriminated union in handleSubmit
   email: string;
   apiToken: string;
   schedule: string;
@@ -70,7 +71,8 @@ export function CreateConnectorDialog({
     const result = await createConnector.mutateAsync({
       name: values.name,
       connectorType: values.connectorType,
-      config: values.config,
+      config:
+        values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
         email: values.email,
         apiToken: values.apiToken,

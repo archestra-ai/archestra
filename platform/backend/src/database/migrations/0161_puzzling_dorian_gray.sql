@@ -1,1 +1,0 @@
-ALTER TABLE "connector_runs" ADD COLUMN "logs" text;

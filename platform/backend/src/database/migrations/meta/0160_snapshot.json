@@ -1,5 +1,5 @@
 {
-  "id": "2e8adf39-2dc7-4714-95ba-f2a0c6dbe337",
+  "id": "88c81afb-ff25-4701-a39e-4e7581c09ec7",
   "prevId": "1b7f0cd9-22b7-4cab-8b25-71169ca345a2",
   "version": "7",
   "dialect": "postgresql",
@@ -1657,6 +1657,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "logs": {
+          "name": "logs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "checkpoint": {
           "name": "checkpoint",
           "type": "jsonb",
@@ -3036,13 +3042,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'active'"
-        },
-        "seeded_from_env": {
-          "name": "seeded_from_env",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",

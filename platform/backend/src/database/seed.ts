@@ -20,7 +20,6 @@ import {
   ChatApiKeyModel,
   DualLlmConfigModel,
   InternalMcpCatalogModel,
-  KnowledgeGraphModel,
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
@@ -572,40 +571,6 @@ async function seedPolicyConfigAgent(): Promise<void> {
   logger.info("Seeded Policy Configuration Subagent built-in agent");
 }
 
-/**
- * Seeds a knowledge graph from environment variables if configured.
- * Creates or updates a seededFromEnv=true row for the default organization.
- */
-export async function seedKnowledgeGraphFromEnv(): Promise<void> {
-  const { default: config } = await import("@/config");
-
-  if (!config.knowledgeGraph.provider) {
-    return;
-  }
-
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-
-  const kgConfig: Record<string, unknown> = {};
-  if (config.knowledgeGraph.provider === "lightrag") {
-    kgConfig.apiUrl = config.knowledgeGraph.lightrag.apiUrl;
-    if (config.knowledgeGraph.lightrag.apiKey) {
-      kgConfig.apiKey = config.knowledgeGraph.lightrag.apiKey;
-    }
-  }
-
-  await KnowledgeGraphModel.seedFromEnv({
-    organizationId: org.id,
-    name: `${config.knowledgeGraph.provider} (env)`,
-    provider: config.knowledgeGraph.provider,
-    config: kgConfig,
-  });
-
-  logger.info(
-    { provider: config.knowledgeGraph.provider },
-    "Seeded knowledge graph from environment variables",
-  );
-}
-
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -621,7 +586,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
   await seedTeamTokens();
-  await seedKnowledgeGraphFromEnv();
   await seedChatApiKeysFromEnv();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();

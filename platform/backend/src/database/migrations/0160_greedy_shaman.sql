@@ -7,6 +7,7 @@ CREATE TABLE "connector_runs" (
 	"documents_processed" integer DEFAULT 0,
 	"documents_ingested" integer DEFAULT 0,
 	"error" text,
+	"logs" text,
 	"checkpoint" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
@@ -37,7 +38,6 @@ CREATE TABLE "knowledge_graphs" (
 	"config" jsonb NOT NULL,
 	"secret_id" uuid,
 	"status" text DEFAULT 'active' NOT NULL,
-	"seeded_from_env" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );

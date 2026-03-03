@@ -1,6 +1,4 @@
 import type pino from "pino";
-import { getConnector } from "@/connectors/registry";
-import { createKnowledgeGraphProvider } from "@/knowledge-graph";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
@@ -8,8 +6,9 @@ import {
   KnowledgeGraphModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { KnowledgeGraphConfig } from "@/types";
 import type { ConnectorCredentials } from "@/types/knowledge-connector";
+import { createKnowledgeGraphProvider } from ".";
+import { getConnector } from "./connectors/registry";
 
 /**
  * Service that orchestrates the sync of data from external connectors
@@ -43,17 +42,9 @@ class ConnectorSyncService {
     const connectorImpl = getConnector(connector.connectorType);
 
     // Build the KG provider for document ingestion
-    const kgConfig: KnowledgeGraphConfig = {
-      provider: knowledgeGraph.provider as KnowledgeGraphConfig["provider"],
-      lightrag:
-        knowledgeGraph.provider === "lightrag"
-          ? (knowledgeGraph.config as KnowledgeGraphConfig["lightrag"])
-          : undefined,
-    };
-
     const kgProvider = createKnowledgeGraphProvider(
-      knowledgeGraph.provider as NonNullable<KnowledgeGraphConfig["provider"]>,
-      kgConfig,
+      knowledgeGraph.provider,
+      knowledgeGraph.config,
     );
 
     // Create a connector run record

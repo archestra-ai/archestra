@@ -10,17 +10,32 @@ import {
   ConnectorConfigSchema,
   ConnectorTypeSchema,
 } from "./knowledge-connector";
+import {
+  KnowledgeGraphProviderTypeSchema,
+  LightragConfigSchema,
+} from "./knowledge-graph";
 
 // ===== Knowledge Graph Schemas =====
 
 export const SelectKnowledgeGraphSchema = createSelectSchema(
   schema.knowledgeGraphsTable,
+  {
+    provider: KnowledgeGraphProviderTypeSchema,
+    config: LightragConfigSchema,
+  },
 );
 export const InsertKnowledgeGraphSchema = createInsertSchema(
   schema.knowledgeGraphsTable,
+  {
+    provider: KnowledgeGraphProviderTypeSchema,
+    config: LightragConfigSchema,
+  },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeGraphSchema = createUpdateSchema(
   schema.knowledgeGraphsTable,
+  {
+    config: LightragConfigSchema.optional(),
+  },
 ).pick({ name: true, config: true, secretId: true, status: true });
 
 export type KnowledgeGraph = z.infer<typeof SelectKnowledgeGraphSchema>;

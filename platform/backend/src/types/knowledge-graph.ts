@@ -9,6 +9,15 @@ export type KnowledgeGraphProviderType = z.infer<
 >;
 
 /**
+ * LightRAG provider configuration stored in the knowledge_graphs.config column
+ */
+export const LightragConfigSchema = z.object({
+  apiUrl: z.string(),
+  apiKey: z.string().optional(),
+});
+export type LightragConfig = z.infer<typeof LightragConfigSchema>;
+
+/**
  * Result of inserting a document into the knowledge graph
  */
 export interface InsertDocumentResult {

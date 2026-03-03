@@ -1,11 +1,11 @@
 /**
  * Entrypoint for running connector syncs as a standalone process.
- * Used by K8s CronJobs instead of the previous curl-based approach.
+ * Used by K8s CronJobs
  *
  * Usage: node dist/entrypoints/connector-sync.mjs --connector-id=<uuid>
  */
 
-import { connectorSyncService } from "@/services/connector-sync";
+import { connectorSyncService } from "@/knowledge-graph/connector-sync";
 import { bootstrap, parseArg } from "./_shared/bootstrap";
 import { createCapturingLogger } from "./_shared/log-capture";
 

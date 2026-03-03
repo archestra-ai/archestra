@@ -11,6 +11,7 @@ import {
   SupportedProviders,
 } from "@shared";
 import dotenv from "dotenv";
+import { DEFAULT_CONNECTOR_NAMESPACE } from "@/k8s/consts";
 import logger from "@/logging";
 import {
   type EmailProviderType,
@@ -700,7 +701,7 @@ const config = {
     },
     connectorNamespace:
       process.env.ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE ||
-      "archestra-connectors",
+      DEFAULT_CONNECTOR_NAMESPACE,
     connectorImage: process.env.ARCHESTRA_ORCHESTRATOR_CONNECTOR_IMAGE || "",
   },
   vault: {

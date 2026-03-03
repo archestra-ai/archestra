@@ -4,6 +4,7 @@ import type {
   KnowledgeGraphConfig,
   KnowledgeGraphProvider,
   KnowledgeGraphProviderType,
+  LightragConfig,
 } from "@/types/knowledge-graph";
 
 import { LightRAGProvider } from "./lightrag-provider";
@@ -58,19 +59,16 @@ export function getKnowledgeGraphProviderType():
 }
 
 /**
- * Create a knowledge graph provider instance based on configuration
+ * Create a knowledge graph provider instance based on provider type and config.
+ * The config parameter is the provider-specific configuration (e.g., LightragConfig).
  */
 export function createKnowledgeGraphProvider(
   providerType: KnowledgeGraphProviderType,
-  providerConfig: KnowledgeGraphConfig,
+  providerConfig: LightragConfig,
 ): KnowledgeGraphProvider {
   switch (providerType) {
-    case "lightrag": {
-      if (!providerConfig.lightrag) {
-        throw new Error("LightRAG provider configuration is missing");
-      }
-      return new LightRAGProvider(providerConfig.lightrag);
-    }
+    case "lightrag":
+      return new LightRAGProvider(providerConfig);
     default:
       throw new Error(`Unknown knowledge graph provider type: ${providerType}`);
   }
@@ -88,9 +86,18 @@ function createProviderInstance(): KnowledgeGraphProvider | null {
   }
 
   try {
+    if (!providerConfig.lightrag) {
+      logger.warn(
+        { provider: providerConfig.provider },
+        "[KnowledgeGraph] Provider-specific configuration is missing",
+      );
+      providerInitializationAttempted = true;
+      return null;
+    }
+
     const provider = createKnowledgeGraphProvider(
       providerConfig.provider,
-      providerConfig,
+      providerConfig.lightrag,
     );
 
     if (!provider.isConfigured()) {

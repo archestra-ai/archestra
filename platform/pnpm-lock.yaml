@@ -242,6 +242,9 @@ importers:
       botframework-connector:
         specifier: ^4.23.3
         version: 4.23.3
+      confluence.js:
+        specifier: ^2.1.0
+        version: 2.1.0
       dotenv:
         specifier: ^17.2.2
         version: 17.2.3
@@ -272,6 +275,9 @@ importers:
       ipaddr.js:
         specifier: ^2.3.0
         version: 2.3.0
+      jira.js:
+        specifier: ^5.3.1
+        version: 5.3.1
       jose:
         specifier: ^6.1.3
         version: 6.1.3
@@ -839,6 +845,10 @@ packages:
 
   '@asamuzakjp/nwsapi@2.3.9':
     resolution: {integrity: sha512-n8GuYSrI9bF7FFZ/SjhwevlHc8xaVlb/7HmHelnc/PZXBD2ZR49NnN9sMMuDdEGPeeRQ5d0hqlSlEpgCX3Wl0Q==}
+
+  '@atlassian/atlassian-jwt@2.2.0':
+    resolution: {integrity: sha512-h6hLnbRFTEVOB0xa8n0TfQCDZ1hUPFGClrbQbO9ryIGeEsNGG2Vy2S8BWrYJBQrirMmj+FHfVVsbs1M9DIC80Q==}
+    engines: {node: '>= 0.4.0'}
 
   '@authenio/xml-encryption@2.0.2':
     resolution: {integrity: sha512-cTlrKttbrRHEw3W+0/I609A2Matj5JQaRvfLtEIGZvlN0RaPi+3ANsMeqAyCAVlH/lUIW2tmtBlSMni74lcXeg==}
@@ -5260,6 +5270,10 @@ packages:
   confbox@0.2.4:
     resolution: {integrity: sha512-ysOGlgTFbN2/Y6Cg3Iye8YKulHw+R2fNXHrgSmXISQdMnomY6eNDprVdW9R5xBguEqI954+S6709UyiO7B+6OQ==}
 
+  confluence.js@2.1.0:
+    resolution: {integrity: sha512-MNu62y7aHABER3cmwKwKeCdxTZFe1sfvhDyhN/7ikaZnN7p4B9igJVJkgvLW2JTLsQ+3GGbQ4D18KkZIdfKGaw==}
+    engines: {node: '>=20'}
+
   consola@3.4.2:
     resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
     engines: {node: ^14.18.0 || >=16.10.0}
@@ -6457,6 +6471,10 @@ packages:
     resolution: {integrity: sha512-7vuh85V5cdDofPyxn58nrPjBktZo0u9x1g8WtjQol+jZDaE+fhN+cIvTj11GndBnMnyfrUOG1sZQxCdjKh+DKg==}
     engines: {node: '>= 10.13.0'}
 
+  jira.js@5.3.1:
+    resolution: {integrity: sha512-ldeH/vcSMLb95OVITF9Q34aNRwPZwCO8PpsY+ZXpzkbGtSzMx74R1pm7ev/0OrDrsYGXSJ+noMS3LH/LnAyG1w==}
+    engines: {node: '>=20'}
+
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
@@ -6545,6 +6563,9 @@ packages:
   jsprim@2.0.2:
     resolution: {integrity: sha512-gqXddjPqQ6G40VdnI6T6yObEC+pDNvyP95wdQhkWkg7crHH3km5qP1FsOXEkzEQwnz6gz5qGTn1c2Y52wP3OyQ==}
     engines: {'0': node >=0.6.0}
+
+  jsuri@1.3.1:
+    resolution: {integrity: sha512-LLdAeqOf88/X0hylAI7oSir6QUsz/8kOW0FcJzzu/SJRfORA/oPHycAOthkNp7eLPlTAbqVDFbqNRHkRVzEA3g==}
 
   jszip@3.10.1:
     resolution: {integrity: sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==}
@@ -7093,6 +7114,9 @@ packages:
 
   oauth4webapi@3.8.3:
     resolution: {integrity: sha512-pQ5BsX3QRTgnt5HxgHwgunIRaDXBdkT23tf8dfzmtTIL2LTpdmxgbpbBm0VgFWAIDlezQvQCTgnVIUmHupXHxw==}
+
+  oauth@0.10.2:
+    resolution: {integrity: sha512-JtFnB+8nxDEXgNyniwz573xxbKSOu3R8D40xQKqcjwJ2CDkYqUDI53o6IuzDJBx60Z8VKCm271+t8iFjakrl8Q==}
 
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
@@ -8867,6 +8891,14 @@ snapshots:
       lru-cache: 11.2.6
 
   '@asamuzakjp/nwsapi@2.3.9': {}
+
+  '@atlassian/atlassian-jwt@2.2.0':
+    dependencies:
+      express: 5.2.0
+      jsuri: 1.3.1
+      lodash: 4.17.23
+    transitivePeerDependencies:
+      - supports-color
 
   '@authenio/xml-encryption@2.0.2':
     dependencies:
@@ -14246,6 +14278,17 @@ snapshots:
 
   confbox@0.2.4: {}
 
+  confluence.js@2.1.0:
+    dependencies:
+      '@atlassian/atlassian-jwt': 2.2.0
+      axios: 1.13.5
+      form-data: 4.0.5
+      oauth: 0.10.2
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
   consola@3.4.2: {}
 
   content-disposition@1.0.1: {}
@@ -15466,6 +15509,14 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
+  jira.js@5.3.1:
+    dependencies:
+      axios: 1.13.5
+      mime-types: 2.1.35
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - debug
+
   jiti@2.6.1: {}
 
   jose@6.1.3: {}
@@ -15574,6 +15625,8 @@ snapshots:
       extsprintf: 1.3.0
       json-schema: 0.4.0
       verror: 1.10.0
+
+  jsuri@1.3.1: {}
 
   jszip@3.10.1:
     dependencies:
@@ -16312,6 +16365,8 @@ snapshots:
   oauth-sign@0.9.0: {}
 
   oauth4webapi@3.8.3: {}
+
+  oauth@0.10.2: {}
 
   object-assign@4.1.1: {}
 

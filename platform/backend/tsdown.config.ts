@@ -119,7 +119,11 @@ export default defineConfig((options: UserConfig) => {
     ...options,
 
     // Bundle server and standalone scripts that need to run in production
-    entry: ["src/server.ts", "src/standalone-scripts/vault-env-injector.ee.ts"],
+    entry: [
+      "src/server.ts",
+      "src/standalone-scripts/vault-env-injector.ee.ts",
+      "src/entrypoints/connector-sync.ts",
+    ],
 
     // Copy SQL migrations and other assets that need to exist at runtime
     copy: ["src/database/migrations"],
@@ -144,6 +148,7 @@ export default defineConfig((options: UserConfig) => {
       "**/*.spec.ts",
       "src/test/**/*",
       "src/standalone-scripts/**/*",
+      "src/entrypoints/**/*",
     ],
 
     // Only set onSuccess handler when in watch mode

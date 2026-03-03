@@ -5,6 +5,11 @@ import {
 } from "drizzle-zod";
 import type { z } from "zod";
 import { schema } from "@/database";
+import {
+  ConnectorCheckpointSchema,
+  ConnectorConfigSchema,
+  ConnectorTypeSchema,
+} from "./knowledge-connector";
 
 // ===== Knowledge Graph Schemas =====
 
@@ -26,12 +31,26 @@ export type UpdateKnowledgeGraph = z.infer<typeof UpdateKnowledgeGraphSchema>;
 
 export const SelectKnowledgeGraphConnectorSchema = createSelectSchema(
   schema.knowledgeGraphConnectorsTable,
+  {
+    connectorType: ConnectorTypeSchema,
+    config: ConnectorConfigSchema,
+  },
 );
 export const InsertKnowledgeGraphConnectorSchema = createInsertSchema(
   schema.knowledgeGraphConnectorsTable,
+  {
+    connectorType: ConnectorTypeSchema,
+    config: ConnectorConfigSchema,
+    checkpoint: ConnectorCheckpointSchema.optional(),
+  },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeGraphConnectorSchema = createUpdateSchema(
   schema.knowledgeGraphConnectorsTable,
+  {
+    connectorType: ConnectorTypeSchema.optional(),
+    config: ConnectorConfigSchema.optional(),
+    checkpoint: ConnectorCheckpointSchema.nullable().optional(),
+  },
 ).pick({
   name: true,
   config: true,
@@ -70,6 +89,7 @@ export const UpdateConnectorRunSchema = createUpdateSchema(
   documentsProcessed: true,
   documentsIngested: true,
   error: true,
+  logs: true,
   checkpoint: true,
 });
 

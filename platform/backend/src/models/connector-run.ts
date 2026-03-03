@@ -38,6 +38,15 @@ class ConnectorRunModel {
     return result?.count ?? 0;
   }
 
+  static async findById(id: string): Promise<ConnectorRun | null> {
+    const [result] = await db
+      .select()
+      .from(schema.connectorRunsTable)
+      .where(eq(schema.connectorRunsTable.id, id));
+
+    return result ?? null;
+  }
+
   static async create(data: InsertConnectorRun): Promise<ConnectorRun> {
     const [result] = await db
       .insert(schema.connectorRunsTable)

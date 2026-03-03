@@ -701,6 +701,7 @@ const config = {
     connectorNamespace:
       process.env.ARCHESTRA_ORCHESTRATOR_CONNECTOR_K8S_NAMESPACE ||
       "archestra-connectors",
+    connectorImage: process.env.ARCHESTRA_ORCHESTRATOR_CONNECTOR_IMAGE || "",
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

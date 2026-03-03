@@ -858,7 +858,12 @@ async function makeKnowledgeGraphConnector(
       organizationId,
       name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
       connectorType: "jira",
-      config: { baseUrl: "https://test.atlassian.net", projectKey: "TEST" },
+      config: {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
       ...overrides,
     })
     .returning();

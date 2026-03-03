@@ -1,10 +1,22 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { JiraSearchResponse } from "@/types/knowledge-connectors/jira";
+import type { ConnectorSyncBatch } from "@/types/knowledge-connector";
 import { extractTextFromAdf, JiraConnector } from "./jira-connector";
 
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// Mock jira.js SDK
+const mockGetCurrentUser = vi.fn();
+const mockEnhancedSearchPost = vi.fn();
+
+vi.mock("jira.js", () => ({
+  ClientType: { Version2: "Version2", Version3: "Version3" },
+  // biome-ignore lint/suspicious/noExplicitAny: mock factory
+  createClient: (_type: any, _config: any) => ({
+    myself: { getCurrentUser: mockGetCurrentUser },
+    issueSearch: {
+      searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
+    },
+  }),
+}));
 
 describe("JiraConnector", () => {
   let connector: JiraConnector;
@@ -69,9 +81,9 @@ describe("JiraConnector", () => {
 
   describe("testConnection", () => {
     test("returns success when API responds OK", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ displayName: "Test User", active: true }),
+      mockGetCurrentUser.mockResolvedValueOnce({
+        displayName: "Test User",
+        active: true,
       });
 
       const result = await connector.testConnection({
@@ -80,40 +92,25 @@ describe("JiraConnector", () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://mysite.atlassian.net/rest/api/3/myself",
-        expect.objectContaining({
-          method: "GET",
-          headers: expect.objectContaining({
-            Authorization: expect.stringContaining("Basic "),
-          }),
-        }),
-      );
+      expect(mockGetCurrentUser).toHaveBeenCalled();
     });
 
-    test("uses API v2 for server instances", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ displayName: "Test User" }),
+    test("returns success for server instances", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({
+        displayName: "Test User",
       });
 
-      await connector.testConnection({
+      const result = await connector.testConnection({
         config: { ...validConfig, isCloud: false },
         credentials,
       });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("/rest/api/2/myself"),
-        expect.anything(),
-      );
+      expect(result).toEqual({ success: true });
+      expect(mockGetCurrentUser).toHaveBeenCalled();
     });
 
-    test("returns error when API responds with error", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        text: () => Promise.resolve("Unauthorized"),
-      });
+    test("returns error when API throws", async () => {
+      mockGetCurrentUser.mockRejectedValueOnce(new Error("401 Unauthorized"));
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -136,29 +133,17 @@ describe("JiraConnector", () => {
   });
 
   describe("sync", () => {
-    function makeSearchResponse(
-      issues: JiraSearchResponse["issues"],
-      total?: number,
-    ): JiraSearchResponse {
-      return {
-        issues,
-        startAt: 0,
-        maxResults: 50,
-        total: total ?? issues.length,
-      };
-    }
-
     function makeIssue(
       key: string,
       summary: string,
       description: unknown = "Description text",
-    ): JiraSearchResponse["issues"][0] {
+    ) {
       return {
         key,
         fields: {
           summary,
           description,
-          comment: { comments: [] },
+          comment: { comments: [] as Record<string, unknown>[] },
           reporter: {
             displayName: "Reporter",
             emailAddress: "reporter@example.com",
@@ -169,7 +154,7 @@ describe("JiraConnector", () => {
           },
           priority: { name: "Medium" },
           status: { name: "Open" },
-          labels: [],
+          labels: [] as string[],
           issuetype: { name: "Task" },
           updated: "2024-01-15T10:00:00.000Z",
         },
@@ -182,9 +167,9 @@ describe("JiraConnector", () => {
         makeIssue("PROJ-2", "Second issue"),
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse(issues)),
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues,
+        nextPageToken: null,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -204,45 +189,27 @@ describe("JiraConnector", () => {
       expect(batches[0].hasMore).toBe(false);
     });
 
-    test("uses POST for cloud search", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
+    test("passes JQL and fields to search", async () => {
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [],
+        nextPageToken: null,
       });
 
       const batches = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, isCloud: true },
+        config: validConfig,
         credentials,
         checkpoint: null,
       })) {
         batches.push(batch);
       }
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://mysite.atlassian.net/rest/api/3/search",
-        expect.objectContaining({ method: "POST" }),
-      );
-    });
-
-    test("uses GET for server search", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
-      });
-
-      const batches = [];
-      for await (const batch of connector.sync({
-        config: { ...validConfig, isCloud: false },
-        credentials,
-        checkpoint: null,
-      })) {
-        batches.push(batch);
-      }
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("/rest/api/2/search?"),
-        expect.objectContaining({ method: "GET" }),
+      expect(mockEnhancedSearchPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jql: expect.stringContaining('project = "PROJ"'),
+          fields: expect.arrayContaining(["summary", "description"]),
+          maxResults: 50,
+        }),
       );
     });
 
@@ -252,26 +219,14 @@ describe("JiraConnector", () => {
       );
       const page2Issues = [makeIssue("PROJ-51", "Issue 51")];
 
-      mockFetch
+      mockEnhancedSearchPost
         .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              issues: page1Issues,
-              startAt: 0,
-              maxResults: 50,
-              total: 51,
-            }),
+          issues: page1Issues,
+          nextPageToken: "next-page-token",
         })
         .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              issues: page2Issues,
-              startAt: 50,
-              maxResults: 50,
-              total: 51,
-            }),
+          issues: page2Issues,
+          nextPageToken: null,
         });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -288,12 +243,18 @@ describe("JiraConnector", () => {
       expect(batches[0].hasMore).toBe(true);
       expect(batches[1].documents).toHaveLength(1);
       expect(batches[1].hasMore).toBe(false);
+
+      // Second call should include the nextPageToken
+      expect(mockEnhancedSearchPost).toHaveBeenCalledTimes(2);
+      expect(mockEnhancedSearchPost.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ nextPageToken: "next-page-token" }),
+      );
     });
 
     test("incremental sync uses checkpoint timestamp", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [],
+        nextPageToken: null,
       });
 
       const batches = [];
@@ -305,9 +266,8 @@ describe("JiraConnector", () => {
         batches.push(batch);
       }
 
-      const callArgs = mockFetch.mock.calls[0];
-      const body = JSON.parse(callArgs[1].body as string);
-      expect(body.jql).toContain('updated >= "2024/01/10 00:00"');
+      const callArgs = mockEnhancedSearchPost.mock.calls[0][0];
+      expect(callArgs.jql).toContain('updated >= "2024/01/10 00:00"');
     });
 
     test("skips issues with labels in labelsToSkip", async () => {
@@ -322,9 +282,9 @@ describe("JiraConnector", () => {
         },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse(issues)),
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues,
+        nextPageToken: null,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -363,9 +323,9 @@ describe("JiraConnector", () => {
         ],
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([issue])),
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [issue],
+        nextPageToken: null,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -386,12 +346,9 @@ describe("JiraConnector", () => {
     });
 
     test("builds source URL correctly", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve(
-            makeSearchResponse([makeIssue("PROJ-1", "Test issue")]),
-          ),
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [makeIssue("PROJ-1", "Test issue")],
+        nextPageToken: null,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -409,12 +366,9 @@ describe("JiraConnector", () => {
     });
 
     test("includes metadata in documents", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve(
-            makeSearchResponse([makeIssue("PROJ-1", "Test issue")]),
-          ),
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [makeIssue("PROJ-1", "Test issue")],
+        nextPageToken: null,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -436,11 +390,9 @@ describe("JiraConnector", () => {
     });
 
     test("throws on search API error", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        text: () => Promise.resolve("Bad JQL"),
-      });
+      mockEnhancedSearchPost.mockRejectedValueOnce(
+        new Error("Request failed with status code 400"),
+      );
 
       const generator = connector.sync({
         config: validConfig,
@@ -448,7 +400,7 @@ describe("JiraConnector", () => {
         checkpoint: null,
       });
 
-      await expect(generator.next()).rejects.toThrow("Jira search failed");
+      await expect(generator.next()).rejects.toThrow();
     });
   });
 
@@ -540,6 +492,3 @@ describe("JiraConnector", () => {
     });
   });
 });
-
-// Import the sync batch type for typing
-import type { ConnectorSyncBatch } from "@/types/knowledge-connectors/connector";

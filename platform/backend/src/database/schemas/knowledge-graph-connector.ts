@@ -7,6 +7,11 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type {
+  ConnectorCheckpoint,
+  ConnectorConfig,
+  ConnectorType,
+} from "@/types";
 import knowledgeGraphsTable from "./knowledge-graph";
 import secretTable from "./secret";
 
@@ -19,8 +24,8 @@ const knowledgeGraphConnectorsTable = pgTable(
       .notNull()
       .references(() => knowledgeGraphsTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    connectorType: text("connector_type").notNull(),
-    config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+    connectorType: text("connector_type").$type<ConnectorType>().notNull(),
+    config: jsonb("config").$type<ConnectorConfig>().notNull(),
     secretId: uuid("secret_id").references(() => secretTable.id, {
       onDelete: "set null",
     }),
@@ -29,7 +34,7 @@ const knowledgeGraphConnectorsTable = pgTable(
     lastSyncAt: timestamp("last_sync_at", { mode: "date" }),
     lastSyncStatus: text("last_sync_status"),
     lastSyncError: text("last_sync_error"),
-    checkpoint: jsonb("checkpoint").$type<Record<string, unknown>>(),
+    checkpoint: jsonb("checkpoint").$type<ConnectorCheckpoint>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

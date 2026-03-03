@@ -1,14 +1,12 @@
+import { ConfluenceClient } from "confluence.js";
 import type {
   ConfluenceCheckpoint,
   ConfluenceConfig,
-  ConfluencePage,
-  ConfluenceSearchResponse,
-} from "@/types/knowledge-connectors/confluence";
-import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
-} from "@/types/knowledge-connectors/connector";
+} from "@/types/knowledge-connector";
+import { ConfluenceConfigSchema } from "@/types/knowledge-connector";
 import { BaseConnector } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -48,24 +46,8 @@ export class ConfluenceConnector extends BaseConnector {
     }
 
     try {
-      const basePath = parsed.isCloud ? "/wiki" : "";
-      const url = this.joinUrl(
-        parsed.confluenceUrl,
-        `${basePath}/rest/api/space?limit=1`,
-      );
-      const response = await this.fetchWithRetry(url, {
-        method: "GET",
-        headers: this.buildHeaders(params.credentials),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        return {
-          success: false,
-          error: `Confluence API error ${response.status}: ${text}`,
-        };
-      }
-
+      const client = createConfluenceClient(parsed, params.credentials);
+      await client.space.getSpaces({ limit: 1 });
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -85,131 +67,94 @@ export class ConfluenceConnector extends BaseConnector {
       throw new Error("Invalid Confluence configuration");
     }
 
-    const checkpoint = (params.checkpoint as ConfluenceCheckpoint | null) ?? {};
+    const checkpoint = (params.checkpoint as ConfluenceCheckpoint | null) ?? {
+      type: "confluence" as const,
+    };
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
     const cql = buildCql(parsed, checkpoint, params.startTime);
-    const basePath = parsed.isCloud ? "/wiki" : "";
+    const client = createConfluenceClient(parsed, params.credentials);
 
-    let start = 0;
+    let cursor: string | undefined;
     let hasMore = true;
 
     while (hasMore) {
       await this.rateLimit();
 
-      const searchResult = await this.searchPages({
-        baseUrl: parsed.confluenceUrl,
-        basePath,
+      const searchResult = await client.content.searchContentByCQL({
         cql,
-        start,
+        cursor,
         limit: batchSize,
-        credentials: params.credentials,
+        expand: ["body.storage", "version", "space", "metadata.labels"],
       });
 
+      const results = searchResult.results ?? [];
       const documents: ConnectorDocument[] = [];
 
-      for (const page of searchResult.results) {
+      for (const page of results) {
         if (shouldSkipPage(page, parsed.labelsToSkip)) {
           continue;
         }
 
-        documents.push(pageToDocument(page, parsed.confluenceUrl, basePath));
+        documents.push(
+          pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
+        );
       }
 
-      start += searchResult.limit;
-      hasMore = searchResult.size >= searchResult.limit;
+      // Extract cursor from _links.next if available
+      // biome-ignore lint/suspicious/noExplicitAny: SDK links type
+      const links = (searchResult as any)._links;
+      const nextUrl: string | undefined = links?.next;
+      if (nextUrl) {
+        const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
+        cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
+      } else {
+        cursor = undefined;
+      }
+      hasMore = results.length >= batchSize && !!cursor;
 
-      const lastPage = searchResult.results[searchResult.results.length - 1];
+      const lastPage = results[results.length - 1];
       const newCheckpoint: ConfluenceCheckpoint = {
+        type: "confluence",
         lastSyncedAt: new Date().toISOString(),
         lastPageId: lastPage?.id ?? checkpoint.lastPageId,
       };
 
       yield {
         documents,
-        checkpoint: newCheckpoint as unknown as Record<string, unknown>,
+        checkpoint: newCheckpoint,
         hasMore,
       };
     }
-  }
-
-  // ===== Private methods =====
-
-  private buildHeaders(
-    credentials: ConnectorCredentials,
-  ): Record<string, string> {
-    return {
-      Authorization: this.buildBasicAuthHeader(
-        credentials.email,
-        credentials.apiToken,
-      ),
-      Accept: "application/json",
-    };
-  }
-
-  private async searchPages(params: {
-    baseUrl: string;
-    basePath: string;
-    cql: string;
-    start: number;
-    limit: number;
-    credentials: ConnectorCredentials;
-  }): Promise<ConfluenceSearchResponse> {
-    const { baseUrl, basePath, cql, start, limit, credentials } = params;
-    const headers = this.buildHeaders(credentials);
-
-    const queryParams = new URLSearchParams({
-      cql,
-      start: String(start),
-      limit: String(limit),
-      expand: "body.storage,version,space,metadata.labels",
-    });
-
-    const url = this.joinUrl(
-      baseUrl,
-      `${basePath}/rest/api/content/search?${queryParams.toString()}`,
-    );
-
-    const response = await this.fetchWithRetry(url, {
-      method: "GET",
-      headers,
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Confluence search failed (${response.status}): ${text}`);
-    }
-
-    return (await response.json()) as ConfluenceSearchResponse;
   }
 }
 
 // ===== Module-level helpers =====
 
+function createConfluenceClient(
+  config: ConfluenceConfig,
+  credentials: ConnectorCredentials,
+) {
+  const host = config.confluenceUrl.replace(/\/+$/, "");
+  return new ConfluenceClient({
+    host,
+    authentication: {
+      basic: {
+        email: credentials.email,
+        apiToken: credentials.apiToken,
+      },
+    },
+    apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
+  });
+}
+
 function parseConfluenceConfig(
   config: Record<string, unknown>,
 ): ConfluenceConfig | null {
-  if (
-    typeof config.confluenceUrl !== "string" ||
-    typeof config.isCloud !== "boolean"
-  ) {
-    return null;
-  }
-  return {
-    confluenceUrl: config.confluenceUrl,
-    isCloud: config.isCloud,
-    spaceKeys: Array.isArray(config.spaceKeys)
-      ? config.spaceKeys.filter((s): s is string => typeof s === "string")
-      : undefined,
-    pageIds: Array.isArray(config.pageIds)
-      ? config.pageIds.filter((p): p is string => typeof p === "string")
-      : undefined,
-    cqlQuery: typeof config.cqlQuery === "string" ? config.cqlQuery : undefined,
-    labelsToSkip: Array.isArray(config.labelsToSkip)
-      ? config.labelsToSkip.filter((l): l is string => typeof l === "string")
-      : undefined,
-    batchSize:
-      typeof config.batchSize === "number" ? config.batchSize : undefined,
-  };
+  const result = ConfluenceConfigSchema.safeParse({
+    type: "confluence",
+    ...config,
+  });
+  return result.success ? result.data : null;
 }
 
 function buildCql(
@@ -250,25 +195,26 @@ function formatCqlDate(isoDate: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function shouldSkipPage(
-  page: ConfluencePage,
-  labelsToSkip?: string[],
-): boolean {
+// biome-ignore lint/suspicious/noExplicitAny: SDK content types
+function shouldSkipPage(page: any, labelsToSkip?: string[]): boolean {
   if (!labelsToSkip || labelsToSkip.length === 0) return false;
-  const pageLabels = page.metadata?.labels?.results?.map((l) => l.name) ?? [];
+  const pageLabels: string[] =
+    page.metadata?.labels?.results?.map((l: { name: string }) => l.name) ?? [];
   return pageLabels.some((label) => labelsToSkip.includes(label));
 }
 
 function pageToDocument(
-  page: ConfluencePage,
+  // biome-ignore lint/suspicious/noExplicitAny: SDK content types
+  page: any,
   baseUrl: string,
-  basePath: string,
+  isCloud: boolean,
 ): ConnectorDocument {
-  const htmlContent = page.body?.storage?.value ?? "";
+  const htmlContent: string = page.body?.storage?.value ?? "";
   const plainText = stripHtmlTags(htmlContent);
 
   const normalizedBase = baseUrl.replace(/\/+$/, "");
-  const webUiPath = page._links?.webui ?? "";
+  const basePath = isCloud ? "/wiki" : "";
+  const webUiPath: string = page._links?.webui ?? "";
   const sourceUrl = webUiPath
     ? `${normalizedBase}${basePath}${webUiPath}`
     : undefined;
@@ -283,7 +229,9 @@ function pageToDocument(
       spaceKey: page.space?.key,
       spaceName: page.space?.name,
       status: page.status,
-      labels: page.metadata?.labels?.results?.map((l) => l.name) ?? [],
+      labels:
+        page.metadata?.labels?.results?.map((l: { name: string }) => l.name) ??
+        [],
     },
     updatedAt: page.version?.when ? new Date(page.version.when) : undefined,
   };
@@ -291,16 +239,12 @@ function pageToDocument(
 
 /**
  * Strip HTML tags to produce plain text.
- * Handles common block elements by adding newlines.
  */
 export function stripHtmlTags(html: string): string {
   let text = html;
-  // Replace block-level elements with newlines
   text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, "\n");
   text = text.replace(/<br\s*\/?>/gi, "\n");
-  // Remove all remaining HTML tags
   text = text.replace(/<[^>]+>/g, "");
-  // Decode common HTML entities
   text = text
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -308,7 +252,6 @@ export function stripHtmlTags(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, " ");
-  // Collapse multiple newlines
   text = text.replace(/\n{3,}/g, "\n\n");
   return text.trim();
 }

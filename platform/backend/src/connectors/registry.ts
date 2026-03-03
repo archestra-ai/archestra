@@ -1,7 +1,4 @@
-import type {
-  Connector,
-  ConnectorType,
-} from "@/types/knowledge-connectors/connector";
+import type { Connector, ConnectorType } from "@/types/knowledge-connector";
 import { ConfluenceConnector } from "./confluence/confluence-connector";
 import { JiraConnector } from "./jira/jira-connector";
 

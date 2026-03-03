@@ -137,7 +137,7 @@ describe("getArchestraMcpTools", () => {
         query: {
           type: "string",
           description:
-            "The natural language query to search the knowledge graph",
+            "A natural language query about the content stored in the knowledge graph. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
         },
         mode: {
           type: "string",
@@ -911,6 +911,275 @@ describe("executeArchestraTool", () => {
         expect((result.content[0] as any).text).toContain(
           "Connection to LightRAG failed",
         );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should fall back to naive mode when hybrid returns no information", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi
+          .fn()
+          .mockResolvedValueOnce({
+            answer: "I do not have enough information to answer your query.",
+          })
+          .mockResolvedValueOnce({
+            answer: "Here are the tasks being tracked: Task #1 - Testing.",
+          }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "get information from jira" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect((result.content[0] as any).text).toContain(
+          "Here are the tasks being tracked",
+        );
+        // First call: hybrid (default), second call: naive fallback
+        expect(mockProvider.queryDocument).toHaveBeenCalledTimes(2);
+        expect(mockProvider.queryDocument).toHaveBeenNthCalledWith(
+          1,
+          "get information from jira",
+          { mode: "hybrid" },
+        );
+        expect(mockProvider.queryDocument).toHaveBeenNthCalledWith(
+          2,
+          "get information from jira",
+          { mode: "naive" },
+        );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should fall back to naive mode for 'no relevant information' response", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi
+          .fn()
+          .mockResolvedValueOnce({
+            answer: "There is no relevant information in the knowledge graph.",
+          })
+          .mockResolvedValueOnce({
+            answer: "Found relevant documents about the project.",
+          }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "project overview", mode: "global" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect((result.content[0] as any).text).toContain(
+          "Found relevant documents about the project.",
+        );
+        expect(mockProvider.queryDocument).toHaveBeenCalledTimes(2);
+        expect(mockProvider.queryDocument).toHaveBeenNthCalledWith(
+          1,
+          "project overview",
+          { mode: "global" },
+        );
+        expect(mockProvider.queryDocument).toHaveBeenNthCalledWith(
+          2,
+          "project overview",
+          { mode: "naive" },
+        );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should not fall back when already in naive mode", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi.fn().mockResolvedValue({
+          answer: "I do not have enough information to answer your query.",
+        }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "some query", mode: "naive" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect((result.content[0] as any).text).toContain(
+          "I do not have enough information",
+        );
+        // Should only call once — no fallback since already naive
+        expect(mockProvider.queryDocument).toHaveBeenCalledTimes(1);
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should return original response when fallback also has no information", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi.fn().mockResolvedValue({
+          answer: "I do not have enough information to answer your query.",
+        }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "completely unknown topic" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect((result.content[0] as any).text).toContain(
+          "I do not have enough information",
+        );
+        // Should call twice: hybrid then naive fallback
+        expect(mockProvider.queryDocument).toHaveBeenCalledTimes(2);
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should return original response when fallback errors", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi
+          .fn()
+          .mockResolvedValueOnce({
+            answer: "I do not have enough information to answer your query.",
+          })
+          .mockResolvedValueOnce({
+            answer: "",
+            error: "Naive mode query failed",
+          }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "some query" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        // Falls through to return original hybrid result
+        expect((result.content[0] as any).text).toContain(
+          "I do not have enough information",
+        );
+        expect(mockProvider.queryDocument).toHaveBeenCalledTimes(2);
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should not fall back when hybrid returns useful answer", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi.fn().mockResolvedValue({
+          answer: "The project has 3 active sprints with 15 tasks in progress.",
+        }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "what tasks are in progress" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect((result.content[0] as any).text).toContain(
+          "3 active sprints with 15 tasks",
+        );
+        // Should only call once — no fallback needed
+        expect(mockProvider.queryDocument).toHaveBeenCalledTimes(1);
       } finally {
         getProviderSpy.mockRestore();
       }

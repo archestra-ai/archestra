@@ -50,6 +50,7 @@ vi.mock("@/config", async (importOriginal) => {
           loadKubeconfigFromCurrentCluster: false,
         },
         connectorNamespace: "test-connector-namespace",
+        connectorImage: "archestra-backend:test",
       },
     },
   };
@@ -70,8 +71,6 @@ describe("CronJobManager", () => {
   const defaultParams = {
     connectorId: "connector-123",
     schedule: "0 */6 * * *",
-    backendUrl: "http://localhost:9000",
-    hmacSecret: "test-hmac-secret",
   };
 
   describe("createOrUpdateCronJob", () => {
@@ -131,7 +130,7 @@ describe("CronJobManager", () => {
       });
     });
 
-    test("uses curlimages/curl container image", async () => {
+    test("uses connector image from config", async () => {
       const manager = await getManager();
 
       mockReadNamespacedCronJob.mockRejectedValue({ statusCode: 404 });
@@ -142,8 +141,14 @@ describe("CronJobManager", () => {
       const call = mockCreateNamespacedCronJob.mock.calls[0][0];
       const container =
         call.body.spec.jobTemplate.spec.template.spec.containers[0];
-      expect(container.image).toBe("curlimages/curl:latest");
+      expect(container.image).toBe("archestra-backend:test");
       expect(container.name).toBe("worker");
+      expect(container.command).toEqual(["node", "--enable-source-maps"]);
+      expect(container.args).toEqual([
+        "dist/entrypoints/connector-sync.mjs",
+        "--connector-id=connector-123",
+      ]);
+      expect(container.workingDir).toBe("/app/backend");
     });
   });
 

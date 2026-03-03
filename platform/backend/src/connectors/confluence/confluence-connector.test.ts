@@ -1,14 +1,18 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type {
-  ConfluencePage,
-  ConfluenceSearchResponse,
-} from "@/types/knowledge-connectors/confluence";
-import type { ConnectorSyncBatch } from "@/types/knowledge-connectors/connector";
+import type { ConnectorSyncBatch } from "@/types/knowledge-connector";
 import { ConfluenceConnector, stripHtmlTags } from "./confluence-connector";
 
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// Mock confluence.js SDK
+const mockGetSpaces = vi.fn();
+const mockSearchContentByCQL = vi.fn();
+
+vi.mock("confluence.js", () => ({
+  ConfluenceClient: class MockConfluenceClient {
+    space = { getSpaces: mockGetSpaces };
+    content = { searchContentByCQL: mockSearchContentByCQL };
+  },
+}));
 
 describe("ConfluenceConnector", () => {
   let connector: ConfluenceConnector;
@@ -73,10 +77,7 @@ describe("ConfluenceConnector", () => {
 
   describe("testConnection", () => {
     test("returns success when API responds OK", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ results: [] }),
-      });
+      mockGetSpaces.mockResolvedValueOnce({ results: [] });
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -84,40 +85,25 @@ describe("ConfluenceConnector", () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://mysite.atlassian.net/wiki/rest/api/space?limit=1",
-        expect.objectContaining({
-          method: "GET",
-          headers: expect.objectContaining({
-            Authorization: expect.stringContaining("Basic "),
-          }),
-        }),
-      );
+      expect(mockGetSpaces).toHaveBeenCalledWith({ limit: 1 });
     });
 
-    test("uses correct path for server instances", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ results: [] }),
-      });
+    test("returns success for server instances", async () => {
+      mockGetSpaces.mockResolvedValueOnce({ results: [] });
 
-      await connector.testConnection({
+      const result = await connector.testConnection({
         config: { ...validConfig, isCloud: false },
         credentials,
       });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://mysite.atlassian.net/rest/api/space?limit=1",
-        expect.anything(),
-      );
+      expect(result).toEqual({ success: true });
+      expect(mockGetSpaces).toHaveBeenCalled();
     });
 
-    test("returns error when API responds with error", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        text: () => Promise.resolve("Unauthorized"),
-      });
+    test("returns error when API throws", async () => {
+      mockGetSpaces.mockRejectedValueOnce(
+        new Error("Request failed with status code 401"),
+      );
 
       const result = await connector.testConnection({
         config: validConfig,
@@ -144,28 +130,16 @@ describe("ConfluenceConnector", () => {
       id: string,
       title: string,
       bodyHtml = "<p>Page content</p>",
-    ): ConfluencePage {
+    ) {
       return {
         id,
         title,
         status: "current",
         body: { storage: { value: bodyHtml } },
-        metadata: { labels: { results: [] } },
+        metadata: { labels: { results: [] as Array<{ name: string }> } },
         version: { when: "2024-01-15T10:00:00.000Z" },
         _links: { webui: `/spaces/DEV/pages/${id}/${title}` },
         space: { key: "DEV", name: "Development" },
-      };
-    }
-
-    function makeSearchResponse(
-      pages: ConfluencePage[],
-      limit = 50,
-    ): ConfluenceSearchResponse {
-      return {
-        results: pages,
-        start: 0,
-        limit,
-        size: pages.length,
       };
     }
 
@@ -175,9 +149,9 @@ describe("ConfluenceConnector", () => {
         makePage("456", "API Reference"),
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse(pages)),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: pages,
+        size: pages.length,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -197,51 +171,10 @@ describe("ConfluenceConnector", () => {
       expect(batches[0].hasMore).toBe(false);
     });
 
-    test("uses /wiki prefix for cloud instances", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
-      });
-
-      const batches = [];
-      for await (const batch of connector.sync({
-        config: { ...validConfig, isCloud: true },
-        credentials,
-        checkpoint: null,
-      })) {
-        batches.push(batch);
-      }
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("/wiki/rest/api/content/search"),
-        expect.anything(),
-      );
-    });
-
-    test("omits /wiki prefix for server instances", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
-      });
-
-      const batches = [];
-      for await (const batch of connector.sync({
-        config: { ...validConfig, isCloud: false },
-        credentials,
-        checkpoint: null,
-      })) {
-        batches.push(batch);
-      }
-
-      const callUrl = mockFetch.mock.calls[0][0] as string;
-      expect(callUrl).toContain("/rest/api/content/search");
-      expect(callUrl).not.toContain("/wiki/rest/api/content/search");
-    });
-
-    test("builds CQL with space filter", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
+    test("passes CQL with space filter", async () => {
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [],
+        size: 0,
       });
 
       const batches = [];
@@ -253,38 +186,27 @@ describe("ConfluenceConnector", () => {
         batches.push(batch);
       }
 
-      const callUrl = mockFetch.mock.calls[0][0] as string;
-      const url = new URL(callUrl);
-      const cql = url.searchParams.get("cql") ?? "";
-      expect(cql).toContain('space IN ("DEV", "OPS")');
+      const callArgs = mockSearchContentByCQL.mock.calls[0][0];
+      expect(callArgs.cql).toContain('space IN ("DEV", "OPS")');
     });
 
-    test("paginates through multiple pages", async () => {
+    test("paginates through multiple pages using cursor", async () => {
       const page1 = Array.from({ length: 50 }, (_, i) =>
         makePage(`${i + 1}`, `Page ${i + 1}`),
       );
       const page2 = [makePage("51", "Page 51")];
 
-      mockFetch
+      mockSearchContentByCQL
         .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              results: page1,
-              start: 0,
-              limit: 50,
-              size: 50,
-            }),
+          results: page1,
+          size: 50,
+          _links: {
+            next: "/rest/api/content/search?cursor=next-page-cursor&cql=...",
+          },
         })
         .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              results: page2,
-              start: 50,
-              limit: 50,
-              size: 1,
-            }),
+          results: page2,
+          size: 1,
         });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -301,12 +223,18 @@ describe("ConfluenceConnector", () => {
       expect(batches[0].hasMore).toBe(true);
       expect(batches[1].documents).toHaveLength(1);
       expect(batches[1].hasMore).toBe(false);
+
+      // Second call should include the cursor
+      expect(mockSearchContentByCQL).toHaveBeenCalledTimes(2);
+      expect(mockSearchContentByCQL.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ cursor: "next-page-cursor" }),
+      );
     });
 
     test("incremental sync uses checkpoint timestamp", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse([])),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [],
+        size: 0,
       });
 
       const batches = [];
@@ -318,10 +246,8 @@ describe("ConfluenceConnector", () => {
         batches.push(batch);
       }
 
-      const callUrl = mockFetch.mock.calls[0][0] as string;
-      const url = new URL(callUrl);
-      const cql = url.searchParams.get("cql") ?? "";
-      expect(cql).toContain('lastModified >= "2024-01-10"');
+      const callArgs = mockSearchContentByCQL.mock.calls[0][0];
+      expect(callArgs.cql).toContain('lastModified >= "2024-01-10"');
     });
 
     test("skips pages with labels in labelsToSkip", async () => {
@@ -333,9 +259,9 @@ describe("ConfluenceConnector", () => {
         },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse(pages)),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: pages,
+        size: pages.length,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -360,9 +286,9 @@ describe("ConfluenceConnector", () => {
         ),
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(makeSearchResponse(pages)),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: pages,
+        size: pages.length,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -381,10 +307,9 @@ describe("ConfluenceConnector", () => {
     });
 
     test("builds source URL correctly for cloud", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve(makeSearchResponse([makePage("123", "Test Page")])),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [makePage("123", "Test Page")],
+        size: 1,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -402,10 +327,9 @@ describe("ConfluenceConnector", () => {
     });
 
     test("includes metadata in documents", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve(makeSearchResponse([makePage("123", "Test Page")])),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [makePage("123", "Test Page")],
+        size: 1,
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -425,11 +349,9 @@ describe("ConfluenceConnector", () => {
     });
 
     test("throws on search API error", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        text: () => Promise.resolve("Invalid CQL"),
-      });
+      mockSearchContentByCQL.mockRejectedValueOnce(
+        new Error("Request failed with status code 400"),
+      );
 
       const generator = connector.sync({
         config: validConfig,
@@ -437,21 +359,13 @@ describe("ConfluenceConnector", () => {
         checkpoint: null,
       });
 
-      await expect(generator.next()).rejects.toThrow(
-        "Confluence search failed",
-      );
+      await expect(generator.next()).rejects.toThrow();
     });
 
     test("respects custom batchSize", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            results: [],
-            start: 0,
-            limit: 10,
-            size: 0,
-          }),
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [],
+        size: 0,
       });
 
       const batches = [];
@@ -463,9 +377,8 @@ describe("ConfluenceConnector", () => {
         batches.push(batch);
       }
 
-      const callUrl = mockFetch.mock.calls[0][0] as string;
-      const url = new URL(callUrl);
-      expect(url.searchParams.get("limit")).toBe("10");
+      const callArgs = mockSearchContentByCQL.mock.calls[0][0];
+      expect(callArgs.limit).toBe(10);
     });
   });
 

@@ -551,17 +551,12 @@ const reconcileConnectorCronJobs = async () => {
     return;
   }
 
-  const hmacSecret = config.auth.secret || "";
-  const backendUrl = `http://localhost:${config.api.port}`;
-
   let reconciled = 0;
   for (const connector of connectors) {
     try {
       await cronJobManager.createOrUpdateCronJob({
         connectorId: connector.id,
         schedule: connector.schedule,
-        backendUrl,
-        hmacSecret,
       });
       reconciled++;
     } catch (error) {

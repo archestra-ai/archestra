@@ -688,6 +688,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Connector Run Routes
   [RouteId.GetConnectorRuns]: { knowledgeGraph: ["read"] },
+  [RouteId.GetConnectorRun]: { knowledgeGraph: ["read"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},

@@ -4,7 +4,7 @@ import type {
   ConnectorCredentials,
   ConnectorSyncBatch,
   ConnectorType,
-} from "@/types/knowledge-connectors/connector";
+} from "@/types/knowledge-connector";
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;

@@ -358,6 +358,7 @@ export const RouteId = {
 
   // Connector Run Routes
   GetConnectorRuns: "getConnectorRuns",
+  GetConnectorRun: "getConnectorRun",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

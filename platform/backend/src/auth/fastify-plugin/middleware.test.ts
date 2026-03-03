@@ -391,32 +391,6 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip auth for internal connector sync routes", async () => {
-      const connectorSyncUrls = [
-        "/api/internal/connectors/some-connector-id/sync",
-        "/api/internal/connectors/123e4567-e89b-12d3-a456-426614174000/sync",
-        "/api/internal/connectors/test-connector/sync",
-      ];
-
-      for (const url of connectorSyncUrls) {
-        const mockRequest = {
-          url,
-          method: "POST",
-          headers: {},
-        } as FastifyRequest;
-
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
-
-        await authnz.handle(mockRequest, mockReply);
-
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      }
-    });
-
     test("should NOT skip auth for similar but different paths", async () => {
       const protectedPaths = [
         "/.well-known/something-else",

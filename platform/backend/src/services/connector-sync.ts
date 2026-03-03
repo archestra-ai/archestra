@@ -1,6 +1,7 @@
+import type pino from "pino";
 import { getConnector } from "@/connectors/registry";
 import { createKnowledgeGraphProvider } from "@/knowledge-graph";
-import logger from "@/logging";
+import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
   KnowledgeGraphConnectorModel,
@@ -8,7 +9,7 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { KnowledgeGraphConfig } from "@/types";
-import type { ConnectorCredentials } from "@/types/knowledge-connectors/connector";
+import type { ConnectorCredentials } from "@/types/knowledge-connector";
 
 /**
  * Service that orchestrates the sync of data from external connectors
@@ -17,7 +18,10 @@ import type { ConnectorCredentials } from "@/types/knowledge-connectors/connecto
 class ConnectorSyncService {
   async executeSync(
     connectorId: string,
+    options?: { logger?: pino.Logger; getLogOutput?: () => string },
   ): Promise<{ runId: string; status: string }> {
+    const log = options?.logger ?? defaultLogger;
+
     const connector = await KnowledgeGraphConnectorModel.findById(connectorId);
     if (!connector) {
       throw new Error(`Connector not found: ${connectorId}`);
@@ -33,7 +37,7 @@ class ConnectorSyncService {
     }
 
     // Load credentials from secrets manager
-    const credentials = await this.loadCredentials(connector.secretId);
+    const credentials = await this.loadCredentials(connector.secretId, log);
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
@@ -93,7 +97,7 @@ class ConnectorSyncService {
             });
             documentsIngested++;
           } catch (docError) {
-            logger.warn(
+            log.warn(
               {
                 connectorId,
                 documentId: doc.id,
@@ -126,6 +130,7 @@ class ConnectorSyncService {
         completedAt: now,
         documentsProcessed,
         documentsIngested,
+        logs: options?.getLogOutput?.() ?? null,
       });
 
       await KnowledgeGraphConnectorModel.update(connectorId, {
@@ -134,7 +139,7 @@ class ConnectorSyncService {
         lastSyncError: null,
       });
 
-      logger.info(
+      log.info(
         { connectorId, runId: run.id, documentsProcessed, documentsIngested },
         "[ConnectorSync] Sync completed successfully",
       );
@@ -150,6 +155,7 @@ class ConnectorSyncService {
         documentsProcessed,
         documentsIngested,
         error: errorMessage,
+        logs: options?.getLogOutput?.() ?? null,
       });
 
       await KnowledgeGraphConnectorModel.update(connectorId, {
@@ -157,7 +163,7 @@ class ConnectorSyncService {
         lastSyncError: errorMessage,
       });
 
-      logger.error(
+      log.error(
         { connectorId, runId: run.id, error: errorMessage },
         "[ConnectorSync] Sync failed",
       );
@@ -168,6 +174,7 @@ class ConnectorSyncService {
 
   private async loadCredentials(
     secretId: string | null,
+    log: pino.Logger,
   ): Promise<ConnectorCredentials> {
     if (!secretId) {
       throw new Error("Connector has no associated secret");
@@ -177,6 +184,8 @@ class ConnectorSyncService {
     if (!secret) {
       throw new Error(`Secret not found: ${secretId}`);
     }
+
+    log.debug({ secretId }, "[ConnectorSync] Credentials loaded");
 
     const data = secret.secret as Record<string, unknown>;
     return {

@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowLeft, Play, Plug } from "lucide-react";
+import { ArrowLeft, FileText, Play, Plug } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -20,10 +20,11 @@ import {
 } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   useConnector,
   useConnectorRuns,
@@ -32,6 +33,16 @@ import {
 } from "@/lib/connector.query";
 import { useKnowledgeGraph } from "@/lib/knowledge-graph.query";
 import { formatDate } from "@/lib/utils";
+
+/**
+ * Connector run item type. Extends the generated SDK type with the `logs` field
+ * which was recently added to the schema. Once codegen is re-run, the `logs`
+ * field will be part of the generated type and this can be simplified.
+ */
+type ConnectorRunItem =
+  archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number] & {
+    logs?: string | null;
+  };
 
 export default function ConnectorDetailPage({
   knowledgeGraphId,
@@ -69,6 +80,7 @@ function ConnectorDetail({
 
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 10;
+  const [selectedRun, setSelectedRun] = useState<ConnectorRunItem | null>(null);
 
   const { data: runsData, isPending: isRunsPending } = useConnectorRuns({
     kgId: knowledgeGraphId,
@@ -91,9 +103,6 @@ function ConnectorDetail({
     },
     [],
   );
-
-  type ConnectorRunItem =
-    archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number];
 
   const columns: ColumnDef<ConnectorRunItem>[] = [
     {
@@ -134,24 +143,22 @@ function ConnectorDetail({
       cell: ({ row }) => <div>{row.original.documentsIngested ?? 0}</div>,
     },
     {
-      id: "error",
-      header: "Error",
+      id: "logs",
+      header: "Logs",
       cell: ({ row }) => {
-        const error = row.original.error;
-        if (!error) return <span className="text-muted-foreground">-</span>;
-        const truncated =
-          error.length > 80 ? `${error.substring(0, 80)}...` : error;
+        const run = row.original;
+        const hasLogs = run.logs || run.error;
+        if (!hasLogs) return <span className="text-muted-foreground">-</span>;
         return (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-xs text-destructive cursor-help">
-                {truncated}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-sm">
-              <p className="text-xs whitespace-pre-wrap">{error}</p>
-            </TooltipContent>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={() => setSelectedRun(run)}
+          >
+            <FileText className="mr-1 h-3.5 w-3.5" />
+            View
+          </Button>
         );
       },
     },
@@ -273,6 +280,70 @@ function ConnectorDetail({
             />
           )}
         </LoadingWrapper>
+
+        <Dialog
+          open={selectedRun !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedRun(null);
+          }}
+        >
+          <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                Sync Run Logs
+                {selectedRun && (
+                  <ConnectorStatusBadge status={selectedRun.status} />
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedRun && (
+              <div className="flex-1 overflow-auto space-y-4">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Started:</span>{" "}
+                    {formatDate({ date: selectedRun.startedAt })}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Completed:</span>{" "}
+                    {selectedRun.completedAt
+                      ? formatDate({ date: selectedRun.completedAt })
+                      : "-"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Processed:</span>{" "}
+                    {selectedRun.documentsProcessed ?? 0}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Ingested:</span>{" "}
+                    {selectedRun.documentsIngested ?? 0}
+                  </div>
+                </div>
+                {selectedRun.error && (
+                  <div>
+                    <h4 className="text-sm font-medium text-destructive mb-1">
+                      Error
+                    </h4>
+                    <pre className="text-xs bg-destructive/10 text-destructive p-3 rounded-md whitespace-pre-wrap break-words max-h-32 overflow-auto">
+                      {selectedRun.error}
+                    </pre>
+                  </div>
+                )}
+                {selectedRun.logs ? (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Output</h4>
+                    <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-words max-h-96 overflow-auto font-mono">
+                      {selectedRun.logs}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No logs available for this run.
+                  </p>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </PageLayout>
   );

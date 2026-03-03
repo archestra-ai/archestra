@@ -27,7 +27,7 @@ export function ConfluenceConfigFields({
     <div className="space-y-4">
       <FormField
         control={form.control}
-        name={`${prefix}.url`}
+        name={`${prefix}.confluenceUrl`}
         rules={{ required: "URL is required" }}
         render={({ field }) => (
           <FormItem>

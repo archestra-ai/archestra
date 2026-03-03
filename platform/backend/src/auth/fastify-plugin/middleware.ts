@@ -120,10 +120,7 @@ export class Authnz {
       url.startsWith("/api/webhooks/incoming-email?") ||
       // ChatOps webhooks - Bot Framework calls these directly
       // JWT validation is handled by the Bot Framework adapter
-      url.startsWith("/api/webhooks/chatops/") ||
-      // Internal connector sync endpoint - called by K8s CronJobs
-      // HMAC signature validation is handled in the route handler
-      url.startsWith("/api/internal/connectors/")
+      url.startsWith("/api/webhooks/chatops/")
     ) {
       return true;
     }

@@ -1,8 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
 import { getConnector } from "@/connectors/registry";
 import { cronJobManager } from "@/k8s/cron-job";
 import { createKnowledgeGraphProvider } from "@/knowledge-graph";
@@ -26,9 +24,11 @@ import {
   SelectKnowledgeGraphSchema,
 } from "@/types";
 import {
+  ConnectorConfigSchema,
   type ConnectorCredentials,
+  ConnectorCredentialsSchema,
   ConnectorTypeSchema,
-} from "@/types/knowledge-connectors/connector";
+} from "@/types/knowledge-connector";
 
 const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // ===== Knowledge Graph CRUD =====
@@ -289,11 +289,8 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1),
           connectorType: ConnectorTypeSchema,
-          config: z.record(z.string(), z.unknown()),
-          credentials: z.object({
-            email: z.string(),
-            apiToken: z.string(),
-          }),
+          config: ConnectorConfigSchema,
+          credentials: ConnectorCredentialsSchema,
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
         }),
@@ -333,14 +330,9 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Create CronJob if K8s is configured
       try {
-        const hmacSecret = config.auth.secret || "";
-        const backendUrl = `http://localhost:${config.api.port}`;
-
         await cronJobManager.createOrUpdateCronJob({
           connectorId: connector.id,
           schedule: connector.schedule,
-          backendUrl,
-          hmacSecret,
         });
       } catch (error) {
         logger.warn(
@@ -384,7 +376,7 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ kgId: z.string(), id: z.string() }),
         body: z.object({
           name: z.string().min(1).optional(),
-          config: z.record(z.string(), z.unknown()).optional(),
+          config: ConnectorConfigSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
         }),
@@ -403,14 +395,9 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Update CronJob if schedule changed
       if (body.schedule && body.schedule !== existing.schedule) {
         try {
-          const hmacSecret = config.auth.secret || "";
-          const backendUrl = `http://localhost:${config.api.port}`;
-
           await cronJobManager.createOrUpdateCronJob({
             connectorId: id,
             schedule: body.schedule,
-            backendUrl,
-            hmacSecret,
           });
         } catch (error) {
           logger.warn(
@@ -602,56 +589,31 @@ const knowledgeGraphRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // ===== Internal Route: CronJob Callback =====
-
-  fastify.post(
-    "/api/internal/connectors/:connectorId/sync",
+  fastify.get(
+    "/api/knowledge-graphs/:kgId/connectors/:id/runs/:runId",
     {
       schema: {
-        description: "Internal endpoint called by K8s CronJobs to trigger sync",
-        tags: ["Internal"],
-        params: z.object({ connectorId: z.string() }),
-        response: constructResponseSchema(
-          z.object({
-            runId: z.string(),
-            status: z.string(),
-          }),
-        ),
+        operationId: RouteId.GetConnectorRun,
+        description: "Get a single connector run (including logs)",
+        tags: ["Knowledge Graph Connectors"],
+        params: z.object({
+          kgId: z.string(),
+          id: z.string(),
+          runId: z.string(),
+        }),
+        response: constructResponseSchema(SelectConnectorRunSchema),
       },
     },
-    async ({ params: { connectorId }, headers }, reply) => {
-      // Validate HMAC signature from CronJob
-      const signature = headers["x-archestra-signature"] as string | undefined;
-      const timestamp = headers["x-archestra-timestamp"] as string | undefined;
+    async ({ params: { kgId, id, runId }, organizationId }, reply) => {
+      await findKnowledgeGraphOrThrow(kgId, organizationId);
+      await findConnectorOrThrow(id, kgId);
 
-      if (!signature || !timestamp) {
-        throw new ApiError(401, "Missing signature or timestamp");
+      const run = await ConnectorRunModel.findById(runId);
+      if (!run || run.connectorId !== id) {
+        throw new ApiError(404, "Connector run not found");
       }
 
-      const hmacSecret = config.auth.secret || "";
-      const expectedSignature = createHmac("sha256", hmacSecret)
-        .update(timestamp)
-        .digest("hex");
-
-      const sigBuffer = Buffer.from(signature, "hex");
-      const expectedBuffer = Buffer.from(expectedSignature, "hex");
-
-      if (
-        sigBuffer.length !== expectedBuffer.length ||
-        !timingSafeEqual(sigBuffer, expectedBuffer)
-      ) {
-        throw new ApiError(401, "Invalid signature");
-      }
-
-      // Verify timestamp is not too old (5 minutes window)
-      const timestampNum = Number.parseInt(timestamp, 10);
-      const now = Math.floor(Date.now() / 1000);
-      if (Math.abs(now - timestampNum) > 300) {
-        throw new ApiError(401, "Timestamp too old");
-      }
-
-      const result = await connectorSyncService.executeSync(connectorId);
-      return reply.send(result);
+      return reply.send(run);
     },
   );
 };

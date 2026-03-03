@@ -20,6 +20,7 @@ export interface CronJobSpec {
   containerImage: string;
   command: string[];
   args: string[];
+  workingDir?: string;
   env?: Array<{ name: string; value: string }>;
   labels: Record<string, string>;
   activeDeadlineSeconds?: number;
@@ -34,38 +35,30 @@ export interface CronJobStatus {
 
 /**
  * Builds a CronJobSpec for a connector sync CronJob.
- * Creates a curl-based CronJob that triggers connector sync via HMAC-authenticated HTTP POST.
+ * Runs the connector-sync entrypoint directly in the backend image,
+ * which talks to the database and captures full sync logs.
  */
 export function buildConnectorSyncCronJobSpec(params: {
   connectorId: string;
   schedule: string;
-  backendUrl: string;
-  hmacSecret: string;
+  containerImage: string;
+  env?: Array<{ name: string; value: string }>;
   namespace: string;
 }): CronJobSpec {
-  const { connectorId, schedule, backendUrl, hmacSecret, namespace } = params;
-  const syncUrl = `${backendUrl}/api/internal/connectors/${connectorId}/sync`;
-  const timestamp = "$(date +%s)";
-  const hmacCommand =
-    'openssl dgst -sha256 -hmac "$HMAC_SECRET" | cut -d" " -f2';
+  const { connectorId, schedule, containerImage, namespace } = params;
 
   return {
     name: `${CRONJOB_NAME_PREFIX}-${sanitizeLabelValue(connectorId)}`,
     namespace,
     schedule,
-    containerImage: CONTAINER_IMAGE,
-    command: ["/bin/sh", "-c"],
+    containerImage,
+    command: ["node", "--enable-source-maps"],
     args: [
-      [
-        `TIMESTAMP=${timestamp}`,
-        `SIGNATURE=$(echo -n "$TIMESTAMP" | ${hmacCommand})`,
-        `curl -sf -X POST "${syncUrl}"`,
-        `-H "Content-Type: application/json"`,
-        `-H "X-Archestra-Signature: $SIGNATURE"`,
-        `-H "X-Archestra-Timestamp: $TIMESTAMP"`,
-      ].join(" && "),
+      "dist/entrypoints/connector-sync.mjs",
+      `--connector-id=${connectorId}`,
     ],
-    env: [{ name: "HMAC_SECRET", value: hmacSecret }],
+    workingDir: "/app/backend",
+    env: params.env,
     labels: {
       app: "archestra-connector",
       "connector-id": sanitizeLabelValue(connectorId),
@@ -140,15 +133,17 @@ class CronJobManager {
 
   /**
    * Convenience: creates or updates a connector sync CronJob.
+   * Reads the container image and env vars from config/process.env.
    */
   async createOrUpdateCronJob(params: {
     connectorId: string;
     schedule: string;
-    backendUrl: string;
-    hmacSecret: string;
   }): Promise<void> {
     const spec = buildConnectorSyncCronJobSpec({
-      ...params,
+      connectorId: params.connectorId,
+      schedule: params.schedule,
+      containerImage: config.orchestrator.connectorImage,
+      env: buildConnectorSyncEnv(),
       namespace: this.namespace,
     });
     await this.createOrUpdateFromSpec(spec);
@@ -262,6 +257,7 @@ class CronJobManager {
                     image: spec.containerImage,
                     command: spec.command,
                     args: spec.args,
+                    workingDir: spec.workingDir,
                     env: spec.env?.map((e) => ({
                       name: e.name,
                       value: e.value,
@@ -284,5 +280,19 @@ export const cronJobManager = new CronJobManager();
 // ============================================================
 
 const CRONJOB_NAME_PREFIX = "archestra-connector";
-const CONTAINER_IMAGE = "curlimages/curl:latest";
 const ACTIVE_DEADLINE_SECONDS = 3600;
+
+/**
+ * Builds the env var array for connector sync CronJob pods.
+ * Forwards all ARCHESTRA_* and DATABASE_URL env vars from the current process
+ * so the entrypoint has access to database, secrets manager, and logging config.
+ */
+function buildConnectorSyncEnv(): Array<{ name: string; value: string }> {
+  const env: Array<{ name: string; value: string }> = [];
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value && (name.startsWith("ARCHESTRA_") || name === "DATABASE_URL")) {
+      env.push({ name, value });
+    }
+  }
+  return env;
+}

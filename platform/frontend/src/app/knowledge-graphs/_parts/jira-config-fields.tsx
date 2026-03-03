@@ -27,7 +27,7 @@ export function JiraConfigFields({
     <div className="space-y-4">
       <FormField
         control={form.control}
-        name={`${prefix}.baseUrl`}
+        name={`${prefix}.jiraBaseUrl`}
         rules={{ required: "Base URL is required" }}
         render={({ field }) => (
           <FormItem>

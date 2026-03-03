@@ -57,7 +57,7 @@ export function CreateConnectorDialog({
     defaultValues: {
       name: "",
       connectorType: "jira",
-      config: { isCloud: true },
+      config: { type: "jira", isCloud: true },
       email: "",
       apiToken: "",
       schedule: "0 */6 * * *",
@@ -153,7 +153,10 @@ export function CreateConnectorDialog({
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value);
-                          form.setValue("config", { isCloud: true });
+                          form.setValue("config", {
+                            type: value,
+                            isCloud: true,
+                          });
                         }}
                         defaultValue={field.value}
                       >

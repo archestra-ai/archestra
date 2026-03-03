@@ -1828,6 +1828,37 @@ export async function executeArchestraTool(
         };
       }
 
+      // If the primary mode returned no useful information and wasn't already
+      // "naive", fall back to naive mode (vector similarity search) which is
+      // more forgiving with vague or broad queries.
+      const noInfoPattern =
+        /i do not have enough information|no relevant information/i;
+      if (mode !== "naive" && noInfoPattern.test(result.answer)) {
+        logger.info(
+          { agentId: contextAgent.id, originalMode: mode },
+          "Knowledge graph query returned no results, falling back to naive mode",
+        );
+
+        const fallbackResult = await provider.queryDocument(query, {
+          mode: "naive",
+        });
+
+        if (
+          !fallbackResult.error &&
+          !noInfoPattern.test(fallbackResult.answer)
+        ) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: fallbackResult.answer,
+              },
+            ],
+            isError: false,
+          };
+        }
+      }
+
       return {
         content: [
           {
@@ -2866,14 +2897,14 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
       title: "Query Knowledge Graph",
       description:
-        "Query the organization's knowledge graph to retrieve information from uploaded documents. Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results.",
+        "Query the organization's knowledge graph to retrieve information from ingested documents (uploaded files, Jira issues, Confluence pages, etc.). Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results. IMPORTANT: formulate queries about the actual content you are looking for, not about the source system. For example, instead of 'get information from jira', ask 'what tasks or issues are being tracked' or 'what are the open bugs'.",
       inputSchema: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "The natural language query to search the knowledge graph",
+              "A natural language query about the content stored in the knowledge graph. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
           },
           mode: {
             type: "string",

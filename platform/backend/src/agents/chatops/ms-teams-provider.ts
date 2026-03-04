@@ -1021,8 +1021,20 @@ class MSTeamsProvider implements ChatOpsProvider {
   /**
    * Obtain a Bot Connector token via OAuth2 client credentials grant.
    * Used to authenticate downloads from the Bot Framework service URL.
+   * Cached for 50 minutes (tokens expire after 60 minutes).
    */
+  private botConnectorTokenCache: { token: string; expiresAt: number } | null =
+    null;
+
   private async getBotConnectorToken(): Promise<string | null> {
+    // Return cached token if still valid (with 10-minute safety margin)
+    if (
+      this.botConnectorTokenCache &&
+      Date.now() < this.botConnectorTokenCache.expiresAt
+    ) {
+      return this.botConnectorTokenCache.token;
+    }
+
     const { appId, appSecret, tenantId } = this.config;
     if (!appId || !appSecret) return null;
 
@@ -1049,8 +1061,22 @@ class MSTeamsProvider implements ChatOpsProvider {
         return null;
       }
 
-      const data = (await response.json()) as { access_token?: string };
-      return data.access_token ?? null;
+      const data = (await response.json()) as {
+        access_token?: string;
+        expires_in?: number;
+      };
+      const token = data.access_token ?? null;
+
+      if (token) {
+        // Cache with 10-minute safety margin before expiry (default 60 min)
+        const expiresInMs = ((data.expires_in ?? 3600) - 600) * 1000;
+        this.botConnectorTokenCache = {
+          token,
+          expiresAt: Date.now() + expiresInMs,
+        };
+      }
+
+      return token;
     } catch (error) {
       logger.warn(
         { error: errorMessage(error) },

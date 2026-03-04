@@ -1067,11 +1067,19 @@ class SlackProvider implements ChatOpsProvider {
       }
 
       try {
-        const response = await fetch(downloadUrl, {
-          headers: {
-            Authorization: `Bearer ${this.config.botToken}`,
-          },
-        });
+        // Only send the bot token to known Slack domains to prevent token leakage via SSRF
+        const headers: Record<string, string> = {};
+        if (isSlackFileUrl(downloadUrl)) {
+          headers.Authorization = `Bearer ${this.config.botToken}`;
+        } else {
+          logger.warn(
+            { fileId: file.id, url: downloadUrl },
+            "[SlackProvider] Skipping file from non-Slack domain",
+          );
+          continue;
+        }
+
+        const response = await fetch(downloadUrl, { headers });
 
         if (!response.ok) {
           logger.warn(
@@ -1087,13 +1095,31 @@ class SlackProvider implements ChatOpsProvider {
 
         const buffer = Buffer.from(await response.arrayBuffer());
 
-        // Double-check actual size against limit
+        // Double-check actual size against individual limit
         if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {
           logger.info(
             { fileId: file.id, actualSize: buffer.length },
             "[SlackProvider] Downloaded file exceeds size limit, skipping",
           );
           continue;
+        }
+
+        // Post-download total size check (handles case where file.size was missing/zero)
+        if (
+          totalSize + buffer.length >
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+        ) {
+          logger.info(
+            {
+              fileId: file.id,
+              fileName: file.name,
+              totalSize,
+              maxTotalSize:
+                CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+            },
+            "[SlackProvider] Total attachments size limit reached (post-download)",
+          );
+          break;
         }
 
         totalSize += buffer.length;
@@ -1163,6 +1189,23 @@ function decodeSlackEntities(text: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&lt;/g, "<")
     .replace(/&amp;/g, "&");
+}
+
+/**
+ * Check whether a URL points to a known Slack file-hosting domain.
+ * Prevents leaking the bot token to arbitrary URLs via SSRF.
+ */
+function isSlackFileUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return (
+      hostname === "slack.com" ||
+      hostname.endsWith(".slack.com") ||
+      hostname === "files.slack.com"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

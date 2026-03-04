@@ -411,7 +411,8 @@ describe("MSTeamsProvider file attachment downloads", () => {
     );
 
     expect(result).not.toBeNull();
-    // First 2 fit (18MB), third downloaded but discarded (total would exceed 25MB)
+    // All 3 are downloaded (Teams checks size post-download), but third is discarded
+    expect(fetch).toHaveBeenCalledTimes(3);
     expect(result?.attachments).toHaveLength(2);
   });
 

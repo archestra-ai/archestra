@@ -33,8 +33,6 @@ export function invalidateToolAssignmentQueries(
   queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
   queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
   queryClient.invalidateQueries({ queryKey: ["agents"] });
-  queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-  queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
   queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
 }
 

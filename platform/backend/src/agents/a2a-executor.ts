@@ -374,8 +374,9 @@ export function buildUserContent(
     content: [
       { type: "text" as const, text: message + skippedNote },
       ...validImageAttachments.map((a) => ({
-        type: "image" as const,
-        image: `data:${a.contentType};base64,${a.contentBase64}`,
+        type: "file" as const,
+        data: Buffer.from(a.contentBase64, "base64"),
+        mediaType: a.contentType,
       })),
     ],
     skippedNote,

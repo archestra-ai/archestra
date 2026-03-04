@@ -642,10 +642,13 @@ describe("SlackProvider file attachment downloads", () => {
       name: "screenshot.png",
     });
 
-    // Verify auth header was sent
+    // Verify auth header was sent (fetchSlackFile uses redirect: "manual")
     expect(fetch).toHaveBeenCalledWith(
       "https://files.slack.com/files-pri/T123/screenshot.png",
-      { headers: { Authorization: "Bearer xoxb-test-bot-token" } },
+      {
+        headers: { Authorization: "Bearer xoxb-test-bot-token" },
+        redirect: "manual",
+      },
     );
   });
 

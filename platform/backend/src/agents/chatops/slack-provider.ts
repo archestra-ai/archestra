@@ -1068,10 +1068,7 @@ class SlackProvider implements ChatOpsProvider {
 
       try {
         // Only send the bot token to known Slack domains to prevent token leakage via SSRF
-        const headers: Record<string, string> = {};
-        if (isSlackFileUrl(downloadUrl)) {
-          headers.Authorization = `Bearer ${this.config.botToken}`;
-        } else {
+        if (!isSlackFileUrl(downloadUrl)) {
           logger.warn(
             { fileId: file.id, url: downloadUrl },
             "[SlackProvider] Skipping file from non-Slack domain",
@@ -1079,7 +1076,13 @@ class SlackProvider implements ChatOpsProvider {
           continue;
         }
 
-        const response = await fetch(downloadUrl, { headers });
+        // Slack redirects files.slack.com → files-origin.slack.com.
+        // Node's fetch strips the Authorization header on cross-origin redirects,
+        // so we follow redirects manually to re-attach the token.
+        const response = await fetchSlackFile(
+          downloadUrl,
+          this.config.botToken,
+        );
 
         if (!response.ok) {
           logger.warn(
@@ -1089,6 +1092,20 @@ class SlackProvider implements ChatOpsProvider {
               status: response.status,
             },
             "[SlackProvider] Failed to download file",
+          );
+          continue;
+        }
+
+        // Verify we got a file, not an HTML error/login page
+        const responseContentType = response.headers.get("content-type") || "";
+        if (responseContentType.includes("text/html")) {
+          logger.warn(
+            {
+              fileId: file.id,
+              fileName: file.name,
+              contentType: responseContentType,
+            },
+            "[SlackProvider] Received HTML instead of file — bot may be missing files:read scope",
           );
           continue;
         }
@@ -1206,6 +1223,46 @@ function isSlackFileUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Fetch a file from Slack, manually following redirects to preserve the
+ * Authorization header. Slack redirects files.slack.com to
+ * files-origin.slack.com (a different origin), and Node's fetch strips
+ * the Authorization header on cross-origin redirects per spec.
+ * We follow up to 5 redirects, re-attaching the token on each hop
+ * as long as the target remains a known Slack domain.
+ */
+async function fetchSlackFile(
+  url: string,
+  botToken: string,
+): Promise<Response> {
+  const maxRedirects = 5;
+  let currentUrl = url;
+
+  for (let i = 0; i <= maxRedirects; i++) {
+    const headers: Record<string, string> = {};
+    if (isSlackFileUrl(currentUrl)) {
+      headers.Authorization = `Bearer ${botToken}`;
+    }
+
+    const response = await fetch(currentUrl, {
+      headers,
+      redirect: "manual",
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) break;
+      currentUrl = location;
+      continue;
+    }
+
+    return response;
+  }
+
+  // If we exhausted redirects, return the last response
+  return fetch(currentUrl, { redirect: "manual" });
 }
 
 /**

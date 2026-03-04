@@ -982,8 +982,19 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
 
         totalSize += buffer.length;
+        // Resolve content type: prefer HTTP header when specific, fall back to
+        // attachment metadata, and detect from magic bytes as last resort when
+        // both are generic (e.g. "application/octet-stream" or "image/*").
+        const httpContentType =
+          response.headers.get("content-type")?.split(";")[0]?.trim() || "";
+        const resolvedContentType =
+          httpContentType && httpContentType !== "application/octet-stream"
+            ? httpContentType
+            : attachment.contentType === "image/*"
+              ? detectImageType(buffer)
+              : attachment.contentType;
         results.push({
-          contentType: attachment.contentType,
+          contentType: resolvedContentType,
           contentBase64: buffer.toString("base64"),
           name: attachment.name,
         });
@@ -1350,4 +1361,27 @@ function stripHtmlTags(html: string): string {
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Detect image MIME type from magic bytes. Falls back to image/png. */
+function detectImageType(buffer: Buffer): string {
+  if (buffer.length < 4) return "image/png";
+  const h = buffer.subarray(0, 8);
+  if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) return "image/jpeg";
+  if (h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47)
+    return "image/png";
+  if (h[0] === 0x47 && h[1] === 0x49 && h[2] === 0x46) return "image/gif";
+  if (
+    h[0] === 0x52 &&
+    h[1] === 0x49 &&
+    h[2] === 0x46 &&
+    h[3] === 0x46 &&
+    buffer.length >= 12 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  )
+    return "image/webp";
+  return "image/png";
 }

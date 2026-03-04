@@ -1481,25 +1481,28 @@ class McpClient {
 
   /**
    * Build an actionable authentication error message with a link to the MCP registry
-   * for the user to re-authenticate.
+   * for the user to set up credentials.
    */
   private buildAuthRequiredMessage(
     catalogDisplayName: string,
     catalogId: string,
     tokenAuth?: TokenAuthContext,
   ): string {
-    const context = tokenAuth?.userId
-      ? `user: ${tokenAuth.userId}`
-      : tokenAuth?.teamId
-        ? `team: ${tokenAuth.teamId}`
-        : "organization";
+    const context = this.formatAuthContext(tokenAuth);
     const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
-    return `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`;
+    return formatActionableAuthError({
+      title: `Authentication required for "${catalogDisplayName}"`,
+      detail: `No credentials were found for your account (${context}).`,
+      actionLabel: "set up your credentials",
+      url: installUrl,
+      postAction:
+        "Once you have completed authentication, retry this tool call.",
+    });
   }
 
   /**
    * Build an actionable error message for expired or invalid credentials,
-   * with a deep link to the manage connections dialog to revoke and re-authenticate.
+   * with a deep link to the re-authentication dialog.
    */
   private buildExpiredAuthMessage(
     catalogDisplayName: string,
@@ -1507,13 +1510,21 @@ class McpClient {
     mcpServerId: string,
     tokenAuth?: TokenAuthContext,
   ): string {
-    const context = tokenAuth?.userId
-      ? `user: ${tokenAuth.userId}`
-      : tokenAuth?.teamId
-        ? `team: ${tokenAuth.teamId}`
-        : "organization";
+    const context = this.formatAuthContext(tokenAuth);
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
-    return `Expired or invalid authentication for "${catalogDisplayName}".\n\nYour credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit: ${reauthUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
+    return formatActionableAuthError({
+      title: `Expired or invalid authentication for "${catalogDisplayName}"`,
+      detail: `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
+      actionLabel: "re-authenticate",
+      url: reauthUrl,
+      postAction: "Once you have re-authenticated, retry this tool call.",
+    });
+  }
+
+  private formatAuthContext(tokenAuth?: TokenAuthContext): string {
+    if (tokenAuth?.userId) return `user: ${tokenAuth.userId}`;
+    if (tokenAuth?.teamId) return `team: ${tokenAuth.teamId}`;
+    return "organization";
   }
 
   /**
@@ -1765,3 +1776,27 @@ process.on("SIGTERM", () => {
   mcpClient.disconnectAll().catch(logger.error);
   process.exit(0);
 });
+
+/**
+ * Format an actionable auth error message that strongly encourages the LLM
+ * to display the URL to the user. The wording is intentionally directive
+ * so that models reliably surface the link rather than paraphrasing it away.
+ */
+function formatActionableAuthError(params: {
+  title: string;
+  detail: string;
+  actionLabel: string;
+  url: string;
+  postAction: string;
+}): string {
+  return [
+    `${params.title}.`,
+    "",
+    params.detail,
+    `To ${params.actionLabel}, visit this URL: ${params.url}`,
+    "",
+    "IMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.",
+    "",
+    params.postAction,
+  ].join("\n");
+}

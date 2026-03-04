@@ -141,6 +141,7 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   normalizeJsonSchema,
+  executeMcpTool,
 };
 
 /**

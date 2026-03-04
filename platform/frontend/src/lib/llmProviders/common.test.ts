@@ -63,7 +63,7 @@ describe("parsePolicyDenied", () => {
 
 describe("parseAuthRequired", () => {
   const makeDirectErrorText = (catalogName: string, installUrl: string) =>
-    `Authentication required for "${catalogName}".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`;
+    `Authentication required for "${catalogName}".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: ${installUrl}\n\nIMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.\n\nOnce you have completed authentication, retry this tool call.`;
 
   it("parses a direct text auth-required error", () => {
     const url = "http://localhost:3000/mcp/registry?install=cat_abc";
@@ -134,14 +134,14 @@ describe("parseAuthRequired", () => {
 
   it("returns null for expired auth errors (distinct message format)", () => {
     const text =
-      'Expired or invalid authentication for "github-remote".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz';
+      'Expired or invalid authentication for "github-remote".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit this URL: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz';
     expect(parseAuthRequired(text)).toBeNull();
   });
 });
 
 describe("parseExpiredAuth", () => {
   const makeExpiredErrorText = (catalogName: string, reauthUrl: string) =>
-    `Expired or invalid authentication for "${catalogName}".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit: ${reauthUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
+    `Expired or invalid authentication for "${catalogName}".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit this URL: ${reauthUrl}\n\nIMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.\n\nOnce you have re-authenticated, retry this tool call.`;
 
   it("parses a direct text expired-auth error", () => {
     const url =

@@ -159,7 +159,7 @@ export function parseAuthRequired(
   if (!message.includes("Authentication required for")) return null;
 
   const nameMatch = message.match(/Authentication required for "([^"]+)"/);
-  const urlMatch = message.match(/visit:\s*(https?:\/\/\S+)/);
+  const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
   if (!nameMatch || !urlMatch) return null;
 
   return { catalogName: nameMatch[1], installUrl: urlMatch[1] };
@@ -189,7 +189,7 @@ export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
   const nameMatch = message.match(
     /Expired or invalid authentication for "([^"]+)"/,
   );
-  const urlMatch = message.match(/visit:\s*(https?:\/\/\S+)/);
+  const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
   if (!nameMatch || !urlMatch) return null;
 
   return { catalogName: nameMatch[1], reauthUrl: urlMatch[1] };

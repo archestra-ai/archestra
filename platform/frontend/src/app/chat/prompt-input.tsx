@@ -33,6 +33,7 @@ import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
+import { KnowledgeBaseIndicator } from "@/components/chat/knowledge-base-indicator";
 import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
@@ -184,9 +185,12 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents
+  // Check if there are tools, delegated agents, or a knowledge base
   const hasTools = tools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
+  const knowledgeBaseId =
+    (agentData as Record<string, unknown> | null | undefined)
+      ?.knowledgeBaseId as string | null | undefined;
   const hasContent = hasTools || hasDelegatedAgents;
 
   // Determine if file uploads should be shown
@@ -211,6 +215,9 @@ const PromptInputContent = ({
     >
       {agentId && (
         <PromptInputHeader>
+          {knowledgeBaseId && (
+            <KnowledgeBaseIndicator knowledgeBaseId={knowledgeBaseId} />
+          )}
           {hasContent ? (
             <>
               {hasTools && (

@@ -142,6 +142,7 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   normalizeJsonSchema,
+  executeMcpTool,
 };
 
 /**
@@ -1189,6 +1190,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
   throwIfAborted(abortSignal);
 
   // Check if MCP tool returned an error
+  // Return error text as tool result instead of throwing so the AI SDK includes
+  // it in the conversation as a tool-result message. This allows the frontend to
+  // parse structured errors (e.g. auth-required with install URL) and render
+  // actionable UI instead of showing a generic stream error.
   if (result.isError) {
     const extractedError = Array.isArray(result.content)
       ? result.content
@@ -1199,9 +1204,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
           )
           .join("\n")
       : null;
-    const errorMessage =
-      extractedError || result.error || "Tool execution failed";
-    throw new Error(errorMessage);
+    return extractedError || result.error || "Tool execution failed";
   }
 
   // Sync browser state if needed

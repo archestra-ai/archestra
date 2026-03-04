@@ -23,6 +23,7 @@ const OAUTH_INSTALLATION_COMPLETE_CATALOG_ID =
 const OAUTH_SERVER_TYPE = "oauth_server_type";
 const OAUTH_ENVIRONMENT_VALUES = "oauth_environment_values";
 const OAUTH_PENDING_AFTER_ENV_VARS = "oauth_pending_after_env_vars";
+const OAUTH_RETURN_URL = "oauth_return_url";
 
 // Dynamic key prefix (combined with code + state to deduplicate callbacks)
 const OAUTH_PROCESSING_PREFIX = "oauth_processing_";
@@ -144,11 +145,25 @@ export function getOAuthPendingAfterEnvVars(): boolean {
   return sessionStorage.getItem(OAUTH_PENDING_AFTER_ENV_VARS) === "true";
 }
 
+/** Store the URL to return to after OAuth re-authentication (e.g. chat page). */
+export function setOAuthReturnUrl(url: string) {
+  sessionStorage.setItem(OAUTH_RETURN_URL, url);
+}
+
+export function getOAuthReturnUrl(): string | null {
+  return sessionStorage.getItem(OAUTH_RETURN_URL);
+}
+
+export function clearOAuthReturnUrl() {
+  sessionStorage.removeItem(OAUTH_RETURN_URL);
+}
+
 // ─── Cleanup ─────────────────────────────────────────────────────────
 
 /** Remove re-authentication context. */
 export function clearReauthContext() {
   sessionStorage.removeItem(OAUTH_MCP_SERVER_ID);
+  sessionStorage.removeItem(OAUTH_RETURN_URL);
 }
 
 /** Remove all install-flow context stored before the OAuth redirect. */

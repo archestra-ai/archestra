@@ -79,12 +79,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
@@ -1239,36 +1233,24 @@ export default function ChatPage() {
               {/* Center - conversation title (absolutely positioned for true centering) */}
               {conversationId && conversation && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
-                          {headerAnimatingTitles.has(conversation.id) ? (
-                            <TypingText
-                              text={getConversationDisplayTitle(
-                                conversation.title,
-                                conversation.messages,
-                              )}
-                              typingSpeed={35}
-                              showCursor
-                              cursorClassName="bg-muted-foreground"
-                            />
-                          ) : (
-                            getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )
-                          )}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {getConversationDisplayTitle(
+                  <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
+                    {headerAnimatingTitles.has(conversation.id) ? (
+                      <TypingText
+                        text={getConversationDisplayTitle(
                           conversation.title,
                           conversation.messages,
                         )}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                        typingSpeed={35}
+                        showCursor
+                        cursorClassName="bg-muted-foreground"
+                      />
+                    ) : (
+                      getConversationDisplayTitle(
+                        conversation.title,
+                        conversation.messages,
+                      )
+                    )}
+                  </span>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}

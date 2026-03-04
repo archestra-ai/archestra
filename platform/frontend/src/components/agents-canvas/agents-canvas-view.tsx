@@ -583,6 +583,51 @@ function AgentsCanvasViewInner() {
     [getExistingConnections, syncAgentDelegations, queryClient],
   );
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") {
+        return;
+      }
+
+      // Don't hijack delete/backspace while typing into form controls.
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Prevent duplicate handling while confirmation is open.
+      if (deletingAgentId) {
+        event.preventDefault();
+        return;
+      }
+
+      const selectedNode = nodes.find((node) => node.selected);
+      if (selectedNode) {
+        event.preventDefault();
+        setDeletingAgentId(selectedNode.id);
+        return;
+      }
+
+      const selectedEdges = edges.filter((edge) => edge.selected);
+      if (selectedEdges.length > 0) {
+        event.preventDefault();
+        const selectedEdgeIds = new Set(selectedEdges.map((edge) => edge.id));
+        setEdges((currentEdges) =>
+          currentEdges.filter((edge) => !selectedEdgeIds.has(edge.id)),
+        );
+        onEdgesDelete(selectedEdges);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [nodes, edges, deletingAgentId, setEdges, onEdgesDelete]);
+
   // Wait for data to load
   if (isLoading) {
     return (
@@ -704,7 +749,7 @@ function AgentsCanvasViewInner() {
             fitView
             fitViewOptions={{ padding: 0.1, minZoom: 0.1, maxZoom: 1.5 }}
             proOptions={{ hideAttribution: true }}
-            deleteKeyCode={["Backspace", "Delete"]}
+            deleteKeyCode={null}
             className="rounded-lg"
           >
             <Background gap={16} size={1} />

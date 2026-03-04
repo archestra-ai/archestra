@@ -435,6 +435,9 @@ class McpClient {
             mcpServerName,
             catalogItem,
             targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
             executeRetry: (getTransport, secrets) =>
               executeToolCall(getTransport, secrets, true),
           });
@@ -443,6 +446,22 @@ class McpClient {
             return retryToolCallResult;
           }
           // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
+        }
+
+        // For auth errors on OAuth servers, return an actionable message with re-auth URL
+        if (isAuthError && isOAuthServer && tool.catalogId) {
+          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          return await this.createErrorResult(
+            toolCall,
+            agentId,
+            this.buildAuthRequiredMessage(
+              catalogDisplayName,
+              tool.catalogId,
+              tokenAuth,
+            ),
+            mcpServerName,
+            authInfo,
+          );
         }
 
         return await this.createErrorResult(
@@ -975,18 +994,16 @@ class McpClient {
     }
 
     // No server found - return an actionable error with install link
-    const context = tokenAuth.userId
-      ? `user: ${tokenAuth.userId}`
-      : tokenAuth.teamId
-        ? `team: ${tokenAuth.teamId}`
-        : "organization";
     const catalogDisplayName = tool.catalogName || tool.catalogId;
-    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${tool.catalogId}`;
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`,
+        this.buildAuthRequiredMessage(
+          catalogDisplayName,
+          tool.catalogId,
+          tokenAuth,
+        ),
         fallbackName,
       ),
     };
@@ -1317,6 +1334,9 @@ class McpClient {
     mcpServerName: string;
     catalogItem: InternalMcpCatalog;
     targetMcpServerId: string;
+    tokenAuth?: TokenAuthContext;
+    toolCatalogId: string | null;
+    toolCatalogName: string | null;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -1331,6 +1351,9 @@ class McpClient {
       mcpServerName,
       catalogItem,
       targetMcpServerId,
+      tokenAuth,
+      toolCatalogId,
+      toolCatalogName,
       executeRetry,
     } = params;
 
@@ -1403,6 +1426,27 @@ class McpClient {
         { toolName: toolCall.name, error: retryErrorMsg },
         "attemptTokenRefreshAndRetry: retry after token refresh also failed",
       );
+
+      // Check if retry also failed with auth error - return actionable message
+      const isRetryAuthError =
+        retryError instanceof UnauthorizedError ||
+        (retryError instanceof StreamableHTTPError &&
+          (retryError as StreamableHTTPError).code === 401);
+
+      if (isRetryAuthError && toolCatalogId) {
+        const catalogDisplayName = toolCatalogName || toolCatalogId;
+        return await this.createErrorResult(
+          toolCall,
+          agentId,
+          this.buildAuthRequiredMessage(
+            catalogDisplayName,
+            toolCatalogId,
+            tokenAuth,
+          ),
+          mcpServerName,
+        );
+      }
+
       return await this.createErrorResult(
         toolCall,
         agentId,
@@ -1410,6 +1454,24 @@ class McpClient {
         mcpServerName,
       );
     }
+  }
+
+  /**
+   * Build an actionable authentication error message with a link to the MCP registry
+   * for the user to re-authenticate.
+   */
+  private buildAuthRequiredMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    tokenAuth?: TokenAuthContext,
+  ): string {
+    const context = tokenAuth?.userId
+      ? `user: ${tokenAuth.userId}`
+      : tokenAuth?.teamId
+        ? `team: ${tokenAuth.teamId}`
+        : "organization";
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`;
   }
 
   /**

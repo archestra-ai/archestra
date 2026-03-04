@@ -1372,6 +1372,309 @@ describe("McpClient", () => {
       });
     });
 
+    describe("Auth error actionable message", () => {
+      test("returns actionable auth-required message with install URL when tool call throws UnauthorizedError on OAuth server", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-unauth@example.com",
+        });
+
+        // Create an OAuth-enabled catalog
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-oauth-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        // Create secret WITHOUT refresh_token (simulates expired token, no refresh)
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token" },
+          "expired-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-oauth-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-oauth-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServer.id,
+        });
+
+        // Mock callTool to throw UnauthorizedError
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_oauth_unauth",
+          name: "github-oauth-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Authentication required for "github-oauth-server"`,
+        );
+        expect(result?.error).toContain(`user: ${testUser.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${oauthCatalog.id}`,
+        );
+        expect(result?.error).toContain(
+          "Once you have completed authentication, retry this tool call.",
+        );
+      });
+
+      test("returns actionable auth-required message when tool call throws StreamableHTTPError 401 on OAuth server", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-http401@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-http401-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token-2" },
+          "expired-oauth-secret-2",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-http401-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-http401-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServer.id,
+        });
+
+        // Mock callTool to throw StreamableHTTPError with 401
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        mockCallTool.mockRejectedValueOnce(
+          new StreamableHTTPError(401, "Unauthorized"),
+        );
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_oauth_http401",
+          name: "github-http401-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Authentication required for "github-http401-server"`,
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${oauthCatalog.id}`,
+        );
+      });
+
+      test("returns generic error for auth error on non-OAuth server", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "non-oauth-unauth@example.com",
+        });
+
+        // Create catalog WITHOUT oauthConfig
+        const nonOauthCatalog = await InternalMcpCatalogModel.create({
+          name: "private-api-server",
+          serverType: "remote",
+          serverUrl: "https://private-api.example.com/mcp/",
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "bad-token" },
+          "non-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "private-api-server",
+          catalogId: nonOauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "private-api-server__get_data",
+          description: "Get data",
+          parameters: {},
+          catalogId: nonOauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_non_oauth_unauth",
+          name: "private-api-server__get_data",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        // Should NOT contain the actionable auth-required message
+        expect(result?.error).not.toContain("Authentication required for");
+        expect(result?.error).not.toContain(MCP_CATALOG_INSTALL_PATH);
+      });
+
+      test("returns actionable auth-required message with team context", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const testUser = await makeUser({
+          email: "oauth-team-unauth@example.com",
+        });
+        const team = await makeTeam(org.id, testUser.id, {
+          name: "Dev Team",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-team-oauth-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-team-token" },
+          "expired-team-oauth-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-team-oauth-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-team-oauth-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_team_oauth_unauth",
+          name: "github-team-oauth-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "team-token",
+          teamId: team.id,
+          isOrganizationToken: false,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Authentication required for "github-team-oauth-server"`,
+        );
+        expect(result?.error).toContain(`team: ${team.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${oauthCatalog.id}`,
+        );
+      });
+    });
+
     describe("Stale session retry", () => {
       let localMcpServerId: string;
       let localCatalogId: string;

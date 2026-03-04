@@ -292,6 +292,8 @@ export function InternalMCPCatalog({
   }, [searchParams, catalogItems]);
 
   // Deep-link: auto-open manage connections dialog when ?manage={catalogId} is present
+  // Uses window.history.replaceState instead of router.replace to avoid triggering
+  // a searchParams change that would re-fire the effect and race with state updates.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams changes, other deps are stable callbacks
   useEffect(() => {
     const manageCatalogIdParam = searchParams.get(
@@ -302,14 +304,14 @@ export function InternalMCPCatalog({
     // Extract highlight param before clearing URL
     const highlightParam = searchParams.get(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
 
-    // Clear the manage/highlight params from URL to prevent re-triggering on refresh
+    // Clear the manage/highlight params from URL without triggering a React re-render
     const params = new URLSearchParams(searchParams.toString());
     params.delete(MCP_CATALOG_MANAGE_QUERY_PARAM);
     params.delete(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
     const newUrl = params.toString()
       ? `${pathname}?${params.toString()}`
       : pathname;
-    router.replace(newUrl, { scroll: false });
+    window.history.replaceState(null, "", newUrl);
 
     // Open the manage connections dialog
     setManageCatalogId(manageCatalogIdParam);

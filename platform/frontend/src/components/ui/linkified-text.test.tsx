@@ -18,18 +18,13 @@ describe("LinkifiedText", () => {
     const link = screen.getByRole("link", {
       name: "https://github.com/settings/tokens",
     });
-    expect(link).toHaveAttribute(
-      "href",
-      "https://github.com/settings/tokens",
-    );
+    expect(link).toHaveAttribute("href", "https://github.com/settings/tokens");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("converts an http URL to a clickable link", () => {
-    render(
-      <LinkifiedText>Go to http://example.com for more</LinkifiedText>,
-    );
+    render(<LinkifiedText>Go to http://example.com for more</LinkifiedText>);
     const link = screen.getByRole("link", {
       name: "http://example.com",
     });
@@ -82,20 +77,14 @@ describe("LinkifiedText", () => {
 
   it("stops URL at comma boundary", () => {
     render(
-      <LinkifiedText>
-        Visit https://example.com, then continue
-      </LinkifiedText>,
+      <LinkifiedText>Visit https://example.com, then continue</LinkifiedText>,
     );
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "https://example.com");
   });
 
   it("stops URL at closing parenthesis", () => {
-    render(
-      <LinkifiedText>
-        (see https://example.com) for info
-      </LinkifiedText>,
-    );
+    render(<LinkifiedText>(see https://example.com) for info</LinkifiedText>);
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "https://example.com");
   });

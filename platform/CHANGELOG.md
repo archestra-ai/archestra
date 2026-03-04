@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.55](https://github.com/archestra-ai/archestra/compare/platform-v1.0.54...platform-v1.0.55) (2026-03-04)
+
+
+### Bug Fixes
+
+* prevent carousel arrow key navigation when focused on inputs ([#3114](https://github.com/archestra-ai/archestra/issues/3114)) ([134b03e](https://github.com/archestra-ai/archestra/commit/134b03eddc70c44e152e57b2619afbb239dfb3ac))
+* return actionable auth-required message when MCP tool calls fail with 401 ([#3110](https://github.com/archestra-ai/archestra/issues/3110)) ([12555b8](https://github.com/archestra-ai/archestra/commit/12555b8512b5c8e5fc5617354104bc2c9cab46cc))
+* tool calls stuck in a2a sessions due to approval ([#3117](https://github.com/archestra-ai/archestra/issues/3117)) ([a92ac73](https://github.com/archestra-ai/archestra/commit/a92ac73f8dd1973fd7c24d6f6490e6e7a0641741))
+
 ## [1.0.54](https://github.com/archestra-ai/archestra/compare/platform-v1.0.53...platform-v1.0.54) (2026-03-04)
 
 

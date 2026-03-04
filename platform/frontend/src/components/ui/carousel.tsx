@@ -57,6 +57,7 @@ function Carousel({
     },
     plugins,
   );
+  const rootRef = React.useRef<HTMLDivElement>(null);
   const [canScrollPrev, setCanScrollPrev] = React.useState(false);
   const [canScrollNext, setCanScrollNext] = React.useState(false);
 
@@ -76,13 +77,7 @@ function Carousel({
 
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      const target = event.target;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
+      if (isInteractiveElement(event.target)) {
         return;
       }
 
@@ -95,6 +90,15 @@ function Carousel({
       }
     },
     [scrollPrev, scrollNext],
+  );
+
+  const handleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!isInteractiveElement(event.target)) {
+        rootRef.current?.focus();
+      }
+    },
+    [],
   );
 
   React.useEffect(() => {
@@ -128,9 +132,14 @@ function Carousel({
       }}
     >
       {/** biome-ignore lint/a11y/useSemanticElements: codegen - ai elements */}
+      {/** biome-ignore lint/a11y/useKeyWithClickEvents: onClick focuses carousel for keyboard nav, onKeyDownCapture already handles keys */}
       <div
+        ref={rootRef}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: carousel needs programmatic focus for keyboard navigation
+        tabIndex={0}
         onKeyDownCapture={handleKeyDown}
-        className={cn("relative", className)}
+        onClick={handleClick}
+        className={cn("relative outline-none", className)}
         role="region"
         aria-roledescription="carousel"
         data-slot="carousel"
@@ -139,6 +148,15 @@ function Carousel({
         {children}
       </div>
     </CarouselContext.Provider>
+  );
+}
+
+function isInteractiveElement(target: EventTarget): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
   );
 }
 

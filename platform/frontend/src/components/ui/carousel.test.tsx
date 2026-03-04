@@ -119,6 +119,28 @@ describe("Carousel keyboard navigation", () => {
     expect(scrollPrevSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("scrolls after clicking on non-interactive area (focus moves to carousel)", async () => {
+    const user = userEvent.setup();
+    const { scrollNextSpy } = renderCarousel();
+
+    // First focus on an input
+    const input = screen.getByTestId("slide-input");
+    await user.click(input);
+    expect(document.activeElement).toBe(input);
+
+    // Click on a non-interactive element (paragraph) inside the carousel
+    const paragraph = screen.getByText("Slide 1");
+    await user.click(paragraph);
+
+    // Carousel should now have focus
+    const carousel = screen.getByRole("region");
+    expect(document.activeElement).toBe(carousel);
+
+    // Arrow keys should now navigate the carousel
+    await user.keyboard("{ArrowRight}");
+    expect(scrollNextSpy).toHaveBeenCalledTimes(1);
+  });
+
   // Note: contentEditable is also handled by the production code (via isContentEditable check)
   // but jsdom doesn't properly implement isContentEditable, so we can't test it here.
 });

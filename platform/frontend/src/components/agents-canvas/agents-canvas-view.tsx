@@ -740,7 +740,16 @@ function AgentsCanvasViewInner() {
         open={!!deletingAgentId}
         onOpenChange={(open) => !open && setDeletingAgentId(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            const target = e.currentTarget as HTMLElement | null;
+            const action = target?.querySelector<HTMLButtonElement>(
+              "[data-slot='alert-dialog-action']",
+            );
+            action?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Agent</AlertDialogTitle>
             <AlertDialogDescription>

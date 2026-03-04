@@ -620,7 +620,8 @@ function AgentsCanvasViewInner() {
         setEdges((currentEdges) =>
           currentEdges.filter((edge) => !selectedEdgeIds.has(edge.id)),
         );
-        onEdgesDelete(selectedEdges);
+        // Call onEdgesDelete once per edge to avoid multi-delete state desyncs.
+        selectedEdges.forEach((edge) => onEdgesDelete([edge]));
       }
     };
 

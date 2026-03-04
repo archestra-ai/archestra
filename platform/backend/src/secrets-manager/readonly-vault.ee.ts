@@ -115,12 +115,13 @@ export default class ReadonlyVaultSecretManager
       return dbRecord;
     }
 
+    const secretValues = dbRecord.secret as Record<string, unknown>;
+
     // Self-heal corrupted records:
     // We had a bug where we were setting isByosVault to true during updateSecret for records created with forceDB=true introduced here:
     // https://github.com/archestra-ai/archestra/pull/1694/changes#diff-02457052fc1fed9d616aebeae6f7e0d984575808d3b218ccfd851300dcf7793aR426
     // In this case, if we detect that the secret values have is_byos_vault=true but are not vault references,
     // we need to fix the flag and return the DB record as-is.
-    const secretValues = dbRecord.secret as Record<string, unknown>;
     const hasAnyVaultReference = Object.values(secretValues).some(
       (v) => typeof v === "string" && isVaultReference(v),
     );

@@ -946,6 +946,22 @@ function MessageTool({
     }
   }
 
+  // Also check tool output for auth-required pattern (tool errors returned as
+  // successful results to avoid crashing the AI SDK stream still need the UI)
+  const rawOutput = toolResultPart?.output ?? part.output;
+  if (typeof rawOutput === "string") {
+    const authRequired = parseAuthRequired(rawOutput);
+    if (authRequired) {
+      return (
+        <AuthRequiredTool
+          toolName={toolName}
+          catalogName={authRequired.catalogName}
+          installUrl={authRequired.installUrl}
+        />
+      );
+    }
+  }
+
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
     return (
       <TodoWriteTool

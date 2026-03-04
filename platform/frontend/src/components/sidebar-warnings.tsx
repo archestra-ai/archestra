@@ -6,6 +6,7 @@ import Link from "next/link";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 
 export function SidebarWarnings() {
@@ -21,6 +22,7 @@ export function SidebarWarnings() {
   const showSecurityEngineWarning =
     !!session && !isLoadingFeatures && features !== undefined && isPermissive;
   const showDefaultCredsWarning =
+    !config.disableBasicAuth &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&

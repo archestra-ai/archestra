@@ -523,3 +523,104 @@ describe("MSTeamsProvider file attachment downloads", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+// =============================================================================
+// convertToThreadMessages — file metadata
+// =============================================================================
+
+describe("MSTeamsProvider.convertToThreadMessages file metadata", () => {
+  test("includes file metadata from Graph API ChatMessage attachments", () => {
+    const provider = createProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    const result = (provider as any).convertToThreadMessages(
+      [
+        {
+          id: "msg-1",
+          from: { user: { id: "user-1", displayName: "Alice" } },
+          body: { content: "Check out this image" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [
+            {
+              contentType: "image/png",
+              contentUrl: "https://teams.blob.core.windows.net/img/photo.png",
+              name: "photo.png",
+            },
+          ],
+        },
+        {
+          id: "msg-2",
+          from: {
+            application: { id: "app-id-123", displayName: "TestBot" },
+          },
+          body: { content: "I see a cat!" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [],
+        },
+        {
+          id: "msg-3",
+          from: { user: { id: "user-1", displayName: "Alice" } },
+          body: { content: "What breed?" },
+          createdDateTime: new Date().toISOString(),
+          attachments: undefined,
+        },
+      ],
+      undefined,
+    );
+
+    expect(result).toHaveLength(3);
+
+    // First message should have file metadata
+    expect(result[0].files).toEqual([
+      {
+        url: "https://teams.blob.core.windows.net/img/photo.png",
+        mimetype: "image/png",
+        name: "photo.png",
+      },
+    ]);
+
+    // Bot message has no file attachments
+    expect(result[1].files).toBeUndefined();
+
+    // Third message has no attachments
+    expect(result[2].files).toBeUndefined();
+  });
+
+  test("excludes Adaptive Card attachments from file metadata", () => {
+    const provider = createProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    const result = (provider as any).convertToThreadMessages(
+      [
+        {
+          id: "msg-1",
+          from: { user: { id: "user-1", displayName: "Alice" } },
+          body: { content: "Message with card" },
+          createdDateTime: new Date().toISOString(),
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: "{}",
+            },
+            {
+              contentType: "image/jpeg",
+              contentUrl: "https://teams.blob.core.windows.net/img/photo.jpg",
+              name: "vacation.jpg",
+            },
+          ],
+        },
+      ],
+      undefined,
+    );
+
+    expect(result).toHaveLength(1);
+    // Only the image should be in files, not the Adaptive Card
+    expect(result[0].files).toEqual([
+      {
+        url: "https://teams.blob.core.windows.net/img/photo.jpg",
+        mimetype: "image/jpeg",
+        name: "vacation.jpg",
+      },
+    ]);
+  });
+});

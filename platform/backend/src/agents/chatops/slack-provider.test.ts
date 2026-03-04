@@ -1085,3 +1085,110 @@ describe("SlackProvider file attachment downloads", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// getThreadHistory — file metadata
+// =============================================================================
+
+describe("SlackProvider.getThreadHistory file metadata", () => {
+  test("includes file metadata from thread messages", async () => {
+    const provider = createProvider();
+
+    // Mock conversations.replies to return messages with files
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1000.001",
+              user: "U_ALICE",
+              text: "Check out this image",
+              files: [
+                {
+                  id: "F1",
+                  name: "photo.png",
+                  mimetype: "image/png",
+                  size: 5000,
+                  url_private_download:
+                    "https://files.slack.com/files-pri/T123/photo.png",
+                },
+              ],
+            },
+            {
+              ts: "1000.002",
+              user: "UBOT123",
+              bot_id: "B123",
+              text: "I see a cat!",
+            },
+            {
+              ts: "1000.003",
+              user: "U_ALICE",
+              text: "What breed is it?",
+            },
+          ],
+        }),
+      },
+    };
+
+    const result = await provider.getThreadHistory({
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      threadId: "1000.001",
+    });
+
+    expect(result).toHaveLength(3);
+
+    // First message should have file metadata
+    expect(result[0].files).toEqual([
+      {
+        url: "https://files.slack.com/files-pri/T123/photo.png",
+        mimetype: "image/png",
+        name: "photo.png",
+        size: 5000,
+      },
+    ]);
+
+    // Bot message should have no files
+    expect(result[1].files).toBeUndefined();
+
+    // Third message should have no files
+    expect(result[2].files).toBeUndefined();
+  });
+
+  test("skips files without download URL", async () => {
+    const provider = createProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1000.001",
+              user: "U_ALICE",
+              text: "Some message",
+              files: [
+                {
+                  id: "F1",
+                  name: "no-url.png",
+                  mimetype: "image/png",
+                  // No url_private or url_private_download
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const result = await provider.getThreadHistory({
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      threadId: "1000.001",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].files).toBeUndefined();
+  });
+});

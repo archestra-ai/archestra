@@ -17,6 +17,7 @@ import type {
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
@@ -460,14 +461,27 @@ class SlackProvider implements ChatOpsProvider {
         .filter(
           (msg) => msg.ts && msg.ts !== params.excludeMessageId && msg.text,
         )
-        .map((msg) => ({
-          messageId: msg.ts as string,
-          senderId: msg.user || msg.bot_id || "unknown",
-          senderName: msg.user || "Unknown",
-          text: msg.text || "",
-          timestamp: new Date(Number.parseFloat(msg.ts as string) * 1000),
-          isFromBot: Boolean(msg.bot_id) || msg.user === this.botUserId,
-        }))
+        .map((msg) => {
+          // Extract file metadata from Slack message files
+          const files = (msg.files as SlackFile[] | undefined)
+            ?.filter((f) => f.url_private_download || f.url_private)
+            .map((f) => ({
+              url: (f.url_private_download || f.url_private) as string,
+              mimetype: f.mimetype || "application/octet-stream",
+              name: f.name,
+              size: f.size,
+            }));
+
+          return {
+            messageId: msg.ts as string,
+            senderId: msg.user || msg.bot_id || "unknown",
+            senderName: msg.user || "Unknown",
+            text: msg.text || "",
+            timestamp: new Date(Number.parseFloat(msg.ts as string) * 1000),
+            isFromBot: Boolean(msg.bot_id) || msg.user === this.botUserId,
+            ...(files && files.length > 0 && { files }),
+          };
+        })
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     } catch (error) {
       logger.warn(
@@ -863,6 +877,22 @@ class SlackProvider implements ChatOpsProvider {
         "[SlackProvider] setTypingStatus failed (non-fatal)",
       );
     }
+  }
+
+  async downloadFiles(
+    files: ChatThreadMessageFile[],
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    // Convert ChatThreadMessageFile[] to SlackFile[] and reuse existing download logic
+    const slackFiles: SlackFile[] = files.map((f) => ({
+      id: f.name || "unknown",
+      name: f.name,
+      mimetype: f.mimetype,
+      size: f.size,
+      url_private_download: f.url,
+    }));
+    return this.downloadSlackFiles(slackFiles);
   }
 
   getBotUserId(): string | null {

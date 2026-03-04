@@ -31,10 +31,12 @@ import type {
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
+import { detectImageType } from "@/utils/detect-image-type";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_TEAM_CACHE,
@@ -868,6 +870,21 @@ class MSTeamsProvider implements ChatOpsProvider {
     });
   }
 
+  async downloadFiles(
+    files: ChatThreadMessageFile[],
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    // Convert ChatThreadMessageFile[] to the format downloadTeamsAttachments expects
+    const teamsAttachments = files.map((f) => ({
+      contentType: f.mimetype,
+      contentUrl: f.url,
+      name: f.name,
+    }));
+    // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
+    return this.downloadTeamsAttachments(teamsAttachments);
+  }
+
   // ===========================================================================
   // Private Methods
 
@@ -1192,6 +1209,21 @@ class MSTeamsProvider implements ChatOpsProvider {
       .filter((msg) => msg.id && msg.id !== excludeMessageId)
       .map((msg) => {
         const isUserMessage = Boolean(msg.from?.user);
+
+        // Extract file attachment metadata from Graph API ChatMessage.attachments
+        const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
+          .filter(
+            (a) =>
+              a.contentUrl &&
+              a.contentType &&
+              !a.contentType.startsWith("application/vnd.microsoft.card."),
+          )
+          .map((a) => ({
+            url: a.contentUrl as string,
+            mimetype: a.contentType as string,
+            name: a.name ?? undefined,
+          }));
+
         return {
           messageId: msg.id as string,
           senderId: isUserMessage
@@ -1210,6 +1242,7 @@ class MSTeamsProvider implements ChatOpsProvider {
           isFromBot:
             msg.from?.user?.id === botAppId ||
             msg.from?.application?.id === botAppId,
+          ...(files.length > 0 && { files }),
         };
       })
       .filter((msg) => msg.text.trim().length > 0)
@@ -1361,27 +1394,4 @@ function stripHtmlTags(html: string): string {
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-/** Detect image MIME type from magic bytes. Falls back to image/png. */
-function detectImageType(buffer: Buffer): string {
-  if (buffer.length < 4) return "image/png";
-  const h = buffer.subarray(0, 8);
-  if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) return "image/jpeg";
-  if (h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47)
-    return "image/png";
-  if (h[0] === 0x47 && h[1] === 0x49 && h[2] === 0x46) return "image/gif";
-  if (
-    h[0] === 0x52 &&
-    h[1] === 0x49 &&
-    h[2] === 0x46 &&
-    h[3] === 0x46 &&
-    buffer.length >= 12 &&
-    buffer[8] === 0x57 &&
-    buffer[9] === 0x45 &&
-    buffer[10] === 0x42 &&
-    buffer[11] === 0x50
-  )
-    return "image/webp";
-  return "image/png";
 }

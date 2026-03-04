@@ -106,8 +106,6 @@ export default class ReadonlyVaultSecretManager
   async getSecret(secretId: string): Promise<SelectSecret | null> {
     const dbRecord = await SecretModel.findById(secretId);
 
-    console.log("dbRecord", dbRecord);
-
     if (!dbRecord) {
       return null;
     }

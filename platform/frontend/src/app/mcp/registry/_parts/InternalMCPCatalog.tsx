@@ -124,9 +124,6 @@ export function InternalMCPCatalog({
 
   // Deep-link manage connections dialog state
   const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
-  const [highlightServerId, setHighlightServerId] = useState<string | null>(
-    null,
-  );
 
   // Update URL when search query changes (debounced via DebouncedInput)
   const handleSearchChange = useCallback(
@@ -329,27 +326,12 @@ export function InternalMCPCatalog({
 
     // Open the manage connections dialog
     setManageCatalogId(reauthCatalogIdParam);
-    setHighlightServerId(serverIdParam);
     openDialog("manage");
   }, [searchParams]);
 
   const handleManageDialogClose = () => {
     closeDialog("manage");
     setManageCatalogId(null);
-    setHighlightServerId(null);
-  };
-
-  // Called when user revokes a highlighted credential - auto-open install dialog
-  const handleManageRevokeComplete = (catalogId: string) => {
-    handleManageDialogClose();
-    const catalogItem = catalogItems?.find((item) => item.id === catalogId);
-    if (!catalogItem) return;
-
-    if (catalogItem.serverType === "local") {
-      handleInstallLocalServer(catalogItem);
-    } else {
-      handleInstallRemoteServer(catalogItem, false);
-    }
   };
 
   // Called to re-authenticate a highlighted credential in-place (preserves tool assignments)
@@ -1176,9 +1158,6 @@ export function InternalMCPCatalog({
           isOpen={isDialogOpened("manage")}
           onClose={handleManageDialogClose}
           catalogId={manageCatalogId}
-          highlightServerId={highlightServerId}
-          onRevokeComplete={handleManageRevokeComplete}
-          onReauth={handleDeepLinkReauth}
         />
       )}
     </div>

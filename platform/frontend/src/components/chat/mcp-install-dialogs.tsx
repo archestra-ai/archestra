@@ -56,9 +56,6 @@ export function McpInstallDialogs({ orchestrator }: McpInstallDialogsProps) {
           isOpen={orchestrator.isDialogOpened("manage")}
           onClose={orchestrator.handleManageDialogClose}
           catalogId={orchestrator.manageCatalogId}
-          highlightServerId={orchestrator.highlightServerId}
-          onRevokeComplete={orchestrator.handleManageRevokeComplete}
-          onReauth={orchestrator.triggerReauthByCatalogIdAndServerId}
         />
       )}
     </>

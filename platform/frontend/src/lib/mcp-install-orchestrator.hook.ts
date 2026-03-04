@@ -52,9 +52,6 @@ export function useMcpInstallOrchestrator() {
 
   // Manage dialog state
   const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
-  const [highlightServerId, setHighlightServerId] = useState<string | null>(
-    null,
-  );
 
   // Re-authentication state
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
@@ -136,16 +133,6 @@ export function useMcpInstallOrchestrator() {
       }
     },
     [findCatalogItem, handleInstallLocalServer, handleInstallRemoteServer],
-  );
-
-  /** Open the manage credentials dialog for a given catalog ID */
-  const triggerManageByCatalogId = useCallback(
-    (catalogId: string, serverId?: string | null) => {
-      setManageCatalogId(catalogId);
-      setHighlightServerId(serverId ?? null);
-      openDialog("manage");
-    },
-    [openDialog],
   );
 
   /** Trigger re-authentication for a specific server, preserving tool assignments */
@@ -353,21 +340,11 @@ export function useMcpInstallOrchestrator() {
   const handleManageDialogClose = useCallback(() => {
     closeDialog("manage");
     setManageCatalogId(null);
-    setHighlightServerId(null);
   }, [closeDialog]);
-
-  const handleManageRevokeComplete = useCallback(
-    (catalogId: string) => {
-      handleManageDialogClose();
-      triggerInstallByCatalogId(catalogId);
-    },
-    [handleManageDialogClose, triggerInstallByCatalogId],
-  );
 
   return {
     // Public API
     triggerInstallByCatalogId,
-    triggerManageByCatalogId,
     triggerReauthByCatalogIdAndServerId,
 
     // Dialog state (for rendering)
@@ -376,7 +353,6 @@ export function useMcpInstallOrchestrator() {
     localServerCatalogItem,
     noAuthCatalogItem,
     manageCatalogId,
-    highlightServerId,
     isInstalling: installMutation.isPending || reauthMutation.isPending,
     isReauth: !!reauthServerId,
 
@@ -388,7 +364,6 @@ export function useMcpInstallOrchestrator() {
 
     // Close handlers
     handleManageDialogClose,
-    handleManageRevokeComplete,
     closeRemoteInstall: () => {
       closeDialog("remote-install");
       setSelectedCatalogItem(null);

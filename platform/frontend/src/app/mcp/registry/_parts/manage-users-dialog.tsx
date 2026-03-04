@@ -39,19 +39,12 @@ import {
   setOAuthState,
 } from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
-import { cn } from "@/lib/utils";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
   label?: string;
   catalogId: string;
-  /** When set, highlights the credential row for this server ID */
-  highlightServerId?: string | null;
-  /** Called after a credential is revoked, to auto-open the install dialog */
-  onRevokeComplete?: (catalogId: string) => void;
-  /** Called to re-authenticate a server in-place (preserves tool assignments) */
-  onReauth?: (catalogId: string, serverId: string) => void;
 }
 
 export function ManageUsersDialog({
@@ -59,9 +52,6 @@ export function ManageUsersDialog({
   onClose,
   label,
   catalogId,
-  highlightServerId,
-  onRevokeComplete,
-  onReauth,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
@@ -157,15 +147,10 @@ export function ManageUsersDialog({
   const initiateOAuthMutation = useInitiateOAuth();
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
-    const isHighlighted = highlightServerId === mcpServer.id;
     await deleteMcpServerMutation.mutateAsync({
       id: mcpServer.id,
       name: mcpServer.name,
     });
-    // If the revoked credential was the highlighted one, auto-open install dialog
-    if (isHighlighted && onRevokeComplete) {
-      onRevokeComplete(catalogId);
-    }
   };
 
   const handleReauthenticate = async (
@@ -257,10 +242,6 @@ export function ManageUsersDialog({
                       key={mcpServer.id}
                       data-testid={E2eTestId.CredentialRow}
                       data-server-id={mcpServer.id}
-                      className={cn(
-                        highlightServerId === mcpServer.id &&
-                          "bg-destructive/5",
-                      )}
                     >
                       <TableCell className="font-medium max-w-[200px]">
                         <div className="flex items-center gap-2">
@@ -297,33 +278,20 @@ export function ManageUsersDialog({
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          {/* Show Re-authenticate button for highlighted server (deep link) or OAuth refresh errors */}
-                          {((highlightServerId === mcpServer.id && onReauth) ||
-                            (isOAuthServer && mcpServer.oauthRefreshError)) && (
+                          {/* Show Re-authenticate button for OAuth refresh errors */}
+                          {isOAuthServer && mcpServer.oauthRefreshError && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="w-full">
                                     <Button
-                                      onClick={() => {
-                                        if (
-                                          highlightServerId === mcpServer.id &&
-                                          onReauth
-                                        ) {
-                                          onClose();
-                                          onReauth(catalogId, mcpServer.id);
-                                        } else {
-                                          handleReauthenticate(mcpServer);
-                                        }
-                                      }}
+                                      onClick={() =>
+                                        handleReauthenticate(mcpServer)
+                                      }
                                       disabled={!canReauthenticate(mcpServer)}
                                       size="sm"
                                       variant="outline"
-                                      className={cn(
-                                        "h-7 w-full text-xs",
-                                        highlightServerId === mcpServer.id &&
-                                          "animate-pulse ring-2 ring-primary ring-offset-1",
-                                      )}
+                                      className="h-7 w-full text-xs"
                                     >
                                       <RefreshCw className="mr-1 h-3 w-3" />
                                       Re-authenticate

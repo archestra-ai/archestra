@@ -19,6 +19,7 @@ import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  OrganizationModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
@@ -30,7 +31,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type { AgentType } from "@/types";
+import type { AgentType, GlobalToolPolicy } from "@/types";
 
 /**
  * MCP Gateway base URL (internal)
@@ -610,6 +611,7 @@ export async function getChatMcpTools({
   delegationChain,
   abortSignal,
   user,
+  skipApprovalCheck,
 }: {
   agentName: string;
   agentId: string;
@@ -626,6 +628,8 @@ export async function getChatMcpTools({
   abortSignal?: AbortSignal;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
+  /** Skip needsApproval hook (for A2A/autonomous contexts where no one can approve) */
+  skipApprovalCheck?: boolean;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -709,6 +713,13 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
+    // Fetch globalToolPolicy once for approval checks (only when needed)
+    let globalToolPolicy: GlobalToolPolicy = "permissive";
+    if (!skipApprovalCheck) {
+      const org = await OrganizationModel.getById(organizationId);
+      globalToolPolicy = org?.globalToolPolicy ?? "permissive";
+    }
+
     // Convert MCP tools to AI SDK Tool format
     const aiTools: Record<string, Tool> = {};
 
@@ -721,16 +732,21 @@ export async function getChatMcpTools({
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,
           inputSchema: jsonSchema(normalizedSchema),
-          needsApproval: async (args: unknown) => {
-            return ToolInvocationPolicyModel.checkApprovalRequired(
-              mcpTool.name,
-              isRecord(args) ? args : {},
-              {
-                teamIds: [],
-                externalAgentId: "Archestra Chat",
-              },
-            );
-          },
+          ...(!skipApprovalCheck
+            ? {
+                needsApproval: async (args: unknown) => {
+                  return ToolInvocationPolicyModel.checkApprovalRequired(
+                    mcpTool.name,
+                    isRecord(args) ? args : {},
+                    {
+                      teamIds: [],
+                      externalAgentId: "Archestra Chat",
+                    },
+                    globalToolPolicy,
+                  );
+                },
+              }
+            : {}),
           execute: async (args: unknown) => {
             logger.info(
               { agentId, userId, toolName: mcpTool.name, arguments: args },
@@ -906,16 +922,21 @@ export async function getChatMcpTools({
             description:
               agentTool.description || `Agent tool: ${agentTool.name}`,
             inputSchema: jsonSchema(normalizedSchema),
-            needsApproval: async (args: unknown) => {
-              return ToolInvocationPolicyModel.checkApprovalRequired(
-                agentTool.name,
-                isRecord(args) ? args : {},
-                {
-                  teamIds: [],
-                  externalAgentId: "Archestra Chat",
-                },
-              );
-            },
+            ...(!skipApprovalCheck
+              ? {
+                  needsApproval: async (args: unknown) => {
+                    return ToolInvocationPolicyModel.checkApprovalRequired(
+                      agentTool.name,
+                      isRecord(args) ? args : {},
+                      {
+                        teamIds: [],
+                        externalAgentId: "Archestra Chat",
+                      },
+                      globalToolPolicy,
+                    );
+                  },
+                }
+              : {}),
             execute: async (args: Record<string, unknown>) => {
               logger.info(
                 {

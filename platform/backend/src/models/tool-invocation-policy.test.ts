@@ -1493,6 +1493,7 @@ describe("ToolInvocationPolicyModel", () => {
         "chat-approval-tool",
         { arg: "value" },
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(true);
@@ -1522,6 +1523,7 @@ describe("ToolInvocationPolicyModel", () => {
         "allowed-chat-tool",
         { arg: "value" },
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1544,6 +1546,7 @@ describe("ToolInvocationPolicyModel", () => {
         "no-policy-tool",
         {},
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1554,6 +1557,7 @@ describe("ToolInvocationPolicyModel", () => {
         "archestra__todo_write",
         { todos: [] },
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1564,6 +1568,7 @@ describe("ToolInvocationPolicyModel", () => {
         "nonexistent-tool",
         {},
         mockContext,
+        "restrictive",
       );
 
       expect(result).toBe(false);
@@ -1594,6 +1599,7 @@ describe("ToolInvocationPolicyModel", () => {
         "conditional-approval-tool",
         { action: "dangerous" },
         mockContext,
+        "restrictive",
       );
       expect(result).toBe(true);
 
@@ -1602,6 +1608,7 @@ describe("ToolInvocationPolicyModel", () => {
         "conditional-approval-tool",
         { action: "safe" },
         mockContext,
+        "restrictive",
       );
       expect(safeResult).toBe(false);
     });
@@ -1639,6 +1646,7 @@ describe("ToolInvocationPolicyModel", () => {
         "precedence-tool",
         { path: "/safe/file.txt" },
         mockContext,
+        "restrictive",
       );
       expect(safeResult).toBe(false);
 
@@ -1647,8 +1655,69 @@ describe("ToolInvocationPolicyModel", () => {
         "precedence-tool",
         { path: "/other/file.txt" },
         mockContext,
+        "restrictive",
       );
       expect(otherResult).toBe(true);
+    });
+
+    test("returns false when globalToolPolicy is permissive even with require_approval policies", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "permissive-test-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Should be skipped in permissive mode",
+      });
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "permissive-test-tool",
+        { arg: "value" },
+        mockContext,
+        "permissive",
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("evaluates policies normally when globalToolPolicy is restrictive", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "restrictive-test-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Should be enforced in restrictive mode",
+      });
+
+      const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+        "restrictive-test-tool",
+        { arg: "value" },
+        mockContext,
+        "restrictive",
+      );
+
+      expect(result).toBe(true);
     });
   });
 });

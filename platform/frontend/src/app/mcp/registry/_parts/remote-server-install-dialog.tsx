@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LinkifiedText } from "@/components/ui/linkified-text";
 import {
   Select,
   SelectContent,
@@ -332,7 +333,7 @@ export function RemoteServerInstallDialog({
                     )}
                     {fieldConfig.description && (
                       <p className="text-xs text-muted-foreground">
-                        {fieldConfig.description}
+                        <LinkifiedText>{fieldConfig.description}</LinkifiedText>
                       </p>
                     )}
 

@@ -799,7 +799,9 @@ export function ChatMessages({
                           agentId={agentId}
                           onToolApprovalResponse={onToolApprovalResponse}
                           onInstallMcp={orchestrator.triggerInstallByCatalogId}
-                          onManageMcp={orchestrator.triggerManageByCatalogId}
+                          onReauthMcp={
+                            orchestrator.triggerReauthByCatalogIdAndServerId
+                          }
                         />
                       );
                     }
@@ -834,7 +836,9 @@ export function ChatMessages({
                             onInstallMcp={
                               orchestrator.triggerInstallByCatalogId
                             }
-                            onManageMcp={orchestrator.triggerManageByCatalogId}
+                            onReauthMcp={
+                              orchestrator.triggerReauthByCatalogIdAndServerId
+                            }
                           />
                         );
                       }
@@ -917,7 +921,7 @@ function MessageTool({
   agentId,
   onToolApprovalResponse,
   onInstallMcp,
-  onManageMcp,
+  onReauthMcp,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -929,7 +933,7 @@ function MessageTool({
     reason?: string;
   }) => void;
   onInstallMcp?: (catalogId: string) => void;
-  onManageMcp?: (catalogId: string, serverId?: string | null) => void;
+  onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -960,9 +964,10 @@ function MessageTool({
           toolName={toolName}
           catalogName={expiredAuth.catalogName}
           manageUrl={expiredAuth.manageUrl}
-          onManage={
-            onManageMcp && ids.catalogId
-              ? () => onManageMcp(ids.catalogId as string, ids.serverId)
+          onReauth={
+            onReauthMcp && ids.catalogId && ids.serverId
+              ? () =>
+                  onReauthMcp(ids.catalogId as string, ids.serverId as string)
               : undefined
           }
         />
@@ -999,9 +1004,10 @@ function MessageTool({
           toolName={toolName}
           catalogName={expiredAuth.catalogName}
           manageUrl={expiredAuth.manageUrl}
-          onManage={
-            onManageMcp && ids.catalogId
-              ? () => onManageMcp(ids.catalogId as string, ids.serverId)
+          onReauth={
+            onReauthMcp && ids.catalogId && ids.serverId
+              ? () =>
+                  onReauthMcp(ids.catalogId as string, ids.serverId as string)
               : undefined
           }
         />

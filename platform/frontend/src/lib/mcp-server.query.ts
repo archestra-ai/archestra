@@ -219,17 +219,27 @@ export function useReauthenticateMcpServer() {
   return useMutation({
     mutationFn: async (data: {
       id: string;
-      secretId: string;
       name: string;
+      secretId?: string;
+      accessToken?: string;
+      userConfigValues?: Record<string, string>;
+      environmentValues?: Record<string, string>;
+      isByosVault?: boolean;
     }) => {
+      const { id, name, ...body } = data;
       const response = await reauthenticateMcpServer({
-        path: { id: data.id },
-        body: { secretId: data.secretId },
+        path: { id },
+        body,
       });
+      if (response.error) {
+        handleApiError(response.error);
+        return null;
+      }
       return response.data;
     },
     onSuccess: async (_, variables) => {
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      invalidateToolAssignmentQueries(queryClient);
       toast.success(`Successfully re-authenticated ${variables.name}`);
     },
     onError: (_error, variables) => {

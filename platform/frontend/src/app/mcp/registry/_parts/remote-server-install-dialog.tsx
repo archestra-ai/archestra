@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Info, ShieldCheck, User } from "lucide-react";
+import { AlertTriangle, Info, ShieldCheck, User } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +69,8 @@ interface RemoteServerInstallDialogProps {
   ) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
+  /** When true, shows re-authentication mode (info banner, different title) */
+  isReauth?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -77,6 +79,7 @@ export function RemoteServerInstallDialog({
   onConfirm,
   catalogItem,
   isInstalling,
+  isReauth = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
@@ -240,7 +243,7 @@ export function RemoteServerInstallDialog({
             <div className="flex items-end gap-2">
               <User className="h-5 w-5" />
               <span>
-                Install Server
+                {isReauth ? "Re-authenticate" : "Install Server"}
                 <span className="text-muted-foreground ml-2 font-normal">
                   {catalogItem.name}
                 </span>
@@ -257,6 +260,17 @@ export function RemoteServerInstallDialog({
 
         <DialogForm onSubmit={handleConfirm}>
           <div className="grid gap-6 py-4">
+            {isReauth && (
+              <Alert className="border-amber-500/50 bg-amber-500/10">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <AlertDescription>
+                  Your existing credentials are expired or invalid. Submitting
+                  new credentials here will replace them while preserving your
+                  tool assignments.
+                </AlertDescription>
+              </Alert>
+            )}
+
             <SelectMcpServerCredentialTypeAndTeams
               onTeamChange={setSelectedTeamId}
               catalogId={catalogItem?.id}
@@ -439,7 +453,13 @@ export function RemoteServerInstallDialog({
             )}
             {canInstall && (
               <Button type="submit" disabled={!isValid || isInstalling}>
-                {isInstalling ? "Installing..." : "Install"}
+                {isInstalling
+                  ? isReauth
+                    ? "Updating..."
+                    : "Installing..."
+                  : isReauth
+                    ? "Update Credentials"
+                    : "Install"}
               </Button>
             )}
           </DialogFooter>

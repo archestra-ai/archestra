@@ -7,7 +7,11 @@ import type { RemoteServerInstallResult } from "@/app/mcp/registry/_parts/remote
 import type { OAuthInstallResult } from "@/components/oauth-confirmation-dialog";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
+import {
+  useInstallMcpServer,
+  useMcpServers,
+  useReauthenticateMcpServer,
+} from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
 import {
   clearPendingAfterEnvVars,
@@ -15,7 +19,9 @@ import {
   setOAuthCatalogId,
   setOAuthEnvironmentValues,
   setOAuthIsFirstInstallation,
+  setOAuthMcpServerId,
   setOAuthPendingAfterEnvVars,
+  setOAuthReturnUrl,
   setOAuthServerType,
   setOAuthState,
   setOAuthTeamId,
@@ -32,6 +38,7 @@ export function useMcpInstallOrchestrator() {
   const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: installedServers } = useMcpServers({});
   const installMutation = useInstallMcpServer();
+  const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<DialogKey>();
@@ -48,6 +55,9 @@ export function useMcpInstallOrchestrator() {
   const [highlightServerId, setHighlightServerId] = useState<string | null>(
     null,
   );
+
+  // Re-authentication state
+  const [reauthServerId, setReauthServerId] = useState<string | null>(null);
 
   const findCatalogItem = useCallback(
     (catalogId: string) => catalogItems?.find((item) => item.id === catalogId),
@@ -138,12 +148,83 @@ export function useMcpInstallOrchestrator() {
     [openDialog],
   );
 
+  /** Trigger re-authentication for a specific server, preserving tool assignments */
+  const triggerReauthByCatalogIdAndServerId = useCallback(
+    (catalogId: string, serverId: string) => {
+      const catalogItem = findCatalogItem(catalogId);
+      if (!catalogItem) return;
+
+      setReauthServerId(serverId);
+
+      if (catalogItem.oauthConfig) {
+        // OAuth server: go through OAuth flow with reauth context
+        const hasUserConfig =
+          catalogItem.userConfig &&
+          Object.keys(catalogItem.userConfig).length > 0;
+
+        if (!hasUserConfig) {
+          // Pure OAuth — set reauth context and open OAuth confirmation
+          setOAuthMcpServerId(serverId);
+          setOAuthReturnUrl(window.location.href);
+          setSelectedCatalogItem(catalogItem);
+          openDialog("oauth");
+          return;
+        }
+
+        // OAuth + user config fields: open remote install dialog in reauth mode
+        setSelectedCatalogItem(catalogItem);
+        openDialog("remote-install");
+        return;
+      }
+
+      // Non-OAuth servers: open the appropriate dialog in reauth mode
+      if (catalogItem.serverType === "local") {
+        setLocalServerCatalogItem(catalogItem);
+        openDialog("local-install");
+      } else {
+        setSelectedCatalogItem(catalogItem);
+        openDialog("remote-install");
+      }
+    },
+    [findCatalogItem, openDialog],
+  );
+
   // --- Confirm handlers ---
 
   const handleRemoteServerInstallConfirm = async (
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
+    // If in reauth mode, call reauthenticate endpoint instead of install
+    if (reauthServerId) {
+      const accessToken =
+        !result.isByosVault &&
+        result.metadata?.access_token &&
+        typeof result.metadata.access_token === "string"
+          ? result.metadata.access_token
+          : undefined;
+
+      await reauthMutation.mutateAsync({
+        id: reauthServerId,
+        name: catalogItem.name,
+        ...(accessToken && { accessToken }),
+        ...(result.isByosVault && {
+          userConfigValues: result.metadata as Record<string, string>,
+        }),
+        ...(!result.isByosVault &&
+          !accessToken &&
+          result.metadata && {
+            userConfigValues: result.metadata as Record<string, string>,
+          }),
+        isByosVault: result.isByosVault,
+      });
+
+      closeDialog("remote-install");
+      setSelectedCatalogItem(null);
+      setReauthServerId(null);
+      return;
+    }
+
     const accessToken =
       !result.isByosVault &&
       result.metadata?.access_token &&
@@ -167,6 +248,21 @@ export function useMcpInstallOrchestrator() {
     installResult: LocalServerInstallResult,
   ) => {
     if (!localServerCatalogItem) return;
+
+    // If in reauth mode, call reauthenticate endpoint instead of install
+    if (reauthServerId) {
+      await reauthMutation.mutateAsync({
+        id: reauthServerId,
+        name: localServerCatalogItem.name,
+        environmentValues: installResult.environmentValues,
+        isByosVault: installResult.isByosVault,
+      });
+
+      closeDialog("local-install");
+      setLocalServerCatalogItem(null);
+      setReauthServerId(null);
+      return;
+    }
 
     if (getOAuthPendingAfterEnvVars() && localServerCatalogItem.oauthConfig) {
       clearPendingAfterEnvVars();
@@ -236,10 +332,17 @@ export function useMcpInstallOrchestrator() {
       setOAuthCatalogId(selectedCatalogItem.id);
       setOAuthTeamId(result.teamId ?? null);
 
-      const isFirstInstallation = !installedServers?.some(
-        (s) => s.catalogId === selectedCatalogItem.id,
-      );
-      setOAuthIsFirstInstallation(isFirstInstallation);
+      // If re-authenticating via OAuth, store reauth context
+      if (reauthServerId) {
+        setOAuthMcpServerId(reauthServerId);
+        setOAuthReturnUrl(window.location.href);
+        setReauthServerId(null);
+      } else {
+        const isFirstInstallation = !installedServers?.some(
+          (s) => s.catalogId === selectedCatalogItem.id,
+        );
+        setOAuthIsFirstInstallation(isFirstInstallation);
+      }
 
       window.location.href = authorizationUrl;
     } catch {
@@ -265,6 +368,7 @@ export function useMcpInstallOrchestrator() {
     // Public API
     triggerInstallByCatalogId,
     triggerManageByCatalogId,
+    triggerReauthByCatalogIdAndServerId,
 
     // Dialog state (for rendering)
     isDialogOpened,
@@ -273,7 +377,8 @@ export function useMcpInstallOrchestrator() {
     noAuthCatalogItem,
     manageCatalogId,
     highlightServerId,
-    isInstalling: installMutation.isPending,
+    isInstalling: installMutation.isPending || reauthMutation.isPending,
+    isReauth: !!reauthServerId,
 
     // Confirm handlers
     handleRemoteServerInstallConfirm,
@@ -287,10 +392,12 @@ export function useMcpInstallOrchestrator() {
     closeRemoteInstall: () => {
       closeDialog("remote-install");
       setSelectedCatalogItem(null);
+      setReauthServerId(null);
     },
     closeLocalInstall: () => {
       closeDialog("local-install");
       setLocalServerCatalogItem(null);
+      setReauthServerId(null);
     },
     closeNoAuth: () => {
       closeDialog("no-auth");
@@ -299,6 +406,7 @@ export function useMcpInstallOrchestrator() {
     closeOAuth: () => {
       closeDialog("oauth");
       setSelectedCatalogItem(null);
+      setReauthServerId(null);
     },
   };
 }

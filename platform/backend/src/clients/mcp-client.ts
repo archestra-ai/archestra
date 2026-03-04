@@ -1513,7 +1513,7 @@ class McpClient {
         ? `team: ${tokenAuth.teamId}`
         : "organization";
     const manageUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServerId}`;
-    return `Expired or invalid authentication for "${catalogDisplayName}".\n\nYour credentials (${context}) failed authentication. Please revoke the invalid credentials and re-authenticate.\nTo manage your connections, visit: ${manageUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
+    return `Expired or invalid authentication for "${catalogDisplayName}".\n\nYour credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.\nTo manage your connections, visit: ${manageUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
   }
 
   /**

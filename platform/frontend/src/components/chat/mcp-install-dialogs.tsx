@@ -18,6 +18,7 @@ export function McpInstallDialogs({ orchestrator }: McpInstallDialogsProps) {
         onConfirm={orchestrator.handleRemoteServerInstallConfirm}
         catalogItem={orchestrator.selectedCatalogItem}
         isInstalling={orchestrator.isInstalling}
+        isReauth={orchestrator.isReauth}
       />
 
       <OAuthConfirmationDialog
@@ -46,6 +47,7 @@ export function McpInstallDialogs({ orchestrator }: McpInstallDialogsProps) {
           onConfirm={orchestrator.handleLocalServerInstallConfirm}
           catalogItem={orchestrator.localServerCatalogItem}
           isInstalling={orchestrator.isInstalling}
+          isReauth={orchestrator.isReauth}
         />
       )}
 
@@ -58,6 +60,7 @@ export function McpInstallDialogs({ orchestrator }: McpInstallDialogsProps) {
           onHighlightedRevokeComplete={
             orchestrator.handleHighlightedRevokeComplete
           }
+          onHighlightedReauth={orchestrator.triggerReauthByCatalogIdAndServerId}
         />
       )}
     </>

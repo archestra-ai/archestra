@@ -4,15 +4,15 @@ interface ExpiredAuthToolProps {
   toolName: string;
   catalogName: string;
   manageUrl: string;
-  /** When provided, opens the manage dialog inline instead of navigating */
-  onManage?: () => void;
+  /** When provided, triggers inline re-authentication instead of navigating */
+  onReauth?: () => void;
 }
 
 export function ExpiredAuthTool({
   toolName,
   catalogName,
   manageUrl,
-  onManage,
+  onReauth,
 }: ExpiredAuthToolProps) {
   return (
     <AuthErrorTool
@@ -21,13 +21,12 @@ export function ExpiredAuthTool({
       description={
         <>
           Your credentials for &ldquo;{catalogName}&rdquo; have expired or are
-          invalid. Revoke the old credentials and re-authenticate to continue
-          using this tool.
+          invalid. Re-authenticate to continue using this tool.
         </>
       }
-      buttonText="Manage credentials"
+      buttonText={onReauth ? "Re-authenticate" : "Manage credentials"}
       buttonUrl={manageUrl}
-      onAction={onManage}
+      onAction={onReauth}
     />
   );
 }

@@ -27,7 +27,7 @@ describe("ExpiredAuthTool", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders a link to the manage URL", () => {
+  it("renders a link to the manage URL when no onReauth", () => {
     render(<ExpiredAuthTool {...defaultProps} />);
 
     const link = screen.getByRole("link", { name: /Manage credentials/i });
@@ -63,11 +63,11 @@ describe("ExpiredAuthTool", () => {
     expect(alert).toBeInTheDocument();
   });
 
-  it("renders an inline button when onManage is provided", () => {
-    render(<ExpiredAuthTool {...defaultProps} onManage={() => {}} />);
+  it("renders a Re-authenticate button when onReauth is provided", () => {
+    render(<ExpiredAuthTool {...defaultProps} onReauth={() => {}} />);
 
     const button = screen.getByRole("button", {
-      name: /Manage credentials/i,
+      name: /Re-authenticate/i,
     });
     expect(button).toBeInTheDocument();
     expect(
@@ -75,13 +75,13 @@ describe("ExpiredAuthTool", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("calls onManage when the inline button is clicked", async () => {
-    const onManage = vi.fn();
-    render(<ExpiredAuthTool {...defaultProps} onManage={onManage} />);
+  it("calls onReauth when the inline button is clicked", async () => {
+    const onReauth = vi.fn();
+    render(<ExpiredAuthTool {...defaultProps} onReauth={onReauth} />);
 
     await userEvent.click(
-      screen.getByRole("button", { name: /Manage credentials/i }),
+      screen.getByRole("button", { name: /Re-authenticate/i }),
     );
-    expect(onManage).toHaveBeenCalledOnce();
+    expect(onReauth).toHaveBeenCalledOnce();
   });
 });

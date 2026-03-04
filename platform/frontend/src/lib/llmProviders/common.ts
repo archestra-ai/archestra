@@ -1,4 +1,9 @@
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_MANAGE_QUERY_PARAM,
+} from "@shared";
 import type {
   PartialUIMessage,
   PolicyDeniedPart,
@@ -199,7 +204,7 @@ export function extractCatalogIdFromInstallUrl(
 ): string | null {
   try {
     const url = new URL(installUrl);
-    return url.searchParams.get("install");
+    return url.searchParams.get(MCP_CATALOG_INSTALL_QUERY_PARAM);
   } catch {
     return null;
   }
@@ -217,8 +222,8 @@ export function extractIdsFromManageUrl(manageUrl: string): {
   try {
     const url = new URL(manageUrl);
     return {
-      catalogId: url.searchParams.get("manage"),
-      serverId: url.searchParams.get("highlight"),
+      catalogId: url.searchParams.get(MCP_CATALOG_MANAGE_QUERY_PARAM),
+      serverId: url.searchParams.get(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM),
     };
   } catch {
     return { catalogId: null, serverId: null };

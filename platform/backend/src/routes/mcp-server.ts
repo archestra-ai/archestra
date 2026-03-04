@@ -718,12 +718,40 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: z.object({
-          secretId: UuidIdSchema,
+          secretId: UuidIdSchema.optional(),
+          accessToken: z.string().optional(),
+          userConfigValues: z.record(z.string(), z.string()).optional(),
+          environmentValues: z.record(z.string(), z.string()).optional(),
+          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body: { secretId }, user, headers }, reply) => {
+    async (
+      {
+        params: { id },
+        body: {
+          secretId: providedSecretId,
+          accessToken,
+          userConfigValues,
+          environmentValues,
+          isByosVault,
+        },
+        user,
+        headers,
+      },
+      reply,
+    ) => {
+      // Validate that at least one credential field is provided
+      if (
+        !providedSecretId &&
+        !accessToken &&
+        !userConfigValues &&
+        !environmentValues
+      ) {
+        throw new ApiError(400, "At least one credential field is required");
+      }
+
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
 
@@ -791,6 +819,110 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Resolve the new secret ID: either provided directly, or create from raw credentials
+      let newSecretId = providedSecretId;
+
+      if (!newSecretId) {
+        const catalogItem = mcpServer.catalogId
+          ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+          : null;
+
+        if (accessToken) {
+          // PAT token flow
+          if (isByosVault && isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual PAT token input is not allowed when Readonly Vault is enabled",
+            );
+          }
+          const secret = await secretManager().createSecret(
+            { access_token: accessToken },
+            `${mcpServer.name}-token`,
+          );
+          newSecretId = secret.id;
+        } else if (userConfigValues) {
+          // Remote server user config fields
+          if (isByosVault) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+          }
+          const secret = await secretManager().createSecret(
+            userConfigValues as Record<string, unknown>,
+            isByosVault
+              ? `${mcpServer.name}-vault-secret`
+              : `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
+
+          // Validate connection for remote servers before committing the swap
+          if (catalogItem?.serverType === "remote") {
+            const { isValid, errorMessage } =
+              await McpServerModel.validateConnection(
+                mcpServer.name,
+                mcpServer.catalogId ?? undefined,
+                newSecretId,
+              );
+            if (!isValid) {
+              // Clean up the newly created secret
+              try {
+                await secretManager().deleteSecret(newSecretId);
+              } catch {
+                // Ignore cleanup errors
+              }
+              throw new ApiError(
+                400,
+                errorMessage ||
+                  "Failed to connect to MCP server with provided credentials",
+              );
+            }
+          }
+        } else if (environmentValues) {
+          // Local server environment variables
+          if (isByosVault) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+            // Vault references for secret env vars
+            const secret = await secretManager().createSecret(
+              environmentValues,
+              `${mcpServer.name}-vault-secret`,
+            );
+            newSecretId = secret.id;
+          } else if (catalogItem?.localConfig?.environment) {
+            // Collect only secret-type env vars
+            const secretEnvVars: Record<string, string> = {};
+            for (const envDef of catalogItem.localConfig.environment) {
+              if (envDef.type === "secret") {
+                const value = envDef.promptOnInstallation
+                  ? environmentValues[envDef.key]
+                  : (envDef.value as string | undefined);
+                if (value) {
+                  secretEnvVars[envDef.key] = value;
+                }
+              }
+            }
+            if (Object.keys(secretEnvVars).length > 0) {
+              const secret = await secretManager().createSecret(
+                secretEnvVars,
+                `${mcpServer.name}-secret`,
+              );
+              newSecretId = secret.id;
+            }
+          }
+        }
+      }
+
+      if (!newSecretId) {
+        throw new ApiError(400, "Could not resolve credentials");
+      }
+
       // Delete the old secret if it exists
       if (mcpServer.secretId) {
         try {
@@ -810,17 +942,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Update the server with new secret and clear OAuth error fields
       const updatedServer = await McpServerModel.update(id, {
-        secretId,
+        secretId: newSecretId,
         oauthRefreshError: null,
         oauthRefreshFailedAt: null,
       });
+
+      // For local servers, trigger pod restart to pick up new credentials
+      if (mcpServer.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.restartServer(id);
+          logger.info(
+            { mcpServerId: id },
+            "Triggered pod restart after re-authentication",
+          );
+        } catch (error) {
+          logger.warn(
+            { err: error, mcpServerId: id },
+            "Failed to restart pod after re-authentication (may not be running)",
+          );
+        }
+      }
 
       if (!updatedServer) {
         throw new ApiError(500, "Failed to update MCP server");
       }
 
       logger.info(
-        { mcpServerId: id, newSecretId: secretId },
+        { mcpServerId: id, newSecretId },
         "MCP server re-authenticated successfully",
       );
 

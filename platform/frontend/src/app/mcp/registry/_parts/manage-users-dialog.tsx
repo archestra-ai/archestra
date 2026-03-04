@@ -50,6 +50,8 @@ interface ManageUsersDialogProps {
   highlightServerId?: string | null;
   /** Called after the highlighted credential is revoked, to auto-open the install dialog */
   onHighlightedRevokeComplete?: (catalogId: string) => void;
+  /** Called to re-authenticate the highlighted server in-place (preserves tool assignments) */
+  onHighlightedReauth?: (catalogId: string, serverId: string) => void;
 }
 
 export function ManageUsersDialog({
@@ -59,6 +61,7 @@ export function ManageUsersDialog({
   catalogId,
   highlightServerId,
   onHighlightedRevokeComplete,
+  onHighlightedReauth,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
@@ -294,19 +297,37 @@ export function ManageUsersDialog({
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          {isOAuthServer && mcpServer.oauthRefreshError && (
+                          {/* Show Re-authenticate button for highlighted server (deep link) or OAuth refresh errors */}
+                          {((highlightServerId === mcpServer.id &&
+                            onHighlightedReauth) ||
+                            (isOAuthServer && mcpServer.oauthRefreshError)) && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="w-full">
                                     <Button
-                                      onClick={() =>
-                                        handleReauthenticate(mcpServer)
-                                      }
+                                      onClick={() => {
+                                        if (
+                                          highlightServerId === mcpServer.id &&
+                                          onHighlightedReauth
+                                        ) {
+                                          onClose();
+                                          onHighlightedReauth(
+                                            catalogId,
+                                            mcpServer.id,
+                                          );
+                                        } else {
+                                          handleReauthenticate(mcpServer);
+                                        }
+                                      }}
                                       disabled={!canReauthenticate(mcpServer)}
                                       size="sm"
                                       variant="outline"
-                                      className="h-7 w-full text-xs"
+                                      className={cn(
+                                        "h-7 w-full text-xs",
+                                        highlightServerId === mcpServer.id &&
+                                          "animate-pulse ring-2 ring-primary ring-offset-1",
+                                      )}
                                     >
                                       <RefreshCw className="mr-1 h-3 w-3" />
                                       Re-authenticate
@@ -332,16 +353,8 @@ export function ManageUsersDialog({
                                       !canRevoke(mcpServer)
                                     }
                                     size="sm"
-                                    variant={
-                                      highlightServerId === mcpServer.id
-                                        ? "destructive"
-                                        : "outline"
-                                    }
-                                    className={cn(
-                                      "h-7 w-full text-xs",
-                                      highlightServerId === mcpServer.id &&
-                                        "animate-pulse ring-2 ring-destructive ring-offset-1",
-                                    )}
+                                    variant="outline"
+                                    className="h-7 w-full text-xs"
                                     data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
                                   >
                                     <Trash className="mr-1 h-3 w-3" />

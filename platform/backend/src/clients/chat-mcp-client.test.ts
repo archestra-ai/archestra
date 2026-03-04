@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
+import mcpClient from "./mcp-client";
 
 const mockConnect = vi.fn().mockRejectedValue(new Error("Connection closed"));
 const mockClose = vi.fn();
@@ -24,6 +25,18 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 
 vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: vi.fn(),
+}));
+
+vi.mock("@/clients/mcp-client", () => ({
+  default: {
+    executeToolCall: vi.fn(),
+  },
+}));
+
+vi.mock("@/features/browser-stream/services/browser-stream.feature", () => ({
+  browserStreamFeature: {
+    isEnabled: vi.fn().mockReturnValue(false),
+  },
 }));
 
 describe("isBrowserMcpTool", () => {
@@ -276,6 +289,81 @@ describe("chat-mcp-client health check", () => {
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
+  });
+});
+
+describe("executeMcpTool error handling", () => {
+  const baseCtx = {
+    toolName: "test_tool",
+    toolArguments: {},
+    agentId: "agent-1",
+    agentName: "Test Agent",
+    userId: "user-1",
+    organizationId: "org-1",
+    userIsAgentAdmin: false,
+    mcpGwToken: null,
+  };
+
+  const mockResult = (overrides: Record<string, unknown>) => ({
+    id: "call-1",
+    name: "test_tool",
+    content: [],
+    isError: true,
+    ...overrides,
+  });
+
+  test("returns error text from text content array", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({
+        content: [{ type: "text", text: "Auth required: install the server" }],
+      }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    expect(result).toBe("Auth required: install the server");
+  });
+
+  test("joins multiple text content items with newline", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({
+        content: [
+          { type: "text", text: "Error line 1" },
+          { type: "text", text: "Error line 2" },
+        ],
+      }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    expect(result).toBe("Error line 1\nError line 2");
+  });
+
+  test("falls back to JSON.stringify for non-text content items", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({
+        content: [{ type: "image", data: "base64..." }],
+      }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    expect(result).toBe(JSON.stringify({ type: "image", data: "base64..." }));
+  });
+
+  test("returns error string when content is not an array", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({ content: null, error: "Something failed" }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    expect(result).toBe("Something failed");
+  });
+
+  test("returns fallback message when no content and no error", async () => {
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+      mockResult({ content: null }),
+    );
+
+    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    expect(result).toBe("Tool execution failed");
   });
 });
 

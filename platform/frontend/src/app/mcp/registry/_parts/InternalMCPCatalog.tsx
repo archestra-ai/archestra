@@ -4,6 +4,8 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   isPlaywrightCatalogItem,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
@@ -25,6 +27,7 @@ import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
   useMcpServers,
+  useReauthenticateMcpServer,
   useReinstallMcpServer,
 } from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
@@ -36,7 +39,9 @@ import {
   setOAuthCatalogId,
   setOAuthEnvironmentValues,
   setOAuthIsFirstInstallation,
+  setOAuthMcpServerId,
   setOAuthPendingAfterEnvVars,
+  setOAuthReturnUrl,
   setOAuthServerType,
   setOAuthState,
   setOAuthTeamId,
@@ -50,6 +55,7 @@ import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
+import { ManageUsersDialog } from "./manage-users-dialog";
 import {
   type CatalogItem,
   type InstalledServer,
@@ -93,6 +99,7 @@ export function InternalMCPCatalog({
   });
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
+  const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const deploymentStatuses = useMcpDeploymentStatuses();
   const session = authClient.useSession();
@@ -108,11 +115,15 @@ export function InternalMCPCatalog({
     | "oauth"
     | "no-auth"
     | "reinstall"
+    | "manage"
   >();
 
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
+
+  // Deep-link manage connections dialog state
+  const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
 
   // Update URL when search query changes (debounced via DebouncedInput)
   const handleSearchChange = useCallback(
@@ -143,6 +154,8 @@ export function InternalMCPCatalog({
   const [reinstallServerTeamId, setReinstallServerTeamId] = useState<
     string | null
   >(null);
+  // Track server ID for re-authentication (preserves tool assignments)
+  const [reauthServerId, setReauthServerId] = useState<string | null>(null);
   const [detailsServerName, setDetailsServerName] = useState<string | null>(
     null,
   );
@@ -280,6 +293,84 @@ export function InternalMCPCatalog({
       handleInstallRemoteServer(catalogItem, false);
     }
   }, [searchParams, catalogItems]);
+
+  // Deep-link: handle ?reauth={catalogId} with optional ?server={serverId}
+  // When server param is present, go straight to re-authentication (preserves tool assignments).
+  // When only reauth param is present, open the manage connections dialog.
+  // Uses window.history.replaceState instead of router.replace to avoid triggering
+  // a searchParams change that would re-fire the effect and race with state updates.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams changes, other deps are stable callbacks
+  useEffect(() => {
+    const reauthCatalogIdParam = searchParams.get(
+      MCP_CATALOG_REAUTH_QUERY_PARAM,
+    );
+    if (!reauthCatalogIdParam) return;
+
+    // Extract highlight param before clearing URL
+    const serverIdParam = searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM);
+
+    // Clear the manage/highlight params from URL without triggering a React re-render
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(MCP_CATALOG_REAUTH_QUERY_PARAM);
+    params.delete(MCP_CATALOG_SERVER_QUERY_PARAM);
+    const newUrl = params.toString()
+      ? `${pathname}?${params.toString()}`
+      : pathname;
+    window.history.replaceState(null, "", newUrl);
+
+    // When highlight param is present, skip manage dialog and go straight to reauth
+    if (serverIdParam) {
+      handleDeepLinkReauth(reauthCatalogIdParam, serverIdParam);
+      return;
+    }
+
+    // Open the manage connections dialog
+    setManageCatalogId(reauthCatalogIdParam);
+    openDialog("manage");
+  }, [searchParams]);
+
+  const handleManageDialogClose = () => {
+    closeDialog("manage");
+    setManageCatalogId(null);
+  };
+
+  // Called to re-authenticate a highlighted credential in-place (preserves tool assignments)
+  const handleDeepLinkReauth = (catalogId: string, serverId: string) => {
+    const catalogItem = catalogItems?.find((item) => item.id === catalogId);
+    if (!catalogItem) return;
+
+    setReauthServerId(serverId);
+
+    if (catalogItem.oauthConfig) {
+      // OAuth server: go through OAuth flow with reauth context
+      const hasUserConfig =
+        catalogItem.userConfig &&
+        Object.keys(catalogItem.userConfig).length > 0;
+
+      if (!hasUserConfig) {
+        // Pure OAuth — set reauth context and open OAuth confirmation
+        setOAuthMcpServerId(serverId);
+        setOAuthReturnUrl(window.location.href);
+        setSelectedCatalogItem(catalogItem);
+        openDialog("oauth");
+        return;
+      }
+
+      // OAuth + user config fields: open remote install dialog in reauth mode
+      setSelectedCatalogItem(catalogItem);
+      openDialog("remote-install");
+      return;
+    }
+
+    // Non-OAuth servers: open the appropriate dialog in reauth mode
+    if (catalogItem.serverType === "local") {
+      setLocalServerCatalogItem(catalogItem);
+      openDialog("local-install");
+    } else {
+      setSelectedCatalogItem(catalogItem);
+      openDialog("remote-install");
+    }
+  };
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
@@ -419,6 +510,21 @@ export function InternalMCPCatalog({
       return;
     }
 
+    // Re-authentication mode: update existing server credentials in-place
+    if (reauthServerId) {
+      await reauthMutation.mutateAsync({
+        id: reauthServerId,
+        name: localServerCatalogItem.name,
+        environmentValues: installResult.environmentValues,
+        isByosVault: installResult.isByosVault,
+      });
+
+      closeDialog("local-install");
+      setLocalServerCatalogItem(null);
+      setReauthServerId(null);
+      return;
+    }
+
     // Check if this is a reinstall (updating existing server) vs new installation
     if (reinstallServerId) {
       // Reinstall mode - call reinstall endpoint with new environment values
@@ -488,13 +594,6 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
-    // Check if this is the first installation for this catalog item
-    const isFirstInstallation = !installedServers?.some(
-      (s) => s.catalogId === catalogItem.id,
-    );
-
-    setInstallingItemId(catalogItem.id);
-
     // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
     // For BYOS mode: metadata contains vault references, pass via userConfigValues
     const accessToken =
@@ -503,6 +602,36 @@ export function InternalMCPCatalog({
       typeof result.metadata.access_token === "string"
         ? result.metadata.access_token
         : undefined;
+
+    // Re-authentication mode: update existing server credentials in-place
+    if (reauthServerId) {
+      await reauthMutation.mutateAsync({
+        id: reauthServerId,
+        name: catalogItem.name,
+        ...(accessToken && { accessToken }),
+        ...(result.isByosVault && {
+          userConfigValues: result.metadata as Record<string, string>,
+        }),
+        ...(!result.isByosVault &&
+          !accessToken &&
+          result.metadata && {
+            userConfigValues: result.metadata as Record<string, string>,
+          }),
+        isByosVault: result.isByosVault,
+      });
+
+      closeDialog("remote-install");
+      setSelectedCatalogItem(null);
+      setReauthServerId(null);
+      return;
+    }
+
+    // Check if this is the first installation for this catalog item
+    const isFirstInstallation = !installedServers?.some(
+      (s) => s.catalogId === catalogItem.id,
+    );
+
+    setInstallingItemId(catalogItem.id);
 
     await installMutation.mutateAsync({
       name: catalogItem.name,
@@ -537,11 +666,18 @@ export function InternalMCPCatalog({
       setOAuthCatalogId(selectedCatalogItem.id);
       setOAuthTeamId(result.teamId ?? null);
 
-      // Store if this is a first installation (for auto-opening assignments dialog)
-      const isFirstInstallation = !installedServers?.some(
-        (s) => s.catalogId === selectedCatalogItem.id,
-      );
-      setOAuthIsFirstInstallation(isFirstInstallation);
+      // If re-authenticating via OAuth, store reauth context
+      if (reauthServerId) {
+        setOAuthMcpServerId(reauthServerId);
+        setOAuthReturnUrl(window.location.href);
+        setReauthServerId(null);
+      } else {
+        // Store if this is a first installation (for auto-opening assignments dialog)
+        const isFirstInstallation = !installedServers?.some(
+          (s) => s.catalogId === selectedCatalogItem.id,
+        );
+        setOAuthIsFirstInstallation(isFirstInstallation);
+      }
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
@@ -946,10 +1082,12 @@ export function InternalMCPCatalog({
         onClose={() => {
           closeDialog("remote-install");
           setSelectedCatalogItem(null);
+          setReauthServerId(null);
         }}
         onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
-        isInstalling={installMutation.isPending}
+        isInstalling={installMutation.isPending || reauthMutation.isPending}
+        isReauth={!!reauthServerId}
       />
 
       <OAuthConfirmationDialog
@@ -964,6 +1102,7 @@ export function InternalMCPCatalog({
         onCancel={() => {
           closeDialog("oauth");
           setSelectedCatalogItem(null);
+          setReauthServerId(null);
         }}
         catalogId={selectedCatalogItem?.id}
       />
@@ -999,14 +1138,26 @@ export function InternalMCPCatalog({
             setLocalServerCatalogItem(null);
             setReinstallServerId(null);
             setReinstallServerTeamId(null);
+            setReauthServerId(null);
           }}
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
           isInstalling={
-            installMutation.isPending || reinstallMutation.isPending
+            installMutation.isPending ||
+            reinstallMutation.isPending ||
+            reauthMutation.isPending
           }
           isReinstall={!!reinstallServerId}
           existingTeamId={reinstallServerTeamId}
+          isReauth={!!reauthServerId}
+        />
+      )}
+
+      {manageCatalogId && (
+        <ManageUsersDialog
+          isOpen={isDialogOpened("manage")}
+          onClose={handleManageDialogClose}
+          catalogId={manageCatalogId}
         />
       )}
     </div>

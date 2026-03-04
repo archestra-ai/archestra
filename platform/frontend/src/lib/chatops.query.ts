@@ -12,8 +12,12 @@ export function useChatOpsStatus() {
   return useQuery({
     queryKey: ["chatops", "status"],
     queryFn: async () => {
-      const response = await archestraApiSdk.getChatOpsStatus();
-      return response.data?.providers || [];
+      const { data, error } = await archestraApiSdk.getChatOpsStatus();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.providers || [];
     },
   });
 }

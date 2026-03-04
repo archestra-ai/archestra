@@ -159,3 +159,33 @@ export function parseAuthRequired(
 
   return { catalogName: nameMatch[1], installUrl: urlMatch[1] };
 }
+
+export interface ExpiredAuthResult {
+  catalogName: string;
+  manageUrl: string;
+}
+
+/**
+ * Parse error text to detect "Expired or invalid authentication" errors from MCP tool calls.
+ * These indicate credentials exist but have expired or become invalid.
+ * The error message includes a deep link to the manage connections dialog.
+ */
+export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
+  let message = errorText;
+  try {
+    const json = JSON.parse(errorText);
+    message = json?.originalError?.message || json?.message || errorText;
+  } catch {
+    /* not JSON, use raw text */
+  }
+
+  if (!message.includes("Expired or invalid authentication for")) return null;
+
+  const nameMatch = message.match(
+    /Expired or invalid authentication for "([^"]+)"/,
+  );
+  const urlMatch = message.match(/visit:\s*(https?:\/\/\S+)/);
+  if (!nameMatch || !urlMatch) return null;
+
+  return { catalogName: nameMatch[1], manageUrl: urlMatch[1] };
+}

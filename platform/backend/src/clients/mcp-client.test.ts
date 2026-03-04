@@ -1,4 +1,8 @@
-import { MCP_CATALOG_INSTALL_PATH } from "@shared";
+import {
+  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
+  MCP_CATALOG_INSTALL_PATH,
+  MCP_CATALOG_MANAGE_QUERY_PARAM,
+} from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
 import {
@@ -1373,7 +1377,7 @@ describe("McpClient", () => {
     });
 
     describe("Auth error actionable message", () => {
-      test("returns actionable auth-required message with install URL when tool call throws UnauthorizedError on OAuth server", async ({
+      test("returns expired-auth message with manage URL when tool call throws UnauthorizedError on OAuth server with existing credentials", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -1443,18 +1447,18 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Authentication required for "github-oauth-server"`,
+          `Expired or invalid authentication for "github-oauth-server"`,
         );
         expect(result?.error).toContain(`user: ${testUser.id}`);
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${oauthCatalog.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
         );
         expect(result?.error).toContain(
-          "Once you have completed authentication, retry this tool call.",
+          "Once you have re-authenticated, retry this tool call.",
         );
       });
 
-      test("returns actionable auth-required message when tool call throws StreamableHTTPError 401 on OAuth server", async ({
+      test("returns expired-auth message with manage URL when tool call throws StreamableHTTPError 401 on OAuth server", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -1524,14 +1528,14 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Authentication required for "github-http401-server"`,
+          `Expired or invalid authentication for "github-http401-server"`,
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${oauthCatalog.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
 
-      test("returns actionable auth-required message for auth error on non-OAuth server (PAT-based)", async ({
+      test("returns expired-auth message for auth error on non-OAuth server (PAT-based) with existing credentials", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -1589,16 +1593,16 @@ describe("McpClient", () => {
         });
 
         expect(result).toMatchObject({ isError: true });
-        // Non-OAuth servers should also get actionable auth-required message
+        // Non-OAuth servers with existing credentials should get expired-auth message
         expect(result?.error).toContain(
-          `Authentication required for "private-api-server"`,
+          `Expired or invalid authentication for "private-api-server"`,
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${nonOauthCatalog.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${nonOauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
 
-      test("returns actionable auth-required message when error message contains auth keywords", async ({
+      test("returns expired-auth message when error message contains auth keywords", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -1664,14 +1668,14 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Authentication required for "github-pat-server"`,
+          `Expired or invalid authentication for "github-pat-server"`,
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${catalog.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${catalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
 
-      test("returns actionable auth-required message with team context", async ({
+      test("returns expired-auth message with team context", async ({
         makeUser,
         makeTeam,
         makeOrganization,
@@ -1743,11 +1747,11 @@ describe("McpClient", () => {
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
-          `Authentication required for "github-team-oauth-server"`,
+          `Expired or invalid authentication for "github-team-oauth-server"`,
         );
         expect(result?.error).toContain(`team: ${team.id}`);
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${oauthCatalog.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
     });

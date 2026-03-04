@@ -3,7 +3,9 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   isPlaywrightCatalogItem,
+  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_MANAGE_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
@@ -50,6 +52,7 @@ import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
+import { ManageUsersDialog } from "./manage-users-dialog";
 import {
   type CatalogItem,
   type InstalledServer,
@@ -108,11 +111,18 @@ export function InternalMCPCatalog({
     | "oauth"
     | "no-auth"
     | "reinstall"
+    | "manage"
   >();
 
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
+
+  // Deep-link manage connections dialog state
+  const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
+  const [highlightServerId, setHighlightServerId] = useState<string | null>(
+    null,
+  );
 
   // Update URL when search query changes (debounced via DebouncedInput)
   const handleSearchChange = useCallback(
@@ -280,6 +290,56 @@ export function InternalMCPCatalog({
       handleInstallRemoteServer(catalogItem, false);
     }
   }, [searchParams, catalogItems]);
+
+  // Deep-link: auto-open manage connections dialog when ?manage={catalogId} is present
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams/catalogItems changes
+  useEffect(() => {
+    const manageCatalogIdParam = searchParams.get(
+      MCP_CATALOG_MANAGE_QUERY_PARAM,
+    );
+    if (!manageCatalogIdParam || !catalogItems) return;
+
+    const catalogItem = catalogItems.find(
+      (item) => item.id === manageCatalogIdParam,
+    );
+    if (!catalogItem) return;
+
+    // Extract highlight param before clearing URL
+    const highlightParam = searchParams.get(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
+
+    // Clear the manage/highlight params from URL to prevent re-triggering on refresh
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(MCP_CATALOG_MANAGE_QUERY_PARAM);
+    params.delete(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
+    const newUrl = params.toString()
+      ? `${pathname}?${params.toString()}`
+      : pathname;
+    router.replace(newUrl, { scroll: false });
+
+    // Open the manage connections dialog
+    setManageCatalogId(manageCatalogIdParam);
+    setHighlightServerId(highlightParam);
+    openDialog("manage");
+  }, [searchParams, catalogItems]);
+
+  const handleManageDialogClose = () => {
+    closeDialog("manage");
+    setManageCatalogId(null);
+    setHighlightServerId(null);
+  };
+
+  // Called when user revokes a highlighted credential - auto-open install dialog
+  const handleHighlightedRevokeComplete = (catalogId: string) => {
+    handleManageDialogClose();
+    const catalogItem = catalogItems?.find((item) => item.id === catalogId);
+    if (!catalogItem) return;
+
+    if (catalogItem.serverType === "local") {
+      handleInstallLocalServer(catalogItem);
+    } else {
+      handleInstallRemoteServer(catalogItem, false);
+    }
+  };
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
@@ -1007,6 +1067,16 @@ export function InternalMCPCatalog({
           }
           isReinstall={!!reinstallServerId}
           existingTeamId={reinstallServerTeamId}
+        />
+      )}
+
+      {manageCatalogId && (
+        <ManageUsersDialog
+          isOpen={isDialogOpened("manage")}
+          onClose={handleManageDialogClose}
+          catalogId={manageCatalogId}
+          highlightServerId={highlightServerId}
+          onHighlightedRevokeComplete={handleHighlightedRevokeComplete}
         />
       )}
     </div>

@@ -39,12 +39,17 @@ import {
   setOAuthState,
 } from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
+import { cn } from "@/lib/utils";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
   label?: string;
   catalogId: string;
+  /** When set, highlights the credential row for this server ID with a pulsating border */
+  highlightServerId?: string | null;
+  /** Called after the highlighted credential is revoked, to auto-open the install dialog */
+  onHighlightedRevokeComplete?: (catalogId: string) => void;
 }
 
 export function ManageUsersDialog({
@@ -52,6 +57,8 @@ export function ManageUsersDialog({
   onClose,
   label,
   catalogId,
+  highlightServerId,
+  onHighlightedRevokeComplete,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [] } = useMcpServers({ catalogId });
@@ -145,10 +152,15 @@ export function ManageUsersDialog({
   const initiateOAuthMutation = useInitiateOAuth();
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
+    const isHighlighted = highlightServerId === mcpServer.id;
     await deleteMcpServerMutation.mutateAsync({
       id: mcpServer.id,
       name: mcpServer.name,
     });
+    // If the revoked credential was the highlighted one, auto-open install dialog
+    if (isHighlighted && onHighlightedRevokeComplete) {
+      onHighlightedRevokeComplete(catalogId);
+    }
   };
 
   const handleReauthenticate = async (
@@ -240,6 +252,10 @@ export function ManageUsersDialog({
                       key={mcpServer.id}
                       data-testid={E2eTestId.CredentialRow}
                       data-server-id={mcpServer.id}
+                      className={cn(
+                        highlightServerId === mcpServer.id &&
+                          "bg-destructive/5",
+                      )}
                     >
                       <TableCell className="font-medium max-w-[200px]">
                         <div className="flex items-center gap-2">
@@ -314,8 +330,16 @@ export function ManageUsersDialog({
                                       !canRevoke(mcpServer)
                                     }
                                     size="sm"
-                                    variant="outline"
-                                    className="h-7 w-full text-xs"
+                                    variant={
+                                      highlightServerId === mcpServer.id
+                                        ? "destructive"
+                                        : "outline"
+                                    }
+                                    className={cn(
+                                      "h-7 w-full text-xs",
+                                      highlightServerId === mcpServer.id &&
+                                        "animate-pulse ring-2 ring-destructive ring-offset-1",
+                                    )}
                                     data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
                                   >
                                     <Trash className="mr-1 h-3 w-3" />

@@ -35,6 +35,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
   parseAuthRequired,
+  parseExpiredAuth,
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
@@ -43,6 +44,7 @@ import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
+import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
@@ -934,6 +936,17 @@ function MessageTool({
       );
     }
 
+    const expiredAuth = parseExpiredAuth(errorText);
+    if (expiredAuth) {
+      return (
+        <ExpiredAuthTool
+          toolName={toolName}
+          catalogName={expiredAuth.catalogName}
+          manageUrl={expiredAuth.manageUrl}
+        />
+      );
+    }
+
     const authRequired = parseAuthRequired(errorText);
     if (authRequired) {
       return (
@@ -946,10 +959,21 @@ function MessageTool({
     }
   }
 
-  // Also check tool output for auth-required pattern (tool errors returned as
+  // Also check tool output for auth-related patterns (tool errors returned as
   // successful results to avoid crashing the AI SDK stream still need the UI)
   const rawOutput = toolResultPart?.output ?? part.output;
   if (typeof rawOutput === "string") {
+    const expiredAuth = parseExpiredAuth(rawOutput);
+    if (expiredAuth) {
+      return (
+        <ExpiredAuthTool
+          toolName={toolName}
+          catalogName={expiredAuth.catalogName}
+          manageUrl={expiredAuth.manageUrl}
+        />
+      );
+    }
+
     const authRequired = parseAuthRequired(rawOutput);
     if (authRequired) {
       return (

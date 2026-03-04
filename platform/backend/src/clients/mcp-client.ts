@@ -7,8 +7,10 @@ import {
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
+  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_MANAGE_QUERY_PARAM,
 } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
@@ -454,6 +456,22 @@ class McpClient {
         // For auth errors, return an actionable message with re-auth URL
         if (isAuthError && tool.catalogId) {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
+          // Credentials exist but failed → "expired/invalid" message with manage link
+          if (targetMcpServerId) {
+            return await this.createErrorResult(
+              toolCall,
+              agentId,
+              this.buildExpiredAuthMessage(
+                catalogDisplayName,
+                tool.catalogId,
+                targetMcpServerId,
+                tokenAuth,
+              ),
+              mcpServerName,
+              authInfo,
+            );
+          }
+          // No server resolved → "auth required" message with install link
           return await this.createErrorResult(
             toolCall,
             agentId,
@@ -1442,9 +1460,10 @@ class McpClient {
         return await this.createErrorResult(
           toolCall,
           agentId,
-          this.buildAuthRequiredMessage(
+          this.buildExpiredAuthMessage(
             catalogDisplayName,
             toolCatalogId,
+            targetMcpServerId,
             tokenAuth,
           ),
           mcpServerName,
@@ -1476,6 +1495,25 @@ class McpClient {
         : "organization";
     const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
     return `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`;
+  }
+
+  /**
+   * Build an actionable error message for expired or invalid credentials,
+   * with a deep link to the manage connections dialog to revoke and re-authenticate.
+   */
+  private buildExpiredAuthMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    mcpServerId: string,
+    tokenAuth?: TokenAuthContext,
+  ): string {
+    const context = tokenAuth?.userId
+      ? `user: ${tokenAuth.userId}`
+      : tokenAuth?.teamId
+        ? `team: ${tokenAuth.teamId}`
+        : "organization";
+    const manageUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServerId}`;
+    return `Expired or invalid authentication for "${catalogDisplayName}".\n\nYour credentials (${context}) failed authentication. Please revoke the invalid credentials and re-authenticate.\nTo manage your connections, visit: ${manageUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
   }
 
   /**

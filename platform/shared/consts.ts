@@ -379,6 +379,14 @@ export const MCP_CATALOG_INSTALL_PATH = "/mcp/registry";
 export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
 
 /**
+ * Query params for deep-linking to the manage connections dialog.
+ * Append `?manage={catalogId}&highlight={mcpServerId}` to auto-open
+ * the manage connections dialog with a specific credential row highlighted.
+ */
+export const MCP_CATALOG_MANAGE_QUERY_PARAM = "manage";
+export const MCP_CATALOG_HIGHLIGHT_QUERY_PARAM = "highlight";
+
+/**
  * Providers where an API key is optional (self-hosted providers that typically don't require auth).
  */
 export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([

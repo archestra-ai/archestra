@@ -1531,14 +1531,14 @@ describe("McpClient", () => {
         );
       });
 
-      test("returns generic error for auth error on non-OAuth server", async ({
+      test("returns actionable auth-required message for auth error on non-OAuth server (PAT-based)", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
           email: "non-oauth-unauth@example.com",
         });
 
-        // Create catalog WITHOUT oauthConfig
+        // Create catalog WITHOUT oauthConfig (PAT-based auth like GitHub)
         const nonOauthCatalog = await InternalMcpCatalogModel.create({
           name: "private-api-server",
           serverType: "remote",
@@ -1589,9 +1589,86 @@ describe("McpClient", () => {
         });
 
         expect(result).toMatchObject({ isError: true });
-        // Should NOT contain the actionable auth-required message
-        expect(result?.error).not.toContain("Authentication required for");
-        expect(result?.error).not.toContain(MCP_CATALOG_INSTALL_PATH);
+        // Non-OAuth servers should also get actionable auth-required message
+        expect(result?.error).toContain(
+          `Authentication required for "private-api-server"`,
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${nonOauthCatalog.id}`,
+        );
+      });
+
+      test("returns actionable auth-required message when error message contains auth keywords", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "auth-keyword@example.com",
+        });
+
+        // Non-OAuth catalog (like GitHub with PAT)
+        const catalog = await InternalMcpCatalogModel.create({
+          name: "github-pat-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+        });
+
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-pat" },
+          "expired-pat-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-pat-server",
+          catalogId: catalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-pat-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: catalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServer.id,
+        });
+
+        // Mock callTool to throw StreamableHTTPError with non-401 code but auth message
+        // (this is what GitHub actually does - returns error with "unauthorized" in body)
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        mockCallTool.mockRejectedValueOnce(
+          new StreamableHTTPError(
+            500,
+            "Error POSTing to endpoint: unauthorized: unauthorized: AuthenticateToken authentication failed",
+          ),
+        );
+        mockConnect.mockResolvedValue(undefined);
+
+        const toolCall = {
+          id: "call_auth_keyword",
+          name: "github-pat-server__list_repos",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "test-token",
+          teamId: null,
+          isOrganizationToken: false,
+          userId: testUser.id,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Authentication required for "github-pat-server"`,
+        );
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${catalog.id}`,
+        );
       });
 
       test("returns actionable auth-required message with team context", async ({

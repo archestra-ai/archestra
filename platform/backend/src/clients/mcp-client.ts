@@ -390,10 +390,13 @@ class McpClient {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
-        // Check if this is an authentication error (401) and we can attempt refresh
+        // Check if this is an authentication error - either by type/status code
+        // or by detecting auth-related keywords in the error message (some servers
+        // return non-401 status codes with auth error messages in the body)
         const isAuthError =
           error instanceof UnauthorizedError ||
-          (error instanceof StreamableHTTPError && error.code === 401);
+          (error instanceof StreamableHTTPError && error.code === 401) ||
+          isAuthRelatedError(errorMessage);
 
         // Only attempt token refresh for OAuth servers with a refresh token
         const isOAuthServer = !!catalogItem.oauthConfig;
@@ -448,8 +451,8 @@ class McpClient {
           // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
         }
 
-        // For auth errors on OAuth servers, return an actionable message with re-auth URL
-        if (isAuthError && isOAuthServer && tool.catalogId) {
+        // For auth errors, return an actionable message with re-auth URL
+        if (isAuthError && tool.catalogId) {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
           return await this.createErrorResult(
             toolCall,
@@ -1431,7 +1434,8 @@ class McpClient {
       const isRetryAuthError =
         retryError instanceof UnauthorizedError ||
         (retryError instanceof StreamableHTTPError &&
-          (retryError as StreamableHTTPError).code === 401);
+          (retryError as StreamableHTTPError).code === 401) ||
+        isAuthRelatedError(retryErrorMsg);
 
       if (isRetryAuthError && toolCatalogId) {
         const catalogDisplayName = toolCatalogName || toolCatalogId;
@@ -1675,6 +1679,26 @@ class McpClient {
  * generate too many log entries. Other browser actions (navigate, click,
  * type, snapshot, etc.) are logged normally.
  */
+/**
+ * Detect auth-related errors from error messages.
+ * Some MCP servers return non-401 HTTP status codes but include auth error
+ * details in the response body (e.g. GitHub returns "unauthorized: AuthenticateToken
+ * authentication failed"). This catches those cases.
+ */
+function isAuthRelatedError(errorMessage: string): boolean {
+  const lower = errorMessage.toLowerCase();
+  return (
+    lower.includes("unauthorized") ||
+    lower.includes("authentication failed") ||
+    lower.includes("authentication required") ||
+    lower.includes("invalid token") ||
+    lower.includes("token expired") ||
+    lower.includes("access denied") ||
+    lower.includes("invalid credentials") ||
+    lower.includes("credentials expired")
+  );
+}
+
 function isHighFrequencyBrowserTool(toolName: string): boolean {
   const name = toolName.toLowerCase();
   return (

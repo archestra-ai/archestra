@@ -1,13 +1,17 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -22,20 +26,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useCreateKnowledgeBase } from "@/lib/knowledge-base.query";
 import { VisibilitySelector } from "./visibility-selector";
 
 interface CreateKnowledgeBaseFormValues {
   name: string;
   description: string;
-  provider: archestraApiTypes.CreateKnowledgeBaseData["body"]["provider"];
   apiUrl: string;
   apiKey: string;
 }
@@ -57,7 +53,6 @@ export function CreateKnowledgeBaseDialog({
     defaultValues: {
       name: "",
       description: "",
-      provider: "lightrag",
       apiUrl: "",
       apiKey: "",
     },
@@ -67,7 +62,7 @@ export function CreateKnowledgeBaseDialog({
     const result = await createKnowledgeBase.mutateAsync({
       name: values.name,
       ...(values.description && { description: values.description }),
-      provider: values.provider,
+      provider: "lightrag",
       visibility,
       teamIds: visibility === "team-scoped" ? teamIds : [],
       config: {
@@ -88,10 +83,6 @@ export function CreateKnowledgeBaseDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Create Knowledge Base</DialogTitle>
-          <DialogDescription>
-            Connect to a knowledge base provider to enable RAG-based document
-            retrieval.
-          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -137,65 +128,55 @@ export function CreateKnowledgeBaseDialog({
               onTeamIdsChange={setTeamIds}
             />
 
-            <FormField
-              control={form.control}
-              name="provider"
-              rules={{ required: "Provider is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provider</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a provider" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="lightrag">LightRAG</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <Collapsible>
+              <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group rounded-lg border p-3">
+                <span className="text-sm font-medium">Advanced</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4 space-y-4">
+                <FormField
+                  control={form.control}
+                  name="apiUrl"
+                  rules={{ required: "API URL is required" }}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>API URL</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="http://localhost:9621"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        The URL of the knowledge base API server.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="apiUrl"
-              rules={{ required: "API URL is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>API URL</FormLabel>
-                  <FormControl>
-                    <Input placeholder="http://localhost:9621" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    The URL of the knowledge base API server.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="apiKey"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>API Key (optional)</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="sk-..." {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Optional API key for authentication.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="apiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>API Key (optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="sk-..."
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Optional API key for authentication.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CollapsibleContent>
+            </Collapsible>
 
             <DialogFooter>
               <Button

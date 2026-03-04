@@ -301,7 +301,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             <TableHead className="uppercase text-xs tracking-wider text-right bg-muted">
               Status
             </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider text-right w-[100px] bg-muted">
+            <TableHead className="uppercase text-xs tracking-wider text-center w-[140px] bg-muted">
               Actions
             </TableHead>
           </TableRow>
@@ -347,8 +347,8 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-1">
+              <TableCell>
+                <div className="flex items-center justify-center gap-1">
                   <Button
                     variant="ghost"
                     size="icon"

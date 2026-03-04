@@ -34,10 +34,13 @@ import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
+  extractCatalogIdFromInstallUrl,
+  extractIdsFromManageUrl,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
+import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
@@ -46,6 +49,7 @@ import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
+import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -119,6 +123,7 @@ export function ChatMessages({
   const { data: userCanCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
+  const orchestrator = useMcpInstallOrchestrator();
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
@@ -793,6 +798,8 @@ export function ChatMessages({
                           toolName={toolName}
                           agentId={agentId}
                           onToolApprovalResponse={onToolApprovalResponse}
+                          onInstallMcp={orchestrator.triggerInstallByCatalogId}
+                          onManageMcp={orchestrator.triggerManageByCatalogId}
                         />
                       );
                     }
@@ -824,6 +831,10 @@ export function ChatMessages({
                             toolName={toolName}
                             agentId={agentId}
                             onToolApprovalResponse={onToolApprovalResponse}
+                            onInstallMcp={
+                              orchestrator.triggerInstallByCatalogId
+                            }
+                            onManageMcp={orchestrator.triggerManageByCatalogId}
                           />
                         );
                       }
@@ -855,6 +866,7 @@ export function ChatMessages({
         </div>
       </ConversationContent>
       <ConversationScrollButton />
+      <McpInstallDialogs orchestrator={orchestrator} />
     </Conversation>
   );
 }
@@ -904,6 +916,8 @@ function MessageTool({
   toolName,
   agentId,
   onToolApprovalResponse,
+  onInstallMcp,
+  onManageMcp,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -914,6 +928,8 @@ function MessageTool({
     approved: boolean;
     reason?: string;
   }) => void;
+  onInstallMcp?: (catalogId: string) => void;
+  onManageMcp?: (catalogId: string, serverId?: string | null) => void;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -938,22 +954,34 @@ function MessageTool({
 
     const expiredAuth = parseExpiredAuth(errorText);
     if (expiredAuth) {
+      const ids = extractIdsFromManageUrl(expiredAuth.manageUrl);
       return (
         <ExpiredAuthTool
           toolName={toolName}
           catalogName={expiredAuth.catalogName}
           manageUrl={expiredAuth.manageUrl}
+          onManage={
+            onManageMcp && ids.catalogId
+              ? () => onManageMcp(ids.catalogId as string, ids.serverId)
+              : undefined
+          }
         />
       );
     }
 
     const authRequired = parseAuthRequired(errorText);
     if (authRequired) {
+      const catalogId = extractCatalogIdFromInstallUrl(authRequired.installUrl);
       return (
         <AuthRequiredTool
           toolName={toolName}
           catalogName={authRequired.catalogName}
           installUrl={authRequired.installUrl}
+          onInstall={
+            onInstallMcp && catalogId
+              ? () => onInstallMcp(catalogId)
+              : undefined
+          }
         />
       );
     }
@@ -965,22 +993,34 @@ function MessageTool({
   if (typeof rawOutput === "string") {
     const expiredAuth = parseExpiredAuth(rawOutput);
     if (expiredAuth) {
+      const ids = extractIdsFromManageUrl(expiredAuth.manageUrl);
       return (
         <ExpiredAuthTool
           toolName={toolName}
           catalogName={expiredAuth.catalogName}
           manageUrl={expiredAuth.manageUrl}
+          onManage={
+            onManageMcp && ids.catalogId
+              ? () => onManageMcp(ids.catalogId as string, ids.serverId)
+              : undefined
+          }
         />
       );
     }
 
     const authRequired = parseAuthRequired(rawOutput);
     if (authRequired) {
+      const catalogId = extractCatalogIdFromInstallUrl(authRequired.installUrl);
       return (
         <AuthRequiredTool
           toolName={toolName}
           catalogName={authRequired.catalogName}
           installUrl={authRequired.installUrl}
+          onInstall={
+            onInstallMcp && catalogId
+              ? () => onInstallMcp(catalogId)
+              : undefined
+          }
         />
       );
     }

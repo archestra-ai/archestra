@@ -4,12 +4,15 @@ interface AuthRequiredToolProps {
   toolName: string;
   catalogName: string;
   installUrl: string;
+  /** When provided, opens the install dialog inline instead of navigating */
+  onInstall?: () => void;
 }
 
 export function AuthRequiredTool({
   toolName,
   catalogName,
   installUrl,
+  onInstall,
 }: AuthRequiredToolProps) {
   return (
     <AuthErrorTool
@@ -23,6 +26,7 @@ export function AuthRequiredTool({
       }
       buttonText="Set up credentials"
       buttonUrl={installUrl}
+      onAction={onInstall}
     />
   );
 }

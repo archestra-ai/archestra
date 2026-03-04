@@ -189,3 +189,38 @@ export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
 
   return { catalogName: nameMatch[1], manageUrl: urlMatch[1] };
 }
+
+/**
+ * Extract the catalog ID from an install deep-link URL.
+ * e.g. "http://localhost:3000/mcp/registry?install=cat_abc123" → "cat_abc123"
+ */
+export function extractCatalogIdFromInstallUrl(
+  installUrl: string,
+): string | null {
+  try {
+    const url = new URL(installUrl);
+    return url.searchParams.get("install");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract the catalog ID and server ID from a manage deep-link URL.
+ * e.g. "http://localhost:3000/mcp/registry?manage=cat_abc&highlight=srv_xyz"
+ *   → { catalogId: "cat_abc", serverId: "srv_xyz" }
+ */
+export function extractIdsFromManageUrl(manageUrl: string): {
+  catalogId: string | null;
+  serverId: string | null;
+} {
+  try {
+    const url = new URL(manageUrl);
+    return {
+      catalogId: url.searchParams.get("manage"),
+      serverId: url.searchParams.get("highlight"),
+    };
+  } catch {
+    return { catalogId: null, serverId: null };
+  }
+}

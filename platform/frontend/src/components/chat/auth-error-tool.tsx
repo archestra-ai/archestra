@@ -10,6 +10,8 @@ interface AuthErrorToolProps {
   description: ReactNode;
   buttonText: string;
   buttonUrl: string;
+  /** When provided, renders an inline button instead of an external link */
+  onAction?: () => void;
 }
 
 export function AuthErrorTool({
@@ -18,6 +20,7 @@ export function AuthErrorTool({
   description,
   buttonText,
   buttonUrl,
+  onAction,
 }: AuthErrorToolProps) {
   return (
     <Tool defaultOpen={true}>
@@ -33,12 +36,18 @@ export function AuthErrorTool({
             <AlertTitle>{title}</AlertTitle>
             <AlertDescription>
               <p>{description}</p>
-              <Button variant="default" size="sm" asChild>
-                <a href={buttonUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="size-3.5" />
+              {onAction ? (
+                <Button variant="default" size="sm" onClick={onAction}>
                   {buttonText}
-                </a>
-              </Button>
+                </Button>
+              ) : (
+                <Button variant="default" size="sm" asChild>
+                  <a href={buttonUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-3.5" />
+                    {buttonText}
+                  </a>
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         </div>

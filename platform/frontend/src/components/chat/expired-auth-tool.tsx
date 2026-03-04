@@ -4,12 +4,15 @@ interface ExpiredAuthToolProps {
   toolName: string;
   catalogName: string;
   manageUrl: string;
+  /** When provided, opens the manage dialog inline instead of navigating */
+  onManage?: () => void;
 }
 
 export function ExpiredAuthTool({
   toolName,
   catalogName,
   manageUrl,
+  onManage,
 }: ExpiredAuthToolProps) {
   return (
     <AuthErrorTool
@@ -24,6 +27,7 @@ export function ExpiredAuthTool({
       }
       buttonText="Manage credentials"
       buttonUrl={manageUrl}
+      onAction={onManage}
     />
   );
 }

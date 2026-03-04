@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 
 describe("ExpiredAuthTool", () => {
@@ -60,5 +61,27 @@ describe("ExpiredAuthTool", () => {
 
     const alert = container.querySelector('[role="alert"]');
     expect(alert).toBeInTheDocument();
+  });
+
+  it("renders an inline button when onManage is provided", () => {
+    render(<ExpiredAuthTool {...defaultProps} onManage={() => {}} />);
+
+    const button = screen.getByRole("button", {
+      name: /Manage credentials/i,
+    });
+    expect(button).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Manage credentials/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls onManage when the inline button is clicked", async () => {
+    const onManage = vi.fn();
+    render(<ExpiredAuthTool {...defaultProps} onManage={onManage} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Manage credentials/i }),
+    );
+    expect(onManage).toHaveBeenCalledOnce();
   });
 });

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { AuthRequiredTool } from "./auth-required-tool";
 
 describe("AuthRequiredTool", () => {
@@ -50,5 +51,28 @@ describe("AuthRequiredTool", () => {
       "href",
       "http://localhost:3000/mcp/registry?install=cat_xyz",
     );
+  });
+
+  it("renders an inline button when onInstall is provided", () => {
+    render(<AuthRequiredTool {...defaultProps} onInstall={() => {}} />);
+
+    const button = screen.getByRole("button", {
+      name: /Set up credentials/i,
+    });
+    expect(button).toBeInTheDocument();
+    // Should not render a link
+    expect(
+      screen.queryByRole("link", { name: /Set up credentials/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls onInstall when the inline button is clicked", async () => {
+    const onInstall = vi.fn();
+    render(<AuthRequiredTool {...defaultProps} onInstall={onInstall} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Set up credentials/i }),
+    );
+    expect(onInstall).toHaveBeenCalledOnce();
   });
 });

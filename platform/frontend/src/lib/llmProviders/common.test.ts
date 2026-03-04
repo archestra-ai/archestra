@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractCatalogIdFromInstallUrl,
+  extractIdsFromManageUrl,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
@@ -193,5 +195,64 @@ describe("parseExpiredAuth", () => {
     const text =
       'Expired or invalid authentication for "some-tool".\n\nPlease re-authenticate.';
     expect(parseExpiredAuth(text)).toBeNull();
+  });
+});
+
+describe("extractCatalogIdFromInstallUrl", () => {
+  it("extracts the catalog ID from a valid install URL", () => {
+    expect(
+      extractCatalogIdFromInstallUrl(
+        "http://localhost:3000/mcp/registry?install=cat_abc123",
+      ),
+    ).toBe("cat_abc123");
+  });
+
+  it("returns null when install param is missing", () => {
+    expect(
+      extractCatalogIdFromInstallUrl("http://localhost:3000/mcp/registry"),
+    ).toBeNull();
+  });
+
+  it("returns null for an invalid URL", () => {
+    expect(extractCatalogIdFromInstallUrl("not-a-url")).toBeNull();
+  });
+
+  it("handles URLs with additional query params", () => {
+    expect(
+      extractCatalogIdFromInstallUrl(
+        "http://localhost:3000/mcp/registry?search=jira&install=cat_xyz",
+      ),
+    ).toBe("cat_xyz");
+  });
+});
+
+describe("extractIdsFromManageUrl", () => {
+  it("extracts catalog ID and server ID from a manage URL", () => {
+    expect(
+      extractIdsFromManageUrl(
+        "http://localhost:3000/mcp/registry?manage=cat_abc&highlight=srv_xyz",
+      ),
+    ).toEqual({ catalogId: "cat_abc", serverId: "srv_xyz" });
+  });
+
+  it("returns catalogId only when highlight is missing", () => {
+    expect(
+      extractIdsFromManageUrl(
+        "http://localhost:3000/mcp/registry?manage=cat_abc",
+      ),
+    ).toEqual({ catalogId: "cat_abc", serverId: null });
+  });
+
+  it("returns nulls when both params are missing", () => {
+    expect(
+      extractIdsFromManageUrl("http://localhost:3000/mcp/registry"),
+    ).toEqual({ catalogId: null, serverId: null });
+  });
+
+  it("returns nulls for an invalid URL", () => {
+    expect(extractIdsFromManageUrl("not-a-url")).toEqual({
+      catalogId: null,
+      serverId: null,
+    });
   });
 });

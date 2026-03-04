@@ -46,12 +46,12 @@ interface ManageUsersDialogProps {
   onClose: () => void;
   label?: string;
   catalogId: string;
-  /** When set, highlights the credential row for this server ID with a pulsating border */
+  /** When set, highlights the credential row for this server ID */
   highlightServerId?: string | null;
-  /** Called after the highlighted credential is revoked, to auto-open the install dialog */
-  onHighlightedRevokeComplete?: (catalogId: string) => void;
-  /** Called to re-authenticate the highlighted server in-place (preserves tool assignments) */
-  onHighlightedReauth?: (catalogId: string, serverId: string) => void;
+  /** Called after a credential is revoked, to auto-open the install dialog */
+  onRevokeComplete?: (catalogId: string) => void;
+  /** Called to re-authenticate a server in-place (preserves tool assignments) */
+  onReauth?: (catalogId: string, serverId: string) => void;
 }
 
 export function ManageUsersDialog({
@@ -60,8 +60,8 @@ export function ManageUsersDialog({
   label,
   catalogId,
   highlightServerId,
-  onHighlightedRevokeComplete,
-  onHighlightedReauth,
+  onRevokeComplete,
+  onReauth,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
@@ -163,8 +163,8 @@ export function ManageUsersDialog({
       name: mcpServer.name,
     });
     // If the revoked credential was the highlighted one, auto-open install dialog
-    if (isHighlighted && onHighlightedRevokeComplete) {
-      onHighlightedRevokeComplete(catalogId);
+    if (isHighlighted && onRevokeComplete) {
+      onRevokeComplete(catalogId);
     }
   };
 
@@ -298,8 +298,7 @@ export function ManageUsersDialog({
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           {/* Show Re-authenticate button for highlighted server (deep link) or OAuth refresh errors */}
-                          {((highlightServerId === mcpServer.id &&
-                            onHighlightedReauth) ||
+                          {((highlightServerId === mcpServer.id && onReauth) ||
                             (isOAuthServer && mcpServer.oauthRefreshError)) && (
                             <TooltipProvider>
                               <Tooltip>
@@ -309,13 +308,10 @@ export function ManageUsersDialog({
                                       onClick={() => {
                                         if (
                                           highlightServerId === mcpServer.id &&
-                                          onHighlightedReauth
+                                          onReauth
                                         ) {
                                           onClose();
-                                          onHighlightedReauth(
-                                            catalogId,
-                                            mcpServer.id,
-                                          );
+                                          onReauth(catalogId, mcpServer.id);
                                         } else {
                                           handleReauthenticate(mcpServer);
                                         }

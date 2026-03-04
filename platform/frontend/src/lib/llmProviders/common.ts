@@ -1,8 +1,8 @@
 import {
   type archestraApiTypes,
-  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
-  MCP_CATALOG_MANAGE_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import type {
   PartialUIMessage,
@@ -167,7 +167,7 @@ export function parseAuthRequired(
 
 export interface ExpiredAuthResult {
   catalogName: string;
-  manageUrl: string;
+  reauthUrl: string;
 }
 
 /**
@@ -192,7 +192,7 @@ export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
   const urlMatch = message.match(/visit:\s*(https?:\/\/\S+)/);
   if (!nameMatch || !urlMatch) return null;
 
-  return { catalogName: nameMatch[1], manageUrl: urlMatch[1] };
+  return { catalogName: nameMatch[1], reauthUrl: urlMatch[1] };
 }
 
 /**
@@ -212,18 +212,18 @@ export function extractCatalogIdFromInstallUrl(
 
 /**
  * Extract the catalog ID and server ID from a manage deep-link URL.
- * e.g. "http://localhost:3000/mcp/registry?manage=cat_abc&highlight=srv_xyz"
+ * e.g. "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz"
  *   → { catalogId: "cat_abc", serverId: "srv_xyz" }
  */
-export function extractIdsFromManageUrl(manageUrl: string): {
+export function extractIdsFromReauthUrl(reauthUrl: string): {
   catalogId: string | null;
   serverId: string | null;
 } {
   try {
-    const url = new URL(manageUrl);
+    const url = new URL(reauthUrl);
     return {
-      catalogId: url.searchParams.get(MCP_CATALOG_MANAGE_QUERY_PARAM),
-      serverId: url.searchParams.get(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM),
+      catalogId: url.searchParams.get(MCP_CATALOG_REAUTH_QUERY_PARAM),
+      serverId: url.searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM),
     };
   } catch {
     return { catalogId: null, serverId: null };

@@ -379,12 +379,12 @@ export const MCP_CATALOG_INSTALL_PATH = "/mcp/registry";
 export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
 
 /**
- * Query params for deep-linking to the manage connections dialog.
- * Append `?manage={catalogId}&highlight={mcpServerId}` to auto-open
- * the manage connections dialog with a specific credential row highlighted.
+ * Query params for deep-linking to the re-authentication dialog.
+ * Append `?reauth={catalogId}&server={mcpServerId}` to auto-open
+ * the credential dialog for in-place re-authentication.
  */
-export const MCP_CATALOG_MANAGE_QUERY_PARAM = "manage";
-export const MCP_CATALOG_HIGHLIGHT_QUERY_PARAM = "highlight";
+export const MCP_CATALOG_REAUTH_QUERY_PARAM = "reauth";
+export const MCP_CATALOG_SERVER_QUERY_PARAM = "server";
 
 /**
  * Providers where an API key is optional (self-hosted providers that typically don't require auth).

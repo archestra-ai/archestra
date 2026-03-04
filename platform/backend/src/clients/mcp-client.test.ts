@@ -1,7 +1,7 @@
 import {
-  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
   MCP_CATALOG_INSTALL_PATH,
-  MCP_CATALOG_MANAGE_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
@@ -1451,7 +1451,7 @@ describe("McpClient", () => {
         );
         expect(result?.error).toContain(`user: ${testUser.id}`);
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
         );
         expect(result?.error).toContain(
           "Once you have re-authenticated, retry this tool call.",
@@ -1531,7 +1531,7 @@ describe("McpClient", () => {
           `Expired or invalid authentication for "github-http401-server"`,
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
 
@@ -1598,7 +1598,7 @@ describe("McpClient", () => {
           `Expired or invalid authentication for "private-api-server"`,
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${nonOauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${nonOauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
 
@@ -1671,7 +1671,7 @@ describe("McpClient", () => {
           `Expired or invalid authentication for "github-pat-server"`,
         );
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${catalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
 
@@ -1751,7 +1751,7 @@ describe("McpClient", () => {
         );
         expect(result?.error).toContain(`team: ${team.id}`);
         expect(result?.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServer.id}`,
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${oauthCatalog.id}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServer.id}`,
         );
       });
     });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,
-  extractIdsFromManageUrl,
+  extractIdsFromReauthUrl,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
@@ -134,29 +134,29 @@ describe("parseAuthRequired", () => {
 
   it("returns null for expired auth errors (distinct message format)", () => {
     const text =
-      'Expired or invalid authentication for "github-remote".\n\nYour credentials (user: usr_123) failed authentication.\nTo manage your connections, visit: http://localhost:3000/mcp/registry?manage=cat_abc&highlight=srv_xyz';
+      'Expired or invalid authentication for "github-remote".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit: http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz';
     expect(parseAuthRequired(text)).toBeNull();
   });
 });
 
 describe("parseExpiredAuth", () => {
-  const makeExpiredErrorText = (catalogName: string, manageUrl: string) =>
-    `Expired or invalid authentication for "${catalogName}".\n\nYour credentials (user: usr_123) failed authentication. Please revoke the invalid credentials and re-authenticate.\nTo manage your connections, visit: ${manageUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
+  const makeExpiredErrorText = (catalogName: string, reauthUrl: string) =>
+    `Expired or invalid authentication for "${catalogName}".\n\nYour credentials (user: usr_123) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit: ${reauthUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
 
   it("parses a direct text expired-auth error", () => {
     const url =
-      "http://localhost:3000/mcp/registry?manage=cat_abc&highlight=srv_xyz";
+      "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz";
     const text = makeExpiredErrorText("github-copilot-remote", url);
     const result = parseExpiredAuth(text);
     expect(result).toEqual({
       catalogName: "github-copilot-remote",
-      manageUrl: url,
+      reauthUrl: url,
     });
   });
 
   it("parses a JSON-wrapped expired-auth error (originalError.message)", () => {
     const url =
-      "https://app.example.com/mcp/registry?manage=cat_jira&highlight=srv_jira";
+      "https://app.example.com/mcp/registry?reauth=cat_jira&server=srv_jira";
     const inner = makeExpiredErrorText("jira-remote", url);
     const text = JSON.stringify({
       code: "unknown",
@@ -165,19 +165,19 @@ describe("parseExpiredAuth", () => {
     const result = parseExpiredAuth(text);
     expect(result).toEqual({
       catalogName: "jira-remote",
-      manageUrl: url,
+      reauthUrl: url,
     });
   });
 
   it("parses a JSON-wrapped expired-auth error (message)", () => {
     const url =
-      "http://localhost:3000/mcp/registry?manage=cat_123&highlight=srv_456";
+      "http://localhost:3000/mcp/registry?reauth=cat_123&server=srv_456";
     const inner = makeExpiredErrorText("slack-remote", url);
     const text = JSON.stringify({ message: inner });
     const result = parseExpiredAuth(text);
     expect(result).toEqual({
       catalogName: "slack-remote",
-      manageUrl: url,
+      reauthUrl: url,
     });
   });
 
@@ -226,31 +226,31 @@ describe("extractCatalogIdFromInstallUrl", () => {
   });
 });
 
-describe("extractIdsFromManageUrl", () => {
+describe("extractIdsFromReauthUrl", () => {
   it("extracts catalog ID and server ID from a manage URL", () => {
     expect(
-      extractIdsFromManageUrl(
-        "http://localhost:3000/mcp/registry?manage=cat_abc&highlight=srv_xyz",
+      extractIdsFromReauthUrl(
+        "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
       ),
     ).toEqual({ catalogId: "cat_abc", serverId: "srv_xyz" });
   });
 
   it("returns catalogId only when highlight is missing", () => {
     expect(
-      extractIdsFromManageUrl(
-        "http://localhost:3000/mcp/registry?manage=cat_abc",
+      extractIdsFromReauthUrl(
+        "http://localhost:3000/mcp/registry?reauth=cat_abc",
       ),
     ).toEqual({ catalogId: "cat_abc", serverId: null });
   });
 
   it("returns nulls when both params are missing", () => {
     expect(
-      extractIdsFromManageUrl("http://localhost:3000/mcp/registry"),
+      extractIdsFromReauthUrl("http://localhost:3000/mcp/registry"),
     ).toEqual({ catalogId: null, serverId: null });
   });
 
   it("returns nulls for an invalid URL", () => {
-    expect(extractIdsFromManageUrl("not-a-url")).toEqual({
+    expect(extractIdsFromReauthUrl("not-a-url")).toEqual({
       catalogId: null,
       serverId: null,
     });

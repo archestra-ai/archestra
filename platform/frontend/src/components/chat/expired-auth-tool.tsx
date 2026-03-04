@@ -3,7 +3,7 @@ import { AuthErrorTool } from "./auth-error-tool";
 interface ExpiredAuthToolProps {
   toolName: string;
   catalogName: string;
-  manageUrl: string;
+  reauthUrl: string;
   /** When provided, triggers inline re-authentication instead of navigating */
   onReauth?: () => void;
 }
@@ -11,7 +11,7 @@ interface ExpiredAuthToolProps {
 export function ExpiredAuthTool({
   toolName,
   catalogName,
-  manageUrl,
+  reauthUrl,
   onReauth,
 }: ExpiredAuthToolProps) {
   return (
@@ -25,7 +25,7 @@ export function ExpiredAuthTool({
         </>
       }
       buttonText={onReauth ? "Re-authenticate" : "Manage credentials"}
-      buttonUrl={manageUrl}
+      buttonUrl={reauthUrl}
       onAction={onReauth}
     />
   );

@@ -7,10 +7,10 @@ import {
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
-  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
-  MCP_CATALOG_MANAGE_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
@@ -1512,8 +1512,8 @@ class McpClient {
       : tokenAuth?.teamId
         ? `team: ${tokenAuth.teamId}`
         : "organization";
-    const manageUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_MANAGE_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_HIGHLIGHT_QUERY_PARAM}=${mcpServerId}`;
-    return `Expired or invalid authentication for "${catalogDisplayName}".\n\nYour credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.\nTo manage your connections, visit: ${manageUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
+    const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
+    return `Expired or invalid authentication for "${catalogDisplayName}".\n\nYour credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.\nTo re-authenticate, visit: ${reauthUrl}\n\nOnce you have re-authenticated, retry this tool call.`;
   }
 
   /**

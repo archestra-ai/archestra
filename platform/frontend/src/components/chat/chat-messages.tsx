@@ -35,7 +35,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
   extractCatalogIdFromInstallUrl,
-  extractIdsFromManageUrl,
+  extractIdsFromReauthUrl,
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
@@ -958,12 +958,12 @@ function MessageTool({
 
     const expiredAuth = parseExpiredAuth(errorText);
     if (expiredAuth) {
-      const ids = extractIdsFromManageUrl(expiredAuth.manageUrl);
+      const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
       return (
         <ExpiredAuthTool
           toolName={toolName}
           catalogName={expiredAuth.catalogName}
-          manageUrl={expiredAuth.manageUrl}
+          reauthUrl={expiredAuth.reauthUrl}
           onReauth={
             onReauthMcp && ids.catalogId && ids.serverId
               ? () =>
@@ -998,12 +998,12 @@ function MessageTool({
   if (typeof rawOutput === "string") {
     const expiredAuth = parseExpiredAuth(rawOutput);
     if (expiredAuth) {
-      const ids = extractIdsFromManageUrl(expiredAuth.manageUrl);
+      const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);
       return (
         <ExpiredAuthTool
           toolName={toolName}
           catalogName={expiredAuth.catalogName}
-          manageUrl={expiredAuth.manageUrl}
+          reauthUrl={expiredAuth.reauthUrl}
           onReauth={
             onReauthMcp && ids.catalogId && ids.serverId
               ? () =>

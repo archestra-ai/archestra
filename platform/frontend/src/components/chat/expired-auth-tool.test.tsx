@@ -7,8 +7,8 @@ describe("ExpiredAuthTool", () => {
   const defaultProps = {
     toolName: "github__list_repos",
     catalogName: "github-copilot-remote",
-    manageUrl:
-      "http://localhost:3000/mcp/registry?manage=cat_abc123&highlight=srv_xyz",
+    reauthUrl:
+      "http://localhost:3000/mcp/registry?reauth=cat_abc123&server=srv_xyz",
   };
 
   it("renders the Expired / Invalid Authentication alert", () => {
@@ -31,7 +31,7 @@ describe("ExpiredAuthTool", () => {
     render(<ExpiredAuthTool {...defaultProps} />);
 
     const link = screen.getByRole("link", { name: /Manage credentials/i });
-    expect(link).toHaveAttribute("href", defaultProps.manageUrl);
+    expect(link).toHaveAttribute("href", defaultProps.reauthUrl);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -41,7 +41,7 @@ describe("ExpiredAuthTool", () => {
       <ExpiredAuthTool
         toolName="jira__create_issue"
         catalogName="jira-atlassian-remote"
-        manageUrl="http://localhost:3000/mcp/registry?manage=cat_jira&highlight=srv_jira"
+        reauthUrl="http://localhost:3000/mcp/registry?reauth=cat_jira&server=srv_jira"
       />,
     );
 
@@ -52,7 +52,7 @@ describe("ExpiredAuthTool", () => {
       screen.getByRole("link", { name: /Manage credentials/i }),
     ).toHaveAttribute(
       "href",
-      "http://localhost:3000/mcp/registry?manage=cat_jira&highlight=srv_jira",
+      "http://localhost:3000/mcp/registry?reauth=cat_jira&server=srv_jira",
     );
   });
 

@@ -356,7 +356,7 @@ export function useMcpInstallOrchestrator() {
     setHighlightServerId(null);
   }, [closeDialog]);
 
-  const handleHighlightedRevokeComplete = useCallback(
+  const handleManageRevokeComplete = useCallback(
     (catalogId: string) => {
       handleManageDialogClose();
       triggerInstallByCatalogId(catalogId);
@@ -388,7 +388,7 @@ export function useMcpInstallOrchestrator() {
 
     // Close handlers
     handleManageDialogClose,
-    handleHighlightedRevokeComplete,
+    handleManageRevokeComplete,
     closeRemoteInstall: () => {
       closeDialog("remote-install");
       setSelectedCatalogItem(null);

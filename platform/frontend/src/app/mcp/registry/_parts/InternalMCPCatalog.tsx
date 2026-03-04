@@ -3,9 +3,9 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   isPlaywrightCatalogItem,
-  MCP_CATALOG_HIGHLIGHT_QUERY_PARAM,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
-  MCP_CATALOG_MANAGE_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
@@ -297,39 +297,39 @@ export function InternalMCPCatalog({
     }
   }, [searchParams, catalogItems]);
 
-  // Deep-link: auto-open manage connections dialog when ?manage={catalogId} is present
-  // When ?highlight={serverId} is also present, skip the manage dialog and go straight
-  // to re-authentication (preserves tool assignments).
+  // Deep-link: handle ?reauth={catalogId} with optional ?server={serverId}
+  // When server param is present, go straight to re-authentication (preserves tool assignments).
+  // When only reauth param is present, open the manage connections dialog.
   // Uses window.history.replaceState instead of router.replace to avoid triggering
   // a searchParams change that would re-fire the effect and race with state updates.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams changes, other deps are stable callbacks
   useEffect(() => {
-    const manageCatalogIdParam = searchParams.get(
-      MCP_CATALOG_MANAGE_QUERY_PARAM,
+    const reauthCatalogIdParam = searchParams.get(
+      MCP_CATALOG_REAUTH_QUERY_PARAM,
     );
-    if (!manageCatalogIdParam) return;
+    if (!reauthCatalogIdParam) return;
 
     // Extract highlight param before clearing URL
-    const highlightParam = searchParams.get(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
+    const serverIdParam = searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM);
 
     // Clear the manage/highlight params from URL without triggering a React re-render
     const params = new URLSearchParams(searchParams.toString());
-    params.delete(MCP_CATALOG_MANAGE_QUERY_PARAM);
-    params.delete(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
+    params.delete(MCP_CATALOG_REAUTH_QUERY_PARAM);
+    params.delete(MCP_CATALOG_SERVER_QUERY_PARAM);
     const newUrl = params.toString()
       ? `${pathname}?${params.toString()}`
       : pathname;
     window.history.replaceState(null, "", newUrl);
 
     // When highlight param is present, skip manage dialog and go straight to reauth
-    if (highlightParam) {
-      handleHighlightedReauth(manageCatalogIdParam, highlightParam);
+    if (serverIdParam) {
+      handleDeepLinkReauth(reauthCatalogIdParam, serverIdParam);
       return;
     }
 
     // Open the manage connections dialog
-    setManageCatalogId(manageCatalogIdParam);
-    setHighlightServerId(highlightParam);
+    setManageCatalogId(reauthCatalogIdParam);
+    setHighlightServerId(serverIdParam);
     openDialog("manage");
   }, [searchParams]);
 
@@ -340,7 +340,7 @@ export function InternalMCPCatalog({
   };
 
   // Called when user revokes a highlighted credential - auto-open install dialog
-  const handleHighlightedRevokeComplete = (catalogId: string) => {
+  const handleManageRevokeComplete = (catalogId: string) => {
     handleManageDialogClose();
     const catalogItem = catalogItems?.find((item) => item.id === catalogId);
     if (!catalogItem) return;
@@ -353,7 +353,7 @@ export function InternalMCPCatalog({
   };
 
   // Called to re-authenticate a highlighted credential in-place (preserves tool assignments)
-  const handleHighlightedReauth = (catalogId: string, serverId: string) => {
+  const handleDeepLinkReauth = (catalogId: string, serverId: string) => {
     const catalogItem = catalogItems?.find((item) => item.id === catalogId);
     if (!catalogItem) return;
 
@@ -1177,8 +1177,8 @@ export function InternalMCPCatalog({
           onClose={handleManageDialogClose}
           catalogId={manageCatalogId}
           highlightServerId={highlightServerId}
-          onHighlightedRevokeComplete={handleHighlightedRevokeComplete}
-          onHighlightedReauth={handleHighlightedReauth}
+          onRevokeComplete={handleManageRevokeComplete}
+          onReauth={handleDeepLinkReauth}
         />
       )}
     </div>

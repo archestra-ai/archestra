@@ -3,10 +3,11 @@ import {
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
-import type { z } from "zod";
+import { z } from "zod";
 import { schema } from "@/database";
 import {
   KnowledgeBaseProviderTypeSchema,
+  KnowledgeBaseVisibilitySchema,
   LightragConfigSchema,
 } from "./knowledge-base";
 import {
@@ -22,6 +23,8 @@ export const SelectKnowledgeBaseSchema = createSelectSchema(
   {
     provider: KnowledgeBaseProviderTypeSchema,
     config: LightragConfigSchema,
+    visibility: KnowledgeBaseVisibilitySchema,
+    teamIds: z.array(z.string()),
   },
 );
 export const InsertKnowledgeBaseSchema = createInsertSchema(
@@ -29,14 +32,26 @@ export const InsertKnowledgeBaseSchema = createInsertSchema(
   {
     provider: KnowledgeBaseProviderTypeSchema,
     config: LightragConfigSchema,
+    visibility: KnowledgeBaseVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
   },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeBaseSchema = createUpdateSchema(
   schema.knowledgeBasesTable,
   {
     config: LightragConfigSchema.optional(),
+    visibility: KnowledgeBaseVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
   },
-).pick({ name: true, config: true, secretId: true, status: true });
+).pick({
+  name: true,
+  description: true,
+  config: true,
+  secretId: true,
+  status: true,
+  visibility: true,
+  teamIds: true,
+});
 
 export type KnowledgeBase = z.infer<typeof SelectKnowledgeBaseSchema>;
 export type InsertKnowledgeBase = z.infer<typeof InsertKnowledgeBaseSchema>;

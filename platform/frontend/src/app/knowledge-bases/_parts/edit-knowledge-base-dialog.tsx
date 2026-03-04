@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,63 +22,71 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useCreateKnowledgeBase } from "@/lib/knowledge-base.query";
+import { useUpdateKnowledgeBase } from "@/lib/knowledge-base.query";
 import { VisibilitySelector } from "./visibility-selector";
 
-interface CreateKnowledgeBaseFormValues {
+type KnowledgeBaseItem =
+  archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
+
+interface EditKnowledgeBaseFormValues {
   name: string;
   description: string;
-  provider: archestraApiTypes.CreateKnowledgeBaseData["body"]["provider"];
   apiUrl: string;
   apiKey: string;
 }
 
-export function CreateKnowledgeBaseDialog({
+export function EditKnowledgeBaseDialog({
+  knowledgeBase,
   open,
   onOpenChange,
 }: {
+  knowledgeBase: KnowledgeBaseItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const createKnowledgeBase = useCreateKnowledgeBase();
+  const updateKnowledgeBase = useUpdateKnowledgeBase();
   const [visibility, setVisibility] = useState<"org-wide" | "team-scoped">(
-    "org-wide",
+    knowledgeBase.visibility,
   );
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [teamIds, setTeamIds] = useState<string[]>(knowledgeBase.teamIds);
 
-  const form = useForm<CreateKnowledgeBaseFormValues>({
+  const form = useForm<EditKnowledgeBaseFormValues>({
     defaultValues: {
-      name: "",
-      description: "",
-      provider: "lightrag",
-      apiUrl: "",
+      name: knowledgeBase.name,
+      description: knowledgeBase.description ?? "",
+      apiUrl: knowledgeBase.config.apiUrl,
       apiKey: "",
     },
   });
 
-  const handleSubmit = async (values: CreateKnowledgeBaseFormValues) => {
-    const result = await createKnowledgeBase.mutateAsync({
-      name: values.name,
-      ...(values.description && { description: values.description }),
-      provider: values.provider,
-      visibility,
-      teamIds: visibility === "team-scoped" ? teamIds : [],
-      config: {
-        apiUrl: values.apiUrl,
-        ...(values.apiKey ? { apiKey: values.apiKey } : {}),
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: knowledgeBase.name,
+        description: knowledgeBase.description ?? "",
+        apiUrl: knowledgeBase.config.apiUrl,
+        apiKey: "",
+      });
+      setVisibility(knowledgeBase.visibility);
+      setTeamIds(knowledgeBase.teamIds);
+    }
+  }, [open, knowledgeBase, form]);
+
+  const handleSubmit = async (values: EditKnowledgeBaseFormValues) => {
+    const result = await updateKnowledgeBase.mutateAsync({
+      id: knowledgeBase.id,
+      body: {
+        name: values.name,
+        description: values.description || null,
+        visibility,
+        teamIds: visibility === "team-scoped" ? teamIds : [],
+        config: {
+          apiUrl: values.apiUrl,
+          ...(values.apiKey ? { apiKey: values.apiKey } : {}),
+        },
       },
     });
     if (result) {
-      form.reset();
-      setVisibility("org-wide");
-      setTeamIds([]);
       onOpenChange(false);
     }
   };
@@ -87,10 +95,9 @@ export function CreateKnowledgeBaseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Knowledge Base</DialogTitle>
+          <DialogTitle>Edit Knowledge Base</DialogTitle>
           <DialogDescription>
-            Connect to a knowledge base provider to enable RAG-based document
-            retrieval.
+            Update the knowledge base settings.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -139,31 +146,6 @@ export function CreateKnowledgeBaseDialog({
 
             <FormField
               control={form.control}
-              name="provider"
-              rules={{ required: "Provider is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provider</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a provider" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="lightrag">LightRAG</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
               name="apiUrl"
               rules={{ required: "API URL is required" }}
               render={({ field }) => (
@@ -190,7 +172,7 @@ export function CreateKnowledgeBaseDialog({
                     <Input type="password" placeholder="sk-..." {...field} />
                   </FormControl>
                   <FormDescription>
-                    Optional API key for authentication.
+                    Leave empty to keep the existing key.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -205,10 +187,8 @@ export function CreateKnowledgeBaseDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createKnowledgeBase.isPending}>
-                {createKnowledgeBase.isPending
-                  ? "Creating..."
-                  : "Create Knowledge Base"}
+              <Button type="submit" disabled={updateKnowledgeBase.isPending}>
+                {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>

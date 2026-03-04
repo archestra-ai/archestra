@@ -26343,15 +26343,24 @@ export type GetKnowledgeBasesResponses = {
             id: string;
             organizationId: string;
             name: string;
+            description: string | null;
             provider: 'lightrag';
             config: {
                 apiUrl: string;
                 apiKey?: string;
             };
             secretId: string | null;
+            visibility: 'org-wide' | 'team-scoped';
+            teamIds: Array<string>;
             status: string;
             createdAt: string;
             updatedAt: string;
+            connectors: Array<{
+                id: string;
+                name: string;
+                connectorType: 'jira' | 'confluence';
+            }>;
+            totalDocsIndexed: number;
         }>;
         pagination: {
             currentPage: number;
@@ -26369,11 +26378,14 @@ export type GetKnowledgeBasesResponse = GetKnowledgeBasesResponses[keyof GetKnow
 export type CreateKnowledgeBaseData = {
     body: {
         name: string;
+        description?: string;
         provider: 'lightrag';
         config: {
             apiUrl: string;
             apiKey?: string;
         };
+        visibility?: 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -26447,12 +26459,15 @@ export type CreateKnowledgeBaseResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         provider: 'lightrag';
         config: {
             apiUrl: string;
             apiKey?: string;
         };
         secretId: string | null;
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -26616,12 +26631,15 @@ export type GetKnowledgeBaseResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         provider: 'lightrag';
         config: {
             apiUrl: string;
             apiKey?: string;
         };
         secretId: string | null;
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -26633,10 +26651,13 @@ export type GetKnowledgeBaseResponse = GetKnowledgeBaseResponses[keyof GetKnowle
 export type UpdateKnowledgeBaseData = {
     body?: {
         name?: string;
+        description?: string | null;
         config?: {
             apiUrl: string;
             apiKey?: string;
         };
+        visibility?: 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -26712,12 +26733,15 @@ export type UpdateKnowledgeBaseResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         provider: 'lightrag';
         config: {
             apiUrl: string;
             apiKey?: string;
         };
         secretId: string | null;
+        visibility: 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;

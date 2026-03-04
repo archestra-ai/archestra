@@ -24,6 +24,7 @@ import {
 } from "@/types";
 import {
   KnowledgeBaseProviderTypeSchema,
+  KnowledgeBaseVisibilitySchema,
   LightragConfigSchema,
 } from "@/types/knowledge-base";
 import {
@@ -32,6 +33,17 @@ import {
   ConnectorCredentialsSchema,
   ConnectorTypeSchema,
 } from "@/types/knowledge-connector";
+
+const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
+  connectors: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      connectorType: ConnectorTypeSchema,
+    }),
+  ),
+  totalDocsIndexed: z.number(),
+});
 
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // ===== Knowledge Base CRUD =====
@@ -45,12 +57,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Knowledge Bases"],
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectKnowledgeBaseSchema),
+          createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
         ),
       },
     },
     async ({ query: { limit, offset }, organizationId }, reply) => {
-      const [data, total] = await Promise.all([
+      const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
           organizationId,
           limit,
@@ -58,6 +70,32 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         KnowledgeBaseModel.countByOrganization(organizationId),
       ]);
+
+      const kbIds = knowledgeBases.map((kb) => kb.id);
+      const [allConnectors, docsIndexedByKbId] = await Promise.all([
+        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
+        ConnectorRunModel.sumDocsIngestedByKnowledgeBaseIds(kbIds),
+      ]);
+
+      const connectorsByKbId = new Map<
+        string,
+        { id: string; name: string; connectorType: "jira" | "confluence" }[]
+      >();
+      for (const connector of allConnectors) {
+        const list = connectorsByKbId.get(connector.knowledgeBaseId) ?? [];
+        list.push({
+          id: connector.id,
+          name: connector.name,
+          connectorType: connector.connectorType as "jira" | "confluence",
+        });
+        connectorsByKbId.set(connector.knowledgeBaseId, list);
+      }
+
+      const data = knowledgeBases.map((kb) => ({
+        ...kb,
+        connectors: connectorsByKbId.get(kb.id) ?? [],
+        totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
+      }));
 
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
@@ -85,8 +123,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Knowledge Bases"],
         body: z.object({
           name: z.string().min(1),
+          description: z.string().optional(),
           provider: KnowledgeBaseProviderTypeSchema,
           config: LightragConfigSchema,
+          visibility: KnowledgeBaseVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
@@ -97,6 +138,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         provider: body.provider,
         config: body.config,
+        ...(body.description !== undefined && {
+          description: body.description,
+        }),
+        ...(body.visibility && { visibility: body.visibility }),
+        ...(body.teamIds && { teamIds: body.teamIds }),
       });
 
       return reply.send(kg);
@@ -130,7 +176,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string() }),
         body: z.object({
           name: z.string().min(1).optional(),
+          description: z.string().nullable().optional(),
           config: LightragConfigSchema.optional(),
+          visibility: KnowledgeBaseVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },

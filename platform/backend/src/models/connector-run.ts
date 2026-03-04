@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, inArray, sum } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ConnectorRun,
@@ -67,6 +67,37 @@ class ConnectorRunModel {
       .returning();
 
     return result ?? null;
+  }
+
+  static async sumDocsIngestedByKnowledgeBaseIds(
+    knowledgeBaseIds: string[],
+  ): Promise<Map<string, number>> {
+    if (knowledgeBaseIds.length === 0) return new Map();
+
+    const results = await db
+      .select({
+        knowledgeBaseId: schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
+        total: sum(schema.connectorRunsTable.documentsIngested),
+      })
+      .from(schema.connectorRunsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.connectorRunsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        inArray(
+          schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
+          knowledgeBaseIds,
+        ),
+      )
+      .groupBy(schema.knowledgeBaseConnectorsTable.knowledgeBaseId);
+
+    return new Map(
+      results.map((r) => [r.knowledgeBaseId, Number(r.total ?? 0)]),
+    );
   }
 }
 

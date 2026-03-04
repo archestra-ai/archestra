@@ -9,6 +9,17 @@ export type KnowledgeBaseProviderType = z.infer<
 >;
 
 /**
+ * Knowledge base visibility
+ */
+export const KnowledgeBaseVisibilitySchema = z.enum([
+  "org-wide",
+  "team-scoped",
+]);
+export type KnowledgeBaseVisibility = z.infer<
+  typeof KnowledgeBaseVisibilitySchema
+>;
+
+/**
  * LightRAG provider configuration stored in the knowledge_bases.config column
  */
 export const LightragConfigSchema = z.object({

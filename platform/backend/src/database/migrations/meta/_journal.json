@@ -1128,6 +1128,27 @@
       "when": 1772556146290,
       "tag": "0160_greedy_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1772645227266,
+      "tag": "0161_modern_scourge",
+      "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1772645728283,
+      "tag": "0162_green_bastion",
+      "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1772648000093,
+      "tag": "0163_strange_wallow",
+      "breakpoints": true
     }
   ]
 }

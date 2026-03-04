@@ -91469,6 +91469,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "provider": {
                             "type": "string",
                             "enum": [
@@ -91496,6 +91500,19 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "org-wide",
+                              "team-scoped"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "status": {
                             "type": "string"
                           },
@@ -91506,18 +91523,62 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "connectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "connectorType": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "jira"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "confluence"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "connectorType"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "totalDocsIndexed": {
+                            "type": "number"
                           }
                         },
                         "required": [
                           "id",
                           "organizationId",
                           "name",
+                          "description",
                           "provider",
                           "config",
                           "secretId",
+                          "visibility",
+                          "teamIds",
                           "status",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "connectors",
+                          "totalDocsIndexed"
                         ],
                         "additionalProperties": false
                       }
@@ -91800,6 +91861,9 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "description": {
+                    "type": "string"
+                  },
                   "provider": {
                     "type": "string",
                     "enum": [
@@ -91819,6 +91883,19 @@
                     "required": [
                       "apiUrl"
                     ]
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "org-wide",
+                      "team-scoped"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -91850,6 +91927,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "provider": {
                       "type": "string",
                       "enum": [
@@ -91877,6 +91958,19 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -91893,9 +91987,12 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "provider",
                     "config",
                     "secretId",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt"
@@ -92154,6 +92251,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "provider": {
                       "type": "string",
                       "enum": [
@@ -92181,6 +92282,19 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -92197,9 +92311,12 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "provider",
                     "config",
                     "secretId",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt"
@@ -92437,6 +92554,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "config": {
                     "type": "object",
                     "properties": {
@@ -92450,6 +92571,19 @@
                     "required": [
                       "apiUrl"
                     ]
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "org-wide",
+                      "team-scoped"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -92485,6 +92619,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "provider": {
                       "type": "string",
                       "enum": [
@@ -92512,6 +92650,19 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -92528,9 +92679,12 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "provider",
                     "config",
                     "secretId",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt"

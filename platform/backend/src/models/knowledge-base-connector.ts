@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeBaseConnector,
@@ -86,6 +86,21 @@ class KnowledgeBaseConnectorModel {
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
       .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
+  }
+
+  static async findByKnowledgeBaseIds(
+    knowledgeBaseIds: string[],
+  ): Promise<KnowledgeBaseConnector[]> {
+    if (knowledgeBaseIds.length === 0) return [];
+    return await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        inArray(
+          schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
+          knowledgeBaseIds,
+        ),
+      );
   }
 
   static async delete(id: string): Promise<boolean> {

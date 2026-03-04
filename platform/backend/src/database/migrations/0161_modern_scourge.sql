@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_bases" ADD COLUMN "visibility" text DEFAULT 'org-wide' NOT NULL;

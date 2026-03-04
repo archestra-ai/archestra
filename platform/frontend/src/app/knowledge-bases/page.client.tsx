@@ -1,16 +1,22 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import {
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ConnectorStatusBadge } from "@/app/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -21,12 +27,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  useConnectors,
+  useDeleteConnector,
+  useUpdateConnector,
+} from "@/lib/connector.query";
 import {
   useDeleteKnowledgeBase,
   useKnowledgeBases,
 } from "@/lib/knowledge-base.query";
 import { formatDate } from "@/lib/utils";
+import { ConnectorTypeIcon } from "./_parts/connector-icons";
+import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
+import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
+import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
+
+type KnowledgeBaseItem =
+  archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
 
 export default function KnowledgeBasesPage() {
   return (
@@ -39,72 +66,13 @@ export default function KnowledgeBasesPage() {
 }
 
 function KnowledgeBasesList() {
-  const router = useRouter();
   const { data: knowledgeBases, isPending } = useKnowledgeBases();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  type KnowledgeBaseItem =
-    archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
-
-  const columns: ColumnDef<KnowledgeBaseItem>[] = [
-    {
-      id: "name",
-      accessorKey: "name",
-      header: "Name",
-      cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
-    },
-    {
-      id: "provider",
-      accessorKey: "provider",
-      header: "Provider",
-      cell: ({ row }) => (
-        <Badge variant="secondary" className="capitalize">
-          {row.original.provider}
-        </Badge>
-      ),
-    },
-    {
-      id: "status",
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    },
-    {
-      id: "createdAt",
-      accessorKey: "createdAt",
-      header: "Created",
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
-        </div>
-      ),
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      size: 100,
-      cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            e.stopPropagation();
-            setDeletingId(row.original.id);
-          }}
-        >
-          <Trash2 className="h-4 w-4 text-muted-foreground" />
-        </Button>
-      ),
-    },
-  ];
-
-  const handleRowClick = useCallback(
-    (row: KnowledgeBaseItem) => {
-      router.push(`/knowledge-bases/${row.id}`);
-    },
-    [router],
+  const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
+    null,
   );
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const items = knowledgeBases?.data ?? [];
 
@@ -129,17 +97,34 @@ function KnowledgeBasesList() {
               No knowledge bases found. Create one to get started.
             </div>
           ) : (
-            <DataTable
-              columns={columns}
-              data={items}
-              onRowClick={handleRowClick}
-            />
+            <div className="space-y-3">
+              {items.map((kb) => (
+                <KnowledgeBaseCard
+                  key={kb.id}
+                  kb={kb}
+                  isExpanded={expandedId === kb.id}
+                  onToggle={() =>
+                    setExpandedId(expandedId === kb.id ? null : kb.id)
+                  }
+                  onEdit={() => setEditingItem(kb)}
+                  onDelete={() => setDeletingId(kb.id)}
+                />
+              ))}
+            </div>
           )}
 
           <CreateKnowledgeBaseDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
           />
+
+          {editingItem && (
+            <EditKnowledgeBaseDialog
+              knowledgeBase={editingItem}
+              open={!!editingItem}
+              onOpenChange={(open) => !open && setEditingItem(null)}
+            />
+          )}
 
           {deletingId && (
             <DeleteKnowledgeBaseDialog
@@ -154,17 +139,310 @@ function KnowledgeBasesList() {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "active"
-      ? "default"
-      : status === "error"
-        ? "destructive"
-        : "secondary";
+function KnowledgeBaseCard({
+  kb,
+  isExpanded,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  kb: KnowledgeBaseItem;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [isCreateConnectorOpen, setIsCreateConnectorOpen] = useState(false);
+  const isOrgWide = kb.visibility === "org-wide";
+  const VisibilityIcon = isOrgWide ? Globe : Users;
+  const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
+  const totalConnectors = kb.connectors.length;
+
   return (
-    <Badge variant={variant} className="capitalize">
-      {status}
-    </Badge>
+    <div className="rounded-lg border">
+      {/* Card header */}
+      <button
+        type="button"
+        className="flex w-full items-center gap-4 px-5 py-4 cursor-pointer hover:bg-muted transition-colors text-left"
+        onClick={onToggle}
+      >
+        <ExpandIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
+
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <span className="text-xl font-semibold">{kb.name}</span>
+          {kb.description && (
+            <span className="text-sm text-muted-foreground truncate">
+              {kb.description}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center shrink-0 ml-auto divide-x">
+          <StatItem label="Connectors" value={String(totalConnectors)} />
+          <StatItem label="Docs Indexed" value={String(kb.totalDocsIndexed)} />
+          <StatItem
+            label="Visibility"
+            value={
+              <Badge variant="outline" className="gap-1.5">
+                <VisibilityIcon className="h-3.5 w-3.5" />
+                {isOrgWide ? "Org-wide" : "Team-scoped"}
+              </Badge>
+            }
+          />
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCreateConnectorOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add connector
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          >
+            <Pencil className="h-4 w-4 text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </div>
+      </button>
+
+      {/* Expanded connectors panel */}
+      {isExpanded && (
+        <div className="border-t">
+          <ExpandedConnectors knowledgeBaseId={kb.id} />
+        </div>
+      )}
+
+      <CreateConnectorDialog
+        knowledgeBaseId={kb.id}
+        open={isCreateConnectorOpen}
+        onOpenChange={setIsCreateConnectorOpen}
+      />
+    </div>
+  );
+}
+
+function StatItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-6">
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-base font-semibold">{value}</span>
+    </div>
+  );
+}
+
+type ConnectorItem =
+  archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
+
+function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
+  const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
+  const updateConnector = useUpdateConnector(knowledgeBaseId);
+  const [editingConnector, setEditingConnector] =
+    useState<ConnectorItem | null>(null);
+  const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
+    null,
+  );
+
+  const handleToggleEnabled = useCallback(
+    async (connectorId: string, enabled: boolean) => {
+      await updateConnector.mutateAsync({ id: connectorId, body: { enabled } });
+    },
+    [updateConnector],
+  );
+
+  if (isPending) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  const items = connectors?.data ?? [];
+
+  if (items.length === 0) {
+    return (
+      <div className="px-6 py-4 text-sm text-muted-foreground">
+        No connectors configured.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="uppercase text-xs tracking-wider bg-muted">
+              Connectors
+            </TableHead>
+            <TableHead className="uppercase text-xs tracking-wider text-right bg-muted">
+              Status
+            </TableHead>
+            <TableHead className="uppercase text-xs tracking-wider text-right w-[100px] bg-muted">
+              Actions
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((connector) => (
+            <TableRow key={connector.id}>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <ConnectorTypeIcon
+                      type={connector.connectorType}
+                      className="h-6 w-6"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{connector.name}</span>
+                    <div className="flex items-center gap-2">
+                      {connector.lastSyncAt ? (
+                        <span className="text-sm text-muted-foreground">
+                          {formatDate({ date: connector.lastSyncAt })}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Never synced
+                        </span>
+                      )}
+                      <ConnectorStatusBadge status={connector.lastSyncStatus} />
+                    </div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <Switch
+                    checked={connector.enabled}
+                    onCheckedChange={(checked) =>
+                      handleToggleEnabled(connector.id, checked)
+                    }
+                  />
+                  <span className="text-sm w-14">
+                    {connector.enabled ? "Active" : "Paused"}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setEditingConnector(connector)}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setDeletingConnectorId(connector.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {editingConnector && (
+        <EditConnectorDialog
+          knowledgeBaseId={knowledgeBaseId}
+          connector={editingConnector}
+          open={!!editingConnector}
+          onOpenChange={(open) => !open && setEditingConnector(null)}
+        />
+      )}
+
+      {deletingConnectorId && (
+        <DeleteConnectorDialog
+          knowledgeBaseId={knowledgeBaseId}
+          connectorId={deletingConnectorId}
+          open={!!deletingConnectorId}
+          onOpenChange={(open) => !open && setDeletingConnectorId(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function DeleteConnectorDialog({
+  knowledgeBaseId,
+  connectorId,
+  open,
+  onOpenChange,
+}: {
+  knowledgeBaseId: string;
+  connectorId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const deleteConnector = useDeleteConnector(knowledgeBaseId);
+
+  const handleDelete = useCallback(async () => {
+    const result = await deleteConnector.mutateAsync(connectorId);
+    if (result) {
+      onOpenChange(false);
+    }
+  }, [connectorId, deleteConnector, onOpenChange]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Delete Connector</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this connector? All sync history
+            will be permanently removed. This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogForm onSubmit={handleDelete}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteConnector.isPending}
+            >
+              {deleteConnector.isPending ? "Deleting..." : "Delete Connector"}
+            </Button>
+          </DialogFooter>
+        </DialogForm>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -14,7 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
@@ -632,6 +632,7 @@ function DeleteAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const deleteAgent = useDeleteProfile();
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleDelete = useCallback(async () => {
     const result = await deleteAgent.mutateAsync(agentId);
@@ -643,7 +644,13 @@ function DeleteAgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          deleteButtonRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Delete Agent</DialogTitle>
           <DialogDescription>
@@ -664,6 +671,7 @@ function DeleteAgentDialog({
               type="submit"
               variant="destructive"
               disabled={deleteAgent.isPending}
+              ref={deleteButtonRef}
             >
               {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
             </Button>

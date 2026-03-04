@@ -61,7 +61,9 @@ export function ManageUsersDialog({
   onHighlightedRevokeComplete,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
-  const { data: allServers = [] } = useMcpServers({ catalogId });
+  const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
+    catalogId,
+  });
   const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
@@ -193,12 +195,12 @@ export function ManageUsersDialog({
     }
   };
 
-  // Close dialog when all credentials are revoked
+  // Close dialog when all credentials are revoked (only after data has loaded)
   useEffect(() => {
-    if (isOpen && !firstServer) {
+    if (isOpen && serversFetched && !firstServer) {
       onClose();
     }
-  }, [isOpen, firstServer, onClose]);
+  }, [isOpen, serversFetched, firstServer, onClose]);
 
   if (!firstServer) {
     return null;

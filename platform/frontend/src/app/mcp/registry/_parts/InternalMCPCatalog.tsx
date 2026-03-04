@@ -292,17 +292,11 @@ export function InternalMCPCatalog({
   }, [searchParams, catalogItems]);
 
   // Deep-link: auto-open manage connections dialog when ?manage={catalogId} is present
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams/catalogItems changes
   useEffect(() => {
     const manageCatalogIdParam = searchParams.get(
       MCP_CATALOG_MANAGE_QUERY_PARAM,
     );
-    if (!manageCatalogIdParam || !catalogItems) return;
-
-    const catalogItem = catalogItems.find(
-      (item) => item.id === manageCatalogIdParam,
-    );
-    if (!catalogItem) return;
+    if (!manageCatalogIdParam) return;
 
     // Extract highlight param before clearing URL
     const highlightParam = searchParams.get(MCP_CATALOG_HIGHLIGHT_QUERY_PARAM);
@@ -320,7 +314,7 @@ export function InternalMCPCatalog({
     setManageCatalogId(manageCatalogIdParam);
     setHighlightServerId(highlightParam);
     openDialog("manage");
-  }, [searchParams, catalogItems]);
+  }, [searchParams, openDialog, pathname, router]);
 
   const handleManageDialogClose = () => {
     closeDialog("manage");

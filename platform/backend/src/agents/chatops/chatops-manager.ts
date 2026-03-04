@@ -1180,6 +1180,10 @@ export class ChatOpsManager {
             organizationId: binding.organizationId,
             message: fullMessage,
             userId,
+            attachments:
+              message.attachments && message.attachments.length > 0
+                ? message.attachments
+                : undefined,
           });
         },
       });

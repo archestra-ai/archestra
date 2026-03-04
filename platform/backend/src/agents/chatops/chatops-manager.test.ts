@@ -1234,3 +1234,174 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     await manager.cleanup();
   });
 });
+
+// =============================================================================
+// Attachment passthrough to A2A executor
+// =============================================================================
+
+describe("ChatOpsManager attachment passthrough", () => {
+  function createMockProvider(
+    overrides: {
+      getUserEmail?: (userId: string) => Promise<string | null>;
+      sendReply?: (options: ChatReplyOptions) => Promise<string>;
+    } = {},
+  ): ChatOpsProvider {
+    return {
+      providerId: "ms-teams",
+      displayName: "Microsoft Teams",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: overrides.getUserEmail ?? (async () => null),
+      getChannelName: async () => null,
+      getWorkspaceId: () => null,
+      getWorkspaceName: () => null,
+      discoverChannels: async () => null,
+    };
+  }
+
+  function createMockMessage(
+    overrides: Partial<IncomingChatMessage> = {},
+  ): IncomingChatMessage {
+    return {
+      messageId: "test-attach-msg",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      senderId: "test-sender-aad-id",
+      senderName: "Test User",
+      text: "Check this image",
+      rawText: "@Bot Check this image",
+      timestamp: new Date(),
+      isThreadReply: false,
+      ...overrides,
+    };
+  }
+
+  test("passes attachments from message to executeA2AMessage", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "I see the image",
+        messageId: "msg-1",
+        finishReason: "stop",
+      });
+
+    const user = await makeUser({ email: "attach-user@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "attach-user@example.com",
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const testAttachments = [
+      {
+        contentType: "image/png",
+        contentBase64: "iVBORw0KGgo=",
+        name: "screenshot.png",
+      },
+      {
+        contentType: "application/pdf",
+        contentBase64: "JVBERi0x",
+        name: "report.pdf",
+      },
+    ];
+
+    const message = createMockMessage({ attachments: testAttachments });
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: testAttachments,
+      }),
+    );
+  });
+
+  test("omits attachments param when message has no attachments", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Plain response",
+        messageId: "msg-2",
+        finishReason: "stop",
+      });
+
+    const user = await makeUser({ email: "noattach@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "noattach@example.com",
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage(); // no attachments
+    await manager.processMessage({ message, provider: mockProvider });
+
+    expect(executorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: undefined,
+      }),
+    );
+  });
+});

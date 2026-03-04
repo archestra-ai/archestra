@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 
 /**
  * ChatOps provider types enum
@@ -35,6 +36,8 @@ export interface IncomingChatMessage {
   isThreadReply: boolean;
   /** Provider-specific metadata */
   metadata?: Record<string, unknown>;
+  /** Attachments from the message (images, files, etc.) */
+  attachments?: A2AAttachment[];
 }
 
 /**

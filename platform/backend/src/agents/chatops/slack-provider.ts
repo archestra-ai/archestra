@@ -27,6 +27,7 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
   SLACK_SLASH_COMMANDS,
@@ -244,6 +245,9 @@ class SlackProvider implements ChatOpsProvider {
 
     const threadTs = event.thread_ts || event.ts;
 
+    // Download file attachments if present
+    const attachments = await this.downloadSlackFiles(event.files);
+
     return {
       messageId: event.ts,
       channelId: event.channel,
@@ -259,6 +263,7 @@ class SlackProvider implements ChatOpsProvider {
         eventType: event.type,
         channelType: event.channel_type,
       },
+      ...(attachments.length > 0 && { attachments }),
     };
   }
 
@@ -993,6 +998,142 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  /**
+   * Download files attached to a Slack message and convert to A2AAttachment format.
+   * Uses the bot token to authenticate downloads from Slack's private URLs.
+   * Enforces size limits to prevent excessive memory usage.
+   */
+  private async downloadSlackFiles(
+    files?: SlackFile[],
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    if (!files || files.length === 0 || !this.client) return [];
+
+    const filesToProcess = files.slice(
+      0,
+      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
+    );
+    const results: Array<{
+      contentType: string;
+      contentBase64: string;
+      name?: string;
+    }> = [];
+    let totalSize = 0;
+
+    for (const file of filesToProcess) {
+      const downloadUrl = file.url_private_download || file.url_private;
+      if (!downloadUrl) {
+        logger.debug(
+          { fileId: file.id, fileName: file.name },
+          "[SlackProvider] Skipping file without download URL",
+        );
+        continue;
+      }
+
+      // Skip files that exceed individual size limit
+      if (
+        file.size &&
+        file.size > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+      ) {
+        logger.info(
+          {
+            fileId: file.id,
+            fileName: file.name,
+            size: file.size,
+            maxSize: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+          },
+          "[SlackProvider] Skipping file exceeding size limit",
+        );
+        continue;
+      }
+
+      // Skip if total size would exceed limit
+      if (
+        file.size &&
+        totalSize + file.size >
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+      ) {
+        logger.info(
+          {
+            fileId: file.id,
+            fileName: file.name,
+            totalSize,
+            maxTotalSize: CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+          },
+          "[SlackProvider] Skipping file - total attachments size limit reached",
+        );
+        break;
+      }
+
+      try {
+        const response = await fetch(downloadUrl, {
+          headers: {
+            Authorization: `Bearer ${this.config.botToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          logger.warn(
+            {
+              fileId: file.id,
+              fileName: file.name,
+              status: response.status,
+            },
+            "[SlackProvider] Failed to download file",
+          );
+          continue;
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        // Double-check actual size against limit
+        if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {
+          logger.info(
+            { fileId: file.id, actualSize: buffer.length },
+            "[SlackProvider] Downloaded file exceeds size limit, skipping",
+          );
+          continue;
+        }
+
+        totalSize += buffer.length;
+        results.push({
+          contentType: file.mimetype || "application/octet-stream",
+          contentBase64: buffer.toString("base64"),
+          name: file.name,
+        });
+
+        logger.debug(
+          {
+            fileId: file.id,
+            fileName: file.name,
+            contentType: file.mimetype,
+            size: buffer.length,
+          },
+          "[SlackProvider] Downloaded file attachment",
+        );
+      } catch (error) {
+        logger.warn(
+          { fileId: file.id, fileName: file.name, error: errorMessage(error) },
+          "[SlackProvider] Error downloading file",
+        );
+      }
+    }
+
+    if (results.length > 0) {
+      logger.info(
+        {
+          fileCount: results.length,
+          totalSize,
+          originalFileCount: files.length,
+        },
+        "[SlackProvider] Downloaded file attachments from Slack message",
+      );
+    }
+
+    return results;
+  }
+
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
     // Slack mentions are formatted as <@U12345678>
@@ -1040,6 +1181,16 @@ function getHeader(
 // Slack Event Types
 // =============================================================================
 
+interface SlackFile {
+  id: string;
+  name?: string;
+  mimetype?: string;
+  filetype?: string;
+  size?: number;
+  url_private?: string;
+  url_private_download?: string;
+}
+
 interface SlackEventPayload {
   type: string;
   team_id?: string;
@@ -1053,6 +1204,7 @@ interface SlackEventPayload {
     text?: string;
     ts: string;
     thread_ts?: string;
+    files?: SlackFile[];
   };
   challenge?: string;
 }

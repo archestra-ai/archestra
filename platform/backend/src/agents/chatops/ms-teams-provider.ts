@@ -35,7 +35,11 @@ import type {
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
-import { CHATOPS_TEAM_CACHE, CHATOPS_THREAD_HISTORY } from "./constants";
+import {
+  CHATOPS_ATTACHMENT_LIMITS,
+  CHATOPS_TEAM_CACHE,
+  CHATOPS_THREAD_HISTORY,
+} from "./constants";
 import { errorMessage } from "./utils";
 
 /**
@@ -176,6 +180,12 @@ class MSTeamsProvider implements ChatOpsProvider {
         type?: string;
         mentioned?: { id?: string; name?: string };
       }>;
+      attachments?: Array<{
+        contentType?: string;
+        contentUrl?: string;
+        content?: string;
+        name?: string;
+      }>;
     };
 
     logger.debug(
@@ -241,6 +251,12 @@ class MSTeamsProvider implements ChatOpsProvider {
     const teamData = activity.channelData?.team;
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
+    // Download file attachments (skip Adaptive Cards and other non-file attachments)
+    const attachments = await this.downloadTeamsAttachments(
+      activity.attachments,
+      activity.serviceUrl,
+    );
+
     return {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
@@ -263,6 +279,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         ),
         authHeader: headers.authorization || headers.Authorization,
       },
+      ...(attachments.length > 0 && { attachments }),
     };
   }
 
@@ -853,6 +870,132 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   // ===========================================================================
   // Private Methods
+
+  /**
+   * Download file attachments from a Teams activity and convert to A2AAttachment format.
+   * Skips Adaptive Cards and other non-file content types.
+   * Uses the Bot Framework service URL for authentication when downloading.
+   */
+  private async downloadTeamsAttachments(
+    attachments?: Array<{
+      contentType?: string;
+      contentUrl?: string;
+      content?: string;
+      name?: string;
+    }>,
+    _serviceUrl?: string,
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    if (!attachments || attachments.length === 0) return [];
+
+    // Filter to only file/image attachments (skip Adaptive Cards, hero cards, etc.)
+    const fileAttachments = attachments.filter(
+      (a) =>
+        a.contentUrl &&
+        a.contentType &&
+        !a.contentType.startsWith("application/vnd.microsoft.card."),
+    );
+
+    if (fileAttachments.length === 0) return [];
+
+    const toProcess = fileAttachments.slice(
+      0,
+      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
+    );
+    const results: Array<{
+      contentType: string;
+      contentBase64: string;
+      name?: string;
+    }> = [];
+    let totalSize = 0;
+
+    for (const attachment of toProcess) {
+      if (!attachment.contentUrl || !attachment.contentType) continue;
+
+      try {
+        const response = await fetch(attachment.contentUrl);
+
+        if (!response.ok) {
+          logger.warn(
+            {
+              name: attachment.name,
+              contentType: attachment.contentType,
+              status: response.status,
+            },
+            "[MSTeamsProvider] Failed to download attachment",
+          );
+          continue;
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        // Skip files that exceed individual size limit
+        if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {
+          logger.info(
+            {
+              name: attachment.name,
+              size: buffer.length,
+              maxSize: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+            },
+            "[MSTeamsProvider] Skipping attachment exceeding size limit",
+          );
+          continue;
+        }
+
+        // Skip if total size would exceed limit
+        if (
+          totalSize + buffer.length >
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+        ) {
+          logger.info(
+            {
+              name: attachment.name,
+              totalSize,
+              maxTotalSize:
+                CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+            },
+            "[MSTeamsProvider] Total attachments size limit reached",
+          );
+          break;
+        }
+
+        totalSize += buffer.length;
+        results.push({
+          contentType: attachment.contentType,
+          contentBase64: buffer.toString("base64"),
+          name: attachment.name,
+        });
+
+        logger.debug(
+          {
+            name: attachment.name,
+            contentType: attachment.contentType,
+            size: buffer.length,
+          },
+          "[MSTeamsProvider] Downloaded Teams attachment",
+        );
+      } catch (error) {
+        logger.warn(
+          { name: attachment.name, error: errorMessage(error) },
+          "[MSTeamsProvider] Error downloading attachment",
+        );
+      }
+    }
+
+    if (results.length > 0) {
+      logger.info(
+        {
+          fileCount: results.length,
+          totalSize,
+          originalCount: attachments.length,
+        },
+        "[MSTeamsProvider] Downloaded attachments from Teams message",
+      );
+    }
+
+    return results;
+  }
   // ===========================================================================
 
   private async fetchGroupChatHistory(

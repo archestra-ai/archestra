@@ -254,9 +254,57 @@ describe("MSTeamsProvider file attachment downloads", () => {
       name: "photo.png",
     });
 
+    // Blob URLs are not on the serviceUrl domain — no auth header sent
     expect(fetch).toHaveBeenCalledWith(
       "https://teams.blob.core.windows.net/files/photo.png",
+      undefined,
     );
+  });
+
+  test("sends auth header when contentUrl matches serviceUrl domain", async () => {
+    const provider = createProvider();
+    const fileContent = Buffer.from("authenticated data");
+
+    // First call: token request to Azure AD
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "bot-token-123" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      // Second call: actual file download
+      .mockResolvedValueOnce(new Response(fileContent, { status: 200 }));
+
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        // serviceUrl is set in makeActivity to https://smba.trafficmanager.net/amer/
+        attachments: [
+          {
+            contentType: "image/png",
+            contentUrl:
+              "https://smba.trafficmanager.net/amer/v3/attachments/photo.png",
+            name: "sharepoint-photo.png",
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("sharepoint-photo.png");
+
+    // Token request should be first
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe(
+      "https://login.microsoftonline.com/tenant-1/oauth2/v2.0/token",
+    );
+
+    // File download should include auth header
+    expect(vi.mocked(fetch).mock.calls[1]).toEqual([
+      "https://smba.trafficmanager.net/amer/v3/attachments/photo.png",
+      { headers: { Authorization: "Bearer bot-token-123" } },
+    ]);
   });
 
   test("skips attachments without contentUrl", async () => {

@@ -55,10 +55,9 @@ describe("ExpiredAuthTool", () => {
     );
   });
 
-  it("uses destructive alert variant", () => {
+  it("renders an alert element", () => {
     const { container } = render(<ExpiredAuthTool {...defaultProps} />);
 
-    // The destructive variant adds specific styling classes
     const alert = container.querySelector('[role="alert"]');
     expect(alert).toBeInTheDocument();
   });

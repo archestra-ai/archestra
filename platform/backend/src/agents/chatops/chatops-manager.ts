@@ -199,9 +199,22 @@ export class ChatOpsManager {
     await this.seedConfigFromEnvVars();
 
     // Load configs from DB (the single source of truth)
+    // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
     const [msTeamsConfig, slackConfig] = await Promise.all([
-      ChatOpsConfigModel.getMsTeamsConfig(),
-      ChatOpsConfigModel.getSlackConfig(),
+      ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[ChatOps] Failed to load MS Teams config, skipping",
+        );
+        return null;
+      }),
+      ChatOpsConfigModel.getSlackConfig().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[ChatOps] Failed to load Slack config, skipping",
+        );
+        return null;
+      }),
     ]);
 
     // Create providers with their config

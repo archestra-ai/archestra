@@ -181,7 +181,7 @@ function ConnectorDetail({
       title={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" asChild>
-            <Link href={`/knowledge-bases/${knowledgeBaseId}`}>
+            <Link href="/knowledge-bases">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -197,12 +197,9 @@ function ConnectorDetail({
             Knowledge Bases
           </Link>
           <span className="text-muted-foreground">/</span>
-          <Link
-            href={`/knowledge-bases/${knowledgeBaseId}`}
-            className="text-muted-foreground hover:text-foreground"
-          >
+          <span className="text-muted-foreground">
             {knowledgeBase?.name ?? "..."}
-          </Link>
+          </span>
           <span className="text-muted-foreground">/</span>
           <span>{connector.name}</span>
         </div>

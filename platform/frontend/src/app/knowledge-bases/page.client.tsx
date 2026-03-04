@@ -5,11 +5,13 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
+  Info,
   Pencil,
   Plus,
   Trash2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorStatusBadge } from "@/app/knowledge-bases/_parts/connector-status-badge";
@@ -45,7 +47,7 @@ import {
   useDeleteKnowledgeBase,
   useKnowledgeBases,
 } from "@/lib/knowledge-base.query";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
@@ -181,6 +183,7 @@ function KnowledgeBaseCard({
           <StatItem label="Connectors" value={String(totalConnectors)} />
           <StatItem label="Docs Indexed" value={String(kb.totalDocsIndexed)} />
           <StatItem
+            className="w-[160px]"
             label="Visibility"
             value={
               <Badge variant="outline" className="gap-1.5">
@@ -193,15 +196,14 @@ function KnowledgeBaseCard({
 
         <div className="flex items-center gap-1 shrink-0">
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={(e) => {
               e.stopPropagation();
               setIsCreateConnectorOpen(true);
             }}
           >
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add connector
+            <Plus className="h-4 w-4 text-muted-foreground" />
           </Button>
           <Button
             variant="ghost"
@@ -242,9 +244,17 @@ function KnowledgeBaseCard({
   );
 }
 
-function StatItem({ label, value }: { label: string; value: React.ReactNode }) {
+function StatItem({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="flex flex-col gap-0.5 px-6">
+    <div className={cn("flex flex-col gap-0.5 px-6", className)}>
       <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
@@ -308,7 +318,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         </TableHeader>
         <TableBody>
           {items.map((connector) => (
-            <TableRow key={connector.id}>
+            <TableRow key={connector.id} className="hover:bg-muted/50">
               <TableCell>
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -349,6 +359,18 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
               </TableCell>
               <TableCell>
                 <div className="flex items-center justify-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    asChild
+                  >
+                    <Link
+                      href={`/knowledge-bases/${knowledgeBaseId}/connectors/${connector.id}`}
+                    >
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Link>
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

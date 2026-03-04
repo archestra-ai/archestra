@@ -226,7 +226,13 @@ class ToolInvocationPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
     context: PolicyEvaluationContext,
+    globalToolPolicy: GlobalToolPolicy,
   ): Promise<boolean> {
+    // Permissive mode: skip all approval checks (consistent with evaluateBatch)
+    if (globalToolPolicy === "permissive") {
+      return false;
+    }
+
     // Archestra tools always bypass policies (consistent with evaluateBatch)
     if (isArchestraMcpServerTool(toolName)) {
       return false;

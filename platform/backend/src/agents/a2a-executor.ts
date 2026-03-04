@@ -158,6 +158,7 @@ export async function executeA2AMessage(
       delegationChain,
       conversationId: isolationKey,
       abortSignal,
+      skipApprovalCheck: true, // A2A/autonomous: no one to approve, always allow
     });
 
     logger.info(

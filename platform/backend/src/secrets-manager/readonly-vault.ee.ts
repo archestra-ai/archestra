@@ -130,10 +130,7 @@ export default class ReadonlyVaultSecretManager
         { secretId },
         "BYOSVaultSecretManager.getSecret: isByosVault=true but no vault references found, fixing corrupted flag",
       );
-      await SecretModel.update(secretId, {
-        secret: secretValues,
-        isByosVault: false,
-      });
+      await SecretModel.update(secretId, { isByosVault: false });
       return { ...dbRecord, isByosVault: false };
     }
 

@@ -863,6 +863,7 @@ class InteractionModel {
         .select({
           sessionId: max(schema.interactionsTable.sessionId),
           sessionSource: max(schema.interactionsTable.sessionSource),
+          // MAX() picks alphabetically last source for mixed-source sessions; in practice sessions are single-source
           source: max(schema.interactionsTable.source),
           // For single interactions (no session), return the interaction ID for direct navigation
           interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,

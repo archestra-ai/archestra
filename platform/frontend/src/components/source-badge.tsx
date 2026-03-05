@@ -54,7 +54,7 @@ const SOURCE_CONFIG: Record<
 export function SourceBadge({
   source,
 }: {
-  source: InteractionSource | undefined;
+  source: InteractionSource | null | undefined;
 }) {
   if (!source) return null;
 

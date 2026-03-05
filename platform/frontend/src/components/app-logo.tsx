@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import config from "@/lib/config";
 import { useOrgTheme } from "@/lib/theme.hook";
 
 interface AppLogoProps {
@@ -29,9 +30,11 @@ export function AppLogo({ centered = true }: AppLogoProps) {
             height={60}
             className="object-contain h-12 w-auto max-w-[calc(100vw-6rem)]"
           />
-          <p className="text-[10px] text-muted-foreground">
-            Powered by Archestra
-          </p>
+          {!config.enterpriseLicenseActivated && (
+            <p className="text-[10px] text-muted-foreground">
+              Powered by Archestra
+            </p>
+          )}
         </div>
       </div>
     );

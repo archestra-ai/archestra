@@ -414,7 +414,7 @@ function McpGateways({
       ? [
           {
             id: "team",
-            header: "Accessible to:",
+            header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: GatewayData } }) => (
               <VisibilityBadge

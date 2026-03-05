@@ -373,7 +373,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       ? [
           {
             id: "team",
-            header: "Accessible to:",
+            header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: ProxyData } }) => (
               <VisibilityBadge

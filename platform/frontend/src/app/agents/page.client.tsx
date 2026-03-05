@@ -398,7 +398,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ? [
           {
             id: "team",
-            header: "Accessible to:",
+            header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: AgentData } }) => (
               <VisibilityBadge

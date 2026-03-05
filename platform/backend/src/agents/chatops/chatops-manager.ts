@@ -1251,11 +1251,24 @@ export class ChatOpsManager {
             }
           : null,
         callback: async () => {
+          // Use thread ID (or channel ID for non-threaded messages) as session ID
+          // so all messages in the same thread are grouped together in logs
+          const sessionId = buildChatOpsSessionId(
+            provider.providerId,
+            message.channelId,
+            message.threadId,
+          );
+
           return executeA2AMessage({
             agentId: agent.id,
             organizationId: binding.organizationId,
             message: fullMessage,
             userId,
+            sessionId,
+            source:
+              provider.providerId === "slack"
+                ? "chatops:slack"
+                : "chatops:ms-teams",
             attachments:
               message.attachments && message.attachments.length > 0
                 ? message.attachments
@@ -1339,6 +1352,20 @@ async function getDefaultOrganizationId(): Promise<string> {
  * blocks are not nested — nested `<thinking>` tags would leave the tail
  * visible, but LLMs do not produce nested thinking blocks in practice.
  */
+/**
+ * Build a deterministic session ID for chatops messages.
+ * Uses the thread ID when available (threaded conversations), otherwise
+ * falls back to the channel ID (non-threaded DMs/channels).
+ * Prefixed with provider to avoid collisions across providers.
+ */
+export function buildChatOpsSessionId(
+  providerId: string,
+  channelId: string,
+  threadId?: string,
+): string {
+  return `chatops:${providerId}:${threadId ?? channelId}`;
+}
+
 function stripThinkingBlocks(text: string): string {
   return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }

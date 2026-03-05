@@ -5,8 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CopyButton } from "@/components/copy-button";
-import Divider from "@/components/divider";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import {
   Accordion,
   AccordionContent,
@@ -88,103 +88,78 @@ function McpToolCallDetail({
 
   return (
     <LoadingWrapper isPending={isPending}>
-      <div className="mb-6">
-        <div className="flex items-center gap-4 mb-2">
-          <Button variant="ghost" size="icon" asChild>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" asChild>
             <Link href="/mcp/logs">
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to MCP Logs
             </Link>
           </Button>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            MCP Tool Call Details
-          </h1>
         </div>
-        <p className="text-sm text-muted-foreground ml-14">
-          {formatDate({ date: mcpToolCall.createdAt })}
-        </p>
-      </div>
-      <Divider className="my-6" />
-      <div>
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Metadata</h2>
-          <div className="border border-border rounded-lg p-6 bg-card">
-            <div className="grid grid-cols-2 gap-x-12 gap-y-6">
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  MCP Gateway
-                </div>
-                <div className="font-medium">
-                  {agent?.name ??
-                    (mcpToolCall.agentId === null
-                      ? "Deleted MCP Gateway"
-                      : "Unknown")}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">Method</div>
-                <Badge
-                  variant={
-                    method === "initialize"
-                      ? "outline"
-                      : method === "tools/list"
-                        ? "secondary"
-                        : "default"
-                  }
-                >
-                  {method}
-                </Badge>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  MCP Server
-                </div>
-                <div className="font-medium font-mono">
-                  {mcpToolCall.mcpServerName}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">Status</div>
-                <Badge variant={isError ? "destructive" : "default"}>
-                  {isError ? "Error" : "Success"}
-                </Badge>
-              </div>
-              {toolCall?.name && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Tool Name
-                  </div>
-                  <div className="font-medium font-mono">
-                    {parseFullToolName(toolCall.name).toolName || toolCall.name}
-                  </div>
-                </div>
-              )}
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Timestamp
-                </div>
-                <div className="font-medium">
-                  {formatDate({ date: mcpToolCall.createdAt })}
-                </div>
-              </div>
-              {mcpToolCall.userName && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">User</div>
-                  <div className="font-medium">{mcpToolCall.userName}</div>
-                </div>
-              )}
-              {mcpToolCall.authMethod && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Auth Method
-                  </div>
-                  <Badge variant="secondary">
-                    {formatAuthMethod(mcpToolCall.authMethod)}
-                  </Badge>
-                </div>
-              )}
+
+        <MetadataCard
+          title="Metadata"
+          badges={
+            <>
+              <Badge
+                variant={
+                  method === "initialize"
+                    ? "outline"
+                    : method === "tools/list"
+                      ? "secondary"
+                      : "default"
+                }
+                className="text-xs"
+              >
+                {method}
+              </Badge>
+              <Badge
+                variant={isError ? "destructive" : "default"}
+                className="text-xs"
+              >
+                {isError ? "Error" : "Success"}
+              </Badge>
+            </>
+          }
+        >
+          <MetadataItem label="MCP Gateway">
+            <div className="font-semibold">
+              {agent?.name ??
+                (mcpToolCall.agentId === null
+                  ? "Deleted MCP Gateway"
+                  : "Unknown")}
             </div>
-          </div>
-        </div>
+          </MetadataItem>
+          <MetadataItem label="MCP Server">
+            <div className="font-mono">{mcpToolCall.mcpServerName}</div>
+          </MetadataItem>
+          {toolCall?.name && (
+            <MetadataItem label="Tool Name">
+              <div className="font-mono">
+                {parseFullToolName(toolCall.name).toolName || toolCall.name}
+              </div>
+            </MetadataItem>
+          )}
+          <MetadataItem label="Timestamp">
+            <div className="font-mono text-xs">
+              {formatDate({ date: mcpToolCall.createdAt })}
+            </div>
+          </MetadataItem>
+          {mcpToolCall.userName && (
+            <MetadataItem label="User">
+              <div>{mcpToolCall.userName}</div>
+            </MetadataItem>
+          )}
+          {mcpToolCall.authMethod && (
+            <MetadataItem label="Auth Method">
+              <Badge variant="secondary" className="text-xs">
+                {formatAuthMethod(mcpToolCall.authMethod)}
+              </Badge>
+            </MetadataItem>
+          )}
+        </MetadataCard>
 
         {toolCall?.arguments !== undefined && (
           <Accordion type="single" collapsible className="mb-4">

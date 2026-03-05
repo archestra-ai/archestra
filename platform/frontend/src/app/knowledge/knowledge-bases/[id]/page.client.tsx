@@ -7,8 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorStatusBadge } from "@/app/knowledge-bases/_parts/connector-status-badge";
-import { CreateConnectorDialog } from "@/app/knowledge-bases/_parts/create-connector-dialog";
+import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +63,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
   } = useKnowledgeBaseHealth(id);
   const { data: connectors, isPending: isConnectorsPending } =
     useConnectors(id);
-  const updateConnector = useUpdateConnector(id);
+  const updateConnector = useUpdateConnector();
   const [isCreateConnectorOpen, setIsCreateConnectorOpen] = useState(false);
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
@@ -84,7 +84,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
 
   const handleRowClick = useCallback(
     (row: ConnectorItem) => {
-      router.push(`/knowledge-bases/${id}/connectors/${row.id}`);
+      router.push(`/knowledge/knowledge-bases/${id}/connectors/${row.id}`);
     },
     [router, id],
   );
@@ -179,7 +179,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
       title={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/knowledge-bases">
+            <Link href="/knowledge/knowledge-bases">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -189,7 +189,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
       description={
         <div className="flex items-center gap-2">
           <Link
-            href="/knowledge-bases"
+            href="/knowledge/knowledge-bases"
             className="text-muted-foreground hover:text-foreground"
           >
             Knowledge Bases
@@ -289,7 +289,6 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
 
         {deletingConnectorId && (
           <DeleteConnectorDialog
-            knowledgeBaseId={id}
             connectorId={deletingConnectorId}
             open={!!deletingConnectorId}
             onOpenChange={(open) => !open && setDeletingConnectorId(null)}
@@ -301,17 +300,15 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
 }
 
 function DeleteConnectorDialog({
-  knowledgeBaseId,
   connectorId,
   open,
   onOpenChange,
 }: {
-  knowledgeBaseId: string;
   connectorId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteConnector = useDeleteConnector(knowledgeBaseId);
+  const deleteConnector = useDeleteConnector();
 
   const handleDelete = useCallback(async () => {
     const result = await deleteConnector.mutateAsync(connectorId);

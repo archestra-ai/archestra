@@ -686,6 +686,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SyncConnector]: { knowledgeBase: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeBase: ["read"] },
 
+  // Connector Knowledge Base Assignment Routes
+  [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeBase: ["update"] },
+  [RouteId.UnassignConnectorFromKnowledgeBase]: { knowledgeBase: ["update"] },
+  [RouteId.GetConnectorKnowledgeBases]: { knowledgeBase: ["read"] },
+
   // Connector Run Routes
   [RouteId.GetConnectorRuns]: { knowledgeBase: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeBase: ["read"] },
@@ -794,7 +799,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/cost/optimization-rules": {
     llmProxy: ["read"],
   },
-  "/knowledge-bases": {
+  "/knowledge/knowledge-bases": {
+    knowledgeBase: ["read"],
+  },
+  "/knowledge/connectors": {
     knowledgeBase: ["read"],
   },
 };

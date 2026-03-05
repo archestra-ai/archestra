@@ -356,6 +356,11 @@ export const RouteId = {
   SyncConnector: "syncConnector",
   TestConnectorConnection: "testConnectorConnection",
 
+  // Connector Knowledge Base Assignment Routes
+  AssignConnectorToKnowledgeBases: "assignConnectorToKnowledgeBases",
+  UnassignConnectorFromKnowledgeBase: "unassignConnectorFromKnowledgeBase",
+  GetConnectorKnowledgeBases: "getConnectorKnowledgeBases",
+
   // Connector Run Routes
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",

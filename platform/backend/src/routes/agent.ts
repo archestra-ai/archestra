@@ -6,7 +6,12 @@ import {
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
 } from "@/auth";
-import { AgentLabelModel, AgentModel, KnowledgeBaseModel, TeamModel } from "@/models";
+import {
+  AgentLabelModel,
+  AgentModel,
+  KnowledgeBaseModel,
+  TeamModel,
+} from "@/models";
 import { metrics } from "@/observability";
 import {
   AgentVersionsResponseSchema,

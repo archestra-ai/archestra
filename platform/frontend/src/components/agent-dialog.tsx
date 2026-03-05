@@ -26,6 +26,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
 import {
   type ProfileLabel,
@@ -104,7 +105,6 @@ import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
-import { ConnectorTypeIcon } from "@/app/knowledge-bases/_parts/connector-icons";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { cn } from "@/lib/utils";
 
@@ -1419,9 +1419,7 @@ export function AgentDialog({
                           const connectors = selectedKb?.connectors ?? [];
                           if (connectors.length === 0) return null;
                           const uniqueTypes = [
-                            ...new Set(
-                              connectors.map((c) => c.connectorType),
-                            ),
+                            ...new Set(connectors.map((c) => c.connectorType)),
                           ];
                           return (
                             <div className="flex items-center gap-1">

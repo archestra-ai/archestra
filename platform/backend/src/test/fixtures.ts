@@ -861,7 +861,6 @@ async function makeKnowledgeBaseConnector(
   const [result] = await db
     .insert(schema.knowledgeBaseConnectorsTable)
     .values({
-      knowledgeBaseId,
       organizationId,
       name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
       connectorType: "jira",
@@ -874,6 +873,13 @@ async function makeKnowledgeBaseConnector(
       ...overrides,
     })
     .returning();
+
+  // Assign connector to the knowledge base via junction table
+  await db.insert(schema.knowledgeBaseConnectorAssignmentsTable).values({
+    connectorId: result.id,
+    knowledgeBaseId,
+  });
+
   return result;
 }
 

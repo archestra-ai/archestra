@@ -12,45 +12,68 @@ const {
   syncConnector,
   testConnectorConnection,
   getConnectorRuns,
+  assignConnectorToKnowledgeBases,
+  unassignConnectorFromKnowledgeBase,
+  getConnectorKnowledgeBases,
 } = archestraApiSdk;
 
 // ===== Query hooks =====
 
-export function useConnectors(kgId: string) {
+export function useConnectors(knowledgeBaseId?: string) {
   return useQuery({
-    queryKey: ["knowledge-bases", kgId, "connectors"],
+    queryKey: knowledgeBaseId
+      ? ["connectors", { knowledgeBaseId }]
+      : ["connectors"],
     queryFn: async () => {
-      const { data, error } = await getConnectors({ path: { kgId } });
+      const { data, error } = await getConnectors({
+        query: { knowledgeBaseId },
+      });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    enabled: !!kgId,
   });
 }
 
-export function useConnector(kgId: string, id: string) {
+export function useConnector(id: string) {
   return useQuery({
-    queryKey: ["knowledge-bases", kgId, "connectors", id],
+    queryKey: ["connectors", id],
     queryFn: async () => {
-      const { data, error } = await getConnector({ path: { kgId, id } });
+      const { data, error } = await getConnector({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    enabled: !!kgId && !!id,
+    enabled: !!id,
   });
 }
 
-export function useCreateConnector(kgId: string) {
+export function useConnectorKnowledgeBases(connectorId: string) {
+  return useQuery({
+    queryKey: ["connectors", connectorId, "knowledge-bases"],
+    queryFn: async () => {
+      const { data, error } = await getConnectorKnowledgeBases({
+        path: { id: connectorId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    enabled: !!connectorId,
+  });
+}
+
+export function useCreateConnector() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: archestraApiTypes.CreateConnectorData["body"]) => {
-      const { data, error } = await createConnector({ path: { kgId }, body });
+      const { data, error } = await createConnector({ body });
       if (error) {
         handleApiError(error);
         return null;
@@ -59,16 +82,14 @@ export function useCreateConnector(kgId: string) {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({
-        queryKey: ["knowledge-bases", kgId, "connectors"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Connector created successfully");
     },
   });
 }
 
-export function useUpdateConnector(kgId: string) {
+export function useUpdateConnector() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -79,7 +100,7 @@ export function useUpdateConnector(kgId: string) {
       body: archestraApiTypes.UpdateConnectorData["body"];
     }) => {
       const { data, error } = await updateConnector({
-        path: { kgId, id },
+        path: { id },
         body,
       });
       if (error) {
@@ -90,22 +111,20 @@ export function useUpdateConnector(kgId: string) {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-bases", kgId, "connectors"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["knowledge-bases", kgId, "connectors", variables.id],
+        queryKey: ["connectors", variables.id],
       });
       toast.success("Connector updated successfully");
     },
   });
 }
 
-export function useDeleteConnector(kgId: string) {
+export function useDeleteConnector() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await deleteConnector({ path: { kgId, id } });
+      const { data, error } = await deleteConnector({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;
@@ -114,21 +133,19 @@ export function useDeleteConnector(kgId: string) {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({
-        queryKey: ["knowledge-bases", kgId, "connectors"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Connector deleted successfully");
     },
   });
 }
 
-export function useSyncConnector(kgId: string) {
+export function useSyncConnector() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (connectorId: string) => {
       const { data, error } = await syncConnector({
-        path: { kgId, id: connectorId },
+        path: { id: connectorId },
       });
       if (error) {
         handleApiError(error);
@@ -139,21 +156,21 @@ export function useSyncConnector(kgId: string) {
     onSuccess: (data, connectorId) => {
       if (!data) return;
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-bases", kgId, "connectors", connectorId],
+        queryKey: ["connectors", connectorId],
       });
       queryClient.invalidateQueries({
-        queryKey: ["knowledge-bases", kgId, "connectors", connectorId, "runs"],
+        queryKey: ["connectors", connectorId, "runs"],
       });
       toast.success("Sync started successfully");
     },
   });
 }
 
-export function useTestConnectorConnection(kgId: string) {
+export function useTestConnectorConnection() {
   return useMutation({
     mutationFn: async (connectorId: string) => {
       const { data, error } = await testConnectorConnection({
-        path: { kgId, id: connectorId },
+        path: { id: connectorId },
       });
       if (error) {
         handleApiError(error);
@@ -173,24 +190,16 @@ export function useTestConnectorConnection(kgId: string) {
 }
 
 export function useConnectorRuns(params: {
-  kgId: string;
   connectorId: string;
   limit?: number;
   offset?: number;
 }) {
-  const { kgId, connectorId, limit = 10, offset = 0 } = params;
+  const { connectorId, limit = 10, offset = 0 } = params;
   return useQuery({
-    queryKey: [
-      "knowledge-bases",
-      kgId,
-      "connectors",
-      connectorId,
-      "runs",
-      { limit, offset },
-    ],
+    queryKey: ["connectors", connectorId, "runs", { limit, offset }],
     queryFn: async () => {
       const { data, error } = await getConnectorRuns({
-        path: { kgId, id: connectorId },
+        path: { id: connectorId },
         query: { limit, offset },
       });
       if (error) {
@@ -199,6 +208,63 @@ export function useConnectorRuns(params: {
       }
       return data;
     },
-    enabled: !!kgId && !!connectorId,
+    enabled: !!connectorId,
+  });
+}
+
+export function useAssignConnectorToKnowledgeBases() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      connectorId,
+      knowledgeBaseIds,
+    }: {
+      connectorId: string;
+      knowledgeBaseIds: string[];
+    }) => {
+      const { data, error } = await assignConnectorToKnowledgeBases({
+        path: { id: connectorId },
+        body: { knowledgeBaseIds },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      toast.success("Connector assigned successfully");
+    },
+  });
+}
+
+export function useUnassignConnectorFromKnowledgeBase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      connectorId,
+      knowledgeBaseId,
+    }: {
+      connectorId: string;
+      knowledgeBaseId: string;
+    }) => {
+      const { data, error } = await unassignConnectorFromKnowledgeBase({
+        path: { id: connectorId, kbId: knowledgeBaseId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      toast.success("Connector unassigned successfully");
+    },
   });
 }

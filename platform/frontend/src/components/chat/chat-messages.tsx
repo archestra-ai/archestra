@@ -49,6 +49,7 @@ import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
+import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
@@ -540,6 +541,9 @@ export function ChatMessages({
                           isLastAssistantInSequence &&
                           isLastTextPart &&
                           status !== "streaming";
+                        const showCitations =
+                          isLastTextPart &&
+                          hasKnowledgeBaseToolCall(message.parts);
 
                         // Check for <think> tags (used by Qwen and similar models)
                         if (hasThinkingTags(part.text)) {
@@ -580,6 +584,9 @@ export function ChatMessages({
                                     showActions={
                                       showActions && isLastParsedTextPart
                                     }
+                                    showCitations={
+                                      showCitations && isLastParsedTextPart
+                                    }
                                     editDisabled={isResponseInProgress}
                                     onStartEdit={handleStartEdit}
                                     onCancelEdit={handleCancelEdit}
@@ -600,6 +607,7 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
+                              showCitations={showCitations}
                               editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}

@@ -44,9 +44,9 @@ export function CreateKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createKnowledgeBase = useCreateKnowledgeBase();
-  const [visibility, setVisibility] = useState<"org-wide" | "team-scoped">(
-    "org-wide",
-  );
+  const [visibility, setVisibility] = useState<
+    "org-wide" | "team-scoped" | "auto-sync-permissions"
+  >("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const form = useForm<CreateKnowledgeBaseFormValues>({
@@ -142,10 +142,7 @@ export function CreateKnowledgeBaseDialog({
                     <FormItem>
                       <FormLabel>API URL</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="http://localhost:9621"
-                          {...field}
-                        />
+                        <Input placeholder="http://localhost:9621" {...field} />
                       </FormControl>
                       <FormDescription>
                         The URL of the knowledge base API server.

@@ -1,4 +1,4 @@
-import { count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeBaseConnector,
@@ -7,8 +7,8 @@ import type {
 } from "@/types";
 
 class KnowledgeBaseConnectorModel {
-  static async findByKnowledgeBase(params: {
-    knowledgeBaseId: string;
+  static async findByOrganization(params: {
+    organizationId: string;
     limit?: number;
     offset?: number;
   }): Promise<KnowledgeBaseConnector[]> {
@@ -17,8 +17,8 @@ class KnowledgeBaseConnectorModel {
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
         eq(
-          schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
-          params.knowledgeBaseId,
+          schema.knowledgeBaseConnectorsTable.organizationId,
+          params.organizationId,
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
@@ -34,18 +34,91 @@ class KnowledgeBaseConnectorModel {
     return await query;
   }
 
-  static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
+  static async countByOrganization(organizationId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
-        eq(
-          schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
-          knowledgeBaseId,
-        ),
+        eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       );
 
     return result?.count ?? 0;
+  }
+
+  static async findByKnowledgeBaseId(
+    knowledgeBaseId: string,
+  ): Promise<KnowledgeBaseConnector[]> {
+    return await db
+      .select({
+        id: schema.knowledgeBaseConnectorsTable.id,
+        organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
+        name: schema.knowledgeBaseConnectorsTable.name,
+        connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
+        config: schema.knowledgeBaseConnectorsTable.config,
+        secretId: schema.knowledgeBaseConnectorsTable.secretId,
+        schedule: schema.knowledgeBaseConnectorsTable.schedule,
+        enabled: schema.knowledgeBaseConnectorsTable.enabled,
+        lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
+        lastSyncStatus: schema.knowledgeBaseConnectorsTable.lastSyncStatus,
+        lastSyncError: schema.knowledgeBaseConnectorsTable.lastSyncError,
+        checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
+        createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
+        updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
+      })
+      .from(schema.knowledgeBaseConnectorAssignmentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+          knowledgeBaseId,
+        ),
+      )
+      .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
+  }
+
+  static async findByKnowledgeBaseIds(
+    knowledgeBaseIds: string[],
+  ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
+    if (knowledgeBaseIds.length === 0) return [];
+    return await db
+      .select({
+        id: schema.knowledgeBaseConnectorsTable.id,
+        organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
+        name: schema.knowledgeBaseConnectorsTable.name,
+        connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
+        config: schema.knowledgeBaseConnectorsTable.config,
+        secretId: schema.knowledgeBaseConnectorsTable.secretId,
+        schedule: schema.knowledgeBaseConnectorsTable.schedule,
+        enabled: schema.knowledgeBaseConnectorsTable.enabled,
+        lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
+        lastSyncStatus: schema.knowledgeBaseConnectorsTable.lastSyncStatus,
+        lastSyncError: schema.knowledgeBaseConnectorsTable.lastSyncError,
+        checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
+        createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
+        updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
+        knowledgeBaseId:
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+      })
+      .from(schema.knowledgeBaseConnectorAssignmentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        inArray(
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+          knowledgeBaseIds,
+        ),
+      );
   }
 
   static async findById(id: string): Promise<KnowledgeBaseConnector | null> {
@@ -88,27 +161,61 @@ class KnowledgeBaseConnectorModel {
       .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
   }
 
-  static async findByKnowledgeBaseIds(
-    knowledgeBaseIds: string[],
-  ): Promise<KnowledgeBaseConnector[]> {
-    if (knowledgeBaseIds.length === 0) return [];
-    return await db
-      .select()
-      .from(schema.knowledgeBaseConnectorsTable)
-      .where(
-        inArray(
-          schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
-          knowledgeBaseIds,
-        ),
-      );
-  }
-
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.knowledgeBaseConnectorsTable)
       .where(eq(schema.knowledgeBaseConnectorsTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  static async assignToKnowledgeBase(
+    connectorId: string,
+    knowledgeBaseId: string,
+  ): Promise<void> {
+    await db
+      .insert(schema.knowledgeBaseConnectorAssignmentsTable)
+      .values({ connectorId, knowledgeBaseId })
+      .onConflictDoNothing();
+  }
+
+  static async unassignFromKnowledgeBase(
+    connectorId: string,
+    knowledgeBaseId: string,
+  ): Promise<boolean> {
+    const result = await db
+      .delete(schema.knowledgeBaseConnectorAssignmentsTable)
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+            connectorId,
+          ),
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            knowledgeBaseId,
+          ),
+        ),
+      );
+
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  static async getKnowledgeBaseIds(connectorId: string): Promise<string[]> {
+    const results = await db
+      .select({
+        knowledgeBaseId:
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+      })
+      .from(schema.knowledgeBaseConnectorAssignmentsTable)
+      .where(
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          connectorId,
+        ),
+      );
+
+    return results.map((r) => r.knowledgeBaseId);
   }
 }
 

@@ -6,7 +6,7 @@ import { ArrowLeft, FileText, Play, Plug } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorStatusBadge } from "@/app/knowledge-bases/_parts/connector-status-badge";
+import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -71,19 +71,15 @@ function ConnectorDetail({
   connectorId: string;
 }) {
   const { data: knowledgeBase } = useKnowledgeBase(knowledgeBaseId);
-  const { data: connector, isPending } = useConnector(
-    knowledgeBaseId,
-    connectorId,
-  );
-  const syncConnector = useSyncConnector(knowledgeBaseId);
-  const testConnection = useTestConnectorConnection(knowledgeBaseId);
+  const { data: connector, isPending } = useConnector(connectorId);
+  const syncConnector = useSyncConnector();
+  const testConnection = useTestConnectorConnection();
 
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 10;
   const [selectedRun, setSelectedRun] = useState<ConnectorRunItem | null>(null);
 
   const { data: runsData, isPending: isRunsPending } = useConnectorRuns({
-    kgId: knowledgeBaseId,
     connectorId,
     limit: pageSize,
     offset: pageIndex * pageSize,
@@ -181,7 +177,7 @@ function ConnectorDetail({
       title={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/knowledge-bases">
+            <Link href="/knowledge/knowledge-bases">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -191,7 +187,7 @@ function ConnectorDetail({
       description={
         <div className="flex items-center gap-2">
           <Link
-            href="/knowledge-bases"
+            href="/knowledge/knowledge-bases"
             className="text-muted-foreground hover:text-foreground"
           >
             Knowledge Bases

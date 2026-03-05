@@ -1,6 +1,7 @@
 "use client";
 
-import { ConnectorTypeIcon } from "@/app/knowledge-bases/_parts/connector-icons";
+import { Database } from "lucide-react";
+import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -8,7 +9,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
-import { Database } from "lucide-react";
 
 interface KnowledgeBaseIndicatorProps {
   knowledgeBaseId: string;

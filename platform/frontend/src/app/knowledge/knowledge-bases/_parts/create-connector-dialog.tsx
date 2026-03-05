@@ -67,11 +67,11 @@ export function CreateConnectorDialog({
   open,
   onOpenChange,
 }: {
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const createConnector = useCreateConnector(knowledgeBaseId);
+  const createConnector = useCreateConnector();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
 
@@ -110,6 +110,7 @@ export function CreateConnectorDialog({
         apiToken: values.apiToken,
       },
       schedule: values.schedule,
+      ...(knowledgeBaseId && { knowledgeBaseIds: [knowledgeBaseId] }),
     });
     if (result) {
       form.reset();

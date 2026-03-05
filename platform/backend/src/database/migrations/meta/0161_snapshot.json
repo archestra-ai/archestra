@@ -1,5 +1,5 @@
 {
-  "id": "31c16ada-29bf-48e5-9af8-ef60dacded68",
+  "id": "79d0c943-fe56-43df-8706-6cf9be2c1ade",
   "prevId": "a69150f8-dbca-482a-9a87-b66c37183968",
   "version": "7",
   "dialect": "postgresql",
@@ -2854,6 +2854,96 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.knowledge_base_connector_assignment": {
+      "name": "knowledge_base_connector_assignment",
+      "schema": "",
+      "columns": {
+        "knowledge_base_id": {
+          "name": "knowledge_base_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "connector_id": {
+          "name": "connector_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "kb_connector_assignment_kb_id_idx": {
+          "name": "kb_connector_assignment_kb_id_idx",
+          "columns": [
+            {
+              "expression": "knowledge_base_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kb_connector_assignment_connector_id_idx": {
+          "name": "kb_connector_assignment_connector_id_idx",
+          "columns": [
+            {
+              "expression": "connector_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "knowledge_base_connector_assignment_knowledge_base_id_knowledge_bases_id_fk": {
+          "name": "knowledge_base_connector_assignment_knowledge_base_id_knowledge_bases_id_fk",
+          "tableFrom": "knowledge_base_connector_assignment",
+          "tableTo": "knowledge_bases",
+          "columnsFrom": [
+            "knowledge_base_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "knowledge_base_connector_assignment_connector_id_knowledge_base_connectors_id_fk": {
+          "name": "knowledge_base_connector_assignment_connector_id_knowledge_base_connectors_id_fk",
+          "tableFrom": "knowledge_base_connector_assignment",
+          "tableTo": "knowledge_base_connectors",
+          "columnsFrom": [
+            "connector_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.knowledge_base_connectors": {
       "name": "knowledge_base_connectors",
       "schema": "",
@@ -2868,12 +2958,6 @@
         "organization_id": {
           "name": "organization_id",
           "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "knowledge_base_id": {
-          "name": "knowledge_base_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -2955,21 +3039,6 @@
         }
       },
       "indexes": {
-        "knowledge_base_connectors_knowledge_base_id_idx": {
-          "name": "knowledge_base_connectors_knowledge_base_id_idx",
-          "columns": [
-            {
-              "expression": "knowledge_base_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "knowledge_base_connectors_organization_id_idx": {
           "name": "knowledge_base_connectors_organization_id_idx",
           "columns": [
@@ -2987,19 +3056,6 @@
         }
       },
       "foreignKeys": {
-        "knowledge_base_connectors_knowledge_base_id_knowledge_bases_id_fk": {
-          "name": "knowledge_base_connectors_knowledge_base_id_knowledge_bases_id_fk",
-          "tableFrom": "knowledge_base_connectors",
-          "tableTo": "knowledge_bases",
-          "columnsFrom": [
-            "knowledge_base_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "knowledge_base_connectors_secret_id_secret_id_fk": {
           "name": "knowledge_base_connectors_secret_id_secret_id_fk",
           "tableFrom": "knowledge_base_connectors",

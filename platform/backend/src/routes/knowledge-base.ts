@@ -210,10 +210,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findKnowledgeBaseOrThrow(id, organizationId);
 
-      // Delete CronJobs for all connectors of this KG
-      const connectors = await KnowledgeBaseConnectorModel.findByKnowledgeBase({
-        knowledgeBaseId: id,
-      });
+      // Delete CronJobs for all connectors assigned to this KB
+      const connectors =
+        await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(id);
       for (const connector of connectors) {
         try {
           await cronJobManager.deleteCronJob(connector.id);
@@ -270,36 +269,49 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // ===== Connector Endpoints =====
+  // ===== Standalone Connector Endpoints =====
 
   fastify.get(
-    "/api/knowledge-bases/:kgId/connectors",
+    "/api/connectors",
     {
       schema: {
         operationId: RouteId.GetConnectors,
-        description: "List connectors for a knowledge base",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string() }),
-        querystring: PaginationQuerySchema,
+        description: "List all connectors for the organization",
+        tags: ["Connectors"],
+        querystring: PaginationQuerySchema.extend({
+          knowledgeBaseId: z.string().optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectKnowledgeBaseConnectorSchema),
         ),
       },
     },
     async (
-      { params: { kgId }, query: { limit, offset }, organizationId },
+      { query: { limit, offset, knowledgeBaseId }, organizationId },
       reply,
     ) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
+      let data: Awaited<
+        ReturnType<typeof KnowledgeBaseConnectorModel.findByOrganization>
+      >;
+      let total: number;
 
-      const [data, total] = await Promise.all([
-        KnowledgeBaseConnectorModel.findByKnowledgeBase({
-          knowledgeBaseId: kgId,
-          limit,
-          offset,
-        }),
-        KnowledgeBaseConnectorModel.countByKnowledgeBase(kgId),
-      ]);
+      if (knowledgeBaseId) {
+        await findKnowledgeBaseOrThrow(knowledgeBaseId, organizationId);
+        data =
+          await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+            knowledgeBaseId,
+          );
+        total = data.length;
+      } else {
+        [data, total] = await Promise.all([
+          KnowledgeBaseConnectorModel.findByOrganization({
+            organizationId,
+            limit,
+            offset,
+          }),
+          KnowledgeBaseConnectorModel.countByOrganization(organizationId),
+        ]);
+      }
 
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
@@ -319,13 +331,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/knowledge-bases/:kgId/connectors",
+    "/api/connectors",
     {
       schema: {
         operationId: RouteId.CreateConnector,
-        description: "Create a new connector for a knowledge base",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string() }),
+        description: "Create a new connector",
+        tags: ["Connectors"],
         body: z.object({
           name: z.string().min(1),
           connectorType: ConnectorTypeSchema,
@@ -333,13 +344,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentials: ConnectorCredentialsSchema,
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
+          knowledgeBaseIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
     },
-    async ({ params: { kgId }, body, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-
+    async ({ body, organizationId }, reply) => {
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -348,6 +358,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           `Invalid connector configuration: ${validation.error}`,
         );
+      }
+
+      // Validate knowledge base IDs if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+        for (const kbId of body.knowledgeBaseIds) {
+          await findKnowledgeBaseOrThrow(kbId, organizationId);
+        }
       }
 
       // Store credentials as a secret
@@ -359,7 +376,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Create the connector
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
-        knowledgeBaseId: kgId,
         name: body.name,
         connectorType: body.connectorType,
         config: body.config,
@@ -367,6 +383,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         schedule: body.schedule,
         enabled: body.enabled,
       });
+
+      // Assign to knowledge bases if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+        for (const kbId of body.knowledgeBaseIds) {
+          await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+            connector.id,
+            kbId,
+          );
+        }
+      }
 
       // Create CronJob if K8s is configured
       try {
@@ -380,7 +406,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             connectorId: connector.id,
             error: error instanceof Error ? error.message : String(error),
           },
-          "[KnowledgeBase] Failed to create CronJob (K8s may not be configured)",
+          "[Connector] Failed to create CronJob (K8s may not be configured)",
         );
       }
 
@@ -389,31 +415,30 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/knowledge-bases/:kgId/connectors/:id",
+    "/api/connectors/:id",
     {
       schema: {
         operationId: RouteId.GetConnector,
         description: "Get a connector by ID",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string(), id: z.string() }),
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
     },
-    async ({ params: { kgId, id }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      const connector = await findConnectorOrThrow(id, kgId);
+    async ({ params: { id }, organizationId }, reply) => {
+      const connector = await findConnectorOrThrow(id, organizationId);
       return reply.send(connector);
     },
   );
 
   fastify.put(
-    "/api/knowledge-bases/:kgId/connectors/:id",
+    "/api/connectors/:id",
     {
       schema: {
         operationId: RouteId.UpdateConnector,
         description: "Update a connector",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string(), id: z.string() }),
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
         body: z.object({
           name: z.string().min(1).optional(),
           config: ConnectorConfigSchema.optional(),
@@ -423,9 +448,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
     },
-    async ({ params: { kgId, id }, body, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      const existing = await findConnectorOrThrow(id, kgId);
+    async ({ params: { id }, body, organizationId }, reply) => {
+      const existing = await findConnectorOrThrow(id, organizationId);
 
       const updated = await KnowledgeBaseConnectorModel.update(id, body);
       if (!updated) {
@@ -445,7 +469,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               connectorId: id,
               error: error instanceof Error ? error.message : String(error),
             },
-            "[KnowledgeBase] Failed to update CronJob",
+            "[Connector] Failed to update CronJob",
           );
         }
       }
@@ -464,7 +488,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               connectorId: id,
               error: error instanceof Error ? error.message : String(error),
             },
-            "[KnowledgeBase] Failed to suspend/resume CronJob",
+            "[Connector] Failed to suspend/resume CronJob",
           );
         }
       }
@@ -474,19 +498,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/knowledge-bases/:kgId/connectors/:id",
+    "/api/connectors/:id",
     {
       schema: {
         operationId: RouteId.DeleteConnector,
         description: "Delete a connector",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string(), id: z.string() }),
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { kgId, id }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      const connector = await findConnectorOrThrow(id, kgId);
+    async ({ params: { id }, organizationId }, reply) => {
+      const connector = await findConnectorOrThrow(id, organizationId);
 
       // Delete the CronJob
       try {
@@ -497,7 +520,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             connectorId: id,
             error: error instanceof Error ? error.message : String(error),
           },
-          "[KnowledgeBase] Failed to delete CronJob",
+          "[Connector] Failed to delete CronJob",
         );
       }
 
@@ -511,7 +534,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               secretId: connector.secretId,
               error: error instanceof Error ? error.message : String(error),
             },
-            "[KnowledgeBase] Failed to delete connector secret",
+            "[Connector] Failed to delete connector secret",
           );
         }
       }
@@ -526,13 +549,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/knowledge-bases/:kgId/connectors/:id/sync",
+    "/api/connectors/:id/sync",
     {
       schema: {
         operationId: RouteId.SyncConnector,
         description: "Manually trigger a connector sync",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string(), id: z.string() }),
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
         response: constructResponseSchema(
           z.object({
             runId: z.string(),
@@ -541,9 +564,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { kgId, id }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      await findConnectorOrThrow(id, kgId);
+    async ({ params: { id }, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
 
       const result = await connectorSyncService.executeSync(id);
       return reply.send(result);
@@ -551,13 +573,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/knowledge-bases/:kgId/connectors/:id/test",
+    "/api/connectors/:id/test",
     {
       schema: {
         operationId: RouteId.TestConnectorConnection,
         description: "Test a connector connection",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string(), id: z.string() }),
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
         response: constructResponseSchema(
           z.object({
             success: z.boolean(),
@@ -566,9 +588,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { kgId, id }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      const connector = await findConnectorOrThrow(id, kgId);
+    async ({ params: { id }, organizationId }, reply) => {
+      const connector = await findConnectorOrThrow(id, organizationId);
 
       // Load credentials
       const credentials = await loadConnectorCredentials(connector.secretId);
@@ -584,16 +605,101 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // ===== Connector Knowledge Base Assignments =====
+
+  fastify.post(
+    "/api/connectors/:id/knowledge-bases",
+    {
+      schema: {
+        operationId: RouteId.AssignConnectorToKnowledgeBases,
+        description: "Assign a connector to one or more knowledge bases",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          knowledgeBaseIds: z.array(z.string()).min(1),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
+
+      for (const kbId of body.knowledgeBaseIds) {
+        await findKnowledgeBaseOrThrow(kbId, organizationId);
+        await KnowledgeBaseConnectorModel.assignToKnowledgeBase(id, kbId);
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/knowledge-bases/:kbId",
+    {
+      schema: {
+        operationId: RouteId.UnassignConnectorFromKnowledgeBase,
+        description: "Unassign a connector from a knowledge base",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string(), kbId: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, kbId }, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
+      await findKnowledgeBaseOrThrow(kbId, organizationId);
+
+      const success =
+        await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(id, kbId);
+      if (!success) {
+        throw new ApiError(404, "Assignment not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/knowledge-bases",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorKnowledgeBases,
+        description: "List knowledge bases assigned to a connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(
+          z.object({
+            data: z.array(SelectKnowledgeBaseSchema),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
+
+      const kbIds = await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(id);
+      const knowledgeBases: z.infer<typeof SelectKnowledgeBaseSchema>[] = [];
+
+      for (const kbId of kbIds) {
+        const kb = await KnowledgeBaseModel.findById(kbId);
+        if (kb && kb.organizationId === organizationId) {
+          knowledgeBases.push(kb);
+        }
+      }
+
+      return reply.send({ data: knowledgeBases });
+    },
+  );
+
   // ===== Connector Runs =====
 
   fastify.get(
-    "/api/knowledge-bases/:kgId/connectors/:id/runs",
+    "/api/connectors/:id/runs",
     {
       schema: {
         operationId: RouteId.GetConnectorRuns,
         description: "List connector runs",
-        tags: ["Knowledge Base Connectors"],
-        params: z.object({ kgId: z.string(), id: z.string() }),
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectConnectorRunSchema),
@@ -601,11 +707,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { kgId, id }, query: { limit, offset }, organizationId },
+      { params: { id }, query: { limit, offset }, organizationId },
       reply,
     ) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      await findConnectorOrThrow(id, kgId);
+      await findConnectorOrThrow(id, organizationId);
 
       const [data, total] = await Promise.all([
         ConnectorRunModel.findByConnector({ connectorId: id, limit, offset }),
@@ -630,23 +735,21 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/knowledge-bases/:kgId/connectors/:id/runs/:runId",
+    "/api/connectors/:id/runs/:runId",
     {
       schema: {
         operationId: RouteId.GetConnectorRun,
         description: "Get a single connector run (including logs)",
-        tags: ["Knowledge Base Connectors"],
+        tags: ["Connectors"],
         params: z.object({
-          kgId: z.string(),
           id: z.string(),
           runId: z.string(),
         }),
         response: constructResponseSchema(SelectConnectorRunSchema),
       },
     },
-    async ({ params: { kgId, id, runId }, organizationId }, reply) => {
-      await findKnowledgeBaseOrThrow(kgId, organizationId);
-      await findConnectorOrThrow(id, kgId);
+    async ({ params: { id, runId }, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
 
       const run = await ConnectorRunModel.findById(runId);
       if (!run || run.connectorId !== id) {
@@ -670,9 +773,9 @@ async function findKnowledgeBaseOrThrow(id: string, organizationId: string) {
   return kg;
 }
 
-async function findConnectorOrThrow(id: string, knowledgeBaseId: string) {
+async function findConnectorOrThrow(id: string, organizationId: string) {
   const connector = await KnowledgeBaseConnectorModel.findById(id);
-  if (!connector || connector.knowledgeBaseId !== knowledgeBaseId) {
+  if (!connector || connector.organizationId !== organizationId) {
     throw new ApiError(404, "Connector not found");
   }
   return connector;

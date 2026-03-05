@@ -188,9 +188,9 @@ const PromptInputContent = ({
   // Check if there are tools, delegated agents, or a knowledge base
   const hasTools = tools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
-  const knowledgeBaseId =
-    (agentData as Record<string, unknown> | null | undefined)
-      ?.knowledgeBaseId as string | null | undefined;
+  const knowledgeBaseId = (
+    agentData as Record<string, unknown> | null | undefined
+  )?.knowledgeBaseId as string | null | undefined;
   const hasContent = hasTools || hasDelegatedAgents;
 
   // Determine if file uploads should be shown

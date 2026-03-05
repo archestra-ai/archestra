@@ -45,9 +45,9 @@ export function EditKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateKnowledgeBase = useUpdateKnowledgeBase();
-  const [visibility, setVisibility] = useState<"org-wide" | "team-scoped">(
-    knowledgeBase.visibility,
-  );
+  const [visibility, setVisibility] = useState<
+    "org-wide" | "team-scoped" | "auto-sync-permissions"
+  >(knowledgeBase.visibility);
   const [teamIds, setTeamIds] = useState<string[]>(knowledgeBase.teamIds);
 
   const form = useForm<EditKnowledgeBaseFormValues>({

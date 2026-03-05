@@ -26383,7 +26383,7 @@ export type GetKnowledgeBasesResponses = {
                 apiKey?: string;
             };
             secretId: string | null;
-            visibility: 'org-wide' | 'team-scoped';
+            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
             status: string;
             createdAt: string;
@@ -26417,7 +26417,7 @@ export type CreateKnowledgeBaseData = {
             apiUrl: string;
             apiKey?: string;
         };
-        visibility?: 'org-wide' | 'team-scoped';
+        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
     };
     path?: never;
@@ -26499,7 +26499,7 @@ export type CreateKnowledgeBaseResponses = {
             apiKey?: string;
         };
         secretId: string | null;
-        visibility: 'org-wide' | 'team-scoped';
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         status: string;
         createdAt: string;
@@ -26671,7 +26671,7 @@ export type GetKnowledgeBaseResponses = {
             apiKey?: string;
         };
         secretId: string | null;
-        visibility: 'org-wide' | 'team-scoped';
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         status: string;
         createdAt: string;
@@ -26689,7 +26689,7 @@ export type UpdateKnowledgeBaseData = {
             apiUrl: string;
             apiKey?: string;
         };
-        visibility?: 'org-wide' | 'team-scoped';
+        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
     };
     path: {
@@ -26773,7 +26773,7 @@ export type UpdateKnowledgeBaseResponses = {
             apiKey?: string;
         };
         secretId: string | null;
-        visibility: 'org-wide' | 'team-scoped';
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         status: string;
         createdAt: string;
@@ -26865,14 +26865,13 @@ export type GetKnowledgeBaseHealthResponse = GetKnowledgeBaseHealthResponses[key
 
 export type GetConnectorsData = {
     body?: never;
-    path: {
-        kgId: string;
-    };
+    path?: never;
     query?: {
         limit?: number;
         offset?: number;
+        knowledgeBaseId?: string;
     };
-    url: '/api/knowledge-bases/{kgId}/connectors';
+    url: '/api/connectors';
 };
 
 export type GetConnectorsErrors = {
@@ -26942,7 +26941,6 @@ export type GetConnectorsResponses = {
         data: Array<{
             id: string;
             organizationId: string;
-            knowledgeBaseId: string;
             name: string;
             connectorType: 'jira' | 'confluence';
             config: {
@@ -27016,12 +27014,11 @@ export type CreateConnectorData = {
         };
         schedule?: string;
         enabled?: boolean;
+        knowledgeBaseIds?: Array<string>;
     };
-    path: {
-        kgId: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors';
+    url: '/api/connectors';
 };
 
 export type CreateConnectorErrors = {
@@ -27090,7 +27087,6 @@ export type CreateConnectorResponses = {
     200: {
         id: string;
         organizationId: string;
-        knowledgeBaseId: string;
         name: string;
         connectorType: 'jira' | 'confluence';
         config: {
@@ -27130,11 +27126,10 @@ export type CreateConnectorResponse = CreateConnectorResponses[keyof CreateConne
 export type DeleteConnectorData = {
     body?: never;
     path: {
-        kgId: string;
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}';
+    url: '/api/connectors/{id}';
 };
 
 export type DeleteConnectorErrors = {
@@ -27210,11 +27205,10 @@ export type DeleteConnectorResponse = DeleteConnectorResponses[keyof DeleteConne
 export type GetConnectorData = {
     body?: never;
     path: {
-        kgId: string;
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}';
+    url: '/api/connectors/{id}';
 };
 
 export type GetConnectorErrors = {
@@ -27283,7 +27277,6 @@ export type GetConnectorResponses = {
     200: {
         id: string;
         organizationId: string;
-        knowledgeBaseId: string;
         name: string;
         connectorType: 'jira' | 'confluence';
         config: {
@@ -27345,11 +27338,10 @@ export type UpdateConnectorData = {
         enabled?: boolean;
     };
     path: {
-        kgId: string;
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}';
+    url: '/api/connectors/{id}';
 };
 
 export type UpdateConnectorErrors = {
@@ -27418,7 +27410,6 @@ export type UpdateConnectorResponses = {
     200: {
         id: string;
         organizationId: string;
-        knowledgeBaseId: string;
         name: string;
         connectorType: 'jira' | 'confluence';
         config: {
@@ -27458,11 +27449,10 @@ export type UpdateConnectorResponse = UpdateConnectorResponses[keyof UpdateConne
 export type SyncConnectorData = {
     body?: never;
     path: {
-        kgId: string;
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}/sync';
+    url: '/api/connectors/{id}/sync';
 };
 
 export type SyncConnectorErrors = {
@@ -27539,11 +27529,10 @@ export type SyncConnectorResponse = SyncConnectorResponses[keyof SyncConnectorRe
 export type TestConnectorConnectionData = {
     body?: never;
     path: {
-        kgId: string;
         id: string;
     };
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}/test';
+    url: '/api/connectors/{id}/test';
 };
 
 export type TestConnectorConnectionErrors = {
@@ -27617,17 +27606,272 @@ export type TestConnectorConnectionResponses = {
 
 export type TestConnectorConnectionResponse = TestConnectorConnectionResponses[keyof TestConnectorConnectionResponses];
 
+export type GetConnectorKnowledgeBasesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/knowledge-bases';
+};
+
+export type GetConnectorKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConnectorKnowledgeBasesError = GetConnectorKnowledgeBasesErrors[keyof GetConnectorKnowledgeBasesErrors];
+
+export type GetConnectorKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            provider: 'lightrag';
+            config: {
+                apiUrl: string;
+                apiKey?: string;
+            };
+            secretId: string | null;
+            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+            teamIds: Array<string>;
+            status: string;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+    };
+};
+
+export type GetConnectorKnowledgeBasesResponse = GetConnectorKnowledgeBasesResponses[keyof GetConnectorKnowledgeBasesResponses];
+
+export type AssignConnectorToKnowledgeBasesData = {
+    body: {
+        knowledgeBaseIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/knowledge-bases';
+};
+
+export type AssignConnectorToKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AssignConnectorToKnowledgeBasesError = AssignConnectorToKnowledgeBasesErrors[keyof AssignConnectorToKnowledgeBasesErrors];
+
+export type AssignConnectorToKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignConnectorToKnowledgeBasesResponse = AssignConnectorToKnowledgeBasesResponses[keyof AssignConnectorToKnowledgeBasesResponses];
+
+export type UnassignConnectorFromKnowledgeBaseData = {
+    body?: never;
+    path: {
+        id: string;
+        kbId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/knowledge-bases/{kbId}';
+};
+
+export type UnassignConnectorFromKnowledgeBaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnassignConnectorFromKnowledgeBaseError = UnassignConnectorFromKnowledgeBaseErrors[keyof UnassignConnectorFromKnowledgeBaseErrors];
+
+export type UnassignConnectorFromKnowledgeBaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignConnectorFromKnowledgeBaseResponse = UnassignConnectorFromKnowledgeBaseResponses[keyof UnassignConnectorFromKnowledgeBaseResponses];
+
 export type GetConnectorRunsData = {
     body?: never;
     path: {
-        kgId: string;
         id: string;
     };
     query?: {
         limit?: number;
         offset?: number;
     };
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}/runs';
+    url: '/api/connectors/{id}/runs';
 };
 
 export type GetConnectorRunsErrors = {
@@ -27725,12 +27969,11 @@ export type GetConnectorRunsResponse = GetConnectorRunsResponses[keyof GetConnec
 export type GetConnectorRunData = {
     body?: never;
     path: {
-        kgId: string;
         id: string;
         runId: string;
     };
     query?: never;
-    url: '/api/knowledge-bases/{kgId}/connectors/{id}/runs/{runId}';
+    url: '/api/connectors/{id}/runs/{runId}';
 };
 
 export type GetConnectorRunErrors = {

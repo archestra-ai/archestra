@@ -91996,7 +91996,8 @@
                             "type": "string",
                             "enum": [
                               "org-wide",
-                              "team-scoped"
+                              "team-scoped",
+                              "auto-sync-permissions"
                             ]
                           },
                           "teamIds": {
@@ -92380,7 +92381,8 @@
                     "type": "string",
                     "enum": [
                       "org-wide",
-                      "team-scoped"
+                      "team-scoped",
+                      "auto-sync-permissions"
                     ]
                   },
                   "teamIds": {
@@ -92454,7 +92456,8 @@
                       "type": "string",
                       "enum": [
                         "org-wide",
-                        "team-scoped"
+                        "team-scoped",
+                        "auto-sync-permissions"
                       ]
                     },
                     "teamIds": {
@@ -92778,7 +92781,8 @@
                       "type": "string",
                       "enum": [
                         "org-wide",
-                        "team-scoped"
+                        "team-scoped",
+                        "auto-sync-permissions"
                       ]
                     },
                     "teamIds": {
@@ -93068,7 +93072,8 @@
                     "type": "string",
                     "enum": [
                       "org-wide",
-                      "team-scoped"
+                      "team-scoped",
+                      "auto-sync-permissions"
                     ]
                   },
                   "teamIds": {
@@ -93146,7 +93151,8 @@
                       "type": "string",
                       "enum": [
                         "org-wide",
-                        "team-scoped"
+                        "team-scoped",
+                        "auto-sync-permissions"
                       ]
                     },
                     "teamIds": {
@@ -93904,13 +93910,13 @@
         }
       }
     },
-    "/api/knowledge-bases/{kgId}/connectors": {
+    "/api/connectors": {
       "get": {
         "operationId": "getConnectors",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
-        "description": "List connectors for a knowledge base",
+        "description": "List all connectors for the organization",
         "parameters": [
           {
             "schema": {
@@ -93938,9 +93944,9 @@
             "schema": {
               "type": "string"
             },
-            "in": "path",
-            "name": "kgId",
-            "required": true
+            "in": "query",
+            "name": "knowledgeBaseId",
+            "required": false
           }
         ],
         "responses": {
@@ -93963,11 +93969,6 @@
                           },
                           "organizationId": {
                             "type": "string"
-                          },
-                          "knowledgeBaseId": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
                             "type": "string"
@@ -94150,7 +94151,6 @@
                         "required": [
                           "id",
                           "organizationId",
-                          "knowledgeBaseId",
                           "name",
                           "connectorType",
                           "config",
@@ -94432,9 +94432,9 @@
       "post": {
         "operationId": "createConnector",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
-        "description": "Create a new connector for a knowledge base",
+        "description": "Create a new connector",
         "requestBody": {
           "content": {
             "application/json": {
@@ -94571,6 +94571,12 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "knowledgeBaseIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -94584,16 +94590,6 @@
           },
           "required": true
         },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
-          }
-        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -94609,11 +94605,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "knowledgeBaseId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string"
@@ -94796,7 +94787,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "knowledgeBaseId",
                     "name",
                     "connectorType",
                     "config",
@@ -95028,22 +95018,14 @@
         }
       }
     },
-    "/api/knowledge-bases/{kgId}/connectors/{id}": {
+    "/api/connectors/{id}": {
       "get": {
         "operationId": "getConnector",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "Get a connector by ID",
         "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
-          },
           {
             "schema": {
               "type": "string"
@@ -95068,11 +95050,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "knowledgeBaseId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string"
@@ -95255,7 +95232,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "knowledgeBaseId",
                     "name",
                     "connectorType",
                     "config",
@@ -95489,7 +95465,7 @@
       "put": {
         "operationId": "updateConnector",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "Update a connector",
         "requestBody": {
@@ -95609,14 +95585,6 @@
               "type": "string"
             },
             "in": "path",
-            "name": "kgId",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
             "name": "id",
             "required": true
           }
@@ -95636,11 +95604,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "knowledgeBaseId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string"
@@ -95823,7 +95786,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "knowledgeBaseId",
                     "name",
                     "connectorType",
                     "config",
@@ -96057,18 +96019,10 @@
       "delete": {
         "operationId": "deleteConnector",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "Delete a connector",
         "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
-          },
           {
             "schema": {
               "type": "string"
@@ -96311,22 +96265,14 @@
         }
       }
     },
-    "/api/knowledge-bases/{kgId}/connectors/{id}/sync": {
+    "/api/connectors/{id}/sync": {
       "post": {
         "operationId": "syncConnector",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "Manually trigger a connector sync",
         "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
-          },
           {
             "schema": {
               "type": "string"
@@ -96573,22 +96519,14 @@
         }
       }
     },
-    "/api/knowledge-bases/{kgId}/connectors/{id}/test": {
+    "/api/connectors/{id}/test": {
       "post": {
         "operationId": "testConnectorConnection",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "Test a connector connection",
         "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
-          },
           {
             "schema": {
               "type": "string"
@@ -96834,11 +96772,876 @@
         }
       }
     },
-    "/api/knowledge-bases/{kgId}/connectors/{id}/runs": {
+    "/api/connectors/{id}/knowledge-bases": {
+      "post": {
+        "operationId": "assignConnectorToKnowledgeBases",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Assign a connector to one or more knowledge bases",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "knowledgeBaseIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "knowledgeBaseIds"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getConnectorKnowledgeBases",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "List knowledge bases assigned to a connector",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "lightrag"
+                            ]
+                          },
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "apiUrl": {
+                                "type": "string"
+                              },
+                              "apiKey": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "apiUrl"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "secretId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "org-wide",
+                              "team-scoped",
+                              "auto-sync-permissions"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "name",
+                          "description",
+                          "provider",
+                          "config",
+                          "secretId",
+                          "visibility",
+                          "teamIds",
+                          "status",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connectors/{id}/knowledge-bases/{kbId}": {
+      "delete": {
+        "operationId": "unassignConnectorFromKnowledgeBase",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Unassign a connector from a knowledge base",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "kbId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connectors/{id}/runs": {
       "get": {
         "operationId": "getConnectorRuns",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "List connector runs",
         "parameters": [
@@ -96863,14 +97666,6 @@
             "in": "query",
             "name": "offset",
             "required": false
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
           },
           {
             "schema": {
@@ -97253,22 +98048,14 @@
         }
       }
     },
-    "/api/knowledge-bases/{kgId}/connectors/{id}/runs/{runId}": {
+    "/api/connectors/{id}/runs/{runId}": {
       "get": {
         "operationId": "getConnectorRun",
         "tags": [
-          "Knowledge Base Connectors"
+          "Connectors"
         ],
         "description": "Get a single connector run (including logs)",
         "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "kgId",
-            "required": true
-          },
           {
             "schema": {
               "type": "string"

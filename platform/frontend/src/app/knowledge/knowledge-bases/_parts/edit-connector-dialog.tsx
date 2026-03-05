@@ -35,17 +35,15 @@ interface ConnectorItem {
 }
 
 export function EditConnectorDialog({
-  knowledgeBaseId,
   connector,
   open,
   onOpenChange,
 }: {
-  knowledgeBaseId: string;
   connector: ConnectorItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const updateConnector = useUpdateConnector(knowledgeBaseId);
+  const updateConnector = useUpdateConnector();
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {

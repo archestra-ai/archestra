@@ -8,13 +8,14 @@ import {
   Info,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorStatusBadge } from "@/app/knowledge-bases/_parts/connector-status-badge";
+import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -156,7 +157,8 @@ function KnowledgeBaseCard({
 }) {
   const [isCreateConnectorOpen, setIsCreateConnectorOpen] = useState(false);
   const isOrgWide = kb.visibility === "org-wide";
-  const VisibilityIcon = isOrgWide ? Globe : Users;
+  const isAutoSync = kb.visibility === "auto-sync-permissions";
+  const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
   const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
   const totalConnectors = kb.connectors.length;
 
@@ -188,7 +190,11 @@ function KnowledgeBaseCard({
             value={
               <Badge variant="outline" className="gap-1.5">
                 <VisibilityIcon className="h-3.5 w-3.5" />
-                {isOrgWide ? "Org-wide" : "Team-scoped"}
+                {isAutoSync
+                  ? "Auto Sync"
+                  : isOrgWide
+                    ? "Org-wide"
+                    : "Team-scoped"}
               </Badge>
             }
           />
@@ -268,7 +274,7 @@ type ConnectorItem =
 
 function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
-  const updateConnector = useUpdateConnector(knowledgeBaseId);
+  const updateConnector = useUpdateConnector();
   const [editingConnector, setEditingConnector] =
     useState<ConnectorItem | null>(null);
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
@@ -366,7 +372,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                     asChild
                   >
                     <Link
-                      href={`/knowledge-bases/${knowledgeBaseId}/connectors/${connector.id}`}
+                      href={`/knowledge/knowledge-bases/${knowledgeBaseId}/connectors/${connector.id}`}
                     >
                       <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     </Link>
@@ -396,7 +402,6 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
 
       {editingConnector && (
         <EditConnectorDialog
-          knowledgeBaseId={knowledgeBaseId}
           connector={editingConnector}
           open={!!editingConnector}
           onOpenChange={(open) => !open && setEditingConnector(null)}
@@ -405,7 +410,6 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
 
       {deletingConnectorId && (
         <DeleteConnectorDialog
-          knowledgeBaseId={knowledgeBaseId}
           connectorId={deletingConnectorId}
           open={!!deletingConnectorId}
           onOpenChange={(open) => !open && setDeletingConnectorId(null)}
@@ -416,17 +420,15 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
 }
 
 function DeleteConnectorDialog({
-  knowledgeBaseId,
   connectorId,
   open,
   onOpenChange,
 }: {
-  knowledgeBaseId: string;
   connectorId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteConnector = useDeleteConnector(knowledgeBaseId);
+  const deleteConnector = useDeleteConnector();
 
   const handleDelete = useCallback(async () => {
     const result = await deleteConnector.mutateAsync(connectorId);

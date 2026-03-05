@@ -6,6 +6,7 @@ import {
   KnowledgeBaseModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import type { KnowledgeBase } from "@/types";
 import type { ConnectorCredentials } from "@/types/knowledge-connector";
 import { createKnowledgeBaseProvider } from ".";
 import { getConnector } from "./connectors/registry";
@@ -13,6 +14,9 @@ import { getConnector } from "./connectors/registry";
 /**
  * Service that orchestrates the sync of data from external connectors
  * (e.g., Jira, Confluence) into a knowledge base.
+ *
+ * A connector can be assigned to multiple knowledge bases. During sync,
+ * documents are ingested into ALL assigned knowledge bases.
  */
 class ConnectorSyncService {
   async executeSync(
@@ -26,12 +30,31 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
-    const knowledgeBase = await KnowledgeBaseModel.findById(
-      connector.knowledgeBaseId,
-    );
-    if (!knowledgeBase) {
+    // Find all assigned knowledge bases
+    const knowledgeBaseIds =
+      await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connectorId);
+    if (knowledgeBaseIds.length === 0) {
       throw new Error(
-        `Knowledge graph not found: ${connector.knowledgeBaseId}`,
+        `Connector ${connectorId} is not assigned to any knowledge base`,
+      );
+    }
+
+    const knowledgeBases: KnowledgeBase[] = [];
+    for (const kbId of knowledgeBaseIds) {
+      const kb = await KnowledgeBaseModel.findById(kbId);
+      if (!kb) {
+        log.warn(
+          { connectorId, knowledgeBaseId: kbId },
+          "[ConnectorSync] Knowledge base not found, skipping",
+        );
+        continue;
+      }
+      knowledgeBases.push(kb);
+    }
+
+    if (knowledgeBases.length === 0) {
+      throw new Error(
+        `No valid knowledge bases found for connector ${connectorId}`,
       );
     }
 
@@ -41,11 +64,11 @@ class ConnectorSyncService {
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
 
-    // Build the KG provider for document ingestion
-    const kgProvider = createKnowledgeBaseProvider(
-      knowledgeBase.provider,
-      knowledgeBase.config,
-    );
+    // Build KG providers for all assigned knowledge bases
+    const kgProviders = knowledgeBases.map((kb) => ({
+      knowledgeBase: kb,
+      provider: createKnowledgeBaseProvider(kb.provider, kb.config),
+    }));
 
     // Create a connector run record
     const run = await ConnectorRunModel.create({
@@ -74,31 +97,35 @@ class ConnectorSyncService {
       for await (const batch of syncGenerator) {
         for (const doc of batch.documents) {
           documentsProcessed++;
-          try {
-            await kgProvider.insertDocument({
-              content: doc.content,
-              filename: doc.title,
-              metadata: {
-                ...doc.metadata,
-                sourceUrl: doc.sourceUrl,
-                connectorId,
-                connectorType: connector.connectorType,
-                externalId: doc.id,
-              },
-            });
-            documentsIngested++;
-          } catch (docError) {
-            log.warn(
-              {
-                connectorId,
-                documentId: doc.id,
-                error:
-                  docError instanceof Error
-                    ? docError.message
-                    : String(docError),
-              },
-              "[ConnectorSync] Failed to ingest document",
-            );
+          // Ingest document into all assigned knowledge bases
+          for (const { knowledgeBase, provider } of kgProviders) {
+            try {
+              await provider.insertDocument({
+                content: doc.content,
+                filename: doc.title,
+                metadata: {
+                  ...doc.metadata,
+                  sourceUrl: doc.sourceUrl,
+                  connectorId,
+                  connectorType: connector.connectorType,
+                  externalId: doc.id,
+                },
+              });
+              documentsIngested++;
+            } catch (docError) {
+              log.warn(
+                {
+                  connectorId,
+                  knowledgeBaseId: knowledgeBase.id,
+                  documentId: doc.id,
+                  error:
+                    docError instanceof Error
+                      ? docError.message
+                      : String(docError),
+                },
+                "[ConnectorSync] Failed to ingest document into knowledge base",
+              );
+            }
           }
         }
 
@@ -131,7 +158,13 @@ class ConnectorSyncService {
       });
 
       log.info(
-        { connectorId, runId: run.id, documentsProcessed, documentsIngested },
+        {
+          connectorId,
+          runId: run.id,
+          documentsProcessed,
+          documentsIngested,
+          knowledgeBaseCount: knowledgeBases.length,
+        },
         "[ConnectorSync] Sync completed successfully",
       );
 

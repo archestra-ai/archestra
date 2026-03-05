@@ -76,24 +76,25 @@ class ConnectorRunModel {
 
     const results = await db
       .select({
-        knowledgeBaseId: schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
+        knowledgeBaseId:
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
         total: sum(schema.connectorRunsTable.documentsIngested),
       })
       .from(schema.connectorRunsTable)
       .innerJoin(
-        schema.knowledgeBaseConnectorsTable,
+        schema.knowledgeBaseConnectorAssignmentsTable,
         eq(
           schema.connectorRunsTable.connectorId,
-          schema.knowledgeBaseConnectorsTable.id,
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
         ),
       )
       .where(
         inArray(
-          schema.knowledgeBaseConnectorsTable.knowledgeBaseId,
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
           knowledgeBaseIds,
         ),
       )
-      .groupBy(schema.knowledgeBaseConnectorsTable.knowledgeBaseId);
+      .groupBy(schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId);
 
     return new Map(
       results.map((r) => [r.knowledgeBaseId, Number(r.total ?? 0)]),

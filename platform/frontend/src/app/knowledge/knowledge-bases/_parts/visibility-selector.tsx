@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ChevronDown, Globe, Users } from "lucide-react";
+import { CheckIcon, ChevronDown, Globe, RefreshCw, Users } from "lucide-react";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -19,6 +19,13 @@ const visibilityOptions = [
     description: "Share knowledge base with selected teams",
     icon: Users,
   },
+  {
+    value: "auto-sync-permissions" as const,
+    label: "Auto Sync Permissions",
+    description:
+      "Automatically sync permissions from the source. Documents are only accessible to users who have permission in the source system.",
+    icon: RefreshCw,
+  },
 ];
 
 export function VisibilitySelector({
@@ -28,8 +35,10 @@ export function VisibilitySelector({
   onTeamIdsChange,
   showTeamRequired,
 }: {
-  visibility: "org-wide" | "team-scoped";
-  onVisibilityChange: (visibility: "org-wide" | "team-scoped") => void;
+  visibility: "org-wide" | "team-scoped" | "auto-sync-permissions";
+  onVisibilityChange: (
+    visibility: "org-wide" | "team-scoped" | "auto-sync-permissions",
+  ) => void;
   teamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
   showTeamRequired?: boolean;

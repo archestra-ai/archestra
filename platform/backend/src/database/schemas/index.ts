@@ -24,7 +24,10 @@ export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as knowledgeBasesTable } from "./knowledge-base";
-export { default as knowledgeBaseConnectorsTable } from "./knowledge-base-connector";
+export {
+  default as knowledgeBaseConnectorsTable,
+  knowledgeBaseConnectorAssignmentsTable,
+} from "./knowledge-base-connector";
 export { default as labelKeysTable } from "./label-key";
 export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";

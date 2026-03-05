@@ -29,7 +29,6 @@ import {
   COMMUNITY_GITHUB_URL,
   COMMUNITY_SLACK_URL,
 } from "@/components/community-links";
-import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
   SidebarContent,
@@ -163,10 +162,19 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "Knowledge",
-        url: "/knowledge-bases",
+        url: "/knowledge/knowledge-bases",
         icon: Database,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/knowledge-bases"),
+          pathname.startsWith("/knowledge") &&
+          !pathname.startsWith("/knowledge/connectors"),
+        subItems: [
+          {
+            title: "Connectors",
+            url: "/knowledge/connectors",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/knowledge/connectors"),
+          },
+        ],
       },
       {
         title: "Logs",
@@ -432,7 +440,8 @@ export function AppSidebar() {
         )}
       </SidebarContent>
       <SidebarFooter>
-        <SidebarWarningsAccordion />
+        {/* TODO: re-enable once security engine warnings are relevant for this branch */}
+        {/* <SidebarWarningsAccordion /> */}
         <SignedIn>
           <SidebarGroup className="mt-auto">
             <SidebarGroupContent>

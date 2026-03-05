@@ -368,6 +368,7 @@ function AccessLevelSelector({
   scope,
   onScopeChange,
   isAdmin,
+  isTeamAdmin,
   initialScope,
   agentType,
   teams,
@@ -379,6 +380,7 @@ function AccessLevelSelector({
   scope: "personal" | "team" | "org";
   onScopeChange: (scope: "personal" | "team" | "org") => void;
   isAdmin: boolean;
+  isTeamAdmin: boolean;
   initialScope?: "personal" | "team" | "org";
   agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
   teams: Array<{ id: string; name: string }> | undefined;
@@ -392,29 +394,31 @@ function AccessLevelSelector({
   const selected =
     scopeOptions.find((o) => o.value === scope) ?? scopeOptions[0];
 
+  const canShareWithTeams = isAdmin || isTeamAdmin;
+
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
-    if (value === "team" && !isAdmin) return true;
+    if (value === "team" && !canShareWithTeams) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
 
-  const resourceForPermission: Record<string, string> = {
-    agent: "agent:admin",
-    mcp_gateway: "mcpGateway:admin",
-    llm_proxy: "llmProxy:admin",
-    profile: "agent:admin",
+  const resourceMap: Record<string, string> = {
+    agent: "agent",
+    mcp_gateway: "mcpGateway",
+    llm_proxy: "llmProxy",
+    profile: "agent",
   };
-  const requiredPermission = resourceForPermission[agentType] || "admin";
+  const resourceName = resourceMap[agentType] || "agent";
 
   const getDisabledReason = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return "Shared agents cannot be made personal";
-    if (value === "team" && !isAdmin)
-      return `You need ${requiredPermission} permission to share with teams`;
+    if (value === "team" && !canShareWithTeams)
+      return `You need ${resourceName}:team-admin permission to share with teams`;
     if (value === "org" && !isAdmin)
-      return `You need ${requiredPermission} permission to make this available org-wide`;
+      return `You need ${resourceName}:admin permission to make this available org-wide`;
     return "";
   };
 
@@ -518,14 +522,9 @@ function AccessLevelSelector({
       {/* SHARE WITH — only shown for team-scoped */}
       {scope === "team" && (
         <div className="space-y-2">
-          <Label>
-            Teams
-            {showTeamRequired && (
-              <span className="text-destructive ml-1">(required)</span>
-            )}
-          </Label>
+          <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
-            disabled={!isAdmin}
+            disabled={!canShareWithTeams || hasNoAvailableTeams}
             options={
               teams?.map((team) => ({
                 value: team.id,
@@ -535,11 +534,7 @@ function AccessLevelSelector({
             value={assignedTeamIds}
             onChange={onTeamIdsChange}
             placeholder={
-              hasNoAvailableTeams
-                ? "No teams available"
-                : assignedTeamIds.length === 0
-                  ? "Search teams..."
-                  : "Search teams..."
+              hasNoAvailableTeams ? "No teams available" : "Search teams..."
             }
             emptyMessage="No teams found."
           />
@@ -596,6 +591,9 @@ export function AgentDialog({
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({
     [resource]: ["admin"],
+  });
+  const { data: isTeamAdmin } = useHasPermissions({
+    [resource]: ["team-admin"],
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
@@ -825,12 +823,9 @@ export function AgentDialog({
     [availableApiKeys, currentLlmProvider, modelsByProvider],
   );
 
-  // Non-admin users must select at least one team for team-scoped external profiles (not agents)
+  // Non-admin users must select at least one team for team-scoped resources
   const requiresTeamSelection =
-    !isAdmin &&
-    !isInternalAgent &&
-    scope === "team" &&
-    assignedTeamIds.length === 0;
+    !isAdmin && scope === "team" && assignedTeamIds.length === 0;
   const hasNoAvailableTeams = !teams || teams.length === 0;
 
   const handleSave = useCallback(async () => {
@@ -843,13 +838,8 @@ export function AgentDialog({
       return;
     }
 
-    // Non-admin users must select at least one team for team-scoped external profiles
-    if (
-      !isAdmin &&
-      !isInternalAgent &&
-      scope === "team" &&
-      assignedTeamIds.length === 0
-    ) {
+    // Non-admin users must select at least one team for team-scoped resources
+    if (!isAdmin && scope === "team" && assignedTeamIds.length === 0) {
       toast.error("Please select at least one team");
       return;
     }
@@ -1153,6 +1143,7 @@ export function AgentDialog({
                     }
                   }}
                   isAdmin={!!isAdmin}
+                  isTeamAdmin={!!isTeamAdmin}
                   initialScope={
                     agent
                       ? (((agent as Record<string, unknown>).scope as
@@ -1166,7 +1157,7 @@ export function AgentDialog({
                   assignedTeamIds={assignedTeamIds}
                   onTeamIdsChange={setAssignedTeamIds}
                   hasNoAvailableTeams={hasNoAvailableTeams}
-                  showTeamRequired={!isAdmin && !isInternalAgent}
+                  showTeamRequired={!isAdmin}
                 />
               )}
 
@@ -1657,7 +1648,7 @@ export function AgentDialog({
                 createAgent.isPending ||
                 updateAgent.isPending ||
                 requiresTeamSelection ||
-                (!isAdmin && !isInternalAgent && hasNoAvailableTeams)
+                (!isAdmin && scope === "team" && hasNoAvailableTeams)
               }
             >
               {(createAgent.isPending || updateAgent.isPending) && (

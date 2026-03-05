@@ -6,7 +6,7 @@ import {
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
 } from "@/auth";
-import { AgentLabelModel, AgentModel } from "@/models";
+import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   AgentVersionsResponseSchema,
@@ -272,6 +272,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need team-admin permission to create team-scoped agents",
             );
           }
+
+          // team-admin can only assign teams they are a member of
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = body.teams.filter(
+            (id) => !userTeamIdSet.has(id),
+          );
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
         }
       }
 
@@ -375,12 +388,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Fetch user's team IDs once for scope-based checks and team assignment validation
+      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+
       // Enforce scope-based modify permissions on the existing agent
       requireAgentModifyPermission({
         checker,
         agentType: existingAgent.agentType,
         agentScope: existingAgent.scope,
         agentAuthorId: existingAgent.authorId,
+        agentTeamIds: existingAgent.teams.map((t) => t.id),
+        userTeamIds,
         userId: user.id,
       });
 
@@ -396,6 +416,34 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need team-admin permission to set scope to team",
             );
           }
+        }
+
+        // team-admin: validate team assignments and preserve teams they don't control
+        if (checker.isTeamAdmin(existingAgent.agentType) && body.teams) {
+          const userTeamIdSet = new Set(userTeamIds);
+          const existingTeamIds = new Set(existingAgent.teams.map((t) => t.id));
+
+          // Validate newly added teams — must be a member
+          const invalidAdds = body.teams.filter(
+            (id) => !existingTeamIds.has(id) && !userTeamIdSet.has(id),
+          );
+          if (invalidAdds.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+
+          // Preserve existing teams the user doesn't control
+          const preservedTeams = [...existingTeamIds].filter(
+            (id) => !userTeamIdSet.has(id),
+          );
+          const userControlledTeams = body.teams.filter((id) =>
+            userTeamIdSet.has(id),
+          );
+          body.teams = [
+            ...new Set([...userControlledTeams, ...preservedTeams]),
+          ];
         }
       }
 
@@ -492,11 +540,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Enforce scope-based modify permissions
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
       requireAgentModifyPermission({
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
         agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
         userId: user.id,
       });
 

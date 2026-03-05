@@ -13,3 +13,4 @@
 *.log
 
 platform/CLAUDE_LOCAL.md
+.pnpm-store/

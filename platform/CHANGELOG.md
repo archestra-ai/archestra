@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.56](https://github.com/archestra-ai/archestra/compare/platform-v1.0.55...platform-v1.0.56) (2026-03-05)
+
+
+### Features
+
+* support file attachments from Slack and MS Teams messages ([#3120](https://github.com/archestra-ai/archestra/issues/3120)) ([a2cdf49](https://github.com/archestra-ai/archestra/commit/a2cdf49056188d4087385a99f8ce40e43be7db42))
+
+
+### Bug Fixes
+
+* make chat deletion reliable in search palette ([#3125](https://github.com/archestra-ai/archestra/issues/3125)) ([ba7a366](https://github.com/archestra-ai/archestra/commit/ba7a366b41c5d7d040ee937f846abe1b04b9e1a5)), closes [#3071](https://github.com/archestra-ai/archestra/issues/3071)
+* suppress MCP gateway log spam ([#3123](https://github.com/archestra-ai/archestra/issues/3123)) ([100d112](https://github.com/archestra-ai/archestra/commit/100d1121691378a87a8aa45bec62110a952fa690)), closes [#3122](https://github.com/archestra-ai/archestra/issues/3122)
+
+
+### Performance Improvements
+
+* speed up agent edit dialog save ([#3124](https://github.com/archestra-ai/archestra/issues/3124)) ([ac39bb4](https://github.com/archestra-ai/archestra/commit/ac39bb42ac17a082f39434e20635d8b07884440d)), closes [#3116](https://github.com/archestra-ai/archestra/issues/3116)
+
+
+### Miscellaneous Chores
+
+* **deps:** bump @hono/node-server from 1.19.9 to 1.19.10 in /platform/mcp_server_docker_image ([#3121](https://github.com/archestra-ai/archestra/issues/3121)) ([1c0c063](https://github.com/archestra-ai/archestra/commit/1c0c0636423b2954eb3049f16914581f7fbecee3))
+* **deps:** bump hono from 4.12.2 to 4.12.5 in /platform/mcp_server_docker_image ([#3118](https://github.com/archestra-ai/archestra/issues/3118)) ([bec7cee](https://github.com/archestra-ai/archestra/commit/bec7ceed46f9ec680fee4a324a3ba9d78238b287))
+
 ## [1.0.55](https://github.com/archestra-ai/archestra/compare/platform-v1.0.54...platform-v1.0.55) (2026-03-04)
 
 

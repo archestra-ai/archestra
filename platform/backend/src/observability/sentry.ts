@@ -7,12 +7,19 @@ import type {
 import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
+import {
+  HEALTH_PATH,
+  MCP_GATEWAY_PREFIX,
+  METRICS_PATH,
+  READY_PATH,
+  WELL_KNOWN_OAUTH_PREFIX,
+} from "@/routes/route-paths";
 import { ApiError } from "@/types";
 
 const {
   api: { version },
   observability: {
-    sentry: { enabled, dsn, environment: sentryEnvironment },
+    sentry: { enabled, dsn, environment: sentryEnvironment, tracesSampleRate },
   },
 } = config;
 
@@ -127,13 +134,25 @@ const initSentry = async (): Promise<void> => {
 
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({ normalizedRequest }: TracesSamplerSamplingContext) => {
+      const url = normalizedRequest?.url;
+      if (!url) return tracesSampleRate;
+
+      // Drop: infrastructure endpoints with no debugging value
       if (
-        normalizedRequest?.url?.startsWith("/health") ||
-        normalizedRequest?.url?.startsWith("/metrics")
+        url.startsWith(HEALTH_PATH) ||
+        url.startsWith(READY_PATH) ||
+        url.startsWith(METRICS_PATH) ||
+        url.startsWith(WELL_KNOWN_OAUTH_PREFIX)
       ) {
-        return 0; // Ignore certain transactions
+        return 0;
       }
-      return 1.0; // Sample 100% of other transactions
+
+      // Sample heavily: MCP Gateway is ~84% of all spans
+      if (url.startsWith(MCP_GATEWAY_PREFIX)) {
+        return 0.05;
+      }
+
+      return tracesSampleRate;
     },
   });
 

@@ -27,7 +27,8 @@ import {
 } from "@sentry/opentelemetry";
 import config from "@/config";
 import logger from "@/logging";
-import sentryClient from "@/sentry";
+import { METRICS_PATH } from "@/routes/route-paths";
+import sentryClient from "@/observability/sentry";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
 
 const {
@@ -143,7 +144,7 @@ const sdk = new NodeSDK({
           new FastifyOtelInstrumentation({
             registerOnInitialization: true,
             ignorePaths: (opts) => {
-              return opts.url.startsWith(config.observability.metrics.endpoint);
+              return opts.url.startsWith(METRICS_PATH);
             },
           }),
         ]

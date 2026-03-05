@@ -17,6 +17,7 @@ import {
   getTrustedOrigins,
   parseBodyLimit,
   parseContentMaxLength,
+  parseSentryTracesSampleRate,
   parseVirtualKeyDefaultExpiration,
 } from "./config";
 
@@ -957,5 +958,39 @@ describe("parseVirtualKeyDefaultExpiration", () => {
 
   test("should cap value just over 1 year", () => {
     expect(parseVirtualKeyDefaultExpiration("31536001")).toBe(31_536_000);
+  });
+});
+
+describe("parseSentryTracesSampleRate", () => {
+  test("should return default 0.2 when undefined", () => {
+    expect(parseSentryTracesSampleRate(undefined)).toBe(0.2);
+  });
+
+  test("should return default when empty string", () => {
+    expect(parseSentryTracesSampleRate("")).toBe(0.2);
+  });
+
+  test("should parse valid rate", () => {
+    expect(parseSentryTracesSampleRate("0.5")).toBe(0.5);
+  });
+
+  test("should parse 0", () => {
+    expect(parseSentryTracesSampleRate("0")).toBe(0);
+  });
+
+  test("should parse 1", () => {
+    expect(parseSentryTracesSampleRate("1")).toBe(1);
+  });
+
+  test("should return default for value above 1", () => {
+    expect(parseSentryTracesSampleRate("1.5")).toBe(0.2);
+  });
+
+  test("should return default for negative value", () => {
+    expect(parseSentryTracesSampleRate("-0.1")).toBe(0.2);
+  });
+
+  test("should return default for non-numeric value", () => {
+    expect(parseSentryTracesSampleRate("abc")).toBe(0.2);
   });
 });

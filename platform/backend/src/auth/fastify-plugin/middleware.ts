@@ -6,6 +6,12 @@ import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { UserModel } from "@/models";
+import {
+  HEALTH_PATH,
+  READY_PATH,
+  WELL_KNOWN_ACME_PREFIX,
+  WELL_KNOWN_OAUTH_PREFIX,
+} from "@/routes/route-paths";
 import { ApiError } from "@/types";
 
 export class Authnz {
@@ -98,18 +104,18 @@ export class Authnz {
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
       url === "/openapi.json" ||
-      url === "/health" ||
-      url === "/ready" ||
+      url === HEALTH_PATH ||
+      url === READY_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       // Skip OAuth well-known discovery endpoints (RFC 8414 / RFC 9728)
-      url.startsWith("/.well-known/oauth-") ||
+      url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)
       url.startsWith("/oauth/") ||
       // Skip ACME challenge paths for SSL certificate domain validation
-      url.startsWith("/.well-known/acme-challenge/") ||
+      url.startsWith(WELL_KNOWN_ACME_PREFIX) ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)

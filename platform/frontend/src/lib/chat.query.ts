@@ -204,13 +204,37 @@ export function useDeleteConversation() {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        // Throw to trigger onError rollback for optimistic cache removal
+        throw error;
       }
       return data;
     },
-    onSuccess: (data, deletedId) => {
-      if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    onMutate: async (deletedId) => {
+      // Cancel in-flight refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["conversations"] });
+
+      // Snapshot all conversation list caches (one per search query) for rollback
+      const previousQueries = queryClient.getQueriesData<{ id: string }[]>({
+        queryKey: ["conversations"],
+      });
+
+      // Optimistically remove the conversation from every cached list
+      queryClient.setQueriesData<{ id: string }[]>(
+        { queryKey: ["conversations"] },
+        (old) => (old ? old.filter((c) => c.id !== deletedId) : old),
+      );
+
+      return { previousQueries };
+    },
+    onError: (_error, _deletedId, context) => {
+      // Roll back optimistic removal on failure
+      if (context?.previousQueries) {
+        for (const [queryKey, data] of context.previousQueries) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      }
+    },
+    onSuccess: (_data, deletedId) => {
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
 
       // Clean up localStorage keys associated with this conversation
@@ -221,6 +245,10 @@ export function useDeleteConversation() {
       }
 
       toast.success("Conversation deleted");
+    },
+    onSettled: () => {
+      // Always refetch to ensure server state is in sync
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
 }

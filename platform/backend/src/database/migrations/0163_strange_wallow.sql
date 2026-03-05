@@ -1,1 +1,0 @@
-ALTER TABLE "knowledge_bases" ADD COLUMN "description" text;

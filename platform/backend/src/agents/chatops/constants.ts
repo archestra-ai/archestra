@@ -79,3 +79,16 @@ export const SLACK_SLASH_COMMANDS = {
   STATUS: "/archestra-status",
   HELP: "/archestra-help",
 } as const;
+
+/**
+ * Attachment limits for chatops file downloads.
+ * Reuses the same limits as the incoming email module for consistency.
+ */
+export const CHATOPS_ATTACHMENT_LIMITS = {
+  /** Maximum size for a single attachment in bytes (10MB) */
+  MAX_ATTACHMENT_SIZE: 10 * 1024 * 1024,
+  /** Maximum total size for all attachments per message in bytes (25MB) */
+  MAX_TOTAL_ATTACHMENTS_SIZE: 25 * 1024 * 1024,
+  /** Maximum number of attachments to process per message */
+  MAX_ATTACHMENTS_PER_MESSAGE: 20,
+} as const;

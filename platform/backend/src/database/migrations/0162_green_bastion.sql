@@ -1,1 +1,0 @@
-ALTER TABLE "knowledge_bases" ADD COLUMN "team_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

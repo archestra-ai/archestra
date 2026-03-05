@@ -17,6 +17,7 @@ import {
   TeamModel,
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
+import type { InteractionSource } from "@/types";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -42,6 +43,8 @@ export interface A2AExecuteParams {
   userId: string;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
+  /** Interaction source for tracking request origin in logs */
+  source?: InteractionSource;
   /**
    * Parent delegation chain (colon-separated agent IDs).
    * The current agentId will be appended to form the new chain.
@@ -85,6 +88,7 @@ export async function executeA2AMessage(
     organizationId,
     userId,
     sessionId,
+    source,
     parentDelegationChain,
     abortSignal,
     attachments,
@@ -158,6 +162,7 @@ export async function executeA2AMessage(
       delegationChain,
       conversationId: isolationKey,
       abortSignal,
+      skipApprovalCheck: true, // A2A/autonomous: no one to approve, always allow
     });
 
     logger.info(
@@ -185,6 +190,7 @@ export async function executeA2AMessage(
       model: selectedModel,
       provider,
       sessionId,
+      source,
       externalAgentId: delegationChain,
       agentLlmApiKeyId: agent.llmApiKeyId,
     });
@@ -373,8 +379,9 @@ export function buildUserContent(
     content: [
       { type: "text" as const, text: message + skippedNote },
       ...validImageAttachments.map((a) => ({
-        type: "image" as const,
-        image: `data:${a.contentType};base64,${a.contentBase64}`,
+        type: "file" as const,
+        data: Buffer.from(a.contentBase64, "base64"),
+        mediaType: a.contentType,
       })),
     ],
     skippedNote,

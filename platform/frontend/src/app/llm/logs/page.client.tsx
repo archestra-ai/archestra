@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Savings } from "@/components/savings";
+import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
@@ -114,7 +115,7 @@ function SessionRow({
     if (isSingleInteraction) {
       router.push(`/llm/logs/${session.interactionId}`);
     } else if (session.sessionId) {
-      router.push(`/llm/logs/session/${session.sessionId}`);
+      router.push(`/llm/logs/session/${encodeURIComponent(session.sessionId)}`);
     }
   };
 
@@ -218,6 +219,9 @@ function SessionRow({
             />
           </TooltipProvider>
         )}
+      </TableCell>
+      <TableCell className="py-3">
+        <SourceBadge source={session.source} />
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
@@ -501,6 +505,7 @@ function SessionsTable({
                   <TableHead className="w-[140px] whitespace-nowrap">
                     Cost
                   </TableHead>
+                  <TableHead className="w-[100px]">Source</TableHead>
                   <TableHead className="w-[160px]">Time</TableHead>
                   <TableHead className="min-w-[100px]">Details</TableHead>
                 </TableRow>

@@ -12,7 +12,7 @@ const isMainModule =
  * Only do this if the server is being run directly (not imported)
  */
 if (isMainModule) {
-  await import("./sentry");
+  await import("./observability/sentry");
   await import("./observability/tracing/sdk");
 }
 
@@ -75,6 +75,11 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+import {
+  HEALTH_PATH,
+  MCP_GATEWAY_PREFIX,
+  READY_PATH,
+} from "./routes/route-paths";
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
@@ -228,7 +233,7 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
  */
 export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
   fastify.get(
-    "/health",
+    HEALTH_PATH,
     {
       schema: {
         tags: ["health"],
@@ -256,7 +261,7 @@ export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
  */
 export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
   fastify.get(
-    "/ready",
+    READY_PATH,
     {
       schema: {
         tags: ["health"],
@@ -431,7 +436,7 @@ const registerMetricsPlugin = async (
     routeMetrics: {
       enabled: metricsEnabled,
       methodBlacklist: ["OPTIONS", "HEAD"],
-      routeBlacklist: ["/health", "/ready"],
+      routeBlacklist: [HEALTH_PATH, READY_PATH],
     },
   });
 };
@@ -455,7 +460,7 @@ const startMetricsServer = async () => {
   if (metricsSecret) {
     metricsServer.addHook("preHandler", async (request, reply) => {
       // Skip auth for health and readiness endpoints
-      if (request.url === "/health" || request.url === "/ready") {
+      if (request.url === HEALTH_PATH || request.url === READY_PATH) {
         return;
       }
 
@@ -473,7 +478,7 @@ const startMetricsServer = async () => {
     });
   }
 
-  metricsServer.get("/health", () => ({ status: "ok" }));
+  metricsServer.get(HEALTH_PATH, () => ({ status: "ok" }));
 
   await registerMetricsPlugin(metricsServer, true);
 
@@ -584,9 +589,10 @@ const start = async () => {
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
-    if (url === "/health" || url === "/ready") return true;
+    if (url === HEALTH_PATH || url === READY_PATH) return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
-    if (method === "GET" && url.startsWith("/v1/mcp/")) return true;
+    if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
+      return true;
     return false;
   };
 

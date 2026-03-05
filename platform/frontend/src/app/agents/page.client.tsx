@@ -213,7 +213,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   });
 
   // Keep teams cache warm for AgentDialog
-  useQuery({
+  const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
@@ -223,8 +223,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   });
 
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isAgentTeamAdmin } = useHasPermissions({
+    agent: ["team-admin"],
+  });
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
+  const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
   // Users can always create personal agents, no team requirement needed
 
@@ -438,9 +442,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           | undefined;
         const authorId = (agent as unknown as Record<string, unknown>)
           .authorId as string | null | undefined;
+        const agentTeams = (
+          agent as unknown as { teams?: Array<{ id: string }> }
+        ).teams;
         const isPersonal = scope === "personal";
+        const isTeamScoped = scope === "team";
         const isOwner = !!currentUserId && authorId === currentUserId;
-        const canModify = !!isAgentAdmin || (isPersonal && isOwner);
+        const isMemberOfAgentTeam = agentTeams?.some((t) =>
+          userTeamIdSet.has(t.id),
+        );
+        const canModify =
+          !!isAgentAdmin ||
+          (isTeamScoped && !!isAgentTeamAdmin && !!isMemberOfAgentTeam) ||
+          (isPersonal && isOwner);
         return (
           <AgentActions
             agent={agent}

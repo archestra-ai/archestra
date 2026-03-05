@@ -472,7 +472,7 @@ function buildSlackManifest(params: {
     },
     oauth_config: {
       scopes: {
-        bot: [...SLACK_REQUIRED_BOT_SCOPES],
+        bot: SLACK_REQUIRED_BOT_SCOPES,
       },
     },
     settings: {

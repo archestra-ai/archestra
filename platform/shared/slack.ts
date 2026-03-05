@@ -24,5 +24,3 @@ export const SLACK_REQUIRED_BOT_SCOPES = [
   "users:read",
   "users:read.email",
 ] as const;
-
-export type SlackBotScope = (typeof SLACK_REQUIRED_BOT_SCOPES)[number];

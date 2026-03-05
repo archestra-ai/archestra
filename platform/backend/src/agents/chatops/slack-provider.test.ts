@@ -1196,18 +1196,10 @@ describe("SlackProvider.getThreadHistory file metadata", () => {
 });
 
 // =============================================================================
-// checkGrantedScopes (via initialize)
+// parseGrantedScopes
 // =============================================================================
 
 describe("SlackProvider scope detection", () => {
-  beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn());
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   function createUninitializedProvider(): SlackProvider {
     return new SlackProvider({
       enabled: true,
@@ -1217,24 +1209,15 @@ describe("SlackProvider scope detection", () => {
     });
   }
 
-  test("detects missing scopes from x-oauth-scopes header", async () => {
+  test("detects missing scopes from x-oauth-scopes header", () => {
     const provider = createUninitializedProvider();
 
-    // First call: auth.test via WebClient (SDK)
-    // Second call: raw fetch to auth.test for scope check
     const grantedScopes = SLACK_REQUIRED_BOT_SCOPES.filter(
       (s) => s !== "files:read" && s !== "users:read.email",
-    );
-
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "x-oauth-scopes": grantedScopes.join(",") },
-      }),
-    );
+    ).join(",");
 
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (provider as any).checkGrantedScopes();
+    (provider as any).parseGrantedScopes(grantedScopes);
 
     expect(provider.hasMissingScopes()).toBe(true);
     // biome-ignore lint/suspicious/noExplicitAny: test-only — access private field
@@ -1245,64 +1228,31 @@ describe("SlackProvider scope detection", () => {
     expect(missing).toHaveLength(2);
   });
 
-  test("reports no missing scopes when all are granted", async () => {
+  test("reports no missing scopes when all are granted", () => {
     const provider = createUninitializedProvider();
 
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: {
-          "x-oauth-scopes": SLACK_REQUIRED_BOT_SCOPES.join(","),
-        },
-      }),
-    );
-
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (provider as any).checkGrantedScopes();
+    (provider as any).parseGrantedScopes(SLACK_REQUIRED_BOT_SCOPES.join(","));
 
     expect(provider.hasMissingScopes()).toBe(false);
   });
 
-  test("handles missing x-oauth-scopes header gracefully", async () => {
+  test("handles null header gracefully", () => {
     const provider = createUninitializedProvider();
 
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    );
-
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (provider as any).checkGrantedScopes();
+    (provider as any).parseGrantedScopes(null);
 
     expect(provider.hasMissingScopes()).toBe(false);
   });
 
-  test("handles fetch failure gracefully", async () => {
+  test("handles extra scopes beyond required without error", () => {
     const provider = createUninitializedProvider();
 
-    vi.mocked(fetch).mockRejectedValueOnce(new Error("Network error"));
+    const scopeHeader = [...SLACK_REQUIRED_BOT_SCOPES, "extra:scope"].join(",");
 
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (provider as any).checkGrantedScopes();
-
-    expect(provider.hasMissingScopes()).toBe(false);
-  });
-
-  test("handles extra scopes beyond required without error", async () => {
-    const provider = createUninitializedProvider();
-
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: {
-          "x-oauth-scopes": [...SLACK_REQUIRED_BOT_SCOPES, "extra:scope"].join(
-            ",",
-          ),
-        },
-      }),
-    );
-
-    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (provider as any).checkGrantedScopes();
+    (provider as any).parseGrantedScopes(scopeHeader);
 
     expect(provider.hasMissingScopes()).toBe(false);
   });

@@ -20,6 +20,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import { AgentScopeFilter } from "@/components/agent-scope-filter";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -193,6 +194,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "asc"
     | "desc"
     | null;
+  const scopeFromUrl = searchParams.get("scope") as
+    | "personal"
+    | "team"
+    | "org"
+    | "built_in"
+    | null;
+  const teamIdsFromUrl = searchParams.get("teamIds");
+  const authorIdsFromUrl = searchParams.get("authorIds");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
@@ -210,6 +219,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: ["agent"],
+    scope: scopeFromUrl || undefined,
+    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
+    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
   });
 
   // Keep teams cache warm for AgentDialog
@@ -500,12 +512,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   className="pl-9"
                 />
               </div>
+              <AgentScopeFilter showBuiltIn />
             </div>
 
             {!agents || agents.length === 0 ? (
               <div className="text-muted-foreground">
-                {nameFilter
-                  ? "No agents found matching your search"
+                {nameFilter || scopeFromUrl
+                  ? "No agents found matching your filters"
                   : "No agents found"}
               </div>
             ) : (

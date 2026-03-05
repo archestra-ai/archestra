@@ -429,6 +429,9 @@ class AgentModel {
       name?: string;
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+      scope?: "personal" | "team" | "org" | "built_in";
+      teamIds?: string[];
+      authorIds?: string[];
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -453,6 +456,41 @@ class AgentModel {
     // Add agentType filter if provided (single type, backwards compatible)
     else if (filters?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
+    }
+
+    // Add scope filter if provided
+    if (filters?.scope === "built_in") {
+      whereConditions.push(eq(schema.agentsTable.builtIn, true));
+    } else if (filters?.scope === "personal") {
+      whereConditions.push(eq(schema.agentsTable.scope, "personal"));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    } else if (filters?.scope === "team") {
+      whereConditions.push(eq(schema.agentsTable.scope, "team"));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    } else if (filters?.scope === "org") {
+      whereConditions.push(eq(schema.agentsTable.scope, "org"));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+
+    // Add teamIds filter if provided (filter team-scoped agents by specific teams)
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      const agentIdsInTeams = await db
+        .selectDistinct({ agentId: schema.agentTeamsTable.agentId })
+        .from(schema.agentTeamsTable)
+        .where(inArray(schema.agentTeamsTable.teamId, filters.teamIds));
+
+      const ids = agentIdsInTeams.map((r) => r.agentId);
+      if (ids.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+      whereConditions.push(inArray(schema.agentsTable.id, ids));
+    }
+
+    // Add authorIds filter if provided (filter personal agents by owner)
+    if (filters?.authorIds && filters.authorIds.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.authorId, filters.authorIds),
+      );
     }
 
     // Apply access control filtering for non-agent admins

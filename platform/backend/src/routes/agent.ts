@@ -51,6 +51,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
               ),
+            scope: z
+              .enum(["personal", "team", "org", "built_in"])
+              .optional()
+              .describe("Filter by scope: personal, team, org, or built_in."),
+            teamIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by specific team IDs (comma-separated). Only used when scope=team.",
+              ),
+            authorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -72,6 +94,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name,
           agentType,
           agentTypes,
+          scope,
+          teamIds,
+          authorIds,
           limit,
           offset,
           sortBy,
@@ -117,6 +142,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // agentTypes takes precedence over agentType
             agentType: agentTypes ? undefined : agentType,
             agentTypes,
+            scope,
+            teamIds,
+            // authorIds is admin-only
+            authorIds: isAdmin ? authorIds : undefined,
           },
           user.id,
           isAdmin,

@@ -11639,6 +11639,18 @@ export type GetAgentsData = {
          * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
          */
         agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Filter by specific team IDs (comma-separated). Only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.
+         */
+        authorIds?: Array<string>;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
@@ -31529,6 +31541,85 @@ export type DeletePendingSignupMemberResponses = {
 };
 
 export type DeletePendingSignupMemberResponse = DeletePendingSignupMemberResponses[keyof DeletePendingSignupMemberResponses];
+
+export type GetOrganizationMembersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/members';
+};
+
+export type GetOrganizationMembersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOrganizationMembersError = GetOrganizationMembersErrors[keyof GetOrganizationMembersErrors];
+
+export type GetOrganizationMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        email: string;
+    }>;
+};
+
+export type GetOrganizationMembersResponse = GetOrganizationMembersResponses[keyof GetOrganizationMembersResponses];
 
 export type GetPublicAppearanceData = {
     body?: never;

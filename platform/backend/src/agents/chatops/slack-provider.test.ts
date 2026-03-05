@@ -1236,10 +1236,13 @@ describe("SlackProvider scope detection", () => {
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
     await (provider as any).checkGrantedScopes();
 
-    expect(provider.getMissingScopes()).toEqual(
+    expect(provider.hasMissingScopes()).toBe(true);
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access private field
+    const missing = (provider as any).missingScopes as string[];
+    expect(missing).toEqual(
       expect.arrayContaining(["files:read", "users:read.email"]),
     );
-    expect(provider.getMissingScopes()).toHaveLength(2);
+    expect(missing).toHaveLength(2);
   });
 
   test("reports no missing scopes when all are granted", async () => {
@@ -1257,7 +1260,7 @@ describe("SlackProvider scope detection", () => {
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
     await (provider as any).checkGrantedScopes();
 
-    expect(provider.getMissingScopes()).toEqual([]);
+    expect(provider.hasMissingScopes()).toBe(false);
   });
 
   test("handles missing x-oauth-scopes header gracefully", async () => {
@@ -1270,7 +1273,7 @@ describe("SlackProvider scope detection", () => {
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
     await (provider as any).checkGrantedScopes();
 
-    expect(provider.getMissingScopes()).toEqual([]);
+    expect(provider.hasMissingScopes()).toBe(false);
   });
 
   test("handles fetch failure gracefully", async () => {
@@ -1281,7 +1284,7 @@ describe("SlackProvider scope detection", () => {
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
     await (provider as any).checkGrantedScopes();
 
-    expect(provider.getMissingScopes()).toEqual([]);
+    expect(provider.hasMissingScopes()).toBe(false);
   });
 
   test("handles extra scopes beyond required without error", async () => {
@@ -1301,7 +1304,7 @@ describe("SlackProvider scope detection", () => {
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
     await (provider as any).checkGrantedScopes();
 
-    expect(provider.getMissingScopes()).toEqual([]);
+    expect(provider.hasMissingScopes()).toBe(false);
   });
 });
 
@@ -1372,7 +1375,9 @@ describe("SlackProvider.notifyMissingScopes", () => {
     expect(callArgs.thread_ts).toBe("1111111111.000000");
     expect(callArgs.text).toContain("`files:read`");
     expect(callArgs.text).toContain("missing required scopes");
-    expect(callArgs.text).toContain("https://api.slack.com/apps/A12345/oauth");
+    expect(callArgs.text).toContain(
+      "https://app.slack.com/app-settings/T12345/A12345/oauth",
+    );
   });
 
   test("does not send notification when already notified (cache hit)", async () => {

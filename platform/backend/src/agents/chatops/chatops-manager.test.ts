@@ -161,6 +161,8 @@ describe("ChatOpsManager security validation", () => {
     overrides: {
       getUserEmail?: (userId: string) => Promise<string | null>;
       sendReply?: (options: ChatReplyOptions) => Promise<string>;
+      hasMissingScopes?: () => boolean;
+      notifyMissingScopes?: (message: IncomingChatMessage) => Promise<void>;
     } = {},
   ): ChatOpsProvider {
     return {
@@ -180,6 +182,8 @@ describe("ChatOpsManager security validation", () => {
       getChannelName: async () => null,
       getWorkspaceId: () => null,
       getWorkspaceName: () => null,
+      hasMissingScopes: overrides.hasMissingScopes ?? (() => false),
+      notifyMissingScopes: overrides.notifyMissingScopes ?? (async () => {}),
       downloadFiles: async () => [],
       discoverChannels: async () => null,
     };
@@ -840,6 +844,8 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
       getChannelName: async () => "test-channel",
       getWorkspaceId: () => "T_TEST",
       getWorkspaceName: () => "Test Workspace",
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
       downloadFiles: async () => [],
       discoverChannels: async () => [],
     };
@@ -872,6 +878,105 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
 
     expect(sendReplySpy).toHaveBeenCalledTimes(1);
     expect(processMessageSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatOpsManager.handleIncomingMessage missing scope notification", () => {
+  function createScopeTestProvider(
+    overrides: {
+      hasMissingScopes?: () => boolean;
+      notifyMissingScopes?: (message: IncomingChatMessage) => Promise<void>;
+      parseWebhookNotification?: (
+        payload: unknown,
+      ) => Promise<IncomingChatMessage | null>;
+    } = {},
+  ): ChatOpsProvider {
+    return {
+      providerId: "slack",
+      displayName: "Slack",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification:
+        overrides.parseWebhookNotification ?? (async () => null),
+      // getUserEmail returns null so handleIncomingMessage exits early
+      // (after the scope notification check) with "Could not verify your identity"
+      sendReply: async () => "reply-id",
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: async () => null,
+      getChannelName: async () => null,
+      getWorkspaceId: () => "T_TEST",
+      getWorkspaceName: () => "Test Workspace",
+      hasMissingScopes: overrides.hasMissingScopes ?? (() => false),
+      notifyMissingScopes: overrides.notifyMissingScopes ?? (async () => {}),
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+    };
+  }
+
+  const fakeMessage: IncomingChatMessage = {
+    messageId: "scope-test-1",
+    channelId: "C_TEST",
+    workspaceId: "T_TEST",
+    senderId: "U_SENDER",
+    senderName: "Test",
+    text: "hello",
+    rawText: "hello",
+    timestamp: new Date(),
+    isThreadReply: false,
+  };
+
+  test("calls notifyMissingScopes when provider reports missing scopes", async () => {
+    const notifySpy = vi.fn().mockResolvedValue(undefined);
+
+    const provider = createScopeTestProvider({
+      hasMissingScopes: () => true,
+      notifyMissingScopes: notifySpy,
+      parseWebhookNotification: async () => fakeMessage,
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.handleIncomingMessage(provider, fakeMessage);
+
+    expect(notifySpy).toHaveBeenCalledWith(fakeMessage);
+  });
+
+  test("does not call notifyMissingScopes when no scopes are missing", async () => {
+    const notifySpy = vi.fn().mockResolvedValue(undefined);
+
+    const provider = createScopeTestProvider({
+      hasMissingScopes: () => false,
+      notifyMissingScopes: notifySpy,
+      parseWebhookNotification: async () => fakeMessage,
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.handleIncomingMessage(provider, fakeMessage);
+
+    expect(notifySpy).not.toHaveBeenCalled();
+  });
+
+  test("does not block message processing if notifyMissingScopes rejects", async () => {
+    const provider = createScopeTestProvider({
+      hasMissingScopes: () => true,
+      notifyMissingScopes: async () => {
+        throw new Error("notification failed");
+      },
+      parseWebhookNotification: async () => fakeMessage,
+    });
+
+    const manager = new ChatOpsManager();
+
+    // Should not throw even though notifyMissingScopes rejects
+    // (handleIncomingMessage continues to the email check, then exits
+    // early because getUserEmail returns null — that's fine for this test)
+    await expect(
+      manager.handleIncomingMessage(provider, fakeMessage),
+    ).resolves.not.toThrow();
   });
 });
 
@@ -1266,6 +1371,8 @@ describe("ChatOpsManager attachment passthrough", () => {
       getChannelName: async () => null,
       getWorkspaceId: () => null,
       getWorkspaceName: () => null,
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
       downloadFiles: async () => [],
       discoverChannels: async () => null,
     };

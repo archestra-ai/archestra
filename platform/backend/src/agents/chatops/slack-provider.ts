@@ -903,8 +903,8 @@ class SlackProvider implements ChatOpsProvider {
     return this.botUserId;
   }
 
-  getMissingScopes(): string[] {
-    return this.missingScopes;
+  hasMissingScopes(): boolean {
+    return this.missingScopes.length > 0;
   }
 
   // ===========================================================================
@@ -1292,9 +1292,10 @@ class SlackProvider implements ChatOpsProvider {
 
     const scopeList = this.missingScopes.map((s) => `  • \`${s}\``).join("\n");
 
-    const appSettingsUrl = this.config.appId
-      ? `https://api.slack.com/apps/${this.config.appId}/oauth`
-      : "https://api.slack.com/apps";
+    const appSettingsUrl =
+      this.config.appId && this.teamId
+        ? `https://app.slack.com/app-settings/${this.teamId}/${this.config.appId}/oauth`
+        : "https://api.slack.com/apps";
 
     const text = [
       ":warning: *Your Archestra Slack app is missing required scopes*",

@@ -204,6 +204,7 @@ export function useDeleteConversation() {
       });
       if (error) {
         handleApiError(error);
+        // Throw to trigger onError rollback for optimistic cache removal
         throw error;
       }
       return data;

@@ -1004,12 +1004,13 @@ class MSTeamsProvider implements ChatOpsProvider {
         // both are generic (e.g. "application/octet-stream" or "image/*").
         const httpContentType =
           response.headers.get("content-type")?.split(";")[0]?.trim() || "";
-        const resolvedContentType =
-          httpContentType && httpContentType !== "application/octet-stream"
-            ? httpContentType
-            : attachment.contentType === "image/*"
-              ? detectImageType(buffer)
-              : attachment.contentType;
+        const isGenericContentType = (ct: string) =>
+          !ct || ct === "application/octet-stream" || ct.includes("*");
+        const resolvedContentType = !isGenericContentType(httpContentType)
+          ? httpContentType
+          : !isGenericContentType(attachment.contentType ?? "")
+            ? (attachment.contentType as string)
+            : detectImageType(buffer);
         results.push({
           contentType: resolvedContentType,
           contentBase64: buffer.toString("base64"),

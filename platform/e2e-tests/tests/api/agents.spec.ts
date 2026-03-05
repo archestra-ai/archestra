@@ -114,6 +114,59 @@ test.describe("Agents API CRUD", () => {
     expect(updatedAgent.isDemo).toBe(updateData.isDemo);
   });
 
+  test("should update systemPrompt and userPrompt", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await createAgent(
+      request,
+      `Agent Prompt Test ${uniqueSuffix}`,
+      "personal",
+    );
+    const createdAgent = await createResponse.json();
+
+    // Set agentType to 'agent' and set prompts
+    const setResponse = await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
+      data: {
+        agentType: "agent",
+        systemPrompt: "You are a test assistant",
+        userPrompt: "User prompt text",
+      },
+    });
+    const withPrompts = await setResponse.json();
+    expect(withPrompts.systemPrompt).toBe("You are a test assistant");
+    expect(withPrompts.userPrompt).toBe("User prompt text");
+
+    // Clear prompts by setting to null
+    const clearResponse = await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
+      data: {
+        systemPrompt: null,
+        userPrompt: null,
+      },
+    });
+    const cleared = await clearResponse.json();
+    expect(cleared.systemPrompt).toBeNull();
+    expect(cleared.userPrompt).toBeNull();
+
+    // Verify persistence
+    const getResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
+    });
+    const fetched = await getResponse.json();
+    expect(fetched.systemPrompt).toBeNull();
+    expect(fetched.userPrompt).toBeNull();
+  });
+
   test("should delete an agent", async ({
     request,
     createAgent,

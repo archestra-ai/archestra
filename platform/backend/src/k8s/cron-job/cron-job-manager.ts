@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import config from "@/config";
 import { DEFAULT_CONNECTOR_NAMESPACE } from "@/k8s/consts";
+import { inProcessScheduler } from "@/k8s/cron-job/in-process-scheduler";
 import {
   createK8sClients,
   isK8sNotFoundError,
@@ -47,10 +48,7 @@ class CronJobManager {
   }): Promise<void> {
     const containerImage = config.orchestrator.connectorImage;
     if (!containerImage) {
-      logger.warn(
-        { connectorId: params.connectorId },
-        "Skipping CronJob creation: ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE is not configured",
-      );
+      inProcessScheduler.schedule(params);
       return;
     }
 
@@ -89,6 +87,12 @@ class CronJobManager {
   }
 
   async deleteCronJob(connectorId: string): Promise<void> {
+    inProcessScheduler.unschedule(connectorId);
+
+    if (!config.orchestrator.connectorImage) {
+      return;
+    }
+
     const cronJobName = this.buildCronJobName(connectorId);
     try {
       await this.api.deleteNamespacedCronJob({
@@ -112,6 +116,11 @@ class CronJobManager {
   }
 
   async suspendCronJob(connectorId: string): Promise<void> {
+    if (!config.orchestrator.connectorImage) {
+      inProcessScheduler.suspend(connectorId);
+      return;
+    }
+
     const cronJobName = this.buildCronJobName(connectorId);
     await this.api.patchNamespacedCronJob({
       name: cronJobName,
@@ -125,6 +134,11 @@ class CronJobManager {
   }
 
   async resumeCronJob(connectorId: string): Promise<void> {
+    if (!config.orchestrator.connectorImage) {
+      inProcessScheduler.resume(connectorId);
+      return;
+    }
+
     const cronJobName = this.buildCronJobName(connectorId);
     await this.api.patchNamespacedCronJob({
       name: cronJobName,

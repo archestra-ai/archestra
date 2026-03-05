@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { formatDistanceToNow } from "date-fns";
 import { Database, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
@@ -11,6 +12,7 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -195,12 +197,17 @@ function ConnectorCard({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ConnectorStatusBadge status={connector.lastSyncStatus} />
-              {connector.lastSyncAt && (
-                <span className="text-xs text-muted-foreground">
-                  {formatDate({ date: connector.lastSyncAt })}
+              {connector.lastSyncAt ? (
+                <span
+                  className="text-xs text-muted-foreground"
+                  title={formatDate({ date: connector.lastSyncAt })}
+                >
+                  Last run{" "}
+                  {formatDistanceToNow(new Date(connector.lastSyncAt), {
+                    addSuffix: true,
+                  })}
                 </span>
-              )}
-              {!connector.lastSyncAt && (
+              ) : (
                 <span className="text-xs text-muted-foreground">
                   Never synced
                 </span>
@@ -223,9 +230,7 @@ function ConnectorCard({
 
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Database className="h-3.5 w-3.5" />
-            <code className="bg-muted px-1.5 py-0.5 rounded">
-              {connector.schedule}
-            </code>
+            <span>{formatCronSchedule(connector.schedule)}</span>
           </div>
         </CardContent>
       </Card>

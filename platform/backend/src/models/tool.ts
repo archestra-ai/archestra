@@ -408,7 +408,7 @@ class ToolModel {
       ToolModel.getAgentKnowledgeBaseId(agentId),
     ]);
 
-    if (assignedToolIds.length === 0) {
+    if (assignedToolIds.length === 0 && !knowledgeBaseId) {
       return [];
     }
 
@@ -416,19 +416,38 @@ class ToolModel {
     // - MCP tools (have catalogId set) - includes regular MCP server tools and Archestra builtin tools
     // - Delegation tools (have delegateToAgentId set)
     // Excludes proxy-discovered tools which have agentId set and catalogId null
-    const tools = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(
-        and(
-          inArray(schema.toolsTable.id, assignedToolIds),
-          or(
-            isNotNull(schema.toolsTable.catalogId),
-            isNotNull(schema.toolsTable.delegateToAgentId),
-          ),
-        ),
-      )
-      .orderBy(desc(schema.toolsTable.createdAt));
+    const tools =
+      assignedToolIds.length > 0
+        ? await db
+            .select()
+            .from(schema.toolsTable)
+            .where(
+              and(
+                inArray(schema.toolsTable.id, assignedToolIds),
+                or(
+                  isNotNull(schema.toolsTable.catalogId),
+                  isNotNull(schema.toolsTable.delegateToAgentId),
+                ),
+              ),
+            )
+            .orderBy(desc(schema.toolsTable.createdAt))
+        : [];
+
+    // Auto-inject query_knowledge_base when the agent has a knowledge base assigned,
+    // regardless of whether the tool was manually assigned
+    if (knowledgeBaseId) {
+      const hasKbTool = tools.some(
+        (t) => t.name === TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+      );
+      if (!hasKbTool) {
+        const kbTool = await ToolModel.findByName(
+          TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+        );
+        if (kbTool) {
+          tools.push(kbTool as (typeof tools)[number]);
+        }
+      }
+    }
 
     return ToolModel.filterUnavailableTools(tools, knowledgeBaseId);
   }

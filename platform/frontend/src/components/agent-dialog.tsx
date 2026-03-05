@@ -1386,9 +1386,9 @@ export function AgentDialog({
                   <div className="space-y-2">
                     <Label>Knowledge Base</Label>
                     <p className="text-sm text-muted-foreground">
-                      Assign a knowledge base to enable the{" "}
-                      <code className="text-xs">query_knowledge_base</code> tool
-                      and automatic document ingestion from chat uploads.
+                      Attach a knowledge base to enable RAG queries against
+                      indexed documents and automatic document ingestion from
+                      chat uploads.
                     </p>
                     <div className="flex items-center gap-2">
                       <Select

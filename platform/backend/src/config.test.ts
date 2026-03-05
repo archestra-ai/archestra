@@ -940,16 +940,7 @@ describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
     expect(cfg.orchestrator.connectorImage).toBe("custom/image:latest");
   });
 
-  test("should default to platform image when K8s is configured via kubeconfig", async () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
-
-    const { default: cfg } = await import("./config");
-    expect(cfg.orchestrator.connectorImage).toMatch(
-      /^archestra\/platform:\d+\.\d+\.\d+$/,
-    );
-  });
-
-  test("should default to platform image when K8s is configured via in-cluster", async () => {
+  test("should default to platform image when running inside K8s cluster", async () => {
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
       "true";
 
@@ -959,20 +950,14 @@ describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
     );
   });
 
-  test("should return empty string when K8s is not configured", async () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "";
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "false";
+  test("should return empty string when using local kubeconfig (local dev)", async () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
 
     const { default: cfg } = await import("./config");
     expect(cfg.orchestrator.connectorImage).toBe("");
   });
 
-  test("should return empty string when kubeconfig is whitespace only", async () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "   ";
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "false";
-
+  test("should return empty string when K8s is not configured at all", async () => {
     const { default: cfg } = await import("./config");
     expect(cfg.orchestrator.connectorImage).toBe("");
   });

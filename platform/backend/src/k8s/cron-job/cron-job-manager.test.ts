@@ -2,6 +2,21 @@ import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 
+// Mock in-process scheduler
+const mockInProcessSchedule = vi.fn();
+const mockInProcessUnschedule = vi.fn();
+const mockInProcessSuspend = vi.fn();
+const mockInProcessResume = vi.fn();
+
+vi.mock("@/k8s/cron-job/in-process-scheduler", () => ({
+  inProcessScheduler: {
+    schedule: (...args: unknown[]) => mockInProcessSchedule(...args),
+    unschedule: (...args: unknown[]) => mockInProcessUnschedule(...args),
+    suspend: (...args: unknown[]) => mockInProcessSuspend(...args),
+    resume: (...args: unknown[]) => mockInProcessResume(...args),
+  },
+}));
+
 // Mock @kubernetes/client-node
 const mockReadNamespacedCronJob = vi.fn();
 const mockCreateNamespacedCronJob = vi.fn();
@@ -151,7 +166,7 @@ describe("CronJobManager", () => {
       expect(container.workingDir).toBe("/app/backend");
     });
 
-    test("skips CronJob creation when connector image is not configured", async () => {
+    test("falls back to in-process scheduler when connector image is not configured", async () => {
       const manager = await getManager();
       const { default: mockedConfig } = await import("@/config");
       const original = mockedConfig.orchestrator.connectorImage;
@@ -162,6 +177,7 @@ describe("CronJobManager", () => {
 
         expect(mockReadNamespacedCronJob).not.toHaveBeenCalled();
         expect(mockCreateNamespacedCronJob).not.toHaveBeenCalled();
+        expect(mockInProcessSchedule).toHaveBeenCalledWith(defaultParams);
       } finally {
         mockedConfig.orchestrator.connectorImage = original;
       }
@@ -286,6 +302,22 @@ describe("CronJobManager", () => {
   });
 
   describe("deleteCronJob", () => {
+    test("uses in-process unschedule and skips K8s when no image configured", async () => {
+      const manager = await getManager();
+      const { default: mockedConfig } = await import("@/config");
+      const original = mockedConfig.orchestrator.connectorImage;
+      mockedConfig.orchestrator.connectorImage = "";
+
+      try {
+        await manager.deleteCronJob("connector-123");
+
+        expect(mockInProcessUnschedule).toHaveBeenCalledWith("connector-123");
+        expect(mockDeleteNamespacedCronJob).not.toHaveBeenCalled();
+      } finally {
+        mockedConfig.orchestrator.connectorImage = original;
+      }
+    });
+
     test("deletes an existing CronJob", async () => {
       const manager = await getManager();
 
@@ -324,6 +356,22 @@ describe("CronJobManager", () => {
   });
 
   describe("suspendCronJob", () => {
+    test("uses in-process suspend when no image configured", async () => {
+      const manager = await getManager();
+      const { default: mockedConfig } = await import("@/config");
+      const original = mockedConfig.orchestrator.connectorImage;
+      mockedConfig.orchestrator.connectorImage = "";
+
+      try {
+        await manager.suspendCronJob("connector-123");
+
+        expect(mockInProcessSuspend).toHaveBeenCalledWith("connector-123");
+        expect(mockPatchNamespacedCronJob).not.toHaveBeenCalled();
+      } finally {
+        mockedConfig.orchestrator.connectorImage = original;
+      }
+    });
+
     test("patches CronJob with suspend=true", async () => {
       const manager = await getManager();
 
@@ -341,6 +389,22 @@ describe("CronJobManager", () => {
   });
 
   describe("resumeCronJob", () => {
+    test("uses in-process resume when no image configured", async () => {
+      const manager = await getManager();
+      const { default: mockedConfig } = await import("@/config");
+      const original = mockedConfig.orchestrator.connectorImage;
+      mockedConfig.orchestrator.connectorImage = "";
+
+      try {
+        await manager.resumeCronJob("connector-123");
+
+        expect(mockInProcessResume).toHaveBeenCalledWith("connector-123");
+        expect(mockPatchNamespacedCronJob).not.toHaveBeenCalled();
+      } finally {
+        mockedConfig.orchestrator.connectorImage = original;
+      }
+    });
+
     test("patches CronJob with suspend=false", async () => {
       const manager = await getManager();
 

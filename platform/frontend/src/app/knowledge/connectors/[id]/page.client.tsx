@@ -17,13 +17,14 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
-  CardDescription,
+
+
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -211,47 +212,44 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-3">
+                <span title={connector.connectorType} className="capitalize">
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-8 w-8"
+                  />
+                </span>
                 <CardTitle>{connector.name}</CardTitle>
-                <CardDescription>
-                  <Badge variant="secondary" className="capitalize mr-2">
-                    {connector.connectorType}
-                  </Badge>
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                    {connector.schedule}
-                  </code>
-                </CardDescription>
+                <span className="text-xs text-muted-foreground">
+                  {formatCronSchedule(connector.schedule)}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <ConnectorStatusBadge status={connector.lastSyncStatus} />
                 <Badge variant={connector.enabled ? "default" : "secondary"}>
                   {connector.enabled ? "Enabled" : "Disabled"}
                 </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSync}
+                  disabled={syncConnector.isPending}
+                >
+                  <Play className="mr-2 h-4 w-4" />
+                  {syncConnector.isPending ? "Starting..." : "Sync Now"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestConnection}
+                  disabled={testConnection.isPending}
+                >
+                  <Plug className="mr-2 h-4 w-4" />
+                  {testConnection.isPending ? "Testing..." : "Test Connection"}
+                </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSync}
-                disabled={syncConnector.isPending}
-              >
-                <Play className="mr-2 h-4 w-4" />
-                {syncConnector.isPending ? "Starting..." : "Sync Now"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTestConnection}
-                disabled={testConnection.isPending}
-              >
-                <Plug className="mr-2 h-4 w-4" />
-                {testConnection.isPending ? "Testing..." : "Test Connection"}
-              </Button>
-            </div>
-          </CardContent>
         </Card>
 
         {/* Knowledge Base Assignments */}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { formatCronSchedule } from "@/lib/format-cron";
 import {
   FormControl,
   FormDescription,
@@ -39,6 +40,12 @@ export function SchedulePicker({ form, name }: SchedulePickerProps) {
     (p) => p.value !== "custom" && p.value === currentValue,
   );
   const [isCustom, setIsCustom] = useState(!isPreset && !!currentValue);
+
+  const humanReadable = useMemo(() => {
+    if (!currentValue) return null;
+    const result = formatCronSchedule(currentValue);
+    return result !== currentValue ? result : null;
+  }, [currentValue]);
 
   return (
     <FormField
@@ -81,7 +88,9 @@ export function SchedulePicker({ form, name }: SchedulePickerProps) {
               />
             )}
           </div>
-          <FormDescription>Cron expression for sync schedule.</FormDescription>
+          <FormDescription>
+            {humanReadable ?? "Cron expression for sync schedule."}
+          </FormDescription>
           <FormMessage />
         </FormItem>
       )}

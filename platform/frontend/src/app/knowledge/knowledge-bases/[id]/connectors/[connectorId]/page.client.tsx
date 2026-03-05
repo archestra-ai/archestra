@@ -8,6 +8,7 @@ import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -211,9 +212,9 @@ function ConnectorDetail({
                   <Badge variant="secondary" className="capitalize mr-2">
                     {connector.connectorType}
                   </Badge>
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                    {connector.schedule}
-                  </code>
+                  <span className="text-xs">
+                    {formatCronSchedule(connector.schedule)}
+                  </span>
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">

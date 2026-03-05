@@ -429,21 +429,23 @@ const parsePositiveInt = (
 
 /**
  * Resolve the connector CronJob image.
- * If explicitly set via env var, use that. Otherwise, if K8s is configured,
- * default to the platform image (`archestra/platform:<version>`).
- * If K8s is not configured, return empty string (connector syncs run in-process).
+ *
+ * Priority:
+ * 1. Explicit env var `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE` — always wins.
+ * 2. Running inside a K8s cluster (`LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`) —
+ *    auto-detect to `archestra/platform:<version>` (production/staging).
+ * 3. Otherwise (local dev with a kubeconfig file) — return empty string so
+ *    connector syncs run in-process via InProcessScheduler.
  */
-const getConnectorImage = (): string => {
+export const getConnectorImage = (): string => {
   const explicit = process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE;
   if (explicit) return explicit;
 
-  const k8sConfigured =
+  const runningInsideCluster =
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
-      "true" ||
-    (!!process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG &&
-      process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG.trim().length > 0);
+    "true";
 
-  if (k8sConfigured) {
+  if (runningInsideCluster) {
     return `archestra/platform:${packageJsonVersion}`;
   }
   return "";

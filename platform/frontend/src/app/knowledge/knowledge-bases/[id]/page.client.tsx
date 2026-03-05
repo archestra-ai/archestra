@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
+import { formatDistanceToNow } from "date-fns";
 import { ArrowLeft, Check, Heart, Link2, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,7 @@ import {
   useKnowledgeBase,
   useKnowledgeBaseHealth,
 } from "@/lib/knowledge-base.query";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { cn, formatDate } from "@/lib/utils";
 
 export default function KnowledgeBaseDetailPage({ id }: { id: string }) {
@@ -113,9 +115,9 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
       accessorKey: "schedule",
       header: "Schedule",
       cell: ({ row }) => (
-        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-          {row.original.schedule}
-        </code>
+        <span className="text-xs">
+          {formatCronSchedule(row.original.schedule)}
+        </span>
       ),
     },
     {
@@ -124,10 +126,17 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-          {row.original.lastSyncAt && (
-            <span className="text-xs text-muted-foreground">
-              {formatDate({ date: row.original.lastSyncAt })}
+          {row.original.lastSyncAt ? (
+            <span
+              className="text-xs text-muted-foreground"
+              title={formatDate({ date: row.original.lastSyncAt })}
+            >
+              {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                addSuffix: true,
+              })}
             </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">Never</span>
           )}
         </div>
       ),

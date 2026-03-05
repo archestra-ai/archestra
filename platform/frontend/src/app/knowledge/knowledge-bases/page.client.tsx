@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   Check,
@@ -356,9 +357,19 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                 <div className="flex items-center justify-end gap-2">
                   <div className="flex items-center gap-2 mr-4">
                     <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                    {connector.lastSyncAt && (
+                    {connector.lastSyncAt ? (
+                      <span
+                        className="text-xs text-muted-foreground"
+                        title={formatDate({ date: connector.lastSyncAt })}
+                      >
+                        {formatDistanceToNow(
+                          new Date(connector.lastSyncAt),
+                          { addSuffix: true },
+                        )}
+                      </span>
+                    ) : (
                       <span className="text-xs text-muted-foreground">
-                        {formatDate({ date: connector.lastSyncAt })}
+                        Never
                       </span>
                     )}
                   </div>

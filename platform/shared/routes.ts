@@ -241,6 +241,11 @@ export const RouteId = {
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
+  ShareConversation: "shareConversation",
+  UnshareConversation: "unshareConversation",
+  GetConversationShare: "getConversationShare",
+  GetSharedConversation: "getSharedConversation",
+  ForkSharedConversation: "forkSharedConversation",
   GetChatModels: "getChatModels",
   SyncChatModels: "syncChatModels",
 

@@ -12,6 +12,7 @@ export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
+export { default as ConversationShareModel } from "./conversation-share";
 export { default as DualLlmConfigModel } from "./dual-llm-config";
 export { default as DualLlmResultModel } from "./dual-llm-result";
 export { default as IncomingEmailSubscriptionModel } from "./incoming-email-subscription";

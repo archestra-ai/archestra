@@ -19543,6 +19543,464 @@ export type UpdateConversationEnabledToolsResponses = {
 
 export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
 
+export type UnshareConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/share';
+};
+
+export type UnshareConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnshareConversationError = UnshareConversationErrors[keyof UnshareConversationErrors];
+
+export type UnshareConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnshareConversationResponse = UnshareConversationResponses[keyof UnshareConversationResponses];
+
+export type GetConversationShareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/share';
+};
+
+export type GetConversationShareErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConversationShareError = GetConversationShareErrors[keyof GetConversationShareErrors];
+
+export type GetConversationShareResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        conversationId: string;
+        organizationId: string;
+        createdByUserId: string;
+        visibility: 'organization';
+        createdAt: string;
+    } | null;
+};
+
+export type GetConversationShareResponse = GetConversationShareResponses[keyof GetConversationShareResponses];
+
+export type ShareConversationData = {
+    body: {
+        visibility: 'organization';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/share';
+};
+
+export type ShareConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ShareConversationError = ShareConversationErrors[keyof ShareConversationErrors];
+
+export type ShareConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        conversationId: string;
+        organizationId: string;
+        createdByUserId: string;
+        visibility: 'organization';
+        createdAt: string;
+    };
+};
+
+export type ShareConversationResponse = ShareConversationResponses[keyof ShareConversationResponses];
+
+export type GetSharedConversationData = {
+    body?: never;
+    path: {
+        shareId: string;
+    };
+    query?: never;
+    url: '/api/chat/shared/{shareId}';
+};
+
+export type GetSharedConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSharedConversationError = GetSharedConversationErrors[keyof GetSharedConversationErrors];
+
+export type GetSharedConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        messages: Array<unknown>;
+        sharedByUserId: string;
+    };
+};
+
+export type GetSharedConversationResponse = GetSharedConversationResponses[keyof GetSharedConversationResponses];
+
+export type ForkSharedConversationData = {
+    body: {
+        agentId: string;
+    };
+    path: {
+        shareId: string;
+    };
+    query?: never;
+    url: '/api/chat/shared/{shareId}/fork';
+};
+
+export type ForkSharedConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ForkSharedConversationError = ForkSharedConversationErrors[keyof ForkSharedConversationErrors];
+
+export type ForkSharedConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        messages: Array<unknown>;
+    };
+};
+
+export type ForkSharedConversationResponse = ForkSharedConversationResponses[keyof ForkSharedConversationResponses];
+
 export type PostApiWebhooksChatopsMsTeamsData = {
     body?: unknown;
     path?: never;

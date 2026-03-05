@@ -14,6 +14,7 @@ export { default as chatopsChannelBindingsTable } from "./chatops-channel-bindin
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
+export { default as conversationSharesTable } from "./conversation-share";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as identityProvidersTable } from "./identity-provider";

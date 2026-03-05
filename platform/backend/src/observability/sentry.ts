@@ -25,6 +25,7 @@ const {
       environment: sentryEnvironment,
       tracesSampleRate,
       mcpGatewayTracesSampleRate,
+      profilesSampleRate,
     },
   },
 } = config;
@@ -94,7 +95,7 @@ const initSentry = async (): Promise<void> => {
      * Only effective if profiling integration loaded successfully
      * https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#profilesSampleRate
      */
-    profilesSampleRate: profilingIntegration ? 1.0 : 0,
+    profilesSampleRate: profilingIntegration ? profilesSampleRate : 0,
 
     // Enable logs to be sent to Sentry
     enableLogs: true,

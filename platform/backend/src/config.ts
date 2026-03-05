@@ -746,6 +746,10 @@ const config = {
         process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,
         0.05,
       ),
+      profilesSampleRate: parseSampleRate(
+        process.env.ARCHESTRA_SENTRY_PROFILES_SAMPLE_RATE,
+        0.2,
+      ),
     },
   },
   debug: isDevelopment,

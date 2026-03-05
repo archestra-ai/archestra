@@ -177,7 +177,10 @@ describe("ConversationSearchPalette", () => {
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
 
     // Should have called deleteMutation.mutate with the conversation ID
-    expect(mockDeleteMutate).toHaveBeenCalledWith("conv-1", expect.objectContaining({ onSettled: expect.any(Function) }));
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
 
     // Should redirect to /chat since the deleted conversation is currently open
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
@@ -203,7 +206,10 @@ describe("ConversationSearchPalette", () => {
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
 
     // Should have called deleteMutation.mutate
-    expect(mockDeleteMutate).toHaveBeenCalledWith("conv-1", expect.objectContaining({ onSettled: expect.any(Function) }));
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
 
     // Should NOT redirect since the deleted conversation is not the one currently open
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -224,7 +230,10 @@ describe("ConversationSearchPalette", () => {
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
     fireEvent.keyDown(window, { key: "d", code: "KeyD" });
 
-    expect(mockDeleteMutate).toHaveBeenCalledWith("conv-1", expect.objectContaining({ onSettled: expect.any(Function) }));
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 

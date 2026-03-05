@@ -31177,6 +31177,7 @@ export type GetOrganizationResponses = {
         name: string;
         slug: string;
         logo: string | null;
+        logoDark: string | null;
         createdAt: string;
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -31200,6 +31201,7 @@ export type UpdateOrganizationData = {
         compressionScope?: 'organization' | 'team';
         globalToolPolicy?: 'permissive' | 'restrictive';
         logo?: string | null;
+        logoDark?: string | null;
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
         allowChatFileUploads?: boolean;
@@ -31277,6 +31279,7 @@ export type UpdateOrganizationResponses = {
         name: string;
         slug: string;
         logo: string | null;
+        logoDark: string | null;
         createdAt: string;
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -31604,6 +31607,7 @@ export type GetPublicAppearanceResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo: string | null;
+        logoDark: string | null;
     };
 };
 

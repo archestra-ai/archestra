@@ -16,17 +16,66 @@ import { useUpdateOrganization } from "@/lib/organization.query";
 
 interface LogoUploadProps {
   currentLogo?: string | null;
+  currentLogoDark?: string | null;
   onLogoChange?: () => void;
 }
 
-export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
+export function LogoUpload({
+  currentLogo,
+  currentLogoDark,
+  onLogoChange,
+}: LogoUploadProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Organization Logo</CardTitle>
+        <CardDescription>
+          Upload custom logos for your organization. The dark mode logo is used
+          when dark mode is active and falls back to the default logo if not
+          set.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <LogoSlot
+            label="Default"
+            currentLogo={currentLogo}
+            field="logo"
+            onLogoChange={onLogoChange}
+          />
+          <LogoSlot
+            label="Dark Mode"
+            currentLogo={currentLogoDark}
+            field="logoDark"
+            onLogoChange={onLogoChange}
+          />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Recommended size: 200x60px. PNG only, max 2 MB.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LogoSlot({
+  label,
+  currentLogo,
+  field,
+  onLogoChange,
+}: {
+  label: string;
+  currentLogo?: string | null;
+  field: "logo" | "logoDark";
+  onLogoChange?: () => void;
+}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentLogo || null);
-  const uploadOrganizationLogoMutation = useUpdateOrganization(
+  const uploadMutation = useUpdateOrganization(
     "Logo uploaded successfully",
     "Failed to upload logo",
   );
-  const removeOrganizationLogoMutation = useUpdateOrganization(
+  const removeMutation = useUpdateOrganization(
     "Logo removed successfully",
     "Failed to remove logo",
   );
@@ -36,27 +85,24 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
       const file = event.target.files?.[0];
       if (!file) return;
 
-      // Validate file type
       if (file.type !== "image/png") {
         toast.error("Please upload a PNG file");
         return;
       }
 
-      // Validate file size (2MB)
       if (file.size > 2 * 1024 * 1024) {
         toast.error("File size must be less than 2MB");
         return;
       }
 
-      // Convert to base64
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = e.target?.result as string;
         setPreview(base64);
 
         try {
-          const result = await uploadOrganizationLogoMutation.mutateAsync({
-            logo: base64,
+          const result = await uploadMutation.mutateAsync({
+            [field]: base64,
           });
 
           if (!result) {
@@ -71,13 +117,13 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
       };
       reader.readAsDataURL(file);
     },
-    [currentLogo, onLogoChange, uploadOrganizationLogoMutation],
+    [currentLogo, onLogoChange, uploadMutation, field],
   );
 
   const handleRemoveLogo = useCallback(async () => {
     try {
-      const result = await removeOrganizationLogoMutation.mutateAsync({
-        logo: null,
+      const result = await removeMutation.mutateAsync({
+        [field]: null,
       });
 
       if (!result) {
@@ -89,76 +135,57 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
     } catch (error) {
       console.error("Failed to remove logo:", error);
     }
-  }, [onLogoChange, removeOrganizationLogoMutation]);
-
-  const handleUploadClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
+  }, [onLogoChange, removeMutation, field]);
 
   const hasPreviewOrCurrentLogo = preview || currentLogo;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Organization Logo</CardTitle>
-        <CardDescription>
-          Upload a custom logo for your organization.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="relative h-16 w-48 rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden">
-            {hasPreviewOrCurrentLogo ? (
-              <Image
-                src={preview || currentLogo || ""}
-                alt="Organization logo"
-                fill
-                className="object-contain p-2"
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">No logo</p>
-            )}
-          </div>
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{label}</p>
+      <div className="relative h-16 w-full rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden">
+        {hasPreviewOrCurrentLogo ? (
+          <Image
+            src={preview || currentLogo || ""}
+            alt={`${label} logo`}
+            fill
+            className="object-contain p-2"
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">No logo</p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <PermissionButton
+          permissions={{ organization: ["update"] }}
+          variant="outline"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadMutation.isPending}
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          {hasPreviewOrCurrentLogo ? "Change" : "Upload"}
+        </PermissionButton>
 
-          <div className="flex gap-2">
-            <PermissionButton
-              permissions={{ organization: ["update"] }}
-              variant="outline"
-              size="sm"
-              onClick={handleUploadClick}
-              disabled={uploadOrganizationLogoMutation.isPending}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              {hasPreviewOrCurrentLogo ? "Change" : "Upload"}
-            </PermissionButton>
-
-            {hasPreviewOrCurrentLogo && (
-              <PermissionButton
-                permissions={{ organization: ["update"] }}
-                variant="outline"
-                size="sm"
-                onClick={handleRemoveLogo}
-                disabled={removeOrganizationLogoMutation.isPending}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Remove
-              </PermissionButton>
-            )}
-          </div>
-        </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-
-        <p className="text-sm text-muted-foreground">
-          Recommended size: 200x60px.
-        </p>
-      </CardContent>
-    </Card>
+        {hasPreviewOrCurrentLogo && (
+          <PermissionButton
+            permissions={{ organization: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={handleRemoveLogo}
+            disabled={removeMutation.isPending}
+          >
+            <X className="h-4 w-4 mr-2" />
+            Remove
+          </PermissionButton>
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+    </div>
   );
 }

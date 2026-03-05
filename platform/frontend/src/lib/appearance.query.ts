@@ -12,6 +12,7 @@ const DEFAULT_APPEARANCE: PublicAppearance = {
   theme: DEFAULT_THEME_ID as OrganizationTheme,
   customFont: "lato",
   logo: null,
+  logoDark: null,
 };
 
 /**

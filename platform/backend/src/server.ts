@@ -546,7 +546,8 @@ const start = async () => {
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
     if (url === HEALTH_PATH || url === READY_PATH) return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
-    if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`)) return true;
+    if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
+      return true;
     return false;
   };
 

@@ -40,8 +40,14 @@ export function getExemplarLabels(): Record<string, string> {
 
   const sessionId = getActiveSessionId();
   if (sessionId) {
-    labels.sessionID = sessionId;
+    labels.sessionID =
+      sessionId.length > MAX_SESSION_ID_EXEMPLAR_LENGTH
+        ? sessionId.slice(0, MAX_SESSION_ID_EXEMPLAR_LENGTH)
+        : sessionId;
   }
 
   return labels;
 }
+
+// traceID (7+32) + spanID (6+16) = 61 chars; 128 - 61 - "sessionID".length(9) = 58
+const MAX_SESSION_ID_EXEMPLAR_LENGTH = 58;

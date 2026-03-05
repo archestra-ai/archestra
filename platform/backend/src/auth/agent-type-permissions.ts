@@ -152,7 +152,7 @@ export function requireAgentModifyPermission(params: {
       // Only admins can manage org-scoped agents (already checked above)
       throw new ApiError(403, "Only admins can manage org-scoped agents");
 
-    case "team":
+    case "team": {
       if (!checker.isTeamAdmin(agentType)) {
         throw new ApiError(
           403,
@@ -177,6 +177,7 @@ export function requireAgentModifyPermission(params: {
         );
       }
       return;
+    }
 
     case "personal":
       if (agentAuthorId !== userId) {

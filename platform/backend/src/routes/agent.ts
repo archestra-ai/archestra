@@ -421,9 +421,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // team-admin: validate team assignments and preserve teams they don't control
         if (checker.isTeamAdmin(existingAgent.agentType) && body.teams) {
           const userTeamIdSet = new Set(userTeamIds);
-          const existingTeamIds = new Set(
-            existingAgent.teams.map((t) => t.id),
-          );
+          const existingTeamIds = new Set(existingAgent.teams.map((t) => t.id));
 
           // Validate newly added teams — must be a member
           const invalidAdds = body.teams.filter(

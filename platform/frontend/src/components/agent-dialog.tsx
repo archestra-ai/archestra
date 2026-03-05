@@ -516,9 +516,7 @@ function AccessLevelSelector({
       {/* SHARE WITH — only shown for team-scoped */}
       {scope === "team" && (
         <div className="space-y-2">
-          <Label>
-            Teams{showTeamRequired && " *"}
-          </Label>
+          <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
             disabled={!canShareWithTeams || hasNoAvailableTeams}
             options={
@@ -530,9 +528,7 @@ function AccessLevelSelector({
             value={assignedTeamIds}
             onChange={onTeamIdsChange}
             placeholder={
-              hasNoAvailableTeams
-                ? "No teams available"
-                : "Search teams..."
+              hasNoAvailableTeams ? "No teams available" : "Search teams..."
             }
             emptyMessage="No teams found."
           />
@@ -823,9 +819,7 @@ export function AgentDialog({
 
   // Non-admin users must select at least one team for team-scoped resources
   const requiresTeamSelection =
-    !isAdmin &&
-    scope === "team" &&
-    assignedTeamIds.length === 0;
+    !isAdmin && scope === "team" && assignedTeamIds.length === 0;
   const hasNoAvailableTeams = !teams || teams.length === 0;
 
   const handleSave = useCallback(async () => {
@@ -839,11 +833,7 @@ export function AgentDialog({
     }
 
     // Non-admin users must select at least one team for team-scoped resources
-    if (
-      !isAdmin &&
-      scope === "team" &&
-      assignedTeamIds.length === 0
-    ) {
+    if (!isAdmin && scope === "team" && assignedTeamIds.length === 0) {
       toast.error("Please select at least one team");
       return;
     }

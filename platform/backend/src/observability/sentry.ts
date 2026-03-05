@@ -7,12 +7,21 @@ import type {
 import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
+import { MCP_GATEWAY_PREFIX } from "@/routes/route-paths";
 import { ApiError } from "@/types";
+import { isNoiseRoute } from "./utils";
 
 const {
   api: { version },
   observability: {
-    sentry: { enabled, dsn, environment: sentryEnvironment },
+    sentry: {
+      enabled,
+      dsn,
+      environment: sentryEnvironment,
+      tracesSampleRate,
+      mcpGatewayTracesSampleRate,
+      profilesSampleRate,
+    },
   },
 } = config;
 
@@ -81,7 +90,7 @@ const initSentry = async (): Promise<void> => {
      * Only effective if profiling integration loaded successfully
      * https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#profilesSampleRate
      */
-    profilesSampleRate: profilingIntegration ? 1.0 : 0,
+    profilesSampleRate: profilingIntegration ? profilesSampleRate : 0,
 
     // Enable logs to be sent to Sentry
     enableLogs: true,
@@ -127,13 +136,19 @@ const initSentry = async (): Promise<void> => {
 
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({ normalizedRequest }: TracesSamplerSamplingContext) => {
-      if (
-        normalizedRequest?.url?.startsWith("/health") ||
-        normalizedRequest?.url?.startsWith("/metrics")
-      ) {
-        return 0; // Ignore certain transactions
+      const url = normalizedRequest?.url;
+      if (!url) return tracesSampleRate;
+
+      if (isNoiseRoute(url)) {
+        return 0;
       }
-      return 1.0; // Sample 100% of other transactions
+
+      // Sample heavily: MCP Gateway is ~84% of all spans
+      if (url.startsWith(MCP_GATEWAY_PREFIX)) {
+        return mcpGatewayTracesSampleRate;
+      }
+
+      return tracesSampleRate;
     },
   });
 

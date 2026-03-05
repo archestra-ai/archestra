@@ -25,6 +25,7 @@ import type {
   InsertInteraction,
   Interaction,
   PaginationQuery,
+  SessionSummary,
   SortingQuery,
   UserInfo,
 } from "@/types";
@@ -776,37 +777,7 @@ class InteractionModel {
       endDate?: Date;
       search?: string;
     },
-  ): Promise<
-    PaginatedResult<{
-      sessionId: string | null;
-      sessionSource: string | null;
-      interactionId: string | null; // Only set for single interactions (null session)
-      requestCount: number;
-      totalInputTokens: number;
-      totalOutputTokens: number;
-      totalCost: string | null;
-      totalBaselineCost: string | null;
-      totalToonCostSavings: string | null;
-      toonSkipReasonCounts: {
-        applied: number;
-        notEnabled: number;
-        notEffective: number;
-        noToolResults: number;
-      };
-      firstRequestTime: Date;
-      lastRequestTime: Date;
-      models: string[];
-      profileId: string | null; // null when profile was deleted
-      profileName: string | null;
-      externalAgentIds: string[];
-      externalAgentIdLabels: (string | null)[]; // Resolved agent names for external agent IDs
-      userNames: string[];
-      lastInteractionRequest: unknown | null;
-      lastInteractionType: string | null;
-      conversationTitle: string | null;
-      claudeCodeTitle: string | null;
-    }>
-  > {
+  ): Promise<PaginatedResult<SessionSummary>> {
     // Build where clauses for access control
     const conditions: SQL[] = [];
 
@@ -892,6 +863,8 @@ class InteractionModel {
         .select({
           sessionId: max(schema.interactionsTable.sessionId),
           sessionSource: max(schema.interactionsTable.sessionSource),
+          // MAX() picks alphabetically last source for mixed-source sessions; in practice sessions are single-source
+          source: max(schema.interactionsTable.source),
           // For single interactions (no session), return the interaction ID for direct navigation
           interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
           requestCount: count(),
@@ -985,6 +958,7 @@ class InteractionModel {
       return {
         sessionId: s.sessionId,
         sessionSource: s.sessionSource,
+        source: s.source,
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,

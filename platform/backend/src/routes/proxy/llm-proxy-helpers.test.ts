@@ -304,6 +304,19 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord(baseParams);
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
+
+  test("includes source when provided", () => {
+    const record = buildInteractionRecord({
+      ...baseParams,
+      source: "chatops:slack",
+    });
+    expect(record.source).toBe("chatops:slack");
+  });
+
+  test("source is undefined when not provided", () => {
+    const record = buildInteractionRecord(baseParams);
+    expect(record.source).toBeUndefined();
+  });
 });
 
 // --------------------------------------------------------------------------

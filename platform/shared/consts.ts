@@ -165,6 +165,13 @@ export const USER_ID_HEADER = "X-Archestra-User-Id";
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 
 /**
+ * Header name for interaction source.
+ * Indicates where the request originated from (e.g., "chat", "chatops:slack", "email").
+ * Internal-only header — external API requests default to "api".
+ */
+export const SOURCE_HEADER = "X-Archestra-Source";
+
+/**
  * Header name for execution ID.
  * Clients can pass this header to associate interactions with a specific execution run.
  */

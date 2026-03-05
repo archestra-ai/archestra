@@ -162,6 +162,11 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
+    // Hide built-in agents from non-admin users
+    if (!isAgentAdmin) {
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -453,6 +458,11 @@ class AgentModel {
     // Add agentType filter if provided (single type, backwards compatible)
     else if (filters?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
+    }
+
+    // Hide built-in agents from non-admin users
+    if (!isAgentAdmin) {
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
     // Apply access control filtering for non-agent admins

@@ -1801,5 +1801,37 @@ describe("AgentModel", () => {
       expect(all).toHaveLength(1);
       expect(all[0].builtInAgentConfig).toBeTruthy();
     });
+
+    test("hides built-in agents from non-admin users", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      // Admin can see built-in agents
+      const adminResults = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(adminResults).toHaveLength(2);
+
+      // Non-admin cannot see built-in agents
+      const nonAdminResults = await AgentModel.findAll(undefined, false, {
+        agentType: "agent",
+      });
+      expect(nonAdminResults).toHaveLength(1);
+      expect(nonAdminResults[0].name).toBe("Regular Agent");
+    });
   });
 });

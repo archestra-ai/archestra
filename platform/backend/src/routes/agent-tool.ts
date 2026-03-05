@@ -228,18 +228,21 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         organizationId: request.organizationId,
       });
-      const userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
+      let userTeamIds: string[] | null = null;
       for (const agentId of uniqueAgentIds) {
         const agent = await AgentModel.findById(agentId);
         if (agent) {
           checker.require(agent.agentType, "update");
+          if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
+            userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
+          }
           requireAgentModifyPermission({
             checker,
             agentType: agent.agentType,
             agentScope: agent.scope,
             agentAuthorId: agent.authorId,
             agentTeamIds: agent.teams.map((t) => t.id),
-            userTeamIds,
+            userTeamIds: userTeamIds ?? [],
             userId: request.user.id,
           });
         }

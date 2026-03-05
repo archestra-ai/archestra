@@ -692,6 +692,19 @@ describe("requireAgentModifyPermission", () => {
       }),
     ).toThrow(ApiError);
 
+    // Editor cannot manage team-scoped agents with no teams (orphaned)
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds,
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
+
     // Editor cannot manage org-scoped agents
     expect(() =>
       requireAgentModifyPermission({

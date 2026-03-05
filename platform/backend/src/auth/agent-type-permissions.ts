@@ -160,17 +160,21 @@ export function requireAgentModifyPermission(params: {
         );
       }
       // team-admin must be a member of at least one of the agent's teams
-      if (agentTeamIds.length > 0) {
-        const userTeamIdSet = new Set(userTeamIds);
-        const isMemberOfAnyTeam = agentTeamIds.some((id) =>
-          userTeamIdSet.has(id),
+      if (agentTeamIds.length === 0) {
+        throw new ApiError(
+          403,
+          "You can only manage agents in teams you are a member of",
         );
-        if (!isMemberOfAnyTeam) {
-          throw new ApiError(
-            403,
-            "You can only manage agents in teams you are a member of",
-          );
-        }
+      }
+      const userTeamIdSet = new Set(userTeamIds);
+      const isMemberOfAnyTeam = agentTeamIds.some((id) =>
+        userTeamIdSet.has(id),
+      );
+      if (!isMemberOfAnyTeam) {
+        throw new ApiError(
+          403,
+          "You can only manage agents in teams you are a member of",
+        );
       }
       return;
 

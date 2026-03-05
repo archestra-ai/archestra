@@ -604,17 +604,21 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "org",
         agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds: [],
         userId: user.id,
       }),
     ).not.toThrow();
 
-    // Admin can manage team-scoped agents
+    // Admin can manage team-scoped agents (even without team membership)
     expect(() =>
       requireAgentModifyPermission({
         checker,
         agentType: "agent",
         agentScope: "team",
         agentAuthorId: "other-user-id",
+        agentTeamIds: ["some-team-id"],
+        userTeamIds: [],
         userId: user.id,
       }),
     ).not.toThrow();
@@ -626,12 +630,14 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "personal",
         agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds: [],
         userId: user.id,
       }),
     ).not.toThrow();
   });
 
-  test("team-admin can manage team-scoped agents but not org-scoped", async ({
+  test("team-admin can manage team-scoped agents in their teams but not others", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -645,16 +651,59 @@ describe("requireAgentModifyPermission", () => {
       organizationId: org.id,
     });
 
-    // Editor (team-admin) can manage team-scoped agents
+    const userTeamIds = ["team-a", "team-b"];
+
+    // Editor (team-admin) can manage agents in their teams
     expect(() =>
       requireAgentModifyPermission({
         checker,
         agentType: "agent",
         agentScope: "team",
         agentAuthorId: "other-user-id",
+        agentTeamIds: ["team-a"],
+        userTeamIds,
         userId: user.id,
       }),
     ).not.toThrow();
+
+    // Editor (team-admin) can manage agents sharing at least one team
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        agentTeamIds: ["team-b", "team-c"],
+        userTeamIds,
+        userId: user.id,
+      }),
+    ).not.toThrow();
+
+    // Editor cannot manage agents in teams they don't belong to
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        agentTeamIds: ["team-c"],
+        userTeamIds,
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
+
+    // Editor cannot manage team-scoped agents with no teams (orphaned)
+    expect(() =>
+      requireAgentModifyPermission({
+        checker,
+        agentType: "agent",
+        agentScope: "team",
+        agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds,
+        userId: user.id,
+      }),
+    ).toThrow(ApiError);
 
     // Editor cannot manage org-scoped agents
     expect(() =>
@@ -663,6 +712,8 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "org",
         agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds,
         userId: user.id,
       }),
     ).toThrow(ApiError);
@@ -689,6 +740,8 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "team",
         agentAuthorId: "other-user-id",
+        agentTeamIds: ["team-a"],
+        userTeamIds: ["team-a"],
         userId: user.id,
       }),
     ).toThrow(ApiError);
@@ -700,6 +753,8 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "org",
         agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds: [],
         userId: user.id,
       }),
     ).toThrow(ApiError);
@@ -726,6 +781,8 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "personal",
         agentAuthorId: user.id,
+        agentTeamIds: [],
+        userTeamIds: [],
         userId: user.id,
       }),
     ).not.toThrow();
@@ -737,6 +794,8 @@ describe("requireAgentModifyPermission", () => {
         agentType: "agent",
         agentScope: "personal",
         agentAuthorId: "other-user-id",
+        agentTeamIds: [],
+        userTeamIds: [],
         userId: user.id,
       }),
     ).toThrow(ApiError);

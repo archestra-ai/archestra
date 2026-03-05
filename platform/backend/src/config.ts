@@ -440,6 +440,16 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
+export const parseSampleRate = (
+  envValue: string | undefined,
+  defaultRate: number,
+): number => {
+  if (!envValue) return defaultRate;
+  const parsed = Number.parseFloat(envValue);
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) return defaultRate;
+  return parsed;
+};
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -687,7 +697,7 @@ const config = {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.56", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.57", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -728,6 +738,18 @@ const config = {
       dsn: sentryDsn,
       environment:
         process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+      tracesSampleRate: parseSampleRate(
+        process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
+        0.2,
+      ),
+      mcpGatewayTracesSampleRate: parseSampleRate(
+        process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,
+        0.05,
+      ),
+      profilesSampleRate: parseSampleRate(
+        process.env.ARCHESTRA_SENTRY_PROFILES_SAMPLE_RATE,
+        0.2,
+      ),
     },
   },
   debug: isDevelopment,

@@ -231,7 +231,7 @@ function McpGateways({
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
   });
 
-  const { data: _teams } = useQuery({
+  const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
@@ -241,8 +241,12 @@ function McpGateways({
   });
 
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
+  const { data: isTeamAdmin } = useHasPermissions({
+    mcpGateway: ["team-admin"],
+  });
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
+  const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
@@ -461,9 +465,28 @@ function McpGateways({
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const scope = (agent as unknown as Record<string, unknown>).scope as
+          | string
+          | undefined;
+        const authorId = (agent as unknown as Record<string, unknown>)
+          .authorId as string | null | undefined;
+        const agentTeams = (
+          agent as unknown as { teams?: Array<{ id: string }> }
+        ).teams;
+        const isPersonal = scope === "personal";
+        const isTeamScoped = scope === "team";
+        const isOwner = !!currentUserId && authorId === currentUserId;
+        const isMemberOfAgentTeam = agentTeams?.some((t) =>
+          userTeamIdSet.has(t.id),
+        );
+        const canModify =
+          !!isAdmin ||
+          (isTeamScoped && !!isTeamAdmin && !!isMemberOfAgentTeam) ||
+          (isPersonal && isOwner);
         return (
           <McpGatewayActions
             agent={agent}
+            canModify={canModify}
             onConnect={setConnectingGateway}
             onEdit={(agentData) => {
               setEditingGateway(agentData);

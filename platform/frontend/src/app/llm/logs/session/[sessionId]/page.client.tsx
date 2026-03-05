@@ -4,7 +4,9 @@ import { ArrowLeft, Bot, ExternalLink, Layers, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
+import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
+import { SourceBadge } from "@/components/source-badge";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +34,8 @@ export default function SessionDetailPage({
 }: {
   paramsPromise: Promise<{ sessionId: string }>;
 }) {
-  const params = use(paramsPromise);
+  const rawParams = use(paramsPromise);
+  const sessionId = decodeURIComponent(rawParams.sessionId);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -41,7 +44,7 @@ export default function SessionDetailPage({
   const pageSize = DEFAULT_TABLE_LIMIT;
 
   const { data: interactionsResponse } = useInteractions({
-    sessionId: params.sessionId,
+    sessionId: sessionId,
     limit: pageSize,
     offset: pageIndex * pageSize,
     sortBy: "createdAt",
@@ -50,7 +53,7 @@ export default function SessionDetailPage({
 
   // Fetch session metadata (profile name, user names, etc.)
   const { data: sessionResponse } = useInteractionSessions({
-    sessionId: params.sessionId,
+    sessionId: sessionId,
     limit: 1,
   });
 
@@ -67,11 +70,11 @@ export default function SessionDetailPage({
         newParams.set("page", String(newPage + 1));
       }
       router.push(
-        `/llm/logs/session/${params.sessionId}?${newParams.toString()}`,
+        `/llm/logs/session/${encodeURIComponent(sessionId)}?${newParams.toString()}`,
         { scroll: false },
       );
     },
-    [searchParams, router, params.sessionId],
+    [searchParams, router, sessionId],
   );
 
   // Use session data from API for accurate totals, fall back to page data
@@ -156,103 +159,95 @@ export default function SessionDetailPage({
       </div>
 
       {/* Session Summary */}
-      <div className="rounded-lg border p-4 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1 min-w-0 flex-1">
-            <h2 className="text-lg font-semibold truncate">
-              {sessionTitle || "Session"}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {sessionSource === "claude_code" && (
-                <Badge
-                  variant="secondary"
-                  className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-                >
-                  Claude Code
-                </Badge>
-              )}
-              {profileName && (
-                <Badge variant="secondary" className="text-xs">
-                  <Layers className="h-3 w-3 mr-1" />
-                  {profileName}
-                </Badge>
-              )}
-              {userNames.map((userName) => (
-                <Badge key={userName} variant="outline" className="text-xs">
-                  <User className="h-3 w-3 mr-1" />
-                  {userName}
-                </Badge>
-              ))}
-            </div>
-          </div>
-          {lastMainRequest && (
+      <MetadataCard
+        title={sessionTitle || "Session"}
+        badges={
+          <>
+            {sessionSource === "claude_code" && (
+              <Badge
+                variant="secondary"
+                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+              >
+                Claude Code
+              </Badge>
+            )}
+            <SourceBadge source={sessionData?.source} />
+            {profileName && (
+              <Badge variant="secondary" className="text-xs">
+                <Layers className="h-3 w-3 mr-1" />
+                {profileName}
+              </Badge>
+            )}
+            {userNames.map((userName) => (
+              <Badge key={userName} variant="outline" className="text-xs">
+                <User className="h-3 w-3 mr-1" />
+                {userName}
+              </Badge>
+            ))}
+          </>
+        }
+        action={
+          lastMainRequest ? (
             <Button variant="outline" size="sm" asChild>
               <Link href={`/llm/logs/${lastMainRequest.id}`}>
                 <ExternalLink className="h-4 w-4 mr-2" />
                 View
               </Link>
             </Button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <div className="text-muted-foreground">Total Requests</div>
-            <div className="font-semibold">{totalRequests}</div>
+          ) : undefined
+        }
+      >
+        <MetadataItem label="Total Requests">
+          <div className="font-semibold">{totalRequests}</div>
+        </MetadataItem>
+        <MetadataItem label="Total Tokens">
+          <div className="font-mono">
+            {totalInputTokens.toLocaleString()} in /{" "}
+            {totalOutputTokens.toLocaleString()} out
           </div>
-          <div>
-            <div className="text-muted-foreground">Total Tokens</div>
-            <div className="font-mono">
-              {totalInputTokens.toLocaleString()} in /{" "}
-              {totalOutputTokens.toLocaleString()} out
-            </div>
+        </MetadataItem>
+        <MetadataItem label="Total Cost">
+          <div className="font-mono">
+            {totalCost && totalBaselineCost ? (
+              <TooltipProvider>
+                <Savings
+                  cost={totalCost}
+                  baselineCost={totalBaselineCost}
+                  toonCostSavings={totalToonCostSavings}
+                  format="percent"
+                  tooltip="hover"
+                  variant="session"
+                />
+              </TooltipProvider>
+            ) : (
+              "-"
+            )}
           </div>
-          <div>
-            <div className="text-muted-foreground">Total Cost</div>
-            <div className="font-mono">
-              {totalCost && totalBaselineCost ? (
-                <TooltipProvider>
-                  <Savings
-                    cost={totalCost}
-                    baselineCost={totalBaselineCost}
-                    toonCostSavings={totalToonCostSavings}
-                    format="percent"
-                    tooltip="hover"
-                    variant="session"
-                  />
-                </TooltipProvider>
-              ) : (
-                "-"
-              )}
-            </div>
+        </MetadataItem>
+        <MetadataItem label="Models">
+          <div className="flex flex-wrap gap-1">
+            {models.map((model) => (
+              <Badge key={model} variant="secondary" className="text-xs">
+                {model}
+              </Badge>
+            ))}
           </div>
-          <div>
-            <div className="text-muted-foreground">Models</div>
-            <div className="flex flex-wrap gap-1">
-              {models.map((model) => (
-                <Badge key={model} variant="secondary" className="text-xs">
-                  {model}
-                </Badge>
-              ))}
+        </MetadataItem>
+        {firstRequest && (
+          <MetadataItem label="First Request">
+            <div className="font-mono text-xs">
+              {formatDate({ date: firstRequest })}
             </div>
-          </div>
-          {firstRequest && (
-            <div>
-              <div className="text-muted-foreground">First Request</div>
-              <div className="font-mono text-xs">
-                {formatDate({ date: firstRequest })}
-              </div>
+          </MetadataItem>
+        )}
+        {lastRequest && (
+          <MetadataItem label="Last Request">
+            <div className="font-mono text-xs">
+              {formatDate({ date: lastRequest })}
             </div>
-          )}
-          {lastRequest && (
-            <div>
-              <div className="text-muted-foreground">Last Request</div>
-              <div className="font-mono text-xs">
-                {formatDate({ date: lastRequest })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+          </MetadataItem>
+        )}
+      </MetadataCard>
 
       {/* Interactions Table */}
       <div className="rounded-md border overflow-x-auto">
@@ -319,7 +314,7 @@ export default function SessionDetailPage({
                     <TableCell className="overflow-hidden">
                       <Badge
                         variant="secondary"
-                        className="text-xs max-w-full inline-block truncate"
+                        className="text-xs max-w-full inline-flex truncate"
                       >
                         {dynamicInteraction.modelName}
                       </Badge>

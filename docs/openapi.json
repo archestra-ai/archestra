@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.0.56"
+    "version": "1.0.57"
   },
   "components": {
     "schemas": {
@@ -75749,6 +75749,17 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
+                              },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
                               },
@@ -75815,7 +75826,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -75853,7 +75869,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -75891,6 +75906,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/GeminiGenerateContentRequest"
@@ -75958,7 +75984,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -75996,7 +76027,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -76034,6 +76064,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/AnthropicMessagesRequest"
@@ -76101,7 +76142,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -76139,7 +76185,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -76177,6 +76222,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "type": "object",
@@ -77944,7 +78000,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -77982,7 +78043,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78020,6 +78080,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -78087,7 +78158,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78125,7 +78201,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78163,6 +78238,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -78230,7 +78316,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78268,7 +78359,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78306,6 +78396,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -78373,7 +78474,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78411,7 +78517,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78449,6 +78554,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -78516,7 +78632,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78554,7 +78675,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78592,6 +78712,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -78659,7 +78790,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78697,7 +78833,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78735,6 +78870,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -78802,7 +78948,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78840,7 +78991,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -78878,6 +79028,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/VllmChatCompletionRequest"
@@ -78945,7 +79106,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -78972,7 +79138,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -79010,6 +79175,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/OllamaChatCompletionRequest"
@@ -79077,7 +79253,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -79104,7 +79285,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -79142,6 +79322,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/CohereChatRequest"
@@ -79209,7 +79400,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -79247,7 +79443,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -79285,6 +79480,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/ZhipuaiChatCompletionRequest"
@@ -79352,7 +79558,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -79390,7 +79601,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -79428,6 +79638,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/DeepSeekChatCompletionRequest"
@@ -79495,7 +79716,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -79533,7 +79759,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -79571,6 +79796,17 @@
                               "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email"
+                                ]
                               },
                               "request": {
                                 "$ref": "#/components/schemas/MinimaxChatCompletionRequest"
@@ -79638,7 +79874,12 @@
                               },
                               "toonSkipReason": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
                               },
                               "createdAt": {
                                 "type": "string",
@@ -79676,7 +79917,6 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
-                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -80059,6 +80299,17 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "source": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "chat",
+                              "chatops:slack",
+                              "chatops:ms-teams",
+                              "email"
+                            ]
+                          },
                           "interactionId": {
                             "nullable": true,
                             "type": "string"
@@ -80168,6 +80419,7 @@
                         "required": [
                           "sessionId",
                           "sessionSource",
+                          "source",
                           "interactionId",
                           "requestCount",
                           "totalInputTokens",
@@ -81009,6 +81261,17 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
+                        },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
                         },
@@ -81075,7 +81338,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -81113,7 +81381,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -81151,6 +81418,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/GeminiGenerateContentRequest"
@@ -81218,7 +81496,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -81256,7 +81539,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -81294,6 +81576,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/AnthropicMessagesRequest"
@@ -81361,7 +81654,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -81399,7 +81697,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -81437,6 +81734,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "type": "object",
@@ -83204,7 +83512,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -83242,7 +83555,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -83280,6 +83592,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -83347,7 +83670,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -83385,7 +83713,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -83423,6 +83750,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -83490,7 +83828,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -83528,7 +83871,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -83566,6 +83908,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -83633,7 +83986,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -83671,7 +84029,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -83709,6 +84066,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -83776,7 +84144,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -83814,7 +84187,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -83852,6 +84224,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -83919,7 +84302,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -83957,7 +84345,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -83995,6 +84382,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -84062,7 +84460,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84100,7 +84503,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -84138,6 +84540,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/VllmChatCompletionRequest"
@@ -84205,7 +84618,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84232,7 +84650,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -84270,6 +84687,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/OllamaChatCompletionRequest"
@@ -84337,7 +84765,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84364,7 +84797,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -84402,6 +84834,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/CohereChatRequest"
@@ -84469,7 +84912,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84507,7 +84955,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -84545,6 +84992,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/ZhipuaiChatCompletionRequest"
@@ -84612,7 +85070,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84650,7 +85113,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -84688,6 +85150,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/DeepSeekChatCompletionRequest"
@@ -84755,7 +85228,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84793,7 +85271,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -84831,6 +85308,17 @@
                         "sessionSource": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email"
+                          ]
                         },
                         "request": {
                           "$ref": "#/components/schemas/MinimaxChatCompletionRequest"
@@ -84898,7 +85386,12 @@
                         },
                         "toonSkipReason": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
                         },
                         "createdAt": {
                           "type": "string",
@@ -84936,7 +85429,6 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
-                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false

@@ -4,6 +4,7 @@ import db, { initializeDatabase, schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
 import {
+  AgentLabelModel,
   AgentModel,
   AgentTeamModel,
   OrganizationModel,
@@ -209,6 +210,93 @@ async function seedMockData() {
     }
   }
   logger.info("✅ Assigned teams to team-scoped entities");
+
+  // Step: Assign labels to agents for testing label-based filtering
+  const labelDefs: {
+    key: string;
+    values: string[];
+    frequency: number; // 1 = every entity, 2 = every 2nd, etc.
+  }[] = [
+    {
+      key: "region",
+      values: [
+        "us-east-1",
+        "us-east-2",
+        "us-west-1",
+        "us-west-2",
+        "eu-west-1",
+        "eu-west-2",
+        "eu-central-1",
+        "ap-southeast-1",
+        "ap-southeast-2",
+        "ap-northeast-1",
+        "sa-east-1",
+        "ca-central-1",
+      ],
+      frequency: 1,
+    },
+    {
+      key: "environment",
+      values: ["production", "staging", "development", "qa", "sandbox"],
+      frequency: 1,
+    },
+    {
+      key: "team",
+      values: ["frontend", "backend", "platform", "ml", "infra", "data", "sre"],
+      frequency: 2,
+    },
+    {
+      key: "tier",
+      values: ["free", "starter", "pro", "enterprise"],
+      frequency: 3,
+    },
+    {
+      key: "compliance",
+      values: ["soc2", "hipaa", "gdpr", "pci-dss", "iso27001"],
+      frequency: 4,
+    },
+    {
+      key: "cost-center",
+      values: ["engineering", "product", "sales", "marketing", "support"],
+      frequency: 3,
+    },
+    {
+      key: "priority",
+      values: ["critical", "high", "medium", "low"],
+      frequency: 2,
+    },
+    {
+      key: "owner",
+      values: ["alice", "bob", "charlie", "diana", "eve", "frank"],
+      frequency: 5,
+    },
+  ];
+
+  for (let i = 0; i < allMockEntities.length; i++) {
+    const entity = allMockEntities[i];
+    const labels: {
+      key: string;
+      value: string;
+      keyId: string;
+      valueId: string;
+    }[] = [];
+
+    for (const def of labelDefs) {
+      if (i % def.frequency === 0) {
+        labels.push({
+          key: def.key,
+          value: def.values[i % def.values.length],
+          keyId: "",
+          valueId: "",
+        });
+      }
+    }
+
+    await AgentLabelModel.syncAgentLabels(entity.id, labels);
+  }
+  logger.info(
+    `✅ Assigned labels to ${allMockEntities.length} entities (${labelDefs.map((d) => d.key).join(", ")})`,
+  );
 
   // Note: Archestra tools are no longer auto-assigned to agents.
   // They are now managed like any other MCP server tools and must be explicitly assigned.

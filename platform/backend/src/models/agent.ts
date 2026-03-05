@@ -157,13 +157,8 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
     }
 
-    // Exclude built-in agents (e.g. for chat dropdown)
-    if (options?.excludeBuiltIn) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
-    }
-
-    // Hide built-in agents from non-admin users
-    if (!isAgentAdmin) {
+    // Exclude built-in agents when explicitly requested or when user is not an admin
+    if (options?.excludeBuiltIn || !isAgentAdmin) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 

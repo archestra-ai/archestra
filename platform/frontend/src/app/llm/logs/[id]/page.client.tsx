@@ -1,14 +1,15 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
 import { CopyButton } from "@/components/copy-button";
-import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
+import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
+import { SourceBadge } from "@/components/source-badge";
 import {
   Accordion,
   AccordionContent,
@@ -91,162 +92,143 @@ function LogDetail({
   ).mapToUiMessages(allDualLlmResults);
 
   return (
-    <>
-      <div className="mb-6">
-        <div className="flex items-center gap-4 mb-2">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/llm/logs">
-              <ArrowLeft className="h-5 w-5" />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" asChild>
+          {dynamicInteraction.sessionId ? (
+            <Link
+              href={`/llm/logs/session/${encodeURIComponent(dynamicInteraction.sessionId)}`}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Session
             </Link>
-          </Button>
-          <h1 className="text-2xl font-semibold tracking-tight">Log Details</h1>
-        </div>
-        <p className="text-sm text-muted-foreground ml-14">
-          {formatDate({ date: interaction.createdAt })}
-        </p>
+          ) : (
+            <Link href="/llm/logs">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Sessions
+            </Link>
+          )}
+        </Button>
       </div>
-      <Divider className="my-6" />
+
       <div>
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Metadata</h2>
-          <div className="border border-border rounded-lg p-6 bg-card">
-            <div className="grid grid-cols-2 gap-x-12 gap-y-6">
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Profile Name
-                </div>
-                <div className="font-medium">
+          <MetadataCard
+            title="Metadata"
+            badges={
+              <>
+                <SourceBadge source={dynamicInteraction.source} />
+                <Badge variant="secondary" className="text-xs">
+                  <Layers className="h-3 w-3 mr-1" />
                   {agent?.name ??
                     (interaction.profileId === null
                       ? "Deleted LLM Proxy"
                       : "Unknown")}
-                </div>
+                </Badge>
+              </>
+            }
+          >
+            <MetadataItem label="Tokens">
+              <div className="font-mono">
+                {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
+                {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
               </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  External Agent
-                </div>
-                <div className="font-medium font-mono">
-                  {dynamicInteraction.externalAgentId || (
-                    <span className="text-muted-foreground font-normal">
-                      Not set
-                    </span>
-                  )}
-                </div>
+            </MetadataItem>
+            <MetadataItem label="Cost">
+              <div className="font-mono">
+                {(() => {
+                  const savings = calculateCostSavings(dynamicInteraction);
+                  const effectiveCost = dynamicInteraction.cost || "0";
+                  const effectiveBaselineCost =
+                    dynamicInteraction.baselineCost ||
+                    dynamicInteraction.cost ||
+                    "0";
+                  return (
+                    <TooltipProvider>
+                      <Savings
+                        cost={effectiveCost}
+                        baselineCost={effectiveBaselineCost}
+                        toonCostSavings={dynamicInteraction.toonCostSavings}
+                        toonTokensSaved={savings.toonTokensSaved}
+                        toonSkipReason={dynamicInteraction.toonSkipReason}
+                        format="percent"
+                        tooltip="always"
+                        variant="interaction"
+                        baselineModel={dynamicInteraction.baselineModel}
+                        actualModel={dynamicInteraction.model}
+                      />
+                    </TooltipProvider>
+                  );
+                })()}
               </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Execution ID
-                </div>
-                <div className="font-medium font-mono">
-                  {dynamicInteraction.executionId || (
-                    <span className="text-muted-foreground font-normal">
-                      Not set
-                    </span>
-                  )}
-                </div>
+            </MetadataItem>
+            <MetadataItem label="Model">
+              <Badge variant="secondary" className="text-xs">
+                {interaction.provider} ({interaction.modelName})
+              </Badge>
+            </MetadataItem>
+            <MetadataItem label="Timestamp">
+              <div className="font-mono text-xs">
+                {formatDate({ date: interaction.createdAt })}
               </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Provider + Model
+            </MetadataItem>
+            {dynamicInteraction.externalAgentId && (
+              <MetadataItem label="External Agent">
+                <div className="font-mono text-xs">
+                  {dynamicInteraction.externalAgentId}
                 </div>
-                <div className="font-medium">
-                  {interaction.provider} ({interaction.modelName})
+              </MetadataItem>
+            )}
+            {dynamicInteraction.executionId && (
+              <MetadataItem label="Execution ID">
+                <div className="font-mono text-xs">
+                  {dynamicInteraction.executionId}
                 </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Tools Used
+              </MetadataItem>
+            )}
+            <MetadataItem label="Tools Used">
+              {toolsUsed.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {toolsUsed.map((toolName) => (
+                    <Badge
+                      key={toolName}
+                      variant="secondary"
+                      className="text-xs"
+                    >
+                      {toolName}
+                    </Badge>
+                  ))}
                 </div>
-                {toolsUsed.length > 0 ? (
-                  <div className="space-y-1">
-                    {toolsUsed.map((toolName) => (
-                      <div key={toolName} className="font-mono text-sm">
-                        {toolName}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground">None</div>
-                )}
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Tools Blocked
-                </div>
-                {toolsBlocked.length > 0 ? (
-                  <div className="space-y-1">
-                    {toolsBlocked.map((toolName) => (
-                      <div key={toolName} className="font-mono text-sm">
-                        {toolName}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground">None</div>
-                )}
-              </div>
-              {(() => {
-                const savings = calculateCostSavings(dynamicInteraction);
-                const effectiveCost = dynamicInteraction.cost || "0";
-                const effectiveBaselineCost =
-                  dynamicInteraction.baselineCost ||
-                  dynamicInteraction.cost ||
-                  "0";
-
-                return (
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Cost
-                    </div>
-                    <div className="flex gap-3">
-                      <TooltipProvider>
-                        <Savings
-                          cost={effectiveCost}
-                          baselineCost={effectiveBaselineCost}
-                          toonCostSavings={dynamicInteraction.toonCostSavings}
-                          toonTokensSaved={savings.toonTokensSaved}
-                          toonSkipReason={dynamicInteraction.toonSkipReason}
-                          format="percent"
-                          tooltip="always"
-                          variant="interaction"
-                          baselineModel={dynamicInteraction.baselineModel}
-                          actualModel={dynamicInteraction.model}
-                        />
-                      </TooltipProvider>
-                    </div>
-                  </div>
-                );
-              })()}
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">Tokens</div>
-                <div className="font-mono text-sm">
-                  {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
-                  {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
-                </div>
-              </div>
-              {isDualLlmRelevant && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Dual LLM Analysis
-                  </div>
-                  {dualLlmResult ? (
-                    <Badge className="bg-green-600">Analyzed</Badge>
-                  ) : (
-                    <div className="text-muted-foreground">Not analyzed</div>
-                  )}
-                </div>
+              ) : (
+                <div className="text-muted-foreground">None</div>
               )}
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Timestamp
+            </MetadataItem>
+            {toolsBlocked.length > 0 && (
+              <MetadataItem label="Tools Blocked">
+                <div className="flex flex-wrap gap-1">
+                  {toolsBlocked.map((toolName) => (
+                    <Badge
+                      key={toolName}
+                      variant="destructive"
+                      className="text-xs"
+                    >
+                      {toolName}
+                    </Badge>
+                  ))}
                 </div>
-                <div className="font-medium">
-                  {formatDate({ date: interaction.createdAt })}
-                </div>
-              </div>
-            </div>
-          </div>
+              </MetadataItem>
+            )}
+            {isDualLlmRelevant && (
+              <MetadataItem label="Dual LLM Analysis">
+                {dualLlmResult ? (
+                  <Badge className="bg-green-600">Analyzed</Badge>
+                ) : (
+                  <div className="text-muted-foreground">Not analyzed</div>
+                )}
+              </MetadataItem>
+            )}
+          </MetadataCard>
         </div>
 
         <div className="mb-8">
@@ -341,6 +323,6 @@ function LogDetail({
           </Accordion>
         </div>
       </div>
-    </>
+    </div>
   );
 }

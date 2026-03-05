@@ -22,6 +22,20 @@ import {
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
+/**
+ * Where an LLM proxy request originated from.
+ * Stored in the `source` column of the interactions table.
+ */
+export const InteractionSourceSchema = z.enum([
+  "api",
+  "chat",
+  "chatops:slack",
+  "chatops:ms-teams",
+  "email",
+]);
+
+export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
+
 export const UserInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -69,12 +83,18 @@ export const InteractionResponseSchema = z.union([
   Minimax.API.ChatCompletionResponseSchema,
 ]);
 
+const extendedFields = {
+  source: InteractionSourceSchema.nullable().optional(),
+  toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
+};
+
 /**
  * Base database schema without discriminated union
  * This is what Drizzle actually returns from the database
  */
 const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
+  extendedFields,
 );
 
 /**
@@ -244,11 +264,11 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
 export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {
+    ...extendedFields,
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
     response: InteractionResponseSchema,
-    toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   },
 ).extend({
   // Override profileId to be required for creating interactions
@@ -263,3 +283,44 @@ export type InsertInteraction = z.infer<typeof InsertInteractionSchema>;
 
 export type InteractionRequest = z.infer<typeof InteractionRequestSchema>;
 export type InteractionResponse = z.infer<typeof InteractionResponseSchema>;
+
+/**
+ * TOON skip reason counts for session summaries
+ */
+export const ToonSkipReasonCountsSchema = z.object({
+  applied: z.number(),
+  notEnabled: z.number(),
+  notEffective: z.number(),
+  noToolResults: z.number(),
+});
+
+/**
+ * Session summary schema for the sessions endpoint
+ */
+export const SessionSummarySchema = z.object({
+  sessionId: z.string().nullable(),
+  sessionSource: z.string().nullable(),
+  source: InteractionSourceSchema.nullable(),
+  interactionId: z.string().nullable(), // Only set for single interactions (null session)
+  requestCount: z.number(),
+  totalInputTokens: z.number(),
+  totalOutputTokens: z.number(),
+  totalCost: z.string().nullable(),
+  totalBaselineCost: z.string().nullable(),
+  totalToonCostSavings: z.string().nullable(),
+  toonSkipReasonCounts: ToonSkipReasonCountsSchema,
+  firstRequestTime: z.date(),
+  lastRequestTime: z.date(),
+  models: z.array(z.string()),
+  profileId: z.string().nullable(), // null when profile was deleted
+  profileName: z.string().nullable(),
+  externalAgentIds: z.array(z.string()),
+  externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names
+  userNames: z.array(z.string()),
+  lastInteractionRequest: z.unknown().nullable(),
+  lastInteractionType: z.string().nullable(),
+  conversationTitle: z.string().nullable(),
+  claudeCodeTitle: z.string().nullable(),
+});
+
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;

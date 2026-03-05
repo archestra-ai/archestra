@@ -11,6 +11,7 @@ import type {
   IncomingChatMessage,
 } from "@/types/chatops";
 import {
+  buildChatOpsSessionId,
   ChatOpsManager,
   findTolerantMatchLength,
   matchesAgentName,
@@ -1504,5 +1505,46 @@ describe("ChatOpsManager attachment passthrough", () => {
         attachments: [historyImageAttachment],
       }),
     );
+  });
+});
+
+describe("buildChatOpsSessionId", () => {
+  test("uses threadId when provided", () => {
+    expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe(
+      "chatops:slack:T456",
+    );
+  });
+
+  test("falls back to channelId when threadId is undefined", () => {
+    expect(buildChatOpsSessionId("slack", "C123")).toBe("chatops:slack:C123");
+  });
+
+  test("uses ms-teams provider ID", () => {
+    expect(buildChatOpsSessionId("ms-teams", "CH1", "TH1")).toBe(
+      "chatops:ms-teams:TH1",
+    );
+  });
+
+  test("uses channelId for non-threaded ms-teams message", () => {
+    expect(buildChatOpsSessionId("ms-teams", "CH1")).toBe(
+      "chatops:ms-teams:CH1",
+    );
+  });
+
+  test("hashes long MS Teams DM channel IDs to stay within exemplar budget", () => {
+    const longChannelId =
+      "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
+    const result = buildChatOpsSessionId("ms-teams", longChannelId);
+
+    expect(result).toMatch(/^chatops:ms-teams:[a-f0-9]{16}$/);
+    expect(result.length).toBeLessThanOrEqual(58);
+  });
+
+  test("produces same hash for same channel ID (deterministic)", () => {
+    const longChannelId =
+      "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
+    const a = buildChatOpsSessionId("ms-teams", longChannelId);
+    const b = buildChatOpsSessionId("ms-teams", longChannelId);
+    expect(a).toBe(b);
   });
 });

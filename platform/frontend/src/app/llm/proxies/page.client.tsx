@@ -478,7 +478,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   className="pl-9"
                 />
               </div>
-              <AgentScopeFilter />
+              <AgentScopeFilter onClearSearch={() => setSearchQuery("")} />
             </div>
 
             {!agents || agents.length === 0 ? (

@@ -1,7 +1,9 @@
 "use client";
 
+import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -20,8 +22,10 @@ type ScopeValue = "personal" | "team" | "org" | "built_in";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
+  onClearSearch,
 }: {
   showBuiltIn?: boolean;
+  onClearSearch?: () => void;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -38,6 +42,14 @@ export function AgentScopeFilter({
   const selectedAuthorIds = useMemo(
     () => (authorIdsParam ? authorIdsParam.split(",") : []),
     [authorIdsParam],
+  );
+
+  const nameFilter = searchParams.get("name");
+  const hasActiveFilters = !!(
+    scope ||
+    teamIdsParam ||
+    authorIdsParam ||
+    nameFilter
   );
 
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
@@ -90,6 +102,16 @@ export function AgentScopeFilter({
     },
     [updateUrlParams],
   );
+
+  const handleClearAll = useCallback(() => {
+    onClearSearch?.();
+    updateUrlParams({
+      scope: null,
+      teamIds: null,
+      authorIds: null,
+      name: null,
+    });
+  }, [updateUrlParams, onClearSearch]);
 
   const teamItems = useMemo(
     () => (teams ?? []).map((t) => ({ value: t.id, label: t.name })),
@@ -144,6 +166,17 @@ export function AgentScopeFilter({
           placeholder="All users"
           className="w-[200px]"
         />
+      )}
+      {hasActiveFilters && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleClearAll}
+          className="h-9 px-2 text-muted-foreground"
+        >
+          <X className="h-4 w-4 mr-1" />
+          Clear
+        </Button>
       )}
     </div>
   );

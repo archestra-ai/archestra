@@ -512,7 +512,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   className="pl-9"
                 />
               </div>
-              <AgentScopeFilter showBuiltIn />
+              <AgentScopeFilter
+                showBuiltIn
+                onClearSearch={() => setSearchQuery("")}
+              />
             </div>
 
             {!agents || agents.length === 0 ? (

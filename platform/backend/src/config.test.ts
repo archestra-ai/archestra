@@ -17,7 +17,7 @@ import {
   getTrustedOrigins,
   parseBodyLimit,
   parseContentMaxLength,
-  parseSentryTracesSampleRate,
+  parseSampleRate,
   parseVirtualKeyDefaultExpiration,
 } from "./config";
 
@@ -961,36 +961,36 @@ describe("parseVirtualKeyDefaultExpiration", () => {
   });
 });
 
-describe("parseSentryTracesSampleRate", () => {
-  test("should return default 0.2 when undefined", () => {
-    expect(parseSentryTracesSampleRate(undefined)).toBe(0.2);
+describe("parseSampleRate", () => {
+  test("should return default when undefined", () => {
+    expect(parseSampleRate(undefined, 0.2)).toBe(0.2);
   });
 
   test("should return default when empty string", () => {
-    expect(parseSentryTracesSampleRate("")).toBe(0.2);
+    expect(parseSampleRate("", 0.05)).toBe(0.05);
   });
 
   test("should parse valid rate", () => {
-    expect(parseSentryTracesSampleRate("0.5")).toBe(0.5);
+    expect(parseSampleRate("0.5", 0.2)).toBe(0.5);
   });
 
   test("should parse 0", () => {
-    expect(parseSentryTracesSampleRate("0")).toBe(0);
+    expect(parseSampleRate("0", 0.2)).toBe(0);
   });
 
   test("should parse 1", () => {
-    expect(parseSentryTracesSampleRate("1")).toBe(1);
+    expect(parseSampleRate("1", 0.2)).toBe(1);
   });
 
   test("should return default for value above 1", () => {
-    expect(parseSentryTracesSampleRate("1.5")).toBe(0.2);
+    expect(parseSampleRate("1.5", 0.2)).toBe(0.2);
   });
 
   test("should return default for negative value", () => {
-    expect(parseSentryTracesSampleRate("-0.1")).toBe(0.2);
+    expect(parseSampleRate("-0.1", 0.3)).toBe(0.3);
   });
 
   test("should return default for non-numeric value", () => {
-    expect(parseSentryTracesSampleRate("abc")).toBe(0.2);
+    expect(parseSampleRate("abc", 0.1)).toBe(0.1);
   });
 });

@@ -440,10 +440,10 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
-export const parseSentryTracesSampleRate = (
+export const parseSampleRate = (
   envValue: string | undefined,
+  defaultRate: number,
 ): number => {
-  const defaultRate = 0.2;
   if (!envValue) return defaultRate;
   const parsed = Number.parseFloat(envValue);
   if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) return defaultRate;
@@ -738,8 +738,13 @@ const config = {
       dsn: sentryDsn,
       environment:
         process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
-      tracesSampleRate: parseSentryTracesSampleRate(
+      tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
+        0.2,
+      ),
+      mcpGatewayTracesSampleRate: parseSampleRate(
+        process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,
+        0.05,
       ),
     },
   },

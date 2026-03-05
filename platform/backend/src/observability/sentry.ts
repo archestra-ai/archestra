@@ -19,7 +19,13 @@ import { ApiError } from "@/types";
 const {
   api: { version },
   observability: {
-    sentry: { enabled, dsn, environment: sentryEnvironment, tracesSampleRate },
+    sentry: {
+      enabled,
+      dsn,
+      environment: sentryEnvironment,
+      tracesSampleRate,
+      mcpGatewayTracesSampleRate,
+    },
   },
 } = config;
 
@@ -149,7 +155,7 @@ const initSentry = async (): Promise<void> => {
 
       // Sample heavily: MCP Gateway is ~84% of all spans
       if (url.startsWith(MCP_GATEWAY_PREFIX)) {
-        return 0.05;
+        return mcpGatewayTracesSampleRate;
       }
 
       return tracesSampleRate;

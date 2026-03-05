@@ -311,6 +311,14 @@ export class ChatOpsManager {
     const message = await provider.parseWebhookNotification(body, headers);
     if (!message) return;
 
+    // Notify about missing Slack scopes (rate-limited, at most once per 30 days)
+    if (
+      provider instanceof SlackProvider &&
+      provider.getMissingScopes().length > 0
+    ) {
+      provider.notifyMissingScopes(message).catch(() => {});
+    }
+
     // Discover channels in background
     if (message.workspaceId) {
       this.discoverChannels({

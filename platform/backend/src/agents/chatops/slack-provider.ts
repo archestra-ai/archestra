@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { TimeInMs } from "@shared";
+import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
@@ -54,6 +54,7 @@ class SlackProvider implements ChatOpsProvider {
   private socketModeClient: SocketModeClient | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
+  private missingScopes: string[] = [];
 
   constructor(slackConfig: SlackConfig) {
     this.config = slackConfig;
@@ -106,6 +107,9 @@ class SlackProvider implements ChatOpsProvider {
       );
       throw error;
     }
+
+    // Check granted scopes against required scopes (non-blocking)
+    await this.checkGrantedScopes();
 
     if (this.isSocketMode()) {
       await this.startSocketMode();
@@ -899,6 +903,10 @@ class SlackProvider implements ChatOpsProvider {
     return this.botUserId;
   }
 
+  getMissingScopes(): string[] {
+    return this.missingScopes;
+  }
+
   // ===========================================================================
   // Private Methods
   // ===========================================================================
@@ -1221,6 +1229,101 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     return results;
+  }
+
+  /**
+   * Check the bot token's granted scopes against SLACK_REQUIRED_BOT_SCOPES.
+   * Uses a raw fetch to auth.test to read the x-oauth-scopes response header,
+   * which the @slack/web-api SDK does not expose.
+   */
+  private async checkGrantedScopes(): Promise<void> {
+    try {
+      const response = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.config.botToken}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      const scopeHeader = response.headers.get("x-oauth-scopes");
+      if (!scopeHeader) {
+        logger.debug(
+          "[SlackProvider] No x-oauth-scopes header in auth.test response",
+        );
+        return;
+      }
+
+      const grantedScopes = new Set(
+        scopeHeader.split(",").map((s) => s.trim()),
+      );
+      const missing = SLACK_REQUIRED_BOT_SCOPES.filter(
+        (s) => !grantedScopes.has(s),
+      );
+
+      if (missing.length > 0) {
+        this.missingScopes = missing;
+        logger.warn(
+          { missingScopes: missing },
+          "[SlackProvider] Bot token is missing required scopes. Some features (e.g., file downloads) may not work.",
+        );
+      } else {
+        logger.debug("[SlackProvider] All required scopes are granted");
+      }
+    } catch (error) {
+      // Non-fatal — scope check is best-effort
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to check granted scopes (non-fatal)",
+      );
+    }
+  }
+
+  /**
+   * Send a rate-limited notification to a Slack thread when missing scopes
+   * are detected. Throttled to at most once per 30 days per workspace.
+   */
+  async notifyMissingScopes(message: IncomingChatMessage): Promise<void> {
+    if (this.missingScopes.length === 0 || !this.client) return;
+
+    const cacheKey: AllowedCacheKey = `${CacheKey.SlackScopeNotification}-${this.teamId ?? "unknown"}`;
+    const alreadyNotified = await cacheManager.get<boolean>(cacheKey);
+    if (alreadyNotified) return;
+
+    const scopeList = this.missingScopes.map((s) => `  • \`${s}\``).join("\n");
+
+    const appSettingsUrl = this.config.appId
+      ? `https://api.slack.com/apps/${this.config.appId}/oauth`
+      : "https://api.slack.com/apps";
+
+    const text = [
+      ":warning: *Your Archestra Slack app is missing required scopes*",
+      "",
+      "The following scopes need to be added to your Slack app:",
+      scopeList,
+      "",
+      "*To update your app:*",
+      `1. Open your <${appSettingsUrl}|Slack app settings>`,
+      "2. Go to *OAuth & Permissions* → *Scopes* → *Bot Token Scopes*",
+      "3. Add the missing scopes listed above",
+      "4. Click *Reinstall to Workspace* to apply the changes",
+    ].join("\n");
+
+    try {
+      await this.client.chat.postMessage({
+        channel: message.channelId,
+        text,
+        thread_ts: message.threadId,
+      });
+
+      // Throttle: don't send again for 30 days
+      await cacheManager.set(cacheKey, true, TimeInMs.Day * 30);
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to send missing-scope notification (non-fatal)",
+      );
+    }
   }
 
   private cleanBotMention(text: string): string {

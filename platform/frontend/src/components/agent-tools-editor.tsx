@@ -274,7 +274,7 @@ const AgentToolsEditorContent = forwardRef<
           isPlaywrightCatalogItem(changes.catalogItem.id) ||
           changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
 
-        await Promise.all([
+        const results = await Promise.allSettled([
           ...toRemove.map((toolId) =>
             unassignTool.mutateAsync({
               agentId: targetAgentId,
@@ -302,6 +302,11 @@ const AgentToolsEditorContent = forwardRef<
             }),
           ),
         ]);
+
+        const failures = results.filter((r) => r.status === "rejected");
+        if (failures.length > 0) {
+          throw (failures[0] as PromiseRejectedResult).reason;
+        }
 
         // Update credential on tools that remain assigned but whose credential changed
         const toKeep = currentAssigned.filter((at) =>

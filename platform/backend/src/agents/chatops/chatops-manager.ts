@@ -1,4 +1,4 @@
-import { executeA2AMessage } from "@/agents/a2a-executor";
+import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -24,6 +24,7 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -637,8 +638,9 @@ export class ChatOpsManager {
       return { success: false, error: authResult.error };
     }
 
-    // Build context from thread history
-    const contextMessages = await this.fetchThreadHistory(message, provider);
+    // Build context from thread history (includes downloading historical image attachments)
+    const { contextMessages, historyAttachments } =
+      await this.fetchThreadHistory(message, provider);
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
@@ -647,11 +649,21 @@ export class ChatOpsManager {
       fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
+    // Merge history attachments with current message attachments
+    const mergedAttachments = [
+      ...(historyAttachments || []),
+      ...(message.attachments || []),
+    ];
+
     // Execute the A2A message using the agent
     return this.executeAndReply({
       agent: agentToUse,
       binding,
-      message,
+      message: {
+        ...message,
+        attachments:
+          mergedAttachments.length > 0 ? mergedAttachments : undefined,
+      },
       provider,
       fullMessage,
       sendReply,
@@ -841,7 +853,10 @@ export class ChatOpsManager {
   private async fetchThreadHistory(
     message: IncomingChatMessage,
     provider: ChatOpsProvider,
-  ): Promise<string[]> {
+  ): Promise<{
+    contextMessages: string[];
+    historyAttachments: A2AAttachment[];
+  }> {
     logger.debug(
       {
         messageId: message.messageId,
@@ -855,7 +870,7 @@ export class ChatOpsManager {
 
     if (!message.threadId) {
       logger.debug("[ChatOps] No threadId, skipping thread history fetch");
-      return [];
+      return { contextMessages: [], historyAttachments: [] };
     }
 
     try {
@@ -871,17 +886,78 @@ export class ChatOpsManager {
         "[ChatOps] Thread history fetched",
       );
 
-      return history.map((msg) => {
+      const contextMessages = history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
         const sender = msg.isFromBot ? "Assistant" : msg.senderName;
         return `${sender}: ${text}`;
       });
+
+      // Collect image files from non-bot user messages in history
+      const historyFiles = history
+        .filter((msg) => !msg.isFromBot && msg.files && msg.files.length > 0)
+        .flatMap((msg) => msg.files ?? [])
+        .filter((f) => f.mimetype.startsWith("image/"));
+
+      const historyAttachments: Array<{
+        contentType: string;
+        contentBase64: string;
+        name?: string;
+      }> = [];
+
+      if (historyFiles.length > 0) {
+        // Calculate how much budget the current message attachments already use
+        const currentAttachmentSize =
+          message.attachments?.reduce(
+            (sum, a) => sum + Math.ceil((a.contentBase64.length * 3) / 4),
+            0,
+          ) ?? 0;
+        const remainingBudget =
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE -
+          currentAttachmentSize;
+
+        if (remainingBudget > 0) {
+          // Limit files to download based on remaining budget
+          const filesToDownload = historyFiles.filter(
+            (f) =>
+              !f.size ||
+              f.size <= CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+          );
+
+          try {
+            const downloaded = await provider.downloadFiles(filesToDownload);
+            // Trim to remaining budget
+            let totalSize = 0;
+            for (const attachment of downloaded) {
+              const size = Math.ceil((attachment.contentBase64.length * 3) / 4);
+              if (totalSize + size > remainingBudget) break;
+              totalSize += size;
+              historyAttachments.push(attachment);
+            }
+            if (historyAttachments.length > 0) {
+              logger.info(
+                {
+                  downloadedCount: historyAttachments.length,
+                  totalHistoryFiles: historyFiles.length,
+                },
+                "[ChatOps] Downloaded image attachments from thread history",
+              );
+            }
+          } catch (error) {
+            logger.warn(
+              { error: errorMessage(error) },
+              "[ChatOps] Failed to download history attachments",
+            );
+          }
+        }
+      }
+
+      return { contextMessages, historyAttachments };
     } catch (error) {
       logger.error(
         { error: errorMessage(error) },
         "[ChatOps] Failed to fetch thread history",
       );
-      return [];
+      return { contextMessages: [], historyAttachments: [] };
     }
   }
 
@@ -1180,6 +1256,10 @@ export class ChatOpsManager {
             organizationId: binding.organizationId,
             message: fullMessage,
             userId,
+            attachments:
+              message.attachments && message.attachments.length > 0
+                ? message.attachments
+                : undefined,
           });
         },
       });

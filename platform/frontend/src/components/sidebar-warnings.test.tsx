@@ -177,7 +177,7 @@ describe("SidebarWarnings", () => {
         isLoading: false,
       });
 
-      const { container } = render(<SidebarWarnings />);
+      render(<SidebarWarnings />);
       expect(
         screen.queryByTestId("default-credentials-warning"),
       ).not.toBeInTheDocument();

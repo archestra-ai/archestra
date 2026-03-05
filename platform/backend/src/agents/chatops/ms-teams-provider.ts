@@ -31,11 +31,17 @@ import type {
   ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
+  ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
-import { CHATOPS_TEAM_CACHE, CHATOPS_THREAD_HISTORY } from "./constants";
+import { detectImageType } from "@/utils/detect-image-type";
+import {
+  CHATOPS_ATTACHMENT_LIMITS,
+  CHATOPS_TEAM_CACHE,
+  CHATOPS_THREAD_HISTORY,
+} from "./constants";
 import { errorMessage } from "./utils";
 
 /**
@@ -176,6 +182,12 @@ class MSTeamsProvider implements ChatOpsProvider {
         type?: string;
         mentioned?: { id?: string; name?: string };
       }>;
+      attachments?: Array<{
+        contentType?: string;
+        contentUrl?: string;
+        content?: string;
+        name?: string;
+      }>;
     };
 
     logger.debug(
@@ -241,6 +253,12 @@ class MSTeamsProvider implements ChatOpsProvider {
     const teamData = activity.channelData?.team;
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
+    // Download file attachments (skip Adaptive Cards and other non-file attachments)
+    const attachments = await this.downloadTeamsAttachments(
+      activity.attachments,
+      activity.serviceUrl,
+    );
+
     return {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
@@ -263,6 +281,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         ),
         authHeader: headers.authorization || headers.Authorization,
       },
+      ...(attachments.length > 0 && { attachments }),
     };
   }
 
@@ -851,8 +870,279 @@ class MSTeamsProvider implements ChatOpsProvider {
     });
   }
 
+  async downloadFiles(
+    files: ChatThreadMessageFile[],
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    // Convert ChatThreadMessageFile[] to the format downloadTeamsAttachments expects
+    const teamsAttachments = files.map((f) => ({
+      contentType: f.mimetype,
+      contentUrl: f.url,
+      name: f.name,
+    }));
+    // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
+    return this.downloadTeamsAttachments(teamsAttachments);
+  }
+
   // ===========================================================================
   // Private Methods
+
+  /**
+   * Download file attachments from a Teams activity and convert to A2AAttachment format.
+   * Skips Adaptive Cards and other non-file content types.
+   *
+   * Authentication: Files uploaded directly in Teams chat use pre-authenticated Azure
+   * Blob Storage URLs. Files shared from SharePoint/OneDrive may require a Bearer token.
+   * When the contentUrl hostname matches the Bot Framework serviceUrl, we authenticate
+   * using client credentials (appId/appSecret) to obtain a Bot Connector token.
+   */
+  private async downloadTeamsAttachments(
+    attachments?: Array<{
+      contentType?: string;
+      contentUrl?: string;
+      content?: string;
+      name?: string;
+    }>,
+    serviceUrl?: string,
+  ): Promise<
+    Array<{ contentType: string; contentBase64: string; name?: string }>
+  > {
+    if (!attachments || attachments.length === 0) return [];
+
+    // Filter to only file/image attachments (skip Adaptive Cards, hero cards, etc.)
+    const fileAttachments = attachments.filter(
+      (a) =>
+        a.contentUrl &&
+        a.contentType &&
+        !a.contentType.startsWith("application/vnd.microsoft.card."),
+    );
+
+    if (fileAttachments.length === 0) return [];
+
+    const toProcess = fileAttachments.slice(
+      0,
+      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
+    );
+    const results: Array<{
+      contentType: string;
+      contentBase64: string;
+      name?: string;
+    }> = [];
+    let totalSize = 0;
+
+    // Lazily obtain a Bot Connector token when needed for authenticated downloads
+    let botToken: string | null = null;
+
+    for (const attachment of toProcess) {
+      if (!attachment.contentUrl || !attachment.contentType) continue;
+
+      // SSRF protection: only allow downloads from known Microsoft domains
+      if (!isAllowedTeamsFileHost(attachment.contentUrl, serviceUrl)) {
+        logger.warn(
+          {
+            name: attachment.name,
+            host: safeHostname(attachment.contentUrl),
+          },
+          "[MSTeamsProvider] Skipping attachment from unexpected domain",
+        );
+        continue;
+      }
+
+      try {
+        // Determine if the URL needs authentication (same host as serviceUrl)
+        const headers: Record<string, string> = {};
+        if (serviceUrl && needsBotAuth(attachment.contentUrl, serviceUrl)) {
+          if (!botToken) {
+            botToken = await this.getBotConnectorToken();
+          }
+          if (botToken) {
+            headers.Authorization = `Bearer ${botToken}`;
+          }
+        }
+
+        const response = await fetch(
+          attachment.contentUrl,
+          Object.keys(headers).length > 0 ? { headers } : undefined,
+        );
+
+        if (!response.ok) {
+          logger.warn(
+            {
+              name: attachment.name,
+              contentType: attachment.contentType,
+              status: response.status,
+            },
+            "[MSTeamsProvider] Failed to download attachment",
+          );
+          continue;
+        }
+
+        // Pre-check Content-Length to avoid buffering oversized files
+        const contentLength = Number.parseInt(
+          response.headers.get("content-length") || "0",
+          10,
+        );
+        if (
+          contentLength > 0 &&
+          contentLength > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+        ) {
+          logger.info(
+            { name: attachment.name, contentLength },
+            "[MSTeamsProvider] Skipping oversized attachment (Content-Length)",
+          );
+          continue;
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        // Skip files that exceed individual size limit
+        if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {
+          logger.info(
+            {
+              name: attachment.name,
+              size: buffer.length,
+              maxSize: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+            },
+            "[MSTeamsProvider] Skipping attachment exceeding size limit",
+          );
+          continue;
+        }
+
+        // Skip if total size would exceed limit
+        if (
+          totalSize + buffer.length >
+          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+        ) {
+          logger.info(
+            {
+              name: attachment.name,
+              totalSize,
+              maxTotalSize:
+                CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+            },
+            "[MSTeamsProvider] Total attachments size limit reached",
+          );
+          break;
+        }
+
+        totalSize += buffer.length;
+        // Resolve content type: prefer HTTP header when specific, fall back to
+        // attachment metadata, and detect from magic bytes as last resort when
+        // both are generic (e.g. "application/octet-stream" or "image/*").
+        const httpContentType =
+          response.headers.get("content-type")?.split(";")[0]?.trim() || "";
+        const isGenericContentType = (ct: string) =>
+          !ct || ct === "application/octet-stream" || ct.includes("*");
+        const resolvedContentType = !isGenericContentType(httpContentType)
+          ? httpContentType
+          : !isGenericContentType(attachment.contentType ?? "")
+            ? (attachment.contentType as string)
+            : detectImageType(buffer);
+        results.push({
+          contentType: resolvedContentType,
+          contentBase64: buffer.toString("base64"),
+          name: attachment.name,
+        });
+
+        logger.debug(
+          {
+            name: attachment.name,
+            contentType: attachment.contentType,
+            size: buffer.length,
+          },
+          "[MSTeamsProvider] Downloaded Teams attachment",
+        );
+      } catch (error) {
+        logger.warn(
+          { name: attachment.name, error: errorMessage(error) },
+          "[MSTeamsProvider] Error downloading attachment",
+        );
+      }
+    }
+
+    if (results.length > 0) {
+      logger.info(
+        {
+          fileCount: results.length,
+          totalSize,
+          originalCount: attachments.length,
+        },
+        "[MSTeamsProvider] Downloaded attachments from Teams message",
+      );
+    }
+
+    return results;
+  }
+
+  /**
+   * Obtain a Bot Connector token via OAuth2 client credentials grant.
+   * Used to authenticate downloads from the Bot Framework service URL.
+   * Cached for 50 minutes (tokens expire after 60 minutes).
+   */
+  private botConnectorTokenCache: { token: string; expiresAt: number } | null =
+    null;
+
+  private async getBotConnectorToken(): Promise<string | null> {
+    // Return cached token if still valid (with 10-minute safety margin)
+    if (
+      this.botConnectorTokenCache &&
+      Date.now() < this.botConnectorTokenCache.expiresAt
+    ) {
+      return this.botConnectorTokenCache.token;
+    }
+
+    const { appId, appSecret, tenantId } = this.config;
+    if (!appId || !appSecret) return null;
+
+    const tokenTenant = tenantId || "botframework.com";
+    const tokenUrl = `https://login.microsoftonline.com/${tokenTenant}/oauth2/v2.0/token`;
+
+    try {
+      const response = await fetch(tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: appId,
+          client_secret: appSecret,
+          scope: "https://api.botframework.com/.default",
+        }),
+      });
+
+      if (!response.ok) {
+        logger.warn(
+          { status: response.status },
+          "[MSTeamsProvider] Failed to obtain Bot Connector token for attachment download",
+        );
+        return null;
+      }
+
+      const data = (await response.json()) as {
+        access_token?: string;
+        expires_in?: number;
+      };
+      const token = data.access_token ?? null;
+
+      if (token) {
+        // Cache with 10-minute safety margin before expiry (default 60 min)
+        const expiresInMs = ((data.expires_in ?? 3600) - 600) * 1000;
+        this.botConnectorTokenCache = {
+          token,
+          expiresAt: Date.now() + expiresInMs,
+        };
+      }
+
+      return token;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Error obtaining Bot Connector token",
+      );
+      return null;
+    }
+  }
+
   // ===========================================================================
 
   private async fetchGroupChatHistory(
@@ -948,6 +1238,21 @@ class MSTeamsProvider implements ChatOpsProvider {
       .filter((msg) => msg.id && msg.id !== excludeMessageId)
       .map((msg) => {
         const isUserMessage = Boolean(msg.from?.user);
+
+        // Extract file attachment metadata from Graph API ChatMessage.attachments
+        const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
+          .filter(
+            (a) =>
+              a.contentUrl &&
+              a.contentType &&
+              !a.contentType.startsWith("application/vnd.microsoft.card."),
+          )
+          .map((a) => ({
+            url: a.contentUrl as string,
+            mimetype: a.contentType as string,
+            name: a.name ?? undefined,
+          }));
+
         return {
           messageId: msg.id as string,
           senderId: isUserMessage
@@ -966,6 +1271,7 @@ class MSTeamsProvider implements ChatOpsProvider {
           isFromBot:
             msg.from?.user?.id === botAppId ||
             msg.from?.application?.id === botAppId,
+          ...(files.length > 0 && { files }),
         };
       })
       .filter((msg) => msg.text.trim().length > 0)
@@ -992,6 +1298,22 @@ function cleanBotMention(text: string, botName?: string): string {
 
 function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Check if a content URL likely needs Bot Framework authentication.
+ * URLs hosted on the same domain as the Bot Framework serviceUrl
+ * (e.g., smba.trafficmanager.net) require a Bot Connector token.
+ * Azure Blob Storage URLs (*.blob.core.windows.net) are pre-authenticated.
+ */
+function needsBotAuth(contentUrl: string, serviceUrl: string): boolean {
+  try {
+    const contentHost = new URL(contentUrl).hostname;
+    const serviceHost = new URL(serviceUrl).hostname;
+    return contentHost === serviceHost;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1101,4 +1423,39 @@ function stripHtmlTags(html: string): string {
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * SSRF protection: only allow Teams file downloads from known Microsoft domains.
+ * Accepts Azure Blob Storage, SharePoint, and the Bot Framework service URL host.
+ */
+function isAllowedTeamsFileHost(
+  contentUrl: string,
+  serviceUrl?: string,
+): boolean {
+  try {
+    const hostname = new URL(contentUrl).hostname;
+    if (
+      hostname.endsWith(".blob.core.windows.net") ||
+      hostname.endsWith(".sharepoint.com")
+    ) {
+      return true;
+    }
+    // Also allow the Bot Framework serviceUrl host (e.g., smba.trafficmanager.net)
+    if (serviceUrl) {
+      const serviceHost = new URL(serviceUrl).hostname;
+      if (hostname === serviceHost) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "invalid-url";
+  }
 }

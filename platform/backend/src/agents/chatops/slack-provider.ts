@@ -1140,6 +1140,22 @@ class SlackProvider implements ChatOpsProvider {
           continue;
         }
 
+        // Pre-check Content-Length to avoid buffering oversized files
+        const contentLength = Number.parseInt(
+          response.headers.get("content-length") || "0",
+          10,
+        );
+        if (
+          contentLength > 0 &&
+          contentLength > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+        ) {
+          logger.info(
+            { fileId: file.id, contentLength },
+            "[SlackProvider] Skipping oversized attachment (Content-Length)",
+          );
+          continue;
+        }
+
         const buffer = Buffer.from(await response.arrayBuffer());
 
         // Double-check actual size against individual limit
@@ -1246,9 +1262,7 @@ function isSlackFileUrl(url: string): boolean {
   try {
     const hostname = new URL(url).hostname;
     return (
-      hostname === "slack.com" ||
-      hostname.endsWith(".slack.com") ||
-      hostname === "files.slack.com"
+      hostname === "files.slack.com" || hostname === "files-origin.slack.com"
     );
   } catch {
     return false;

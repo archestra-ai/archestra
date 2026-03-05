@@ -937,6 +937,18 @@ class MSTeamsProvider implements ChatOpsProvider {
     for (const attachment of toProcess) {
       if (!attachment.contentUrl || !attachment.contentType) continue;
 
+      // SSRF protection: only allow downloads from known Microsoft domains
+      if (!isAllowedTeamsFileHost(attachment.contentUrl, serviceUrl)) {
+        logger.warn(
+          {
+            name: attachment.name,
+            host: safeHostname(attachment.contentUrl),
+          },
+          "[MSTeamsProvider] Skipping attachment from unexpected domain",
+        );
+        continue;
+      }
+
       try {
         // Determine if the URL needs authentication (same host as serviceUrl)
         const headers: Record<string, string> = {};
@@ -962,6 +974,22 @@ class MSTeamsProvider implements ChatOpsProvider {
               status: response.status,
             },
             "[MSTeamsProvider] Failed to download attachment",
+          );
+          continue;
+        }
+
+        // Pre-check Content-Length to avoid buffering oversized files
+        const contentLength = Number.parseInt(
+          response.headers.get("content-length") || "0",
+          10,
+        );
+        if (
+          contentLength > 0 &&
+          contentLength > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+        ) {
+          logger.info(
+            { name: attachment.name, contentLength },
+            "[MSTeamsProvider] Skipping oversized attachment (Content-Length)",
           );
           continue;
         }
@@ -1395,4 +1423,39 @@ function stripHtmlTags(html: string): string {
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * SSRF protection: only allow Teams file downloads from known Microsoft domains.
+ * Accepts Azure Blob Storage, SharePoint, and the Bot Framework service URL host.
+ */
+function isAllowedTeamsFileHost(
+  contentUrl: string,
+  serviceUrl?: string,
+): boolean {
+  try {
+    const hostname = new URL(contentUrl).hostname;
+    if (
+      hostname.endsWith(".blob.core.windows.net") ||
+      hostname.endsWith(".sharepoint.com")
+    ) {
+      return true;
+    }
+    // Also allow the Bot Framework serviceUrl host (e.g., smba.trafficmanager.net)
+    if (serviceUrl) {
+      const serviceHost = new URL(serviceUrl).hostname;
+      if (hostname === serviceHost) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "invalid-url";
+  }
 }

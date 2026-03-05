@@ -1255,40 +1255,23 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_, reply) => {
-      // Get models with their API key relationships
+      // Get models with their API key relationships.
+      // Only returns models that have at least one linked API key.
+      // Models without API keys (orphaned after key deletion) are excluded
+      // to avoid showing stale entries with no provider access (#3138).
       const modelsWithApiKeys =
         await ApiKeyModelModel.getAllModelsWithApiKeys();
 
-      // Also include unlinked models (e.g. created by ensureModelExists during proxy
-      // requests) but ONLY for providers that have at least one configured API key.
-      // This prevents showing models from unconfigured providers.
-      // Use chat_api_keys table directly (not api_key_models join table) because
-      // model sync may not have linked models yet (e.g. timing issue on startup).
-      const allModels = await ModelModel.findAll();
-      const linkedModelIds = new Set(modelsWithApiKeys.map((m) => m.model.id));
-      const configuredProviders =
-        await ChatApiKeyModel.getConfiguredProviders();
-      const unlinkedModels = allModels.filter(
-        (m) => !linkedModelIds.has(m.id) && configuredProviders.has(m.provider),
-      );
-
       // Transform to response format with capabilities and markers
-      const response = [
-        ...modelsWithApiKeys.map(({ model, isFastest, isBest, apiKeys }) => ({
+      const response = modelsWithApiKeys.map(
+        ({ model, isFastest, isBest, apiKeys }) => ({
           ...model,
           isFastest,
           isBest,
           apiKeys,
           capabilities: ModelModel.toCapabilities(model),
-        })),
-        ...unlinkedModels.map((model) => ({
-          ...model,
-          isFastest: false,
-          isBest: false,
-          apiKeys: [],
-          capabilities: ModelModel.toCapabilities(model),
-        })),
-      ];
+        }),
+      );
 
       logger.debug(
         { modelCount: response.length },

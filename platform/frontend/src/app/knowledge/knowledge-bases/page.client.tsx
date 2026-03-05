@@ -2,10 +2,13 @@
 
 import type { archestraApiTypes } from "@shared";
 import {
+  ArrowLeft,
+  Check,
   ChevronDown,
   ChevronRight,
   Globe,
   Info,
+  Link2,
   Pencil,
   Plus,
   RefreshCw,
@@ -40,6 +43,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  useConnectors as useAllConnectors,
+  useAssignConnectorToKnowledgeBases,
   useConnectors,
   useDeleteConnector,
   useUpdateConnector,
@@ -75,7 +80,19 @@ function KnowledgeBasesList() {
   const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
     null,
   );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const items = knowledgeBases?.data ?? [];
 
@@ -105,10 +122,8 @@ function KnowledgeBasesList() {
                 <KnowledgeBaseCard
                   key={kb.id}
                   kb={kb}
-                  isExpanded={expandedId === kb.id}
-                  onToggle={() =>
-                    setExpandedId(expandedId === kb.id ? null : kb.id)
-                  }
+                  isExpanded={expandedIds.has(kb.id)}
+                  onToggle={() => toggleExpanded(kb.id)}
                   onEdit={() => setEditingItem(kb)}
                   onDelete={() => setDeletingId(kb.id)}
                 />
@@ -155,7 +170,7 @@ function KnowledgeBaseCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const [isCreateConnectorOpen, setIsCreateConnectorOpen] = useState(false);
+  const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
   const isOrgWide = kb.visibility === "org-wide";
   const isAutoSync = kb.visibility === "auto-sync-permissions";
   const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
@@ -206,7 +221,7 @@ function KnowledgeBaseCard({
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
-              setIsCreateConnectorOpen(true);
+              setIsAddConnectorOpen(true);
             }}
           >
             <Plus className="h-4 w-4 text-muted-foreground" />
@@ -241,10 +256,11 @@ function KnowledgeBaseCard({
         </div>
       )}
 
-      <CreateConnectorDialog
+      <AddConnectorDialog
         knowledgeBaseId={kb.id}
-        open={isCreateConnectorOpen}
-        onOpenChange={setIsCreateConnectorOpen}
+        assignedConnectorIds={new Set(kb.connectors.map((c) => c.id))}
+        open={isAddConnectorOpen}
+        onOpenChange={setIsAddConnectorOpen}
       />
     </div>
   );
@@ -333,25 +349,19 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                       className="h-6 w-6"
                     />
                   </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{connector.name}</span>
-                    <div className="flex items-center gap-2">
-                      {connector.lastSyncAt ? (
-                        <span className="text-sm text-muted-foreground">
-                          {formatDate({ date: connector.lastSyncAt })}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          Never synced
-                        </span>
-                      )}
-                      <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                    </div>
-                  </div>
+                  <span className="font-medium">{connector.name}</span>
                 </div>
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center gap-2 mr-4">
+                    <ConnectorStatusBadge status={connector.lastSyncStatus} />
+                    {connector.lastSyncAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate({ date: connector.lastSyncAt })}
+                      </span>
+                    )}
+                  </div>
                   <Switch
                     checked={connector.enabled}
                     onCheckedChange={(checked) =>
@@ -415,6 +425,204 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           onOpenChange={(open) => !open && setDeletingConnectorId(null)}
         />
       )}
+    </>
+  );
+}
+
+function AddConnectorDialog({
+  knowledgeBaseId,
+  assignedConnectorIds,
+  open,
+  onOpenChange,
+}: {
+  knowledgeBaseId: string;
+  assignedConnectorIds: Set<string>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [step, setStep] = useState<"choose" | "reuse" | "create">("choose");
+  const { data: allConnectors } = useAllConnectors();
+  const assignMutation = useAssignConnectorToKnowledgeBases();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const availableConnectors = (allConnectors?.data ?? []).filter(
+    (c) => !assignedConnectorIds.has(c.id),
+  );
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleAssign = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    for (const connectorId of selectedIds) {
+      await assignMutation.mutateAsync({
+        connectorId,
+        knowledgeBaseIds: [knowledgeBaseId],
+      });
+    }
+    setSelectedIds(new Set());
+    setStep("choose");
+    onOpenChange(false);
+  }, [selectedIds, knowledgeBaseId, assignMutation, onOpenChange]);
+
+  const handleClose = (isOpen: boolean) => {
+    if (!isOpen) {
+      setStep("choose");
+      setSelectedIds(new Set());
+    }
+    onOpenChange(isOpen);
+  };
+
+  return (
+    <>
+      <Dialog open={open && step !== "create"} onOpenChange={handleClose}>
+        <DialogContent className="max-w-xl">
+          {step === "choose" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Add Connector</DialogTitle>
+                <DialogDescription>
+                  Reuse an existing connector or create a new one.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setStep("reuse")}
+                  disabled={availableConnectors.length === 0}
+                  className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                    <Link2 className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Reuse Existing</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {availableConnectors.length === 0
+                        ? "No unassigned connectors"
+                        : `${availableConnectors.length} available`}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("create")}
+                  className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                    <Plus className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Create New</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Set up a new connector
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === "reuse" && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      setStep("choose");
+                      setSelectedIds(new Set());
+                    }}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  Select Connectors
+                </DialogTitle>
+                <DialogDescription>
+                  Choose connectors to assign to this knowledge base.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3 py-2 max-h-[50vh] overflow-y-auto">
+                {availableConnectors.map((connector) => {
+                  const isSelected = selectedIds.has(connector.id);
+                  return (
+                    <button
+                      key={connector.id}
+                      type="button"
+                      onClick={() => toggleSelected(connector.id)}
+                      className={cn(
+                        "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                        isSelected && "border-primary bg-primary/5",
+                      )}
+                    >
+                      {isSelected && (
+                        <div className="absolute top-2 right-2">
+                          <Check className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                        <ConnectorTypeIcon
+                          type={connector.connectorType}
+                          className="h-5 w-5"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {connector.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {connector.connectorType}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setStep("choose");
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAssign}
+                  disabled={selectedIds.size === 0 || assignMutation.isPending}
+                >
+                  {assignMutation.isPending
+                    ? "Assigning..."
+                    : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <CreateConnectorDialog
+        knowledgeBaseId={knowledgeBaseId}
+        open={open && step === "create"}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setStep("choose");
+            onOpenChange(false);
+          }
+        }}
+      />
     </>
   );
 }

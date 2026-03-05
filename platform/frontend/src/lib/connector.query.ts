@@ -34,6 +34,12 @@ export function useConnectors(knowledgeBaseId?: string) {
       }
       return data;
     },
+    refetchInterval: (query) => {
+      const hasRunning = query.state.data?.data?.some(
+        (c) => c.lastSyncStatus === "running",
+      );
+      return hasRunning ? 3000 : false;
+    },
   });
 }
 
@@ -49,6 +55,9 @@ export function useConnector(id: string) {
       return data;
     },
     enabled: !!id,
+    refetchInterval: (query) => {
+      return query.state.data?.lastSyncStatus === "running" ? 3000 : false;
+    },
   });
 }
 
@@ -209,6 +218,12 @@ export function useConnectorRuns(params: {
       return data;
     },
     enabled: !!connectorId,
+    refetchInterval: (query) => {
+      const hasRunning = query.state.data?.data?.some(
+        (r) => r.status === "running",
+      );
+      return hasRunning ? 3000 : false;
+    },
   });
 }
 

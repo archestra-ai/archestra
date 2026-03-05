@@ -2,6 +2,8 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Database, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import type React from "react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -143,80 +145,91 @@ function ConnectorCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
-              <ConnectorTypeIcon
-                type={connector.connectorType}
-                className="h-6 w-6"
-              />
-            </div>
-            <div>
-              <CardTitle className="text-base">{connector.name}</CardTitle>
-              <CardDescription className="capitalize">
-                {connector.connectorType}
-              </CardDescription>
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onEdit}
-            >
-              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ConnectorStatusBadge status={connector.lastSyncStatus} />
-            {connector.lastSyncAt && (
-              <span className="text-xs text-muted-foreground">
-                {formatDate({ date: connector.lastSyncAt })}
-              </span>
-            )}
-            {!connector.lastSyncAt && (
-              <span className="text-xs text-muted-foreground">
-                Never synced
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={connector.enabled}
-              onCheckedChange={(checked) =>
-                onToggleEnabled(connector.id, checked)
-              }
-            />
-            <span className="text-sm w-14">
-              {connector.enabled ? "Active" : "Paused"}
-            </span>
-          </div>
-        </div>
+  const stopPropagation = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Database className="h-3.5 w-3.5" />
-          <code className="bg-muted px-1.5 py-0.5 rounded">
-            {connector.schedule}
-          </code>
-        </div>
-      </CardContent>
-    </Card>
+  return (
+    <Link href={`/knowledge/connectors/${connector.id}`} className="group">
+      <Card className="cursor-pointer transition-all hover:border-foreground/30 hover:shadow-md group-hover:bg-accent/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                <ConnectorTypeIcon
+                  type={connector.connectorType}
+                  className="h-6 w-6"
+                />
+              </div>
+              <div>
+                <CardTitle className="text-base">{connector.name}</CardTitle>
+                <CardDescription className="capitalize">
+                  {connector.connectorType}
+                </CardDescription>
+              </div>
+            </div>
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only prevents link navigation */}
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only prevents link navigation */}
+            <div className="flex items-center gap-1" onClick={stopPropagation}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={onEdit}
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ConnectorStatusBadge status={connector.lastSyncStatus} />
+              {connector.lastSyncAt && (
+                <span className="text-xs text-muted-foreground">
+                  {formatDate({ date: connector.lastSyncAt })}
+                </span>
+              )}
+              {!connector.lastSyncAt && (
+                <span className="text-xs text-muted-foreground">
+                  Never synced
+                </span>
+              )}
+            </div>
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only prevents link navigation */}
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only prevents link navigation */}
+            <div className="flex items-center gap-2" onClick={stopPropagation}>
+              <Switch
+                checked={connector.enabled}
+                onCheckedChange={(checked) =>
+                  onToggleEnabled(connector.id, checked)
+                }
+              />
+              <span className="text-sm w-14">
+                {connector.enabled ? "Active" : "Paused"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Database className="h-3.5 w-3.5" />
+            <code className="bg-muted px-1.5 py-0.5 rounded">
+              {connector.schedule}
+            </code>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 

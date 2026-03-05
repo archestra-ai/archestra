@@ -27,7 +27,7 @@ export const InsertSecretSchema = createInsertSchema(schema.secretsTable, {
   updatedAt: true,
 });
 export const UpdateSecretSchema = createUpdateSchema(schema.secretsTable, {
-  secret: SecretValueSchema,
+  secret: SecretValueSchema.optional(),
 }).omit({
   id: true,
   createdAt: true,

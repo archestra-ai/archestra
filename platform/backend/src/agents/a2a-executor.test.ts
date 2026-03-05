@@ -32,11 +32,13 @@ describe("buildUserContent", () => {
         name: "note.txt",
       },
     ];
+
     const { content, skippedNote } = buildUserContent("Hello", attachments);
+
     expect(content).toBeNull();
     expect(skippedNote).toContain("2 attachment(s)");
-    expect(skippedNote).toContain("doc.pdf (application/pdf)");
-    expect(skippedNote).toContain("note.txt (text/plain)");
+    expect(skippedNote).toContain("doc.pdf");
+    expect(skippedNote).toContain("note.txt");
   });
 
   test("builds content parts with a single image attachment", () => {
@@ -50,10 +52,15 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("Describe this image", attachments);
 
-    expect(content).toEqual([
-      { type: "text", text: "Describe this image" },
-      { type: "image", image: `data:image/png;base64,${VALID_IMAGE_BASE64}` },
-    ]);
+    expect(content).toHaveLength(2);
+    expect(content?.[0]).toEqual({ type: "text", text: "Describe this image" });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
+    expect(content?.[1]).toHaveProperty("data");
+    // Verify the data is a Buffer with the correct decoded bytes
+    const filePart = content?.[1] as { data: Buffer; mediaType: string };
+    expect(Buffer.isBuffer(filePart.data)).toBe(true);
+    expect(filePart.data.toString("base64")).toBe(VALID_IMAGE_BASE64);
   });
 
   test("builds content parts with multiple image attachments", () => {
@@ -77,11 +84,15 @@ describe("buildUserContent", () => {
       attachments,
     );
 
-    expect(content).toEqual([
-      { type: "text", text: "What's in these photos?" },
-      { type: "image", image: `data:image/png;base64,${pngBase64}` },
-      { type: "image", image: `data:image/jpeg;base64,${jpegBase64}` },
-    ]);
+    expect(content).toHaveLength(3); // 1 text + 2 files
+    expect(content?.[0]).toEqual({
+      type: "text",
+      text: "What's in these photos?",
+    });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
+    expect(content?.[2]).toHaveProperty("type", "file");
+    expect(content?.[2]).toHaveProperty("mediaType", "image/jpeg");
   });
 
   test("filters out non-image attachments from mixed set and appends note", () => {
@@ -108,17 +119,15 @@ describe("buildUserContent", () => {
       attachments,
     );
 
-    expect(content).toHaveLength(2); // 1 text + 1 image
+    expect(content).toHaveLength(2); // 1 text + 1 file
     expect(content?.[0]).toHaveProperty("type", "text");
     // The text part should include the skipped note
     expect((content?.[0] as { text: string }).text).toContain("Check this");
     expect((content?.[0] as { text: string }).text).toContain(
       "2 attachment(s)",
     );
-    expect(content?.[1]).toEqual({
-      type: "image",
-      image: `data:image/png;base64,${VALID_IMAGE_BASE64}`,
-    });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
     expect(skippedNote).toContain("doc.pdf");
     expect(skippedNote).toContain("note.txt");
   });
@@ -154,10 +163,10 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("Describe", attachments);
 
-    expect(content).toHaveLength(6); // 1 text + 5 images
+    expect(content).toHaveLength(6); // 1 text + 5 files
     expect(content?.[0]).toHaveProperty("type", "text");
     for (let i = 1; i < (content?.length ?? 0); i++) {
-      expect(content?.[i]).toHaveProperty("type", "image");
+      expect(content?.[i]).toHaveProperty("type", "file");
     }
   });
 
@@ -171,10 +180,10 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("What is this?", attachments);
 
-    expect(content).toEqual([
-      { type: "text", text: "What is this?" },
-      { type: "image", image: `data:image/png;base64,${VALID_IMAGE_BASE64}` },
-    ]);
+    expect(content).toHaveLength(2);
+    expect(content?.[0]).toEqual({ type: "text", text: "What is this?" });
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
   });
 
   test("skipped note uses 'unnamed' for attachments without names", () => {
@@ -218,11 +227,9 @@ describe("buildUserContent", () => {
     );
 
     // Should include only the valid image
-    expect(content).toHaveLength(2); // 1 text + 1 image
-    expect(content?.[1]).toEqual({
-      type: "image",
-      image: `data:image/jpeg;base64,${validBase64}`,
-    });
+    expect(content).toHaveLength(2); // 1 text + 1 file
+    expect(content?.[1]).toHaveProperty("type", "file");
+    expect(content?.[1]).toHaveProperty("mediaType", "image/jpeg");
 
     // Skipped note should mention the filtered tiny image
     expect(skippedNote).toContain("broken-inline-ref.png");
@@ -263,7 +270,7 @@ describe("buildUserContent", () => {
 
     const { content } = buildUserContent("Test", attachments);
 
-    expect(content).toHaveLength(2); // 1 text + 1 image
-    expect(content?.[1]).toHaveProperty("type", "image");
+    expect(content).toHaveLength(2); // 1 text + 1 file
+    expect(content?.[1]).toHaveProperty("type", "file");
   });
 });

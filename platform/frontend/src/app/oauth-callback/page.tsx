@@ -19,10 +19,12 @@ import { useHandleOAuthCallback } from "@/lib/oauth.query";
 import {
   clearCallbackProcessing,
   clearInstallContext,
+  clearOAuthReturnUrl,
   clearReauthContext,
   getOAuthEnvironmentValues,
   getOAuthIsFirstInstallation,
   getOAuthMcpServerId,
+  getOAuthReturnUrl,
   getOAuthServerType,
   getOAuthTeamId,
   isCallbackProcessed,
@@ -72,6 +74,8 @@ function OAuthCallbackContent() {
 
         if (mcpServerId) {
           // Re-authentication: update existing server with new secret
+          const returnUrl = getOAuthReturnUrl();
+
           await reauthMutation.mutateAsync({
             id: mcpServerId,
             secretId,
@@ -80,6 +84,13 @@ function OAuthCallbackContent() {
 
           clearCallbackProcessing(code, state);
           clearReauthContext();
+          clearOAuthReturnUrl();
+
+          // Redirect back to where the user was (e.g. chat page)
+          if (returnUrl) {
+            router.push(returnUrl);
+            return;
+          }
         } else {
           // New installation flow
           const teamId = getOAuthTeamId();

@@ -107,6 +107,17 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 ![Autoprovisioned Slack Users](/docs/autoprovisioned-users-slack.png)
 
+## Attachments
+
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+
+**Limits:**
+- Max 20 attachments per message
+- Max 10 MB per individual file
+- Max 25 MB total across all attachments in a single message
+
+Files exceeding these limits are silently skipped.
+
 ## Troubleshooting
 
 **Bot not responding**

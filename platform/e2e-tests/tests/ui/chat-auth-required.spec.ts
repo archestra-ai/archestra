@@ -220,13 +220,12 @@ test.describe("Chat - Auth Required Tool", () => {
       ),
     ).toBeVisible();
 
-    // Verify the "Set up credentials" link points to the install URL
-    const link = memberPage.getByRole("link", {
+    // Verify the "Set up credentials" button is visible
+    // When the chat orchestrator is available, the button opens the install dialog
+    // inline instead of navigating to an external link
+    const button = memberPage.getByRole("button", {
       name: /Set up credentials/i,
     });
-    await expect(link).toBeVisible();
-    const href = await link.getAttribute("href");
-    expect(href).toContain("/mcp/registry");
-    expect(href).toContain(catalogItemId);
+    await expect(button).toBeVisible();
   });
 });

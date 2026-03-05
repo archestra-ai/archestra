@@ -99,6 +99,19 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 ![Autoprovisioned MS Teams Users](/docs/autoprovisioned-users-msteams.png)
 
+## Attachments
+
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+
+Adaptive Cards and other Teams-specific card types are not treated as file attachments.
+
+**Limits:**
+- Max 20 attachments per message
+- Max 10 MB per individual file
+- Max 25 MB total across all attachments in a single message
+
+Files exceeding these limits are silently skipped.
+
 ## Troubleshooting
 
 **"You don't have access to this app"**

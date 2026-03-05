@@ -9,6 +9,8 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
@@ -390,10 +392,13 @@ class McpClient {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
-        // Check if this is an authentication error (401) and we can attempt refresh
+        // Check if this is an authentication error - either by type/status code
+        // or by detecting auth-related keywords in the error message (some servers
+        // return non-401 status codes with auth error messages in the body)
         const isAuthError =
           error instanceof UnauthorizedError ||
-          (error instanceof StreamableHTTPError && error.code === 401);
+          (error instanceof StreamableHTTPError && error.code === 401) ||
+          isAuthRelatedError(errorMessage);
 
         // Only attempt token refresh for OAuth servers with a refresh token
         const isOAuthServer = !!catalogItem.oauthConfig;
@@ -435,6 +440,9 @@ class McpClient {
             mcpServerName,
             catalogItem,
             targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
             executeRetry: (getTransport, secrets) =>
               executeToolCall(getTransport, secrets, true),
           });
@@ -443,6 +451,38 @@ class McpClient {
             return retryToolCallResult;
           }
           // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
+        }
+
+        // For auth errors, return an actionable message with re-auth URL
+        if (isAuthError && tool.catalogId) {
+          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          // Credentials exist but failed → "expired/invalid" message with manage link
+          if (targetMcpServerId) {
+            return await this.createErrorResult(
+              toolCall,
+              agentId,
+              this.buildExpiredAuthMessage(
+                catalogDisplayName,
+                tool.catalogId,
+                targetMcpServerId,
+                tokenAuth,
+              ),
+              mcpServerName,
+              authInfo,
+            );
+          }
+          // No server resolved → "auth required" message with install link
+          return await this.createErrorResult(
+            toolCall,
+            agentId,
+            this.buildAuthRequiredMessage(
+              catalogDisplayName,
+              tool.catalogId,
+              tokenAuth,
+            ),
+            mcpServerName,
+            authInfo,
+          );
         }
 
         return await this.createErrorResult(
@@ -975,18 +1015,16 @@ class McpClient {
     }
 
     // No server found - return an actionable error with install link
-    const context = tokenAuth.userId
-      ? `user: ${tokenAuth.userId}`
-      : tokenAuth.teamId
-        ? `team: ${tokenAuth.teamId}`
-        : "organization";
     const catalogDisplayName = tool.catalogName || tool.catalogId;
-    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${tool.catalogId}`;
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`,
+        this.buildAuthRequiredMessage(
+          catalogDisplayName,
+          tool.catalogId,
+          tokenAuth,
+        ),
         fallbackName,
       ),
     };
@@ -1317,6 +1355,9 @@ class McpClient {
     mcpServerName: string;
     catalogItem: InternalMcpCatalog;
     targetMcpServerId: string;
+    tokenAuth?: TokenAuthContext;
+    toolCatalogId: string | null;
+    toolCatalogName: string | null;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -1331,6 +1372,9 @@ class McpClient {
       mcpServerName,
       catalogItem,
       targetMcpServerId,
+      tokenAuth,
+      toolCatalogId,
+      toolCatalogName,
       executeRetry,
     } = params;
 
@@ -1403,6 +1447,29 @@ class McpClient {
         { toolName: toolCall.name, error: retryErrorMsg },
         "attemptTokenRefreshAndRetry: retry after token refresh also failed",
       );
+
+      // Check if retry also failed with auth error - return actionable message
+      const isRetryAuthError =
+        retryError instanceof UnauthorizedError ||
+        (retryError instanceof StreamableHTTPError &&
+          (retryError as StreamableHTTPError).code === 401) ||
+        isAuthRelatedError(retryErrorMsg);
+
+      if (isRetryAuthError && toolCatalogId) {
+        const catalogDisplayName = toolCatalogName || toolCatalogId;
+        return await this.createErrorResult(
+          toolCall,
+          agentId,
+          this.buildExpiredAuthMessage(
+            catalogDisplayName,
+            toolCatalogId,
+            targetMcpServerId,
+            tokenAuth,
+          ),
+          mcpServerName,
+        );
+      }
+
       return await this.createErrorResult(
         toolCall,
         agentId,
@@ -1410,6 +1477,54 @@ class McpClient {
         mcpServerName,
       );
     }
+  }
+
+  /**
+   * Build an actionable authentication error message with a link to the MCP registry
+   * for the user to set up credentials.
+   */
+  private buildAuthRequiredMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    tokenAuth?: TokenAuthContext,
+  ): string {
+    const context = this.formatAuthContext(tokenAuth);
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return formatActionableAuthError({
+      title: `Authentication required for "${catalogDisplayName}"`,
+      detail: `No credentials were found for your account (${context}).`,
+      actionLabel: "set up your credentials",
+      url: installUrl,
+      postAction:
+        "Once you have completed authentication, retry this tool call.",
+    });
+  }
+
+  /**
+   * Build an actionable error message for expired or invalid credentials,
+   * with a deep link to the re-authentication dialog.
+   */
+  private buildExpiredAuthMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    mcpServerId: string,
+    tokenAuth?: TokenAuthContext,
+  ): string {
+    const context = this.formatAuthContext(tokenAuth);
+    const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
+    return formatActionableAuthError({
+      title: `Expired or invalid authentication for "${catalogDisplayName}"`,
+      detail: `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
+      actionLabel: "re-authenticate",
+      url: reauthUrl,
+      postAction: "Once you have re-authenticated, retry this tool call.",
+    });
+  }
+
+  private formatAuthContext(tokenAuth?: TokenAuthContext): string {
+    if (tokenAuth?.userId) return `user: ${tokenAuth.userId}`;
+    if (tokenAuth?.teamId) return `team: ${tokenAuth.teamId}`;
+    return "organization";
   }
 
   /**
@@ -1613,6 +1728,26 @@ class McpClient {
  * generate too many log entries. Other browser actions (navigate, click,
  * type, snapshot, etc.) are logged normally.
  */
+/**
+ * Detect auth-related errors from error messages.
+ * Some MCP servers return non-401 HTTP status codes but include auth error
+ * details in the response body (e.g. GitHub returns "unauthorized: AuthenticateToken
+ * authentication failed"). This catches those cases.
+ */
+function isAuthRelatedError(errorMessage: string): boolean {
+  const lower = errorMessage.toLowerCase();
+  return (
+    lower.includes("unauthorized") ||
+    lower.includes("authentication failed") ||
+    lower.includes("authentication required") ||
+    lower.includes("invalid token") ||
+    lower.includes("token expired") ||
+    lower.includes("access denied") ||
+    lower.includes("invalid credentials") ||
+    lower.includes("credentials expired")
+  );
+}
+
 function isHighFrequencyBrowserTool(toolName: string): boolean {
   const name = toolName.toLowerCase();
   return (
@@ -1641,3 +1776,27 @@ process.on("SIGTERM", () => {
   mcpClient.disconnectAll().catch(logger.error);
   process.exit(0);
 });
+
+/**
+ * Format an actionable auth error message that strongly encourages the LLM
+ * to display the URL to the user. The wording is intentionally directive
+ * so that models reliably surface the link rather than paraphrasing it away.
+ */
+function formatActionableAuthError(params: {
+  title: string;
+  detail: string;
+  actionLabel: string;
+  url: string;
+  postAction: string;
+}): string {
+  return [
+    `${params.title}.`,
+    "",
+    params.detail,
+    `To ${params.actionLabel}, visit this URL: ${params.url}`,
+    "",
+    "IMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.",
+    "",
+    params.postAction,
+  ].join("\n");
+}

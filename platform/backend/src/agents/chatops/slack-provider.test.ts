@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import SlackProvider from "./slack-provider";
 
 // =============================================================================
@@ -560,5 +560,635 @@ describe("SlackProvider.parseInteractivePayload", () => {
     expect(result?.userId).toBe("unknown");
     expect(result?.userName).toBe("Unknown");
     expect(result?.responseUrl).toBe("");
+  });
+});
+
+describe("SlackProvider file attachment downloads", () => {
+  function createProviderWithConfig(overrides?: {
+    botUserId?: string;
+  }): SlackProvider {
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test-bot-token",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (provider as any).botUserId = overrides?.botUserId || "UBOT123";
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (provider as any).client = {}; // truthy so methods don't bail
+    return provider;
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("message without files has no attachments field", async () => {
+    const provider = createProviderWithConfig();
+    const payload = makeEventPayload();
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+  });
+
+  test("message with empty files array has no attachments field", async () => {
+    const provider = createProviderWithConfig();
+    const payload = makeEventPayload({}, { files: [] });
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+  });
+
+  test("downloads file and returns attachment with base64 content", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("hello image data");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F123",
+            name: "screenshot.png",
+            mimetype: "image/png",
+            size: fileContent.length,
+            url_private:
+              "https://files.slack.com/files-pri/T123/screenshot.png",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0]).toEqual({
+      contentType: "image/png",
+      contentBase64: fileContent.toString("base64"),
+      name: "screenshot.png",
+    });
+
+    // Verify auth header was sent (fetchSlackFile uses redirect: "manual")
+    expect(fetch).toHaveBeenCalledWith(
+      "https://files.slack.com/files-pri/T123/screenshot.png",
+      {
+        headers: { Authorization: "Bearer xoxb-test-bot-token" },
+        redirect: "manual",
+      },
+    );
+  });
+
+  test("prefers url_private_download over url_private", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("file data");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F123",
+            name: "doc.pdf",
+            mimetype: "application/pdf",
+            size: fileContent.length,
+            url_private: "https://files.slack.com/url_private",
+            url_private_download:
+              "https://files.slack.com/url_private_download",
+          },
+        ],
+      },
+    );
+
+    await provider.parseWebhookNotification(payload, {});
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://files.slack.com/url_private_download",
+      expect.any(Object),
+    );
+  });
+
+  test("skips files without download URL", async () => {
+    const provider = createProviderWithConfig();
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F123",
+            name: "no-url.txt",
+            mimetype: "text/plain",
+            size: 100,
+            // no url_private or url_private_download
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("skips files exceeding individual size limit (10MB)", async () => {
+    const provider = createProviderWithConfig();
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_BIG",
+            name: "huge.bin",
+            mimetype: "application/octet-stream",
+            size: 11 * 1024 * 1024, // 11MB > 10MB limit
+            url_private: "https://files.slack.com/huge",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("skips files when total size would exceed 25MB limit", async () => {
+    const provider = createProviderWithConfig();
+
+    const file1Content = Buffer.alloc(9 * 1024 * 1024, "a"); // 9MB
+    const file2Content = Buffer.alloc(9 * 1024 * 1024, "b"); // 9MB
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(file1Content, { status: 200 }))
+      .mockResolvedValueOnce(new Response(file2Content, { status: 200 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F1",
+            name: "file1.bin",
+            mimetype: "application/octet-stream",
+            size: 9 * 1024 * 1024,
+            url_private: "https://files.slack.com/f1",
+          },
+          {
+            id: "F2",
+            name: "file2.bin",
+            mimetype: "application/octet-stream",
+            size: 9 * 1024 * 1024,
+            url_private: "https://files.slack.com/f2",
+          },
+          {
+            id: "F3",
+            name: "file3.bin",
+            mimetype: "application/octet-stream",
+            size: 9 * 1024 * 1024,
+            url_private: "https://files.slack.com/f3",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    // Only first 2 files should be downloaded (18MB total), 3rd skipped (would be 27MB)
+    expect(result?.attachments).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("continues downloading after fetch error on one file", async () => {
+    const provider = createProviderWithConfig();
+    const file2Content = Buffer.from("file2 data");
+
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce(new Response(file2Content, { status: 200 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F1",
+            name: "fail.png",
+            mimetype: "image/png",
+            size: 100,
+            url_private: "https://files.slack.com/f1",
+          },
+          {
+            id: "F2",
+            name: "ok.png",
+            mimetype: "image/png",
+            size: file2Content.length,
+            url_private: "https://files.slack.com/f2",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].name).toBe("ok.png");
+  });
+
+  test("skips file when fetch returns non-200 status", async () => {
+    const provider = createProviderWithConfig();
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response("Not Found", { status: 404 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F404",
+            name: "missing.png",
+            mimetype: "image/png",
+            size: 100,
+            url_private: "https://files.slack.com/missing",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+  });
+
+  test("uses application/octet-stream when mimetype is missing", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("mystery data");
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(fileContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_NO_MIME",
+            name: "unknown",
+            size: fileContent.length,
+            url_private: "https://files.slack.com/unknown",
+            // no mimetype
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toHaveLength(1);
+    expect(result?.attachments?.[0].contentType).toBe(
+      "application/octet-stream",
+    );
+  });
+
+  test("limits to max 20 files per message", async () => {
+    const provider = createProviderWithConfig();
+    const fileContent = Buffer.from("small");
+
+    // Create 25 files
+    const files = Array.from({ length: 25 }, (_, i) => ({
+      id: `F${i}`,
+      name: `file${i}.txt`,
+      mimetype: "text/plain",
+      size: fileContent.length,
+      url_private: `https://files.slack.com/f${i}`,
+    }));
+
+    // Mock fetch for exactly 20 calls (the max limit)
+    for (let i = 0; i < 20; i++) {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(fileContent, { status: 200 }),
+      );
+    }
+
+    const payload = makeEventPayload({}, { files });
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toHaveLength(20);
+    expect(fetch).toHaveBeenCalledTimes(20);
+  });
+
+  test("downloads multiple files successfully", async () => {
+    const provider = createProviderWithConfig();
+    const img1 = Buffer.from("image1 data");
+    const img2 = Buffer.from("image2 data");
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(img1, { status: 200 }))
+      .mockResolvedValueOnce(new Response(img2, { status: 200 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F1",
+            name: "photo1.jpg",
+            mimetype: "image/jpeg",
+            size: img1.length,
+            url_private: "https://files.slack.com/f1",
+          },
+          {
+            id: "F2",
+            name: "photo2.png",
+            mimetype: "image/png",
+            size: img2.length,
+            url_private: "https://files.slack.com/f2",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toHaveLength(2);
+    expect(result?.attachments?.[0]).toEqual({
+      contentType: "image/jpeg",
+      contentBase64: img1.toString("base64"),
+      name: "photo1.jpg",
+    });
+    expect(result?.attachments?.[1]).toEqual({
+      contentType: "image/png",
+      contentBase64: img2.toString("base64"),
+      name: "photo2.png",
+    });
+  });
+
+  test("skips file when actual download size exceeds limit (post-download check)", async () => {
+    const provider = createProviderWithConfig();
+    // File reports small size but actual content is huge
+    const hugeContent = Buffer.alloc(11 * 1024 * 1024, "x"); // 11MB
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(hugeContent, { status: 200 }),
+    );
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_LIE",
+            name: "lying-file.bin",
+            mimetype: "application/octet-stream",
+            size: 100, // Claims small but actually huge
+            url_private: "https://files.slack.com/liar",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+  });
+
+  test("skips files from non-Slack domains (SSRF protection)", async () => {
+    const provider = createProviderWithConfig();
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F_EVIL",
+            name: "evil.png",
+            mimetype: "image/png",
+            size: 100,
+            url_private: "https://evil.attacker.com/steal-token",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.attachments).toBeUndefined();
+    // Should not have sent any request (no Slack domain)
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("stops when post-download total size exceeds 25MB (file.size was missing)", async () => {
+    const provider = createProviderWithConfig();
+    const file1Content = Buffer.alloc(9 * 1024 * 1024, "a"); // 9MB (under 10MB individual limit)
+    const file2Content = Buffer.alloc(9 * 1024 * 1024, "b"); // 9MB
+    const file3Content = Buffer.alloc(9 * 1024 * 1024, "c"); // 9MB — would push total to 27MB
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(file1Content, { status: 200 }))
+      .mockResolvedValueOnce(new Response(file2Content, { status: 200 }))
+      .mockResolvedValueOnce(new Response(file3Content, { status: 200 }));
+
+    const payload = makeEventPayload(
+      {},
+      {
+        files: [
+          {
+            id: "F1",
+            name: "big1.bin",
+            mimetype: "application/octet-stream",
+            // size intentionally omitted — pre-download check can't catch this
+            url_private: "https://files.slack.com/f1",
+          },
+          {
+            id: "F2",
+            name: "big2.bin",
+            mimetype: "application/octet-stream",
+            url_private: "https://files.slack.com/f2",
+          },
+          {
+            id: "F3",
+            name: "big3.bin",
+            mimetype: "application/octet-stream",
+            url_private: "https://files.slack.com/f3",
+          },
+        ],
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    // All 3 downloaded but third discarded because post-download total exceeds 25MB
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result?.attachments).toHaveLength(2);
+    expect(result?.attachments?.[0]?.name).toBe("big1.bin");
+    expect(result?.attachments?.[1]?.name).toBe("big2.bin");
+  });
+
+  test("returns no attachments when client is null", async () => {
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (provider as any).botUserId = "UBOT123";
+    // client is null (not initialized) — but parseWebhookNotification returns null
+    // because client check is further up; test downloadSlackFiles directly
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    const result = await (provider as any).downloadSlackFiles([
+      {
+        id: "F1",
+        name: "test.png",
+        mimetype: "image/png",
+        size: 100,
+        url_private: "https://files.slack.com/f1",
+      },
+    ]);
+
+    expect(result).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// getThreadHistory — file metadata
+// =============================================================================
+
+describe("SlackProvider.getThreadHistory file metadata", () => {
+  test("includes file metadata from thread messages", async () => {
+    const provider = createProvider();
+
+    // Mock conversations.replies to return messages with files
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1000.001",
+              user: "U_ALICE",
+              text: "Check out this image",
+              files: [
+                {
+                  id: "F1",
+                  name: "photo.png",
+                  mimetype: "image/png",
+                  size: 5000,
+                  url_private_download:
+                    "https://files.slack.com/files-pri/T123/photo.png",
+                },
+              ],
+            },
+            {
+              ts: "1000.002",
+              user: "UBOT123",
+              bot_id: "B123",
+              text: "I see a cat!",
+            },
+            {
+              ts: "1000.003",
+              user: "U_ALICE",
+              text: "What breed is it?",
+            },
+          ],
+        }),
+      },
+    };
+
+    const result = await provider.getThreadHistory({
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      threadId: "1000.001",
+    });
+
+    expect(result).toHaveLength(3);
+
+    // First message should have file metadata
+    expect(result[0].files).toEqual([
+      {
+        url: "https://files.slack.com/files-pri/T123/photo.png",
+        mimetype: "image/png",
+        name: "photo.png",
+        size: 5000,
+      },
+    ]);
+
+    // Bot message should have no files
+    expect(result[1].files).toBeUndefined();
+
+    // Third message should have no files
+    expect(result[2].files).toBeUndefined();
+  });
+
+  test("skips files without download URL", async () => {
+    const provider = createProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1000.001",
+              user: "U_ALICE",
+              text: "Some message",
+              files: [
+                {
+                  id: "F1",
+                  name: "no-url.png",
+                  mimetype: "image/png",
+                  // No url_private or url_private_download
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const result = await provider.getThreadHistory({
+      channelId: "C_TEST",
+      workspaceId: "T_TEST",
+      threadId: "1000.001",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].files).toBeUndefined();
   });
 });

@@ -21,6 +21,22 @@ vi.mock("@/lib/config.query", () => ({
   useFeatures: (...args: unknown[]) => mockUseFeatures(...args),
 }));
 
+const mockConfig = {
+  disableBasicAuth: false,
+};
+
+vi.mock("@/lib/config", () => ({
+  default: new Proxy(
+    {},
+    {
+      get: (_target, prop) =>
+        prop in mockConfig
+          ? mockConfig[prop as keyof typeof mockConfig]
+          : undefined,
+    },
+  ),
+}));
+
 vi.mock("@shared", () => ({
   DEFAULT_ADMIN_EMAIL: "admin@example.com",
   DEFAULT_ADMIN_PASSWORD: "admin",
@@ -40,6 +56,7 @@ import { SidebarWarnings } from "./sidebar-warnings";
 describe("SidebarWarnings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConfig.disableBasicAuth = false;
 
     // Default: no session, no warnings
     mockUseSession.mockReturnValue({ data: null });
@@ -148,6 +165,22 @@ describe("SidebarWarnings", () => {
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
+    });
+
+    it("does not show when basic auth is disabled", () => {
+      mockConfig.disableBasicAuth = true;
+      mockUseSession.mockReturnValue({
+        data: { user: { email: "admin@example.com" } },
+      });
+      mockUseDefaultCredentialsEnabled.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+
+      render(<SidebarWarnings />);
+      expect(
+        screen.queryByTestId("default-credentials-warning"),
+      ).not.toBeInTheDocument();
     });
 
     it("does not show when credentials are not default", () => {

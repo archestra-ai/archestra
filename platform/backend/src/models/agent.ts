@@ -899,23 +899,22 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
-    const toolRows = await db
-      .select({ tool: schema.toolsTable })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(eq(schema.agentToolsTable.agentId, updatedAgent.id));
-    const tools = toolRows.map((row) => row.tool);
-
-    // Fetch current teams and labels
-    const currentTeams = await AgentTeamModel.getTeamDetailsForAgent(id);
-    const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
+    const [toolRows, currentTeams, currentLabels] = await Promise.all([
+      db
+        .select({ tool: schema.toolsTable })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(eq(schema.agentToolsTable.agentId, updatedAgent.id)),
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+    ]);
 
     return {
       ...updatedAgent,
-      tools,
+      tools: toolRows.map((row) => row.tool),
       teams: currentTeams,
       labels: currentLabels,
     };

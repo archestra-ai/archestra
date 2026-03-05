@@ -49,6 +49,10 @@ const shouldLogApiRequest = (req: NextRequest) => {
   if (pathname.startsWith("/_next")) {
     return false;
   }
+  // ignore MCP gateway GET polling requests to reduce log noise
+  if (req.method === "GET" && pathname.startsWith("/v1/mcp/")) {
+    return false;
+  }
   // log request before it is proxied via nextjs rewrites
   // see rewrites() config in next.config.ts
   return pathname.startsWith("/api") || pathname.startsWith("/v1");

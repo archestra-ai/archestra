@@ -1,4 +1,9 @@
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
+} from "@shared";
 import type {
   PartialUIMessage,
   PolicyDeniedPart,
@@ -154,8 +159,73 @@ export function parseAuthRequired(
   if (!message.includes("Authentication required for")) return null;
 
   const nameMatch = message.match(/Authentication required for "([^"]+)"/);
-  const urlMatch = message.match(/visit:\s*(https?:\/\/\S+)/);
+  const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
   if (!nameMatch || !urlMatch) return null;
 
   return { catalogName: nameMatch[1], installUrl: urlMatch[1] };
+}
+
+export interface ExpiredAuthResult {
+  catalogName: string;
+  reauthUrl: string;
+}
+
+/**
+ * Parse error text to detect "Expired or invalid authentication" errors from MCP tool calls.
+ * These indicate credentials exist but have expired or become invalid.
+ * The error message includes a deep link to the manage connections dialog.
+ */
+export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
+  let message = errorText;
+  try {
+    const json = JSON.parse(errorText);
+    message = json?.originalError?.message || json?.message || errorText;
+  } catch {
+    /* not JSON, use raw text */
+  }
+
+  if (!message.includes("Expired or invalid authentication for")) return null;
+
+  const nameMatch = message.match(
+    /Expired or invalid authentication for "([^"]+)"/,
+  );
+  const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
+  if (!nameMatch || !urlMatch) return null;
+
+  return { catalogName: nameMatch[1], reauthUrl: urlMatch[1] };
+}
+
+/**
+ * Extract the catalog ID from an install deep-link URL.
+ * e.g. "http://localhost:3000/mcp/registry?install=cat_abc123" → "cat_abc123"
+ */
+export function extractCatalogIdFromInstallUrl(
+  installUrl: string,
+): string | null {
+  try {
+    const url = new URL(installUrl);
+    return url.searchParams.get(MCP_CATALOG_INSTALL_QUERY_PARAM);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract the catalog ID and server ID from a manage deep-link URL.
+ * e.g. "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz"
+ *   → { catalogId: "cat_abc", serverId: "srv_xyz" }
+ */
+export function extractIdsFromReauthUrl(reauthUrl: string): {
+  catalogId: string | null;
+  serverId: string | null;
+} {
+  try {
+    const url = new URL(reauthUrl);
+    return {
+      catalogId: url.searchParams.get(MCP_CATALOG_REAUTH_QUERY_PARAM),
+      serverId: url.searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM),
+    };
+  } catch {
+    return { catalogId: null, serverId: null };
+  }
 }

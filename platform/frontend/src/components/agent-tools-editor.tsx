@@ -269,38 +269,43 @@ const AgentToolsEditorContent = forwardRef<
 
         const isLocal = changes.catalogItem.serverType === "local";
 
-        // Remove tools (skip invalidation, will do it once at the end)
-        for (const toolId of toRemove) {
-          await unassignTool.mutateAsync({
-            agentId: targetAgentId,
-            toolId,
-            skipInvalidation: true,
-          });
-        }
-
-        // Add tools (skip invalidation, will do it once at the end)
+        // Remove and add tools in parallel (skip invalidation, will do it once at the end)
         const useDynamicCredential =
           isPlaywrightCatalogItem(changes.catalogItem.id) ||
           changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
 
-        for (const toolId of toAdd) {
-          await assignTool.mutateAsync({
-            agentId: targetAgentId,
-            toolId,
-            // When using dynamic credentials, omit server IDs — they are mutually
-            // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
-            // field based on whether the server is local (execution) or remote (credential).
-            credentialSourceMcpServerId:
-              !isLocal && !useDynamicCredential
-                ? changes.credentialSourceId
-                : undefined,
-            executionSourceMcpServerId:
-              isLocal && !useDynamicCredential
-                ? changes.credentialSourceId
-                : undefined,
-            useDynamicTeamCredential: useDynamicCredential,
-            skipInvalidation: true,
-          });
+        const results = await Promise.allSettled([
+          ...toRemove.map((toolId) =>
+            unassignTool.mutateAsync({
+              agentId: targetAgentId,
+              toolId,
+              skipInvalidation: true,
+            }),
+          ),
+          ...toAdd.map((toolId) =>
+            assignTool.mutateAsync({
+              agentId: targetAgentId,
+              toolId,
+              // When using dynamic credentials, omit server IDs — they are mutually
+              // exclusive with useDynamicTeamCredential. Otherwise, set the appropriate
+              // field based on whether the server is local (execution) or remote (credential).
+              credentialSourceMcpServerId:
+                !isLocal && !useDynamicCredential
+                  ? changes.credentialSourceId
+                  : undefined,
+              executionSourceMcpServerId:
+                isLocal && !useDynamicCredential
+                  ? changes.credentialSourceId
+                  : undefined,
+              useDynamicTeamCredential: useDynamicCredential,
+              skipInvalidation: true,
+            }),
+          ),
+        ]);
+
+        const failures = results.filter((r) => r.status === "rejected");
+        if (failures.length > 0) {
+          throw (failures[0] as PromiseRejectedResult).reason;
         }
 
         // Update credential on tools that remain assigned but whose credential changed

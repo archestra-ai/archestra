@@ -8,7 +8,7 @@ type InteractionSource =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number]["source"];
 
 const SOURCE_CONFIG: Record<
-  InteractionSource,
+  NonNullable<InteractionSource>,
   { label: string; icon: ReactNode }
 > = {
   api: { label: "API", icon: <Globe className="h-3 w-3 mr-1" /> },

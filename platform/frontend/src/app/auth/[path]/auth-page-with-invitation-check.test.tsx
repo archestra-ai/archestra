@@ -22,11 +22,21 @@ vi.mock("@/lib/backend-connectivity", () => ({
 }));
 
 // Mock config
+const mockConfig = {
+  disableBasicAuth: false,
+  enterpriseLicenseActivated: false,
+};
+
 vi.mock("@/lib/config", () => ({
-  default: {
-    disableBasicAuth: false,
-    enterpriseLicenseActivated: false,
-  },
+  default: new Proxy(
+    {},
+    {
+      get: (_target, prop) =>
+        prop in mockConfig
+          ? mockConfig[prop as keyof typeof mockConfig]
+          : undefined,
+    },
+  ),
 }));
 
 // Mock AuthViewWithErrorHandling
@@ -68,6 +78,8 @@ const mockRetry = vi.fn();
 describe("AuthPageWithInvitationCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConfig.disableBasicAuth = false;
+    mockConfig.enterpriseLicenseActivated = false;
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
@@ -118,6 +130,23 @@ describe("AuthPageWithInvitationCheck", () => {
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: { userExists: true },
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(
+        screen.queryByTestId("default-credentials-warning"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should not show default credentials warning when basic auth is disabled", () => {
+      mockConfig.disableBasicAuth = true;
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
         isLoading: false,
       } as ReturnType<typeof useInvitationCheck>);
 

@@ -919,8 +919,8 @@ export function AgentDialog({
             agentType: agentType,
             ...(isInternalAgent && {
               description: description.trim() || null,
-              userPrompt: trimmedUserPrompt || undefined,
-              systemPrompt: trimmedSystemPrompt || undefined,
+              userPrompt: trimmedUserPrompt || null,
+              systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               llmModel: llmModel || null,
             }),
@@ -945,8 +945,8 @@ export function AgentDialog({
           agentType: agentType,
           ...(isInternalAgent && {
             description: description.trim() || null,
-            userPrompt: trimmedUserPrompt || undefined,
-            systemPrompt: trimmedSystemPrompt || undefined,
+            userPrompt: trimmedUserPrompt || null,
+            systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
           }),

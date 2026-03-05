@@ -1,6 +1,7 @@
 "use client";
 
 import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
+import { AlertTriangle } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -13,6 +14,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -93,6 +95,8 @@ interface LocalServerInstallDialogProps {
   isReinstall?: boolean;
   /** The team ID of the existing server being reinstalled (null = personal) */
   existingTeamId?: string | null;
+  /** When true, shows re-authentication mode (info banner, different title) */
+  isReauth?: boolean;
 }
 
 export function LocalServerInstallDialog({
@@ -103,6 +107,7 @@ export function LocalServerInstallDialog({
   isInstalling,
   isReinstall = false,
   existingTeamId,
+  isReauth = false,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -305,7 +310,12 @@ export function LocalServerInstallDialog({
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {isReinstall ? "Reinstall" : "Install"} - {catalogItem?.name}
+            {isReauth
+              ? "Re-authenticate"
+              : isReinstall
+                ? "Reinstall"
+                : "Install"}{" "}
+            - {catalogItem?.name}
           </DialogTitle>
           {catalogItem?.instructions && (
             <DialogDescription asChild>
@@ -322,6 +332,17 @@ export function LocalServerInstallDialog({
         </DialogHeader>
 
         <DialogForm onSubmit={handleInstall}>
+          {isReauth && (
+            <Alert className="border-amber-500/50 bg-amber-500/10 mb-4">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <AlertDescription>
+                Your existing credentials are expired or invalid. Submitting new
+                credentials here will replace them while preserving your tool
+                assignments.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <SelectMcpServerCredentialTypeAndTeams
             onTeamChange={setSelectedTeamId}
             catalogId={isReinstall ? undefined : catalogItem?.id}
@@ -627,12 +648,16 @@ export function LocalServerInstallDialog({
             {canInstall && (
               <Button type="submit" disabled={!isValid || isInstalling}>
                 {isInstalling
-                  ? isReinstall
-                    ? "Reinstalling..."
-                    : "Installing..."
-                  : isReinstall
-                    ? "Reinstall"
-                    : "Install"}
+                  ? isReauth
+                    ? "Updating..."
+                    : isReinstall
+                      ? "Reinstalling..."
+                      : "Installing..."
+                  : isReauth
+                    ? "Update Credentials"
+                    : isReinstall
+                      ? "Reinstall"
+                      : "Install"}
               </Button>
             )}
           </DialogFooter>

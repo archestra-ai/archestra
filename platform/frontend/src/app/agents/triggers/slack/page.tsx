@@ -320,10 +320,10 @@ function NgrokSetupDialog({
               <div className="space-y-2 text-sm">
                 <p>1. Start an ngrok tunnel:</p>
                 <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
+                  <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
                     {ngrokCommand}
                   </pre>
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-0 right-0">
                     <CopyButton text={ngrokCommand} />
                   </div>
                 </div>
@@ -337,10 +337,10 @@ function NgrokSetupDialog({
                   file:
                 </p>
                 <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto whitespace-pre">
+                  <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
                     {envCommand}
                   </pre>
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-0 right-0">
                     <CopyButton text={envCommand} />
                   </div>
                 </div>

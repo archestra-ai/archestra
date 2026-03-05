@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.0.53"
+    "version": "1.0.55"
   },
   "components": {
     "schemas": {
@@ -100256,15 +100256,29 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
+                  "accessToken": {
+                    "type": "string"
+                  },
+                  "userConfigValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "environmentValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "isByosVault": {
+                    "type": "boolean"
                   }
-                },
-                "required": [
-                  "secretId"
-                ]
+                }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {

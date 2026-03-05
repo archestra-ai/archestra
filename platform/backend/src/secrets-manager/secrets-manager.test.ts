@@ -28,6 +28,9 @@ vi.mock("node-vault", () => {
 describe("SecretsManager", async () => {
   // biome-ignore lint/style/noRestrictedImports: dynamic import
   const VaultSecretManager = (await import("./vault.ee")).default;
+  // biome-ignore lint/style/noRestrictedImports: dynamic import
+  const ReadonlyVaultSecretManager = (await import("./readonly-vault.ee"))
+    .default;
 
   describe("getSecretsManagerTypeBasedOnEnvVars", () => {
     const originalEnv = process.env;
@@ -1130,6 +1133,96 @@ describe("SecretsManager", async () => {
         expect(mockVaultClient.delete).toHaveBeenCalledWith(
           `secret/archestra/testsecret-${created.id}`,
         );
+      });
+    });
+  });
+
+  describe("ReadonlyVaultSecretManager", () => {
+    const vaultConfig = {
+      address: "http://localhost:8200",
+      authMethod: "token" as const,
+      kvVersion: "2" as const,
+      token: "dev-root-token",
+      secretPath: "secret/data/archestra",
+      k8sTokenPath: "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      k8sMountPoint: "kubernetes",
+      awsMountPoint: "aws",
+      awsRegion: "us-east-1",
+      awsStsEndpoint: "https://sts.amazonaws.com",
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    describe("getSecret - self-healing corrupted isByosVault", () => {
+      test("should fix isByosVault flag when secret values are not vault references", async () => {
+        const byosManager = new ReadonlyVaultSecretManager(vaultConfig);
+
+        // Create a forceDB secret (isByosVault=false, plain DB values)
+        const created = await byosManager.createSecret(
+          { apiKey: "sk-test-key-123" },
+          "test-oauth-secret",
+          true,
+        );
+        expect(created.isByosVault).toBe(false);
+
+        // Simulate the bug: manually set isByosVault to true
+        await SecretModel.update(created.id, {
+          secret: { apiKey: "sk-test-key-123" },
+          isByosVault: true,
+        });
+
+        // getSecret should detect the mismatch and self-heal
+        const result = await byosManager.getSecret(created.id);
+        expect(result).not.toBeNull();
+        expect(result?.isByosVault).toBe(false);
+        expect(result?.secret).toEqual({ apiKey: "sk-test-key-123" });
+
+        // Verify the DB was fixed
+        const dbRecord = await SecretModel.findById(created.id);
+        expect(dbRecord?.isByosVault).toBe(false);
+      });
+
+      test("should not modify isByosVault when secret values are valid vault references", async () => {
+        const byosManager = new ReadonlyVaultSecretManager(vaultConfig);
+
+        // Create a proper BYOS secret with vault references
+        const created = await byosManager.createSecret(
+          { apiKey: "secret/data/my-keys#api_key" },
+          "test-vault-ref",
+        );
+        expect(created.isByosVault).toBe(true);
+
+        // getSecret should try to resolve vault references (will fail since no real vault)
+        // but should NOT flip isByosVault to false
+        await expect(byosManager.getSecret(created.id)).rejects.toThrow();
+
+        // Verify the flag was NOT changed
+        const dbRecord = await SecretModel.findById(created.id);
+        expect(dbRecord?.isByosVault).toBe(true);
+      });
+    });
+
+    describe("updateSecret - preserves isByosVault", () => {
+      test("should not modify isByosVault flag on update", async () => {
+        const byosManager = new ReadonlyVaultSecretManager(vaultConfig);
+
+        // Create a forceDB secret (like OAuth tokens)
+        const created = await byosManager.createSecret(
+          { access_token: "oauth-token-123", refresh_token: "refresh-456" },
+          "test-oauth",
+          true,
+        );
+        expect(created.isByosVault).toBe(false);
+
+        // Update with new plain values (like token refresh)
+        const updated = await byosManager.updateSecret(created.id, {
+          access_token: "new-oauth-token",
+          refresh_token: "new-refresh",
+        });
+        expect(updated).not.toBeNull();
+        expect(updated?.isByosVault).toBe(false);
       });
     });
   });

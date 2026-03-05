@@ -19,7 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
@@ -207,6 +207,10 @@ export function ConversationSearchPalette({
   const deleteMutation = useDeleteConversation();
   const pinMutation = usePinConversation();
 
+  // Track in-flight deletions via ref to prevent rapid double-deletion
+  // (React batches state updates, so the keydown handler may see stale state)
+  const deletingIdsRef = useRef(new Set<string>());
+
   // Debounce search query to reduce API calls while typing
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -240,6 +244,7 @@ export function ConversationSearchPalette({
     setSearchQuery("");
     setSelectedValue("");
     setIsPendingDeletion(null);
+    deletingIdsRef.current.clear();
   }, [open]);
 
   // Reset pending deletion when selection or search query changes
@@ -260,6 +265,10 @@ export function ConversationSearchPalette({
 
   const handleDeleteConversation = useCallback(
     (conversationId: string) => {
+      // Guard against rapid double-deletion (ref is synchronous, not batched)
+      if (deletingIdsRef.current.has(conversationId)) return;
+      deletingIdsRef.current.add(conversationId);
+
       // Find the next conversation to select after deletion
       const currentIndex = conversations.findIndex(
         (c) => c.id === conversationId,
@@ -271,7 +280,9 @@ export function ConversationSearchPalette({
           null;
         setSelectedValue(nextConv ? `conv-${nextConv.id}` : "");
       }
-      deleteMutation.mutate(conversationId);
+      deleteMutation.mutate(conversationId, {
+        onSettled: () => deletingIdsRef.current.delete(conversationId),
+      });
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open

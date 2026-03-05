@@ -447,12 +447,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      const labelKeys = await AgentLabelModel.getAllKeys();
-      // We need to re-init metrics with the new label keys in case label keys changed.
-      // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-      metrics.llm.initializeMetrics(labelKeys);
-      metrics.mcp.initializeMcpMetrics(labelKeys);
-      metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+      // Only re-init metrics when labels were part of the update payload,
+      // since that's the only field that can introduce new label keys.
+      if (body.labels !== undefined) {
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        metrics.llm.initializeMetrics(labelKeys);
+        metrics.mcp.initializeMcpMetrics(labelKeys);
+        metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+      }
 
       return reply.send(agent);
     },

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 
 /**
  * ChatOps provider types enum
@@ -35,6 +36,8 @@ export interface IncomingChatMessage {
   isThreadReply: boolean;
   /** Provider-specific metadata */
   metadata?: Record<string, unknown>;
+  /** Attachments from the message (images, files, etc.) */
+  attachments?: A2AAttachment[];
 }
 
 /**
@@ -54,6 +57,22 @@ export interface ChatReplyOptions {
 }
 
 /**
+ * File metadata from a thread history message (not yet downloaded).
+ * Used to carry attachment info from provider-specific history APIs
+ * so the manager can download them for LLM context.
+ */
+export interface ChatThreadMessageFile {
+  /** Download URL for the file */
+  url: string;
+  /** MIME type of the file */
+  mimetype: string;
+  /** Optional filename */
+  name?: string;
+  /** Optional file size in bytes (from provider metadata) */
+  size?: number;
+}
+
+/**
  * A message in a chat thread history
  */
 export interface ChatThreadMessage {
@@ -69,6 +88,8 @@ export interface ChatThreadMessage {
   timestamp: Date;
   /** Whether this message was from the bot */
   isFromBot: boolean;
+  /** File attachments from this message (metadata only, not downloaded) */
+  files?: ChatThreadMessageFile[];
 }
 
 /**
@@ -308,6 +329,14 @@ export interface ChatOpsProvider {
    * Used to populate workspaceName on channel bindings (including DMs).
    */
   getWorkspaceName(): string | null;
+
+  /**
+   * Download files from thread history messages.
+   * Reuses the provider's existing download logic (auth headers, SSRF protection, etc.).
+   * @param files - File metadata from thread history messages
+   * @returns Downloaded attachments in A2A format (base64-encoded)
+   */
+  downloadFiles(files: ChatThreadMessageFile[]): Promise<A2AAttachment[]>;
 
   /**
    * Discover all channels in a workspace/team.

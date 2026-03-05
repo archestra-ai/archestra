@@ -91,3 +91,15 @@ Incoming email is disabled by default for all agents. When enabled, you must cho
 | **Public** | Any email address can invoke the agent. Use with caution as this exposes the agent to external senders. |
 
 When security validation fails, the email is rejected with an appropriate error and no agent execution occurs.
+
+## Attachments
+
+Emails sent to agents can include file attachments (both inline images and attached files). Attachments are automatically extracted and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+
+**Limits:**
+- Max 20 attachments per email
+- Max 10 MB per individual file
+- Max 25 MB total across all attachments in a single email
+- Images smaller than 2 KB are filtered out (typically broken inline references from forwarded emails)
+
+Files exceeding these limits are silently skipped.

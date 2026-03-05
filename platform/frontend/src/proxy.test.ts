@@ -244,6 +244,32 @@ describe("proxy", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
+    it("should not log GET requests to /v1/mcp/ gateway polling", () => {
+      const consoleSpy = vi.spyOn(console, "log");
+      const request = createMockRequest({
+        method: "GET",
+        url: "/v1/mcp/some-profile-id",
+      });
+
+      proxy(request);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
+
+    it("should still log POST requests to /v1/mcp/", () => {
+      const consoleSpy = vi.spyOn(console, "log");
+      const request = createMockRequest({
+        method: "POST",
+        url: "/v1/mcp/some-profile-id",
+      });
+
+      proxy(request);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("API Request: POST"),
+      );
+    });
+
     it("should not log non-API requests", () => {
       const consoleSpy = vi.spyOn(console, "log");
       const request = createMockRequest({

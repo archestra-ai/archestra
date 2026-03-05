@@ -229,6 +229,9 @@ describe("processIncomingEmail", () => {
       message: "Hello, agent!",
       organizationId: org.id,
       userId: "system",
+      source: "email",
+      sessionId: undefined,
+      attachments: undefined,
     });
   });
 

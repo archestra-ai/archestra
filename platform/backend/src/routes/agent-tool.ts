@@ -18,6 +18,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  TeamModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -138,11 +139,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
       checker.require(agent.agentType, "update");
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(request.user.id)
+        : [];
       requireAgentModifyPermission({
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
         agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
         userId: request.user.id,
       });
 
@@ -222,6 +228,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         organizationId: request.organizationId,
       });
+      const userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
       for (const agentId of uniqueAgentIds) {
         const agent = await AgentModel.findById(agentId);
         if (agent) {
@@ -231,6 +238,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentType: agent.agentType,
             agentScope: agent.scope,
             agentAuthorId: agent.authorId,
+            agentTeamIds: agent.teams.map((t) => t.id),
+            userTeamIds,
             userId: request.user.id,
           });
         }
@@ -453,11 +462,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       checker.require(agent.agentType, "update");
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
       requireAgentModifyPermission({
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
         agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
         userId: user.id,
       });
 
@@ -555,11 +569,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
         checker.require(agentForPerm.agentType, "update");
+        const userTeamIds = !checker.isAdmin(agentForPerm.agentType)
+          ? await TeamModel.getUserTeamIds(user.id)
+          : [];
         requireAgentModifyPermission({
           checker,
           agentType: agentForPerm.agentType,
           agentScope: agentForPerm.scope,
           agentAuthorId: agentForPerm.authorId,
+          agentTeamIds: agentForPerm.teams.map((t) => t.id),
+          userTeamIds,
           userId: user.id,
         });
       }
@@ -769,11 +788,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
+      const syncUserTeamIds = !syncChecker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
       requireAgentModifyPermission({
         checker: syncChecker,
         agentType: agent.agentType,
         agentScope: agent.scope,
         agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds: syncUserTeamIds,
         userId: user.id,
       });
 
@@ -850,11 +874,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
+      const delUserTeamIds = !delChecker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
       requireAgentModifyPermission({
         checker: delChecker,
         agentType: agent.agentType,
         agentScope: agent.scope,
         agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds: delUserTeamIds,
         userId: user.id,
       });
 

@@ -252,6 +252,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             conversationId,
             externalAgentId,
             sessionId: conversationId,
+            source: "chat",
             agentLlmApiKeyId: agent.llmApiKeyId,
           });
 

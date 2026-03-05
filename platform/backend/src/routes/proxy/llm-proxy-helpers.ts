@@ -21,6 +21,7 @@ import type {
   InsertInteraction,
   InteractionRequest,
   InteractionResponse,
+  InteractionSource,
   ToolCompressionStats,
   ToonSkipReason,
 } from "@/types";
@@ -101,6 +102,7 @@ export function buildInteractionRecord(params: {
   userId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
+  source?: InteractionSource | null;
   providerType: SupportedProviderDiscriminator;
   request: unknown;
   processedRequest: unknown;
@@ -119,6 +121,7 @@ export function buildInteractionRecord(params: {
     userId: params.userId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,
+    source: params.source,
     type: params.providerType,
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,

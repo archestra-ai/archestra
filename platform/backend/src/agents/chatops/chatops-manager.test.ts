@@ -11,6 +11,7 @@ import type {
   IncomingChatMessage,
 } from "@/types/chatops";
 import {
+  buildChatOpsSessionId,
   ChatOpsManager,
   findTolerantMatchLength,
   matchesAgentName,
@@ -1503,6 +1504,30 @@ describe("ChatOpsManager attachment passthrough", () => {
       expect.objectContaining({
         attachments: [historyImageAttachment],
       }),
+    );
+  });
+});
+
+describe("buildChatOpsSessionId", () => {
+  test("uses threadId when provided", () => {
+    expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe(
+      "chatops:slack:T456",
+    );
+  });
+
+  test("falls back to channelId when threadId is undefined", () => {
+    expect(buildChatOpsSessionId("slack", "C123")).toBe("chatops:slack:C123");
+  });
+
+  test("uses ms-teams provider ID", () => {
+    expect(buildChatOpsSessionId("ms-teams", "CH1", "TH1")).toBe(
+      "chatops:ms-teams:TH1",
+    );
+  });
+
+  test("uses channelId for non-threaded ms-teams message", () => {
+    expect(buildChatOpsSessionId("ms-teams", "CH1")).toBe(
+      "chatops:ms-teams:CH1",
     );
   });
 });

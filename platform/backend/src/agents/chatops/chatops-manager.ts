@@ -1,4 +1,4 @@
-import { executeA2AMessage } from "@/agents/a2a-executor";
+import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -855,11 +855,7 @@ export class ChatOpsManager {
     provider: ChatOpsProvider,
   ): Promise<{
     contextMessages: string[];
-    historyAttachments: Array<{
-      contentType: string;
-      contentBase64: string;
-      name?: string;
-    }>;
+    historyAttachments: A2AAttachment[];
   }> {
     logger.debug(
       {

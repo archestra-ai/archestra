@@ -1305,8 +1305,15 @@ async function fetchSlackFile(
     return response;
   }
 
-  // If we exhausted redirects, return the last response
-  return fetch(currentUrl, { redirect: "manual" });
+  // If we exhausted redirects, do a final attempt with auth if still a Slack domain
+  const headers: Record<string, string> = {};
+  if (isSlackFileUrl(currentUrl)) {
+    headers.Authorization = `Bearer ${botToken}`;
+  }
+  return fetch(currentUrl, {
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+    redirect: "follow",
+  });
 }
 
 /**

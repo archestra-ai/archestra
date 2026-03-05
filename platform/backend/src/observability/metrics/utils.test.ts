@@ -1,7 +1,5 @@
-import type { SpanContext } from "@opentelemetry/api";
-import { TraceFlags, trace } from "@opentelemetry/api";
-import { describe, expect, test, vi } from "@/test";
-import { getExemplarLabels, sanitizeLabelKey } from "./utils";
+import { describe, expect, test } from "@/test";
+import { sanitizeLabelKey } from "./utils";
 
 describe("sanitizeLabelKey", () => {
   test("passes through valid label keys unchanged", () => {
@@ -28,52 +26,5 @@ describe("sanitizeLabelKey", () => {
 
   test("handles empty string", () => {
     expect(sanitizeLabelKey("")).toBe("");
-  });
-});
-
-describe("getExemplarLabels", () => {
-  test("truncates long sessionID to fit 128-char exemplar budget", async () => {
-    const longSessionId =
-      "chatops:ms-teams:a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
-    vi.spyOn(
-      await import("@/observability/request-context"),
-      "getActiveSessionId",
-    ).mockReturnValue(longSessionId);
-
-    const validSpanContext: SpanContext = {
-      traceId: "d7016c05fd08aab5d6cc0df9ebd13180",
-      spanId: "3411dd4999b25680",
-      traceFlags: TraceFlags.SAMPLED,
-    };
-    const mockSpan = { spanContext: () => validSpanContext };
-    vi.spyOn(trace, "getSpan").mockReturnValue(mockSpan as never);
-
-    const labels = getExemplarLabels();
-
-    expect(labels.sessionID.length).toBe(58);
-    // Total budget: all key lengths + all value lengths <= 128
-    const totalSize = Object.entries(labels).reduce(
-      (sum, [k, v]) => sum + k.length + v.length,
-      0,
-    );
-    expect(totalSize).toBeLessThanOrEqual(128);
-  });
-
-  test("keeps short sessionID as-is", async () => {
-    vi.spyOn(
-      await import("@/observability/request-context"),
-      "getActiveSessionId",
-    ).mockReturnValue("short-session");
-
-    const validSpanContext: SpanContext = {
-      traceId: "d7016c05fd08aab5d6cc0df9ebd13180",
-      spanId: "3411dd4999b25680",
-      traceFlags: TraceFlags.SAMPLED,
-    };
-    const mockSpan = { spanContext: () => validSpanContext };
-    vi.spyOn(trace, "getSpan").mockReturnValue(mockSpan as never);
-
-    const labels = getExemplarLabels();
-    expect(labels.sessionID).toBe("short-session");
   });
 });

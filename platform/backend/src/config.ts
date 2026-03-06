@@ -772,6 +772,9 @@ const config = {
   },
   kb: {
     openaiApiKey: process.env.ARCHESTRA_KB_OPENAI_API_KEY || "",
+    hybridSearchEnabled:
+      process.env.ARCHESTRA_KB_HYBRID_SEARCH_ENABLED !== "false",
+    rerankerEnabled: process.env.ARCHESTRA_KB_RERANKER_ENABLED !== "false",
   },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",

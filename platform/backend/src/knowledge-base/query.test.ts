@@ -13,18 +13,30 @@ vi.mock("openai", () => {
   return { default: MockOpenAI };
 });
 
+const mockRerank = vi.hoisted(() => vi.fn());
+
+vi.mock("./reranker", () => ({
+  default: mockRerank,
+}));
+
 vi.mock("@/config", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/config")>();
   return {
     ...original,
     default: {
       ...original.default,
-      kb: { openaiApiKey: "test-api-key" },
+      kb: {
+        openaiApiKey: "test-api-key",
+        hybridSearchEnabled: true,
+        rerankerEnabled: false,
+      },
     },
   };
 });
 
+import config from "@/config";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
 
 import { queryService } from "./query";
@@ -211,5 +223,241 @@ describe("QueryService", () => {
     });
 
     expect(results).toHaveLength(2);
+  });
+
+  test("hybrid search merges vector and full-text results without duplicates", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+
+    const vectorOnly: VectorSearchResult = {
+      id: "vec-1",
+      content: "Vector only result",
+      chunkIndex: 0,
+      documentId: "doc-1",
+      title: "Doc 1",
+      sourceUrl: null,
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 0.9,
+    };
+
+    const fullTextOnly: VectorSearchResult = {
+      id: "ft-1",
+      content: "Full text only result",
+      chunkIndex: 1,
+      documentId: "doc-2",
+      title: "Doc 2",
+      sourceUrl: null,
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 5.0,
+    };
+
+    const sharedResult: VectorSearchResult = {
+      id: "shared-1",
+      content: "Shared result from both",
+      chunkIndex: 0,
+      documentId: "doc-3",
+      title: "Doc 3",
+      sourceUrl: "https://example.com",
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 0.8,
+    };
+
+    const vectorSearchSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockResolvedValueOnce([vectorOnly, sharedResult]);
+
+    const fullTextSearchSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockResolvedValueOnce([fullTextOnly, { ...sharedResult, score: 3.0 }]);
+
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      data: [{ embedding: makeFakeEmbedding(1) }],
+    });
+
+    const results = await queryService.query({
+      knowledgeBaseId: kb.id,
+      queryText: "test query",
+      userAcl: ["org:*"],
+    });
+
+    // shared-1 appears in both lists → should rank highest via RRF
+    expect(results[0].content).toBe("Shared result from both");
+    // No duplicates
+    const ids = results.map((r) => r.citation.documentId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(results).toHaveLength(3);
+
+    vectorSearchSpy.mockRestore();
+    fullTextSearchSpy.mockRestore();
+  });
+
+  test("falls back gracefully when full-text returns no results", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+
+    const vectorResult: VectorSearchResult = {
+      id: "vec-1",
+      content: "Semantic match",
+      chunkIndex: 0,
+      documentId: "doc-1",
+      title: "Doc 1",
+      sourceUrl: null,
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 0.85,
+    };
+
+    const vectorSearchSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockResolvedValueOnce([vectorResult]);
+
+    const fullTextSearchSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockResolvedValueOnce([]);
+
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      data: [{ embedding: makeFakeEmbedding(1) }],
+    });
+
+    const results = await queryService.query({
+      knowledgeBaseId: kb.id,
+      queryText: "semantic meaning only",
+      userAcl: ["org:*"],
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe("Semantic match");
+
+    vectorSearchSpy.mockRestore();
+    fullTextSearchSpy.mockRestore();
+  });
+
+  test("calls reranker after fusion when rerankerEnabled is true", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    config.kb.rerankerEnabled = true;
+
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+
+    const chunk1: VectorSearchResult = {
+      id: "r-1",
+      content: "First result",
+      chunkIndex: 0,
+      documentId: "doc-1",
+      title: "Doc 1",
+      sourceUrl: null,
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 0.9,
+    };
+
+    const chunk2: VectorSearchResult = {
+      id: "r-2",
+      content: "Second result",
+      chunkIndex: 1,
+      documentId: "doc-2",
+      title: "Doc 2",
+      sourceUrl: null,
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 0.7,
+    };
+
+    const vectorSearchSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockResolvedValueOnce([chunk1, chunk2]);
+
+    const fullTextSearchSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockResolvedValueOnce([chunk2, chunk1]);
+
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      data: [{ embedding: makeFakeEmbedding(1) }],
+    });
+
+    // Reranker reverses the order
+    mockRerank.mockResolvedValueOnce([chunk2, chunk1]);
+
+    const results = await queryService.query({
+      knowledgeBaseId: kb.id,
+      queryText: "test query",
+      userAcl: ["org:*"],
+      limit: 2,
+    });
+
+    expect(mockRerank).toHaveBeenCalledWith({
+      queryText: "test query",
+      chunks: expect.any(Array),
+      openaiApiKey: "test-api-key",
+    });
+    expect(results[0].content).toBe("Second result");
+    expect(results[1].content).toBe("First result");
+
+    config.kb.rerankerEnabled = false;
+    vectorSearchSpy.mockRestore();
+    fullTextSearchSpy.mockRestore();
+  });
+
+  test("skips reranker when rerankerEnabled is false", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+  }) => {
+    config.kb.rerankerEnabled = false;
+
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+
+    const chunk1: VectorSearchResult = {
+      id: "s-1",
+      content: "First",
+      chunkIndex: 0,
+      documentId: "doc-1",
+      title: "Doc 1",
+      sourceUrl: null,
+      sourceType: "api",
+      metadata: null,
+      connectorType: null,
+      score: 0.9,
+    };
+
+    const vectorSearchSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockResolvedValueOnce([chunk1]);
+
+    const fullTextSearchSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockResolvedValueOnce([]);
+
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      data: [{ embedding: makeFakeEmbedding(1) }],
+    });
+
+    await queryService.query({
+      knowledgeBaseId: kb.id,
+      queryText: "test",
+      userAcl: ["org:*"],
+    });
+
+    expect(mockRerank).not.toHaveBeenCalled();
+
+    vectorSearchSpy.mockRestore();
+    fullTextSearchSpy.mockRestore();
   });
 });

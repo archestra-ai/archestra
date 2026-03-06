@@ -513,6 +513,18 @@ export default function ChatPage() {
     [conversation, modelsByProvider, updateConversationMutation],
   );
 
+  // Handle agent change in existing conversation
+  const handleConversationAgentChange = useCallback(
+    (agentId: string) => {
+      if (!conversation) return;
+      updateConversationMutation.mutate({
+        id: conversation.id,
+        agentId,
+      });
+    },
+    [conversation, updateConversationMutation],
+  );
+
   // Find the specific internal agent for this conversation (if any)
   const _conversationInternalAgent = conversation?.agentId
     ? internalAgents.find((a) => a.id === conversation.agentId)
@@ -1477,15 +1489,8 @@ export default function ChatPage() {
                         }
                         submitDisabled={isPlaywrightSetupVisible}
                         isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                        currentPromptId={
-                          conversation?.agent?.agentType === "agent"
-                            ? (conversation?.agentId ?? null)
-                            : null
-                        }
-                        currentConversationAgentId={conversation?.agentId ?? ""}
-                        currentConversationModel={
-                          conversation?.selectedModel ?? ""
-                        }
+                        selectorAgentId={conversation?.agentId ?? null}
+                        onAgentChange={handleConversationAgentChange}
                       />
                       <div className="text-center">
                         <Version inline />
@@ -1552,7 +1557,7 @@ export default function ChatPage() {
                       }
                       submitDisabled={isPlaywrightSetupVisible}
                       isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                      initialAgentId={initialAgentId}
+                      selectorAgentId={initialAgentId}
                       onAgentChange={handleInitialAgentChange}
                     />
                   </div>

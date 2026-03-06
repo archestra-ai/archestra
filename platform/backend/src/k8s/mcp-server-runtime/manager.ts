@@ -3,7 +3,6 @@ import {
   createK8sClients,
   loadKubeConfig,
   sanitizeLabelValue,
-  validateKubeconfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
@@ -23,9 +22,6 @@ import type {
   K8sRuntimeStatusSummary,
   McpServerContainerLogs,
 } from "./schemas";
-
-// Re-export for backward compatibility
-export { validateKubeconfig };
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.

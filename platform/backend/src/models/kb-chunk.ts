@@ -2,7 +2,7 @@ import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbChunk, KbChunk } from "@/types";
 
-interface VectorSearchResult {
+export interface VectorSearchResult {
   id: string;
   content: string;
   chunkIndex: number;
@@ -67,6 +67,31 @@ class KbChunkModel {
       WHERE d.knowledge_base_id = ${knowledgeBaseId}
         AND c.embedding IS NOT NULL
       ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  static async fullTextSearch(params: {
+    knowledgeBaseId: string;
+    queryText: string;
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const { knowledgeBaseId, queryText, limit = 10 } = params;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.title, d.source_url AS "sourceUrl", d.source_type AS "sourceType", d.metadata,
+        kbc.connector_type AS "connectorType",
+        ts_rank(c.search_vector, plainto_tsquery('english', ${queryText})) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.knowledge_base_id = ${knowledgeBaseId}
+        AND c.search_vector @@ plainto_tsquery('english', ${queryText})
+      ORDER BY score DESC
       LIMIT ${limit}
     `);
 

@@ -70,6 +70,7 @@ export const PublicAppearanceSchema = z.object({
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   logo: z.string().nullable(),
+  logoDark: z.string().nullable(),
 });
 
 export const OrganizationLimitCleanupIntervalSchema = z
@@ -102,6 +103,7 @@ export const InsertOrganizationSchema = createInsertSchema(
 export const UpdateOrganizationSchema = z.object({
   ...extendedFields,
   logo: Base64PngSchema,
+  logoDark: Base64PngSchema,
   onboardingComplete: z.boolean(),
   convertToolResultsToToon: z.boolean(),
   compressionScope: OrganizationCompressionScopeSchema,

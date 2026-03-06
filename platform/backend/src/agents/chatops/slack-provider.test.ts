@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
+import { SLACK_REQUIRED_BOT_SCOPES } from "@shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import SlackProvider from "./slack-provider";
 
 // =============================================================================
@@ -1190,5 +1192,241 @@ describe("SlackProvider.getThreadHistory file metadata", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].files).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// parseGrantedScopes
+// =============================================================================
+
+describe("SlackProvider scope detection", () => {
+  function createUninitializedProvider(): SlackProvider {
+    return new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    });
+  }
+
+  test("detects missing scopes from x-oauth-scopes header", () => {
+    const provider = createUninitializedProvider();
+
+    const grantedScopes = SLACK_REQUIRED_BOT_SCOPES.filter(
+      (s) => s !== "files:read" && s !== "users:read.email",
+    ).join(",");
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    (provider as any).parseGrantedScopes(grantedScopes);
+
+    expect(provider.hasMissingScopes()).toBe(true);
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access private field
+    const missing = (provider as any).missingScopes as string[];
+    expect(missing).toEqual(
+      expect.arrayContaining(["files:read", "users:read.email"]),
+    );
+    expect(missing).toHaveLength(2);
+  });
+
+  test("reports no missing scopes when all are granted", () => {
+    const provider = createUninitializedProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    (provider as any).parseGrantedScopes(SLACK_REQUIRED_BOT_SCOPES.join(","));
+
+    expect(provider.hasMissingScopes()).toBe(false);
+  });
+
+  test("handles null header gracefully", () => {
+    const provider = createUninitializedProvider();
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    (provider as any).parseGrantedScopes(null);
+
+    expect(provider.hasMissingScopes()).toBe(false);
+  });
+
+  test("handles extra scopes beyond required without error", () => {
+    const provider = createUninitializedProvider();
+
+    const scopeHeader = [...SLACK_REQUIRED_BOT_SCOPES, "extra:scope"].join(",");
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    (provider as any).parseGrantedScopes(scopeHeader);
+
+    expect(provider.hasMissingScopes()).toBe(false);
+  });
+});
+
+// =============================================================================
+// notifyMissingScopes
+// =============================================================================
+
+describe("SlackProvider.notifyMissingScopes", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function createProviderWithMissingScopes(
+    missingScopes: string[],
+  ): SlackProvider {
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
+    (provider as any).botUserId = "UBOT123";
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
+    (provider as any).teamId = "T12345";
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
+    (provider as any).missingScopes = missingScopes;
+    const mockPostMessage = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      chat: { postMessage: mockPostMessage },
+    };
+    return provider;
+  }
+
+  const fakeMessage = {
+    messageId: "1234567890.123456",
+    channelId: "C12345",
+    workspaceId: "T12345",
+    threadId: "1111111111.000000",
+    senderId: "U_SENDER",
+    senderName: "Test User",
+    text: "hello",
+    rawText: "hello",
+    timestamp: new Date(),
+    isThreadReply: false,
+  };
+
+  test("sends notification with missing scopes list", async () => {
+    const provider = createProviderWithMissingScopes(["files:read"]);
+
+    // Ensure cache returns undefined (not notified yet)
+    vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+    vi.spyOn(cacheManager, "set").mockResolvedValue(true);
+
+    await provider.notifyMissingScopes(fakeMessage);
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access mock
+    const mockPostMessage = (provider as any).client.chat.postMessage;
+    expect(mockPostMessage).toHaveBeenCalledTimes(1);
+
+    const callArgs = mockPostMessage.mock.calls[0][0];
+    expect(callArgs.channel).toBe("C12345");
+    expect(callArgs.thread_ts).toBe("1111111111.000000");
+    expect(callArgs.text).toContain("`files:read`");
+    expect(callArgs.text).toContain("missing required scopes");
+    expect(callArgs.text).toContain(
+      "https://app.slack.com/app-settings/T12345/A12345/oauth",
+    );
+  });
+
+  test("does not send notification when already notified (cache hit)", async () => {
+    const provider = createProviderWithMissingScopes(["files:read"]);
+
+    vi.spyOn(cacheManager, "get").mockResolvedValue(true);
+
+    await provider.notifyMissingScopes(fakeMessage);
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access mock
+    const mockPostMessage = (provider as any).client.chat.postMessage;
+    expect(mockPostMessage).not.toHaveBeenCalled();
+  });
+
+  test("sets cache with 30-day TTL after sending", async () => {
+    const provider = createProviderWithMissingScopes(["files:read"]);
+
+    vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+    const setSpy = vi.spyOn(cacheManager, "set").mockResolvedValue(true);
+
+    await provider.notifyMissingScopes(fakeMessage);
+
+    expect(setSpy).toHaveBeenCalledWith(
+      `${CacheKey.SlackScopeNotification}-T12345`,
+      true,
+      30 * 24 * 60 * 60 * 1000, // 30 days in ms
+    );
+  });
+
+  test("does nothing when no missing scopes", async () => {
+    const provider = createProviderWithMissingScopes([]);
+
+    vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+
+    await provider.notifyMissingScopes(fakeMessage);
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access mock
+    const mockPostMessage = (provider as any).client.chat.postMessage;
+    expect(mockPostMessage).not.toHaveBeenCalled();
+  });
+
+  test("lists multiple missing scopes", async () => {
+    const provider = createProviderWithMissingScopes([
+      "files:read",
+      "users:read.email",
+    ]);
+
+    vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+    vi.spyOn(cacheManager, "set").mockResolvedValue(true);
+
+    await provider.notifyMissingScopes(fakeMessage);
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access mock
+    const callArgs = (provider as any).client.chat.postMessage.mock.calls[0][0];
+    expect(callArgs.text).toContain("`files:read`");
+    expect(callArgs.text).toContain("`users:read.email`");
+  });
+
+  test("handles postMessage failure gracefully", async () => {
+    const provider = createProviderWithMissingScopes(["files:read"]);
+
+    vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — access mock
+    (provider as any).client.chat.postMessage.mockRejectedValue(
+      new Error("channel_not_found"),
+    );
+
+    // Should not throw
+    await provider.notifyMissingScopes(fakeMessage);
+  });
+
+  test("uses fallback URL when appId is not set", async () => {
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
+    (provider as any).botUserId = "UBOT123";
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
+    (provider as any).teamId = "T12345";
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
+    (provider as any).missingScopes = ["files:read"];
+    const mockPostMessage = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      chat: { postMessage: mockPostMessage },
+    };
+
+    vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+    vi.spyOn(cacheManager, "set").mockResolvedValue(true);
+
+    await provider.notifyMissingScopes(fakeMessage);
+
+    const callArgs = mockPostMessage.mock.calls[0][0];
+    expect(callArgs.text).toContain(
+      "<https://api.slack.com/apps|Slack app settings>",
+    );
+    expect(callArgs.text).not.toContain("A12345");
   });
 });

@@ -19,6 +19,7 @@ describe("OrganizationModel", () => {
         theme: DEFAULT_THEME_ID,
         customFont: "lato",
         logo: null,
+        logoDark: null,
       });
     });
 
@@ -33,6 +34,7 @@ describe("OrganizationModel", () => {
         theme: "cosmic-night",
         customFont: "lato",
         logo: null,
+        logoDark: null,
       });
     });
 
@@ -80,6 +82,19 @@ describe("OrganizationModel", () => {
       expect(appearance.logo).toBe(VALID_PNG_BASE64);
     });
 
+    test("should return logoDark when set", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      await db
+        .update(schema.organizationsTable)
+        .set({ logoDark: VALID_PNG_BASE64 })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const appearance = await OrganizationModel.getPublicAppearance();
+
+      expect(appearance.logoDark).toBe(VALID_PNG_BASE64);
+    });
+
     test("should return first organization's appearance when multiple exist", async ({
       makeOrganization,
     }) => {
@@ -100,7 +115,7 @@ describe("OrganizationModel", () => {
       expect(appearance.customFont).toBe("roboto");
     });
 
-    test("should only return theme, customFont, and logo fields", async ({
+    test("should only return theme, customFont, logo, and logoDark fields", async ({
       makeOrganization,
     }) => {
       await makeOrganization();
@@ -111,6 +126,7 @@ describe("OrganizationModel", () => {
       expect(Object.keys(appearance).sort()).toEqual([
         "customFont",
         "logo",
+        "logoDark",
         "theme",
       ]);
     });
@@ -180,6 +196,29 @@ describe("OrganizationModel", () => {
       expect(updated?.logo).toBeNull();
     });
 
+    test("should accept valid PNG logoDark", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        logoDark: VALID_PNG_BASE64,
+      });
+
+      expect(updated?.logoDark).toBe(VALID_PNG_BASE64);
+    });
+
+    test("should accept null logoDark (removal)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await OrganizationModel.patch(org.id, { logoDark: VALID_PNG_BASE64 });
+      const updated = await OrganizationModel.patch(org.id, {
+        logoDark: null,
+      });
+
+      expect(updated?.logoDark).toBeNull();
+    });
+
     test("should return null for non-existent organization", async () => {
       const updated = await OrganizationModel.patch("non-existent-id", {
         theme: "twitter",
@@ -205,6 +244,28 @@ describe("OrganizationModel", () => {
       const updated = await OrganizationModel.patch("non-existent-id", {});
 
       expect(updated).toBeNull();
+    });
+  });
+
+  describe("patch logoDark validation (via UpdateOrganizationSchema)", () => {
+    const parseLogoDarkField = (logoDark: string | null) =>
+      UpdateOrganizationSchema.shape.logoDark.safeParse(logoDark);
+
+    test("should accept null", () => {
+      const result = parseLogoDarkField(null);
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept valid PNG data URI", () => {
+      const result = parseLogoDarkField(VALID_PNG_BASE64);
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject non-PNG data URI prefix", () => {
+      const result = parseLogoDarkField(
+        "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+      );
+      expect(result.success).toBe(false);
     });
   });
 

@@ -396,12 +396,7 @@ export function McpLogsDialog({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <TabsTrigger
-                        value="debug"
-                        disabled
-                        data-testid={E2eTestId.McpDebugTab}
-                        className="px-6"
-                      >
+                      <TabsTrigger value="debug" disabled className="px-6">
                         Shell
                       </TabsTrigger>
                     </span>
@@ -411,11 +406,7 @@ export function McpLogsDialog({
                   </TooltipContent>
                 </Tooltip>
               ) : (
-                <TabsTrigger
-                  value="debug"
-                  data-testid={E2eTestId.McpDebugTab}
-                  className="px-6"
-                >
+                <TabsTrigger value="debug" className="px-6">
                   Shell
                 </TabsTrigger>
               )}

@@ -1,1 +1,0 @@
-ALTER TABLE "models" ADD COLUMN "discovered_via_llm_proxy" boolean DEFAULT false NOT NULL;

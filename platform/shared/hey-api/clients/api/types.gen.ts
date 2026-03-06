@@ -18228,6 +18228,7 @@ export type GetModelsWithApiKeysResponses = {
         completionPricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;
@@ -18344,6 +18345,7 @@ export type UpdateModelPricingResponses = {
         completionPricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;

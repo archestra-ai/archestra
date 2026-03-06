@@ -60472,6 +60472,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "discoveredViaLlmProxy": {
+                        "type": "boolean"
+                      },
                       "lastSyncedAt": {
                         "type": "string",
                         "format": "date-time"
@@ -60609,6 +60612,7 @@
                       "completionPricePerToken",
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
+                      "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
                       "updatedAt",
@@ -60975,6 +60979,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "discoveredViaLlmProxy": {
+                      "type": "boolean"
+                    },
                     "lastSyncedAt": {
                       "type": "string",
                       "format": "date-time"
@@ -61002,6 +61009,7 @@
                     "completionPricePerToken",
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
+                    "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
                     "updatedAt"

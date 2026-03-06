@@ -1270,8 +1270,8 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Transform to response format with capabilities and markers
-      const response = modelsWithApiKeys.map(
-        ({ model, isFastest, isBest, apiKeys }) => ({
+      const response = [
+        ...modelsWithApiKeys.map(({ model, isFastest, isBest, apiKeys }) => ({
           ...model,
           isFastest,
           isBest,

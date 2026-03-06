@@ -3,6 +3,10 @@ const CONNECTOR_ICON_MAP: Record<string, string> = {
   confluence: "/icons/confluence.png",
 };
 
+export function hasConnectorIcon(type: string): boolean {
+  return type in CONNECTOR_ICON_MAP;
+}
+
 export function ConnectorTypeIcon({
   type,
   className,

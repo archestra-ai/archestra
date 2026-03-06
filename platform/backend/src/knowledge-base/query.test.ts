@@ -94,8 +94,8 @@ describe("QueryService", () => {
     expect(results[0].citation).toEqual({
       title: "Test Document",
       sourceUrl: "https://example.com/doc",
-      sourceType: "api",
       documentId: doc.id,
+      connectorType: null,
     });
     // First result should have higher score (closer embedding)
     expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);

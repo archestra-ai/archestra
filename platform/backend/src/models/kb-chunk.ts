@@ -11,6 +11,7 @@ interface VectorSearchResult {
   sourceUrl: string | null;
   sourceType: string;
   metadata: Record<string, unknown> | null;
+  connectorType: string | null;
   score: number;
 }
 
@@ -58,9 +59,11 @@ class KbChunkModel {
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.title, d.source_url AS "sourceUrl", d.source_type AS "sourceType", d.metadata,
+        kbc.connector_type AS "connectorType",
         1 - (c.embedding <=> ${embeddingStr}::vector(1536)) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.knowledge_base_id = ${knowledgeBaseId}
         AND c.embedding IS NOT NULL
       ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)

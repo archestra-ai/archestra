@@ -10,8 +10,8 @@ interface ChunkResult {
   citation: {
     title: string;
     sourceUrl: string | null;
-    sourceType: string;
     documentId: string;
+    connectorType: string | null;
   };
 }
 
@@ -52,8 +52,8 @@ class QueryService {
       citation: {
         title: row.title,
         sourceUrl: row.sourceUrl,
-        sourceType: row.sourceType,
         documentId: row.documentId,
+        connectorType: row.connectorType,
       },
     }));
   }

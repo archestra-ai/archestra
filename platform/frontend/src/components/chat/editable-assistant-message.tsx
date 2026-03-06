@@ -22,7 +22,12 @@ interface EditableAssistantMessageProps {
   text: string;
   isEditing: boolean;
   showActions: boolean;
-  showCitations?: boolean;
+  citationParts?: Array<{
+    type: string;
+    toolName?: string;
+    state?: string;
+    output?: unknown;
+  }>;
   editDisabled?: boolean;
   onStartEdit: (partKey: string) => void;
   onCancelEdit: () => void;
@@ -40,7 +45,7 @@ export function EditableAssistantMessage({
   text,
   isEditing,
   showActions,
-  showCitations = false,
+  citationParts,
   editDisabled = false,
   onStartEdit,
   onCancelEdit,
@@ -168,7 +173,7 @@ export function EditableAssistantMessage({
       <div className="relative flex flex-col items-start pb-8 w-full">
         <MessageContent>
           <Response>{text}</Response>
-          {showCitations && <KnowledgeGraphCitations />}
+          {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
         </MessageContent>
         {showActions && (
           <MessageActions

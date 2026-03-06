@@ -541,9 +541,11 @@ export function ChatMessages({
                           isLastAssistantInSequence &&
                           isLastTextPart &&
                           status !== "streaming";
-                        const showCitations =
+                        const citationParts =
                           isLastTextPart &&
-                          hasKnowledgeBaseToolCall(message.parts);
+                          hasKnowledgeBaseToolCall(message.parts)
+                            ? message.parts
+                            : undefined;
 
                         // Check for <think> tags (used by Qwen and similar models)
                         if (hasThinkingTags(part.text)) {
@@ -584,8 +586,10 @@ export function ChatMessages({
                                     showActions={
                                       showActions && isLastParsedTextPart
                                     }
-                                    showCitations={
-                                      showCitations && isLastParsedTextPart
+                                    citationParts={
+                                      isLastParsedTextPart
+                                        ? citationParts
+                                        : undefined
                                     }
                                     editDisabled={isResponseInProgress}
                                     onStartEdit={handleStartEdit}
@@ -607,7 +611,7 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
-                              showCitations={showCitations}
+                              citationParts={citationParts}
                               editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}

@@ -13,6 +13,7 @@ import {
   MoreVertical,
   Plus,
   Share2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -42,6 +43,7 @@ import {
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
+import { useConversationShare } from "@/lib/chat-share.query";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import {
   ChatApiKeyForm,
@@ -155,6 +157,8 @@ export default function ChatPage() {
   >(undefined);
 
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const { data: conversationShare } = useConversationShare(conversationId ?? undefined);
+  const isShared = !!conversationShare;
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -1266,10 +1270,20 @@ export default function ChatPage() {
                     onClick={() => setIsShareDialogOpen(true)}
                     className="text-xs"
                   >
-                    <Share2 className="h-3 w-3 mr-1" />
-                    Share
+                    {isShared ? (
+                      <>
+                        <Users className="h-3 w-3 mr-1 text-primary" />
+                        <span className="text-primary">Shared</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-3 w-3 mr-1" />
+                        Share
+                      </>
+                    )}
                   </Button>
                 )}
+                {conversationId && <div className="w-px h-4 bg-border" />}
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1318,8 +1332,17 @@ export default function ChatPage() {
                       <DropdownMenuItem
                         onSelect={() => setIsShareDialogOpen(true)}
                       >
-                        <Share2 className="h-4 w-4" />
-                        Share
+                        {isShared ? (
+                          <>
+                            <Users className="h-4 w-4 text-primary" />
+                            <span className="text-primary">Shared</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="h-4 w-4" />
+                            Share
+                          </>
+                        )}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onSelect={toggleArtifactPanel}>

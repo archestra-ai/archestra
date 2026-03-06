@@ -26,7 +26,7 @@ import {
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
 import { ProviderError } from "@/routes/chat/errors";
-import type { InternalMcpCatalog } from "@/types";
+import type { Agent, InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
   type LimitEntityType,
@@ -1670,7 +1670,7 @@ export async function executeArchestraTool(
     toolName === TOOL_GET_LLM_PROXY_FULL_NAME ||
     toolName === TOOL_GET_MCP_GATEWAY_FULL_NAME
   ) {
-    const getTypeMap: Record<string, string> = {
+    const getTypeMap: Record<string, "agent" | "llm_proxy" | "mcp_gateway"> = {
       [TOOL_GET_AGENT_FULL_NAME]: "agent",
       [TOOL_GET_LLM_PROXY_FULL_NAME]: "llm_proxy",
       [TOOL_GET_MCP_GATEWAY_FULL_NAME]: "mcp_gateway",
@@ -1679,26 +1679,55 @@ export async function executeArchestraTool(
     const getLabel = expectedType.replace("_", " ");
 
     logger.info(
-      { agentId: contextAgent.id, requestedId: args?.id, type: expectedType },
+      {
+        agentId: contextAgent.id,
+        requestedId: args?.id,
+        requestedName: args?.name,
+        type: expectedType,
+      },
       `get_${expectedType} tool called`,
     );
 
     try {
-      const id = args?.id as string;
+      const id = args?.id as string | undefined;
+      const name = args?.name as string | undefined;
 
-      if (!id) {
+      if (!id && !name) {
         return {
           content: [
             {
               type: "text",
-              text: "Error: id parameter is required",
+              text: "Error: either id or name parameter is required",
             },
           ],
           isError: true,
         };
       }
 
-      const record = await AgentModel.findById(id);
+      let record: Agent | null | undefined;
+
+      if (id) {
+        record = await AgentModel.findById(id);
+      } else if (name) {
+        // Search by name, only matching personal agents owned by the current user
+        const results = await AgentModel.findAllPaginated(
+          { limit: 1, offset: 0 },
+          undefined,
+          {
+            name,
+            agentType: expectedType,
+            scope: "personal",
+            authorIds: context.userId ? [context.userId] : [],
+          },
+          context.userId,
+          true,
+        );
+
+        if (results.data.length > 0) {
+          record = results.data[0];
+        }
+      }
+
       if (!record) {
         return {
           content: [
@@ -2812,7 +2841,7 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_GET_AGENT_FULL_NAME,
       title: "Get Agent",
       description:
-        "Get a specific agent by ID with full details including labels and team assignments",
+        "Get a specific agent by ID or name. When searching by name, only your personal agents are matched.",
       inputSchema: {
         type: "object",
         properties: {
@@ -2820,8 +2849,12 @@ export function getArchestraMcpTools(): Tool[] {
             type: "string",
             description: "The ID of the agent to retrieve",
           },
+          name: {
+            type: "string",
+            description:
+              "Search by name (partial match). Only returns your personal agents.",
+          },
         },
-        required: ["id"],
       },
       annotations: {},
       _meta: {},
@@ -2830,7 +2863,7 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_GET_LLM_PROXY_FULL_NAME,
       title: "Get LLM Proxy",
       description:
-        "Get a specific LLM proxy by ID with full details including labels and team assignments",
+        "Get a specific LLM proxy by ID or name. When searching by name, only your personal proxies are matched.",
       inputSchema: {
         type: "object",
         properties: {
@@ -2838,8 +2871,12 @@ export function getArchestraMcpTools(): Tool[] {
             type: "string",
             description: "The ID of the LLM proxy to retrieve",
           },
+          name: {
+            type: "string",
+            description:
+              "Search by name (partial match). Only returns your personal proxies.",
+          },
         },
-        required: ["id"],
       },
       annotations: {},
       _meta: {},
@@ -2848,7 +2885,7 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_GET_MCP_GATEWAY_FULL_NAME,
       title: "Get MCP Gateway",
       description:
-        "Get a specific MCP gateway by ID with full details including labels and team assignments",
+        "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
       inputSchema: {
         type: "object",
         properties: {
@@ -2856,8 +2893,12 @@ export function getArchestraMcpTools(): Tool[] {
             type: "string",
             description: "The ID of the MCP gateway to retrieve",
           },
+          name: {
+            type: "string",
+            description:
+              "Search by name (partial match). Only returns your personal gateways.",
+          },
         },
-        required: ["id"],
       },
       annotations: {},
       _meta: {},

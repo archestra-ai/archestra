@@ -36791,6 +36791,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "incomingEmailEnabled": {
                             "type": "boolean"
                           },
@@ -37019,6 +37023,7 @@
                           "promptVersion",
                           "promptHistory",
                           "description",
+                          "icon",
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
@@ -37354,6 +37359,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "incomingEmailEnabled": {
                     "type": "boolean"
                   },
@@ -37548,6 +37557,10 @@
                       ]
                     },
                     "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "icon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -37779,6 +37792,7 @@
                     "promptVersion",
                     "promptHistory",
                     "description",
+                    "icon",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -38164,6 +38178,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "incomingEmailEnabled": {
                         "type": "boolean"
                       },
@@ -38392,6 +38410,7 @@
                       "promptVersion",
                       "promptHistory",
                       "description",
+                      "icon",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
@@ -38732,6 +38751,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -38960,6 +38983,7 @@
                     "promptVersion",
                     "promptHistory",
                     "description",
+                    "icon",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -39299,6 +39323,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -39527,6 +39555,7 @@
                     "promptVersion",
                     "promptHistory",
                     "description",
+                    "icon",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -39878,6 +39907,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -40106,6 +40139,7 @@
                     "promptVersion",
                     "promptHistory",
                     "description",
+                    "icon",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -40393,6 +40427,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "incomingEmailEnabled": {
                     "type": "boolean"
                   },
@@ -40593,6 +40631,10 @@
                       ]
                     },
                     "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "icon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -40824,6 +40866,7 @@
                     "promptVersion",
                     "promptHistory",
                     "description",
+                    "icon",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -41428,6 +41471,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "icon": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "incomingEmailEnabled": {
                           "type": "boolean"
                         },
@@ -41656,6 +41703,7 @@
                         "promptVersion",
                         "promptHistory",
                         "description",
+                        "icon",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain",
@@ -42064,6 +42112,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -42292,6 +42344,7 @@
                     "promptVersion",
                     "promptHistory",
                     "description",
+                    "icon",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",

@@ -20,6 +20,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Config"],
         response: {
           200: z.strictObject({
+            enterpriseFeatures: z.strictObject({
+              core: z.boolean(),
+              knowledgeBase: z.boolean(),
+            }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
@@ -38,10 +42,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
             }),
-            enterpriseFeatures: z.strictObject({
-              core: z.boolean(),
-              knowledgeBase: z.boolean(),
-            }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
               z.string().nullable(),
@@ -57,6 +57,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         org?.globalToolPolicy ?? "permissive";
 
       return reply.send({
+        enterpriseFeatures: config.enterpriseFeatures,
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
@@ -71,7 +72,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
         },
-        enterpriseFeatures: config.enterpriseFeatures,
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
           openrouter: config.llm.openrouter.baseUrl || null,

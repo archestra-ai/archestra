@@ -175,10 +175,10 @@ export default {
       },
     } satisfies Partial<PostHogConfig>,
   },
+  /**
+   * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
+   */
   enterpriseFeatures: {
-    /**
-     * Core enterprise license — hides Archestra-specific branding and UI sections when enabled.
-     */
     get core() {
       return (
         env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true"

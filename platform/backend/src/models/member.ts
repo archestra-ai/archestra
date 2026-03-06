@@ -161,6 +161,34 @@ class MemberModel {
   }
 
   /**
+   * Get all members of an organization with user details
+   */
+  static async findAllByOrganization(organizationId: string) {
+    logger.debug(
+      { organizationId },
+      "MemberModel.findAllByOrganization: fetching members",
+    );
+    const results = await db
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.membersTable.organizationId, organizationId))
+      .orderBy(schema.usersTable.name);
+    logger.debug(
+      { organizationId, count: results.length },
+      "MemberModel.findAllByOrganization: completed",
+    );
+    return results;
+  }
+
+  /**
    * Delete a member by member ID or user ID + organization ID
    */
   static async deleteByMemberOrUserId(

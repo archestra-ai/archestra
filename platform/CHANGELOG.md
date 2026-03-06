@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.58](https://github.com/archestra-ai/archestra/compare/platform-v1.0.57...platform-v1.0.58) (2026-03-06)
+
+
+### Features
+
+* detect and notify about missing Slack bot scopes ([#3132](https://github.com/archestra-ai/archestra/issues/3132)) ([f9c1650](https://github.com/archestra-ai/archestra/commit/f9c16506afae591373fe389d95028315a80ad7cd))
+* filtering agents gateways proxies ([#3134](https://github.com/archestra-ai/archestra/issues/3134)) ([b4c1394](https://github.com/archestra-ai/archestra/commit/b4c1394542b2603f0b8125e2a9a3d92b8eedac94))
+* share readonly chats ([#3152](https://github.com/archestra-ai/archestra/issues/3152)) ([b840167](https://github.com/archestra-ai/archestra/commit/b840167c1b1ae6ff9f3af55f97514ea145c86842))
+
+
+### Bug Fixes
+
+* add dark logo option ([#3128](https://github.com/archestra-ai/archestra/issues/3128)) ([012564d](https://github.com/archestra-ai/archestra/commit/012564dfd44bdcc394a400b6f3b5ecac300b59e4))
+* add remove button on empty MCP server/profile pills ([#3139](https://github.com/archestra-ai/archestra/issues/3139)) ([#3142](https://github.com/archestra-ai/archestra/issues/3142)) ([27bd24e](https://github.com/archestra-ai/archestra/commit/27bd24e62f365fd573958b04c64dc6132977646c))
+* allow members to create/manage personal API keys ([#3149](https://github.com/archestra-ai/archestra/issues/3149)) ([52df7c7](https://github.com/archestra-ai/archestra/commit/52df7c74c92a70e395b75892c513554936fd6a78))
+* filter out orphaned models with no API keys from models table ([#3138](https://github.com/archestra-ai/archestra/issues/3138)) ([#3143](https://github.com/archestra-ai/archestra/issues/3143)) ([03fd2ce](https://github.com/archestra-ai/archestra/commit/03fd2ce7923f74a492dfe31f5b9ae1ed84d25c3c))
+* guardrails page layout broken on medium-sized screens ([#3137](https://github.com/archestra-ai/archestra/issues/3137)) ([#3141](https://github.com/archestra-ai/archestra/issues/3141)) ([670d3d8](https://github.com/archestra-ai/archestra/commit/670d3d8cb48fc8cea133e8ab7aa9e0ac817c9cba))
+* prevent "RangeError: Label set size must be smaller than 128 UTF… ([#3135](https://github.com/archestra-ai/archestra/issues/3135)) ([f6268e7](https://github.com/archestra-ai/archestra/commit/f6268e718bd31cb51da8c5b282147ef38e3ee9f8))
+* remove branding from enterprise license ([#3140](https://github.com/archestra-ai/archestra/issues/3140)) ([5342816](https://github.com/archestra-ai/archestra/commit/53428165c7a88b48ba58532afd0843b4919a40d5))
+* version footer incorrectly shows "new" for commit-hash dev builds ([#3146](https://github.com/archestra-ai/archestra/issues/3146)) ([08f6f7a](https://github.com/archestra-ai/archestra/commit/08f6f7ad9e90fad0cfaeac39c0fed8a8a7c3fcdb))
+
+
+### Miscellaneous Chores
+
+* iron out team-admin permissions ([#3131](https://github.com/archestra-ai/archestra/issues/3131)) ([ac67e2d](https://github.com/archestra-ai/archestra/commit/ac67e2d40d9b62d20ccf8cd011011d30c569691a))
+* permission-gate built-in agents and sidebar warnings ([#3144](https://github.com/archestra-ai/archestra/issues/3144)) ([1fb94dd](https://github.com/archestra-ai/archestra/commit/1fb94dd9badfb738525eaa3a4fe23fd7d6aacb1d))
+
 ## [1.0.57](https://github.com/archestra-ai/archestra/compare/platform-v1.0.56...platform-v1.0.57) (2026-03-05)
 
 

@@ -24,6 +24,7 @@ export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatApiKeysRoutes } from "./chat/routes.api-keys";
 export { default as chatRoutes } from "./chat/routes.chat";
 export { default as chatModelsRoutes } from "./chat/routes.models";
+export { default as chatShareRoutes } from "./chat/routes.share";
 export { default as virtualApiKeysRoutes } from "./chat/routes.virtual-api-keys";
 export { default as chatopsRoutes } from "./chatops";
 export { default as configRoutes } from "./config";

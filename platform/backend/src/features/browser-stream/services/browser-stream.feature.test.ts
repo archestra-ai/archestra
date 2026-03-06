@@ -3,7 +3,7 @@ import { browserStreamFeature } from "./browser-stream.feature";
 
 describe("BrowserStreamFeature", () => {
   describe("isEnabled", () => {
-    test("always returns true", () => {
+    test("returns true", () => {
       expect(browserStreamFeature.isEnabled()).toBe(true);
     });
   });

@@ -12,6 +12,8 @@ import {
   Loader2,
   MoreVertical,
   Plus,
+  Share2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -40,6 +42,7 @@ import {
 } from "@/components/chat/playwright-install-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
+import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import {
   ChatApiKeyForm,
@@ -99,6 +102,7 @@ import {
   useChatApiKeys,
   useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
+import { useConversationShare } from "@/lib/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
@@ -151,6 +155,12 @@ export default function ChatPage() {
   const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
     string | undefined
   >(undefined);
+
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const { data: conversationShare } = useConversationShare(
+    conversationId ?? undefined,
+  );
+  const isShared = !!conversationShare;
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -1252,6 +1262,27 @@ export default function ChatPage() {
               )}
               {/* Right side - desktop: original buttons */}
               <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+                {conversationId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsShareDialogOpen(true)}
+                    className="text-xs"
+                  >
+                    {isShared ? (
+                      <>
+                        <Users className="h-3 w-3 mr-1 text-primary" />
+                        <span className="text-primary">Shared</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-3 w-3 mr-1" />
+                        Share
+                      </>
+                    )}
+                  </Button>
+                )}
+                {conversationId && <div className="w-px h-4 bg-border" />}
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1293,6 +1324,23 @@ export default function ChatPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {conversationId && (
+                      <DropdownMenuItem
+                        onSelect={() => setIsShareDialogOpen(true)}
+                      >
+                        {isShared ? (
+                          <>
+                            <Users className="h-4 w-4 text-primary" />
+                            <span className="text-primary">Shared</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="h-4 w-4" />
+                            Share
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onSelect={toggleArtifactPanel}>
                       <FileText className="h-4 w-4" />
                       {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
@@ -1614,6 +1662,14 @@ export default function ChatPage() {
         }}
         agent={versionHistoryAgent}
       />
+
+      {conversationId && (
+        <ShareConversationDialog
+          conversationId={conversationId}
+          open={isShareDialogOpen}
+          onOpenChange={setIsShareDialogOpen}
+        />
+      )}
     </div>
   );
 }

@@ -241,6 +241,11 @@ export const RouteId = {
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
+  ShareConversation: "shareConversation",
+  UnshareConversation: "unshareConversation",
+  GetConversationShare: "getConversationShare",
+  GetSharedConversation: "getSharedConversation",
+  ForkSharedConversation: "forkSharedConversation",
   GetChatModels: "getChatModels",
   SyncChatModels: "syncChatModels",
 
@@ -273,6 +278,7 @@ export const RouteId = {
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
+  GetOrganizationMembers: "getOrganizationMembers",
   DeletePendingSignupMember: "deletePendingSignupMember",
 
   // Appearance Routes (public/unauthenticated)

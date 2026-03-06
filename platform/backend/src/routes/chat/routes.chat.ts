@@ -1369,7 +1369,7 @@ async function persistNewMessages(
       );
     } else {
       // For onError, just strip without detailed logging
-      messagesToStore = stripImagesFromMessages(messagesToSave as UiMessage[]);
+      messagesToStore = stripImagesFromMessages(messagesToStore);
     }
 
     // Append only new messages with timestamps

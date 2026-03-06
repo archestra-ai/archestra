@@ -48,10 +48,14 @@ export function useProfilesPaginated(params?: {
   initialData?: archestraApiTypes.GetAgentsResponses["200"];
   limit?: number;
   offset?: number;
-  sortBy?: "name" | "createdAt" | "toolsCount" | "team";
+  sortBy?: "name" | "createdAt" | "toolsCount" | "subagentsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
   agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+  scope?: "personal" | "team" | "org" | "built_in";
+  teamIds?: string[];
+  authorIds?: string[];
+  labels?: string;
 }) {
   const {
     initialData,
@@ -61,23 +65,42 @@ export function useProfilesPaginated(params?: {
     sortDirection,
     name,
     agentTypes,
+    scope,
+    teamIds,
+    authorIds,
+    labels,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // no agentTypes filter, AND matching default page size (20)
+  // no agentTypes filter, no scope filter, AND matching default page size (20)
   const useInitialData =
     offset === 0 &&
     (sortBy === undefined || sortBy === DEFAULT_SORT_BY) &&
     (sortDirection === undefined || sortDirection === DEFAULT_SORT_DIRECTION) &&
     name === undefined &&
     agentTypes === undefined &&
+    scope === undefined &&
+    teamIds === undefined &&
+    authorIds === undefined &&
+    labels === undefined &&
     (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
 
   return useQuery({
     queryKey: [
       "agents",
-      { limit, offset, sortBy, sortDirection, name, agentTypes },
+      {
+        limit,
+        offset,
+        sortBy,
+        sortDirection,
+        name,
+        agentTypes,
+        scope,
+        teamIds,
+        authorIds,
+        labels,
+      },
     ],
     queryFn: async () =>
       (
@@ -89,6 +112,10 @@ export function useProfilesPaginated(params?: {
             sortDirection,
             name,
             agentTypes,
+            scope,
+            teamIds,
+            authorIds,
+            labels,
           },
         })
       ).data ?? null,

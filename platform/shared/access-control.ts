@@ -26,7 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
   identityProvider: ["create", "read", "update", "delete"],
-  member: ["create", "update", "delete"],
+  member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   knowledgeBase: ["create", "read", "update", "delete"],
@@ -482,6 +482,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteConversationEnabledTools]: {
     conversation: ["update"],
   },
+  [RouteId.ShareConversation]: {
+    conversation: ["update"],
+  },
+  [RouteId.UnshareConversation]: {
+    conversation: ["update"],
+  },
+  [RouteId.GetConversationShare]: {
+    conversation: ["read"],
+  },
+  [RouteId.GetSharedConversation]: {
+    conversation: ["read"],
+  },
+  [RouteId.ForkSharedConversation]: {
+    conversation: ["create"],
+  },
   [RouteId.GetChatApiKeys]: {
     chatSettings: ["read"],
   },
@@ -577,6 +592,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
+  [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
 
@@ -705,6 +721,9 @@ export const requiredEndpointPermissionsMap: Partial<
  */
 export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/chat": {
+    conversation: ["read"],
+  },
+  "/chat/shared": {
     conversation: ["read"],
   },
 

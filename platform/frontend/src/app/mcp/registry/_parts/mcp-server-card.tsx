@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
   type McpDeploymentStatusEntry,
@@ -9,6 +10,7 @@ import {
   AlertTriangle,
   Code,
   Info,
+  MessageSquare,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -18,6 +20,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import {
   WithoutPermissions,
@@ -40,6 +43,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
+import { useCreateProfile } from "@/lib/agent.query";
+import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
@@ -128,6 +133,10 @@ export function McpServerCard({
 
   const tools = isBuiltin ? catalogTools : mcpServerTools;
 
+  const createAgent = useCreateProfile();
+  const bulkAssignTools = useBulkAssignTools();
+  const [isChatCreating, setIsChatCreating] = useState(false);
+
   const isByosEnabled = useFeatureFlag("byosEnabled");
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
@@ -196,6 +205,44 @@ export function McpServerCard({
     setIsToolsDialogOpen(open);
     if (!open && autoOpenAssignmentsDialog) {
       onAssignmentsDialogClose?.();
+    }
+  };
+
+  const handleChatWithMcpServer = async () => {
+    setIsChatCreating(true);
+    const agentName = item.label || item.name;
+    try {
+      // Get or create: check if an agent with this name already exists
+      const { data: existingAgents } = await archestraApiSdk.getAllAgents({
+        query: { agentType: "agent" },
+      });
+      const existing = existingAgents?.find((a) => a.name === agentName);
+
+      const agent =
+        existing ??
+        (await createAgent.mutateAsync({
+          name: agentName,
+          agentType: "agent",
+          scope: "personal",
+          teams: [],
+        }));
+
+      if (agent && tools && tools.length > 0) {
+        const assignments = tools.map((tool) => ({
+          agentId: agent.id,
+          toolId: tool.id,
+          useDynamicTeamCredential: true,
+        }));
+        await bulkAssignTools.mutateAsync({ assignments });
+      }
+
+      if (agent) {
+        window.location.href = `/chat/new?agent_id=${agent.id}`;
+      }
+    } catch {
+      toast.error("Failed to create chat agent");
+    } finally {
+      setIsChatCreating(false);
     }
   };
 
@@ -295,6 +342,20 @@ export function McpServerCard({
       Debug
     </Button>
   ) : null;
+
+  const chatButton =
+    tools && tools.length > 0 ? (
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        disabled={isChatCreating}
+        onClick={handleChatWithMcpServer}
+      >
+        <MessageSquare className="mr-2 h-4 w-4" />
+        {isChatCreating ? "Creating..." : "Chat with MCP Server"}
+      </Button>
+    ) : null;
 
   const manageCatalogItemDropdownMenu = (
     <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
@@ -534,37 +595,24 @@ export function McpServerCard({
             Reconnect Required
           </PermissionButton>
         )}
-      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex gap-1">
           {userIsMcpServerAdmin && editButton}
           {logsButton}
         </div>
-        {!isInstalling && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
-                    onClick={onInstallRemoteServer}
-                    disabled={isInstalling || !canCreateNewInstallation}
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    {isInstalling ? "Connecting..." : "Connect"}
-                  </PermissionButton>
-                </div>
-              </TooltipTrigger>
-              {!canCreateNewInstallation && (
-                <TooltipContent side="bottom">
-                  <p>All connect options exhausted (personal and all teams)</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+        {chatButton}
+        {!isInstalling && canCreateNewInstallation && (
+          <PermissionButton
+            permissions={{ mcpServer: ["create"] }}
+            onClick={onInstallRemoteServer}
+            size="sm"
+            variant="outline"
+            className="w-full"
+          >
+            <User className="mr-2 h-4 w-4" />
+            Connect
+          </PermissionButton>
         )}
       </div>
     </>
@@ -599,14 +647,15 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + action buttons + Connect button pinned to bottom */}
+      {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex gap-1">
           {userIsMcpServerAdmin && editButton}
           {logsButton}
         </div>
+        {chatButton}
         {/* Show Connect button when user can create new installation */}
-        {!isInstalling && (
+        {!isInstalling && canCreateNewInstallation && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -614,7 +663,7 @@ export function McpServerCard({
                   <PermissionButton
                     permissions={{ mcpServer: ["create"] }}
                     onClick={onInstallLocalServer}
-                    disabled={!isLocalMcpEnabled || !canCreateNewInstallation}
+                    disabled={!isLocalMcpEnabled}
                     size="sm"
                     variant="outline"
                     className="w-full"
@@ -625,13 +674,9 @@ export function McpServerCard({
                   </PermissionButton>
                 </div>
               </TooltipTrigger>
-              {(!isLocalMcpEnabled || !canCreateNewInstallation) && (
+              {!isLocalMcpEnabled && (
                 <TooltipContent side="bottom">
-                  <p>
-                    {!isLocalMcpEnabled
-                      ? LOCAL_MCP_DISABLED_MESSAGE
-                      : "All connect options exhausted (personal and all teams)"}
-                  </p>
+                  <p>{LOCAL_MCP_DISABLED_MESSAGE}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -683,12 +728,13 @@ export function McpServerCard({
           Reinstall Required
         </PermissionButton>
       )}
-      {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
+      {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex gap-1">
           {userIsMcpServerAdmin && editButton}
           {logsButton}
         </div>
+        {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && installedServer && (
           <Button
             variant="outline"
@@ -761,6 +807,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
+      <div className="mt-auto">{chatButton}</div>
     </>
   );
 

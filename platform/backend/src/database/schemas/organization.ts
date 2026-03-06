@@ -4,6 +4,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
@@ -11,6 +12,7 @@ import type {
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
+import secretTable from "./secret";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -51,6 +53,15 @@ const organizationsTable = pgTable("organization", {
   allowChatFileUploads: boolean("allow_chat_file_uploads")
     .notNull()
     .default(true),
+
+  /** Embedding model for knowledge base RAG (enterprise feature) */
+  embeddingModel: text("embedding_model").default("text-embedding-3-small"),
+
+  /** Secret ID storing the embedding API key (enterprise feature) */
+  embeddingApiKeySecretId: uuid("embedding_api_key_secret_id").references(
+    () => secretTable.id,
+    { onDelete: "set null" },
+  ),
 });
 
 export default organizationsTable;

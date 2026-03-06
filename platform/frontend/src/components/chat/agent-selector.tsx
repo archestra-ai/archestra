@@ -1,9 +1,10 @@
 "use client";
 
-import { Bot, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentIcon } from "@/components/agent-icon";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
   AlertDialog,
@@ -107,7 +108,14 @@ export function AgentSelector({
             data-agent-selector
             className="max-w-[300px] min-w-0"
           >
-            <Bot className="size-4 shrink-0 opacity-70" />
+            <AgentIcon
+              icon={
+                (currentAgent as unknown as Record<string, unknown>)?.icon as
+                  | string
+                  | null
+              }
+              size={16}
+            />
             <span className="truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>

@@ -21,6 +21,7 @@
     "@better-auth/oauth-provider": "1.4.19",
     "@better-auth/sso": "1.4.19",
     "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#516664e",
+    "@ferrucc-io/emoji-picker": "^0.0.48",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-accordion": "^1.2.12",

@@ -1207,7 +1207,7 @@ export default function ChatPage() {
               {/* Left side - conversation title */}
               {conversationId && conversation && (
                 <div className="flex items-center flex-shrink min-w-0">
-                  <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default">
+                  <h1 className="text-base font-normal text-muted-foreground truncate max-w-[300px] cursor-default">
                     {headerAnimatingTitles.has(conversation.id) ? (
                       <TypingText
                         text={getConversationDisplayTitle(
@@ -1224,7 +1224,7 @@ export default function ChatPage() {
                         conversation.messages,
                       )
                     )}
-                  </span>
+                  </h1>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}

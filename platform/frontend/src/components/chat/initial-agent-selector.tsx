@@ -1,8 +1,9 @@
 "use client";
 
-import { Bot, Check, Search, XIcon } from "lucide-react";
+import { Check, Search, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentIcon } from "@/components/agent-icon";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
   Dialog,
@@ -102,7 +103,14 @@ export function InitialAgentSelector({
           data-agent-selector
           className="max-w-[300px] min-w-0"
         >
-          <Bot className="size-4 shrink-0 opacity-70" />
+          <AgentIcon
+            icon={
+              (currentAgent as unknown as Record<string, unknown>)?.icon as
+                | string
+                | null
+            }
+            size={16}
+          />
           <span className="truncate flex-1 text-left">
             {currentAgent?.name ?? "Select agent"}
           </span>
@@ -195,7 +203,14 @@ function AgentCard({
     >
       <div className="flex w-full items-center gap-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-          <Bot className="h-4 w-4 text-muted-foreground" />
+          <AgentIcon
+            icon={
+              (agent as unknown as Record<string, unknown>).icon as
+                | string
+                | null
+            }
+            size={16}
+          />
         </div>
         <span className="text-sm font-medium truncate flex-1">
           {agent.name}
@@ -208,7 +223,10 @@ function AgentCard({
         </p>
       )}
       <div className="flex items-center gap-2 w-full mt-auto">
-        <AgentBadge type={agent.scope} className="text-[10px] px-1.5 py-0" />
+        <AgentBadge
+          type={agent.scope as "personal" | "team" | "org"}
+          className="text-[10px] px-1.5 py-0"
+        />
       </div>
     </button>
   );

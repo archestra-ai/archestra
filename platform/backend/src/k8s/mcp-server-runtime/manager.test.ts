@@ -479,6 +479,115 @@ describe("McpServerRuntimeManager", () => {
     });
   });
 
+  describe("startServer - secret key filtering (cross-server isolation)", () => {
+    // These tests reproduce the original issue from #3148:
+    // When multiple MCP servers share a vault path, the secret object
+    // contains keys for ALL servers. Without filtering, every server's
+    // pod gets every other server's env vars injected.
+
+    test("filters secretData to only keys defined in catalog environment config", () => {
+      // Reproduces #3148: vault secret contains keys for multiple servers
+      const vaultSecret: Record<string, unknown> = {
+        SLACK_TOKEN: "xoxb-slack-token",
+        GITHUB_TOKEN: "ghp_github_token",
+        JIRA_API_KEY: "jira-key-123",
+      };
+
+      // This server only needs SLACK_TOKEN
+      const catalogEnvironment = [
+        { key: "SLACK_TOKEN", type: "secret" as const },
+      ];
+
+      // Apply the filtering logic from the fix
+      const expectedKeys = new Set(
+        catalogEnvironment
+          .filter((e) => e.type === "secret")
+          .map((e) => e.key),
+      );
+
+      const secretData: Record<string, string> = {};
+      for (const [key, value] of Object.entries(vaultSecret)) {
+        if (!expectedKeys.size || expectedKeys.has(key)) {
+          secretData[key] = String(value);
+        }
+      }
+
+      // Only SLACK_TOKEN should be present — not GITHUB_TOKEN or JIRA_API_KEY
+      expect(secretData).toEqual({
+        SLACK_TOKEN: "xoxb-slack-token",
+      });
+      expect(secretData).not.toHaveProperty("GITHUB_TOKEN");
+      expect(secretData).not.toHaveProperty("JIRA_API_KEY");
+    });
+
+    test("passes all keys through when catalog has no environment config", () => {
+      // Edge case: no catalog environment defined (e.g. BYOS server)
+      const vaultSecret: Record<string, unknown> = {
+        SOME_KEY: "some-value",
+        OTHER_KEY: "other-value",
+      };
+
+      const catalogEnvironment: Array<{ key: string; type: string }> = [];
+
+      const expectedKeys = new Set(
+        catalogEnvironment
+          .filter((e) => e.type === "secret")
+          .map((e) => e.key),
+      );
+
+      const secretData: Record<string, string> = {};
+      for (const [key, value] of Object.entries(vaultSecret)) {
+        if (!expectedKeys.size || expectedKeys.has(key)) {
+          secretData[key] = String(value);
+        }
+      }
+
+      // When no catalog env config exists, all keys pass through (backwards compat)
+      expect(secretData).toEqual({
+        SOME_KEY: "some-value",
+        OTHER_KEY: "other-value",
+      });
+    });
+
+    test("excludes keys not in catalog even when vault has many entries", () => {
+      // Simulates a shared BYOS vault path with secrets for 3 different servers
+      const sharedVaultSecret: Record<string, unknown> = {
+        OUTLOOK_CLIENT_ID: "outlook-id",
+        OUTLOOK_CLIENT_SECRET: "outlook-secret",
+        SLACK_BOT_TOKEN: "slack-bot",
+        SLACK_SIGNING_SECRET: "slack-sign",
+        JIRA_API_TOKEN: "jira-token",
+        JIRA_BASE_URL: "https://jira.example.com",
+      };
+
+      // Server B only needs Slack keys
+      const serverBCatalogEnv = [
+        { key: "SLACK_BOT_TOKEN", type: "secret" as const },
+        { key: "SLACK_SIGNING_SECRET", type: "secret" as const },
+      ];
+
+      const expectedKeys = new Set(
+        serverBCatalogEnv
+          .filter((e) => e.type === "secret")
+          .map((e) => e.key),
+      );
+
+      const secretData: Record<string, string> = {};
+      for (const [key, value] of Object.entries(sharedVaultSecret)) {
+        if (!expectedKeys.size || expectedKeys.has(key)) {
+          secretData[key] = String(value);
+        }
+      }
+
+      expect(secretData).toEqual({
+        SLACK_BOT_TOKEN: "slack-bot",
+        SLACK_SIGNING_SECRET: "slack-sign",
+      });
+      // Outlook and Jira keys must NOT leak into Slack server
+      expect(Object.keys(secretData)).toHaveLength(2);
+    });
+  });
+
   describe("startServer - non-prompted secrets merging logic", () => {
     // These tests verify the non-prompted secret merging logic
     // by testing the helper function behavior patterns

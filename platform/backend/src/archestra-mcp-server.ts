@@ -11,14 +11,12 @@ import {
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
-import { createKnowledgeBaseProvider } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
   InternalMcpCatalogModel,
-  KnowledgeBaseModel,
   LimitModel,
   McpServerModel,
   ToolInvocationPolicyModel,
@@ -36,7 +34,6 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
-import { type QueryMode, QueryModeSchema } from "@/types/knowledge-base";
 
 /**
  * Constants for Archestra MCP server
@@ -1755,154 +1752,17 @@ export async function executeArchestraTool(
       "query_knowledge_base tool called",
     );
 
-    try {
-      const query = args?.query as string;
-      const modeArg = args?.mode as string | undefined;
-
-      if (!query || query.trim() === "") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: query parameter is required and cannot be empty",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // Validate mode if provided
-      let mode: QueryMode = "hybrid";
-      if (modeArg) {
-        const parseResult = QueryModeSchema.safeParse(modeArg);
-        if (!parseResult.success) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Error: Invalid mode "${modeArg}". Must be one of: local, global, hybrid, naive`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        mode = parseResult.data;
-      }
-
-      // Look up the agent's assigned knowledge base
-      const agentRow = await AgentModel.findById(contextAgent.id);
-      if (!agentRow?.knowledgeBaseId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: No knowledge base assigned to this agent. Assign a knowledge base in the agent settings.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const knowledgeBase = await KnowledgeBaseModel.findById(
-        agentRow.knowledgeBaseId,
-      );
-      if (!knowledgeBase) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: The assigned knowledge base could not be found.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const provider = createKnowledgeBaseProvider(
-        knowledgeBase.provider,
-        knowledgeBase.config,
-      );
-
-      logger.info(
+    // TODO: Replace with hybrid search query builder (pgvector + BM-25 RRF)
+    // once the query pipeline (query.ee.ts) is implemented.
+    return {
+      content: [
         {
-          agentId: contextAgent.id,
-          agentName: contextAgent.name,
-          mode,
+          type: "text",
+          text: "Knowledge base query is being migrated to the built-in pgvector RAG stack. This tool will be available once the query pipeline is implemented.",
         },
-        "Querying knowledge base",
-      );
-
-      // Execute the query
-      const result = await provider.queryDocument(query, {
-        mode,
-      });
-
-      if (result.error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error querying knowledge base: ${result.error}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // If the primary mode returned no useful information and wasn't already
-      // "naive", fall back to naive mode (vector similarity search) which is
-      // more forgiving with vague or broad queries.
-      const noInfoPattern =
-        /i do not have enough information|no relevant information/i;
-      if (mode !== "naive" && noInfoPattern.test(result.answer)) {
-        logger.info(
-          { agentId: contextAgent.id, originalMode: mode },
-          "Knowledge graph query returned no results, falling back to naive mode",
-        );
-
-        const fallbackResult = await provider.queryDocument(query, {
-          mode: "naive",
-        });
-
-        if (
-          !fallbackResult.error &&
-          !noInfoPattern.test(fallbackResult.answer)
-        ) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: fallbackResult.answer,
-              },
-            ],
-            isError: false,
-          };
-        }
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: result.answer,
-          },
-        ],
-        isError: false,
-      };
-    } catch (error) {
-      logger.error({ err: error }, "Error querying knowledge base");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error querying knowledge base: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
-    }
+      ],
+      isError: true,
+    };
   }
 
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {

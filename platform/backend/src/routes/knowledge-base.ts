@@ -2,7 +2,6 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { cronJobManager } from "@/k8s/cron-job";
-import { createKnowledgeBaseProvider } from "@/knowledge-base";
 import { connectorSyncService } from "@/knowledge-base/connector-sync";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
@@ -253,19 +252,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
-      const kg = await findKnowledgeBaseOrThrow(id, organizationId);
+      await findKnowledgeBaseOrThrow(id, organizationId);
 
-      try {
-        const provider = createKnowledgeBaseProvider(kg.provider, kg.config);
-
-        const health = await provider.getHealth();
-        return reply.send(health);
-      } catch (error) {
-        return reply.send({
-          status: "unhealthy" as const,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
+      // TODO: Replace with pgvector-based health check (verify vector extension,
+      // check document/chunk counts, embedding processing status)
+      return reply.send({
+        status: "healthy" as const,
+        message: "Knowledge base uses built-in pgvector RAG stack",
+      });
     },
   );
 

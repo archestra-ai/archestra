@@ -80,6 +80,12 @@ export interface ConnectorDocument {
   sourceUrl?: string;
   metadata: Record<string, unknown>;
   updatedAt?: Date;
+  /** Access control permissions extracted from the source system */
+  permissions?: {
+    users?: string[];
+    groups?: string[];
+    isPublic?: boolean;
+  };
 }
 
 export interface ConnectorSyncBatch {

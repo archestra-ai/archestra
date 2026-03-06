@@ -1,19 +1,24 @@
+import { createHash } from "node:crypto";
 import type pino from "pino";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
+  KbDocumentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { KnowledgeBase } from "@/types";
-import type { ConnectorCredentials } from "@/types/knowledge-connector";
-import { createKnowledgeBaseProvider } from ".";
+import type {
+  ConnectorCredentials,
+  ConnectorDocument,
+} from "@/types/knowledge-connector";
+import { buildDocumentAcl } from "./acl";
 import { getConnector } from "./connectors/registry";
 
 /**
  * Service that orchestrates the sync of data from external connectors
- * (e.g., Jira, Confluence) into a knowledge base.
+ * (e.g., Jira, Confluence) into kb_documents.
  *
  * A connector can be assigned to multiple knowledge bases. During sync,
  * documents are ingested into ALL assigned knowledge bases.
@@ -64,12 +69,6 @@ class ConnectorSyncService {
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
 
-    // Build KG providers for all assigned knowledge bases
-    const kgProviders = knowledgeBases.map((kb) => ({
-      knowledgeBase: kb,
-      provider: createKnowledgeBaseProvider(kb.provider, kb.config),
-    }));
-
     // Create a connector run record
     const run = await ConnectorRunModel.create({
       connectorId,
@@ -98,25 +97,23 @@ class ConnectorSyncService {
         for (const doc of batch.documents) {
           documentsProcessed++;
           // Ingest document into all assigned knowledge bases
-          for (const { knowledgeBase, provider } of kgProviders) {
+          for (const kb of knowledgeBases) {
             try {
-              await provider.insertDocument({
-                content: doc.content,
-                filename: doc.title,
-                metadata: {
-                  ...doc.metadata,
-                  sourceUrl: doc.sourceUrl,
-                  connectorId,
-                  connectorType: connector.connectorType,
-                  externalId: doc.id,
-                },
+              const ingested = await this.ingestDocument({
+                doc,
+                knowledgeBase: kb,
+                connectorId,
+                connectorType: connector.connectorType,
+                log,
               });
-              documentsIngested++;
+              if (ingested) {
+                documentsIngested++;
+              }
             } catch (docError) {
               log.warn(
                 {
                   connectorId,
-                  knowledgeBaseId: knowledgeBase.id,
+                  knowledgeBaseId: kb.id,
                   documentId: doc.id,
                   error:
                     docError instanceof Error
@@ -194,6 +191,113 @@ class ConnectorSyncService {
 
       return { runId: run.id, status: "failed" };
     }
+  }
+
+  /**
+   * Ingest a single connector document into a knowledge base via kb_documents.
+   * Uses content hash deduplication — returns false if the document already exists
+   * with the same content hash (skipped).
+   */
+  private async ingestDocument(params: {
+    doc: ConnectorDocument;
+    knowledgeBase: KnowledgeBase;
+    connectorId: string;
+    connectorType: string;
+    log: pino.Logger;
+  }): Promise<boolean> {
+    const { doc, knowledgeBase, connectorId, connectorType, log } = params;
+
+    const contentHash = createHash("sha256")
+      .update(doc.content)
+      .digest("hex");
+
+    // Check for existing document with the same content hash (dedup)
+    const existing = await KbDocumentModel.findByContentHash({
+      knowledgeBaseId: knowledgeBase.id,
+      contentHash,
+    });
+
+    if (existing) {
+      log.debug(
+        {
+          documentId: doc.id,
+          knowledgeBaseId: knowledgeBase.id,
+          existingDocId: existing.id,
+        },
+        "[ConnectorSync] Document already exists with same content hash, skipping",
+      );
+      return false;
+    }
+
+    // Build ACL based on knowledge base visibility
+    const acl = buildDocumentAcl({
+      visibility: knowledgeBase.visibility as
+        | "org-wide"
+        | "team-scoped"
+        | "auto-sync-permissions",
+      teamIds: (knowledgeBase.teamIds as string[]) ?? [],
+      permissions: doc.permissions,
+    });
+
+    // Also check for existing document by source ID (update case)
+    const existingBySource = await KbDocumentModel.findBySourceId({
+      knowledgeBaseId: knowledgeBase.id,
+      sourceType: "connector",
+      sourceId: doc.id,
+    });
+
+    if (existingBySource) {
+      // Content has changed — update existing document
+      await KbDocumentModel.update(existingBySource.id, {
+        title: doc.title,
+        content: doc.content,
+        contentHash,
+        sourceUrl: doc.sourceUrl ?? null,
+        acl,
+        metadata: {
+          ...doc.metadata,
+          connectorType,
+        },
+        embeddingStatus: "pending",
+      });
+
+      log.debug(
+        {
+          documentId: doc.id,
+          kbDocumentId: existingBySource.id,
+          knowledgeBaseId: knowledgeBase.id,
+        },
+        "[ConnectorSync] Updated existing document with new content",
+      );
+      return true;
+    }
+
+    // Create new document
+    await KbDocumentModel.create({
+      knowledgeBaseId: knowledgeBase.id,
+      organizationId: knowledgeBase.organizationId,
+      sourceType: "connector",
+      sourceId: doc.id,
+      connectorId,
+      title: doc.title,
+      content: doc.content,
+      contentHash,
+      sourceUrl: doc.sourceUrl,
+      acl,
+      metadata: {
+        ...doc.metadata,
+        connectorType,
+      },
+    });
+
+    log.debug(
+      {
+        documentId: doc.id,
+        knowledgeBaseId: knowledgeBase.id,
+      },
+      "[ConnectorSync] Document ingested into kb_documents",
+    );
+    return true;
   }
 
   private async loadCredentials(

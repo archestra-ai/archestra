@@ -780,9 +780,7 @@ export function ModelSelector({
                   <ModelSelectorName>
                     Best available model (resolved at runtime)
                   </ModelSelectorName>
-                  {!selectedModel && (
-                    <CheckIcon className="ml-auto size-4" />
-                  )}
+                  {!selectedModel && <CheckIcon className="ml-auto size-4" />}
                 </ModelSelectorItem>
               </ModelSelectorGroup>
             )}

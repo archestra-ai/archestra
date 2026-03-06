@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
-  Edit,
   FileText,
   Globe,
   Loader2,
@@ -79,7 +78,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
@@ -1199,7 +1197,12 @@ export default function ChatPage() {
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
 
-          <div className={cn("sticky top-0 z-10 bg-background border-b p-2", !conversationId && "hidden")}>
+          <div
+            className={cn(
+              "sticky top-0 z-10 bg-background border-b p-2",
+              !conversationId && "hidden",
+            )}
+          >
             <div className="relative flex items-center justify-between gap-2">
               {/* Left side - conversation title */}
               {conversationId && conversation && (
@@ -1403,8 +1406,7 @@ export default function ChatPage() {
                       const messagesWithoutEditedMessage =
                         updatedMessages.slice(0, -1);
                       setMessages(messagesWithoutEditedMessage);
-                      const editedPart =
-                        editedMessage.parts?.[editedPartIndex];
+                      const editedPart = editedMessage.parts?.[editedPartIndex];
                       const editedText =
                         editedPart?.type === "text" ? editedPart.text : "";
                       if (editedText?.trim()) {
@@ -1480,9 +1482,7 @@ export default function ChatPage() {
                             ? (conversation?.agentId ?? null)
                             : null
                         }
-                        currentConversationAgentId={
-                          conversation?.agentId ?? ""
-                        }
+                        currentConversationAgentId={conversation?.agentId ?? ""}
                         currentConversationModel={
                           conversation?.selectedModel ?? ""
                         }
@@ -1498,6 +1498,8 @@ export default function ChatPage() {
           ) : (
             /* No active chat: centered prompt input */
             activeAgentId && (
+              // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
+              // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
               <div
                 className="flex-1 flex flex-col min-h-0"
                 onClick={(e) => {
@@ -1543,9 +1545,9 @@ export default function ChatPage() {
                       inputModalities={selectedModelInputModalities}
                       agentLlmApiKeyId={
                         (
-                          internalAgents.find(
-                            (a) => a.id === initialAgentId,
-                          ) as Record<string, unknown> | undefined
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
                         )?.llmApiKeyId as string | null
                       }
                       submitDisabled={isPlaywrightSetupVisible}

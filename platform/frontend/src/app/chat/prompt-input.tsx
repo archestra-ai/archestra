@@ -29,12 +29,12 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { AgentSelector } from "@/components/chat/agent-selector";
+import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
-import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
+import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
@@ -269,7 +269,7 @@ const PromptInputContent = ({
           />
         ) : (
           <PromptInputTextarea
-            placeholder="Type a message..."
+            placeholder="What would you like to get done?"
             ref={textareaRef}
             className="px-4"
             autoFocus

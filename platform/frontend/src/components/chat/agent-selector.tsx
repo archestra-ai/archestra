@@ -4,6 +4,7 @@ import { Bot, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +15,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -101,18 +101,17 @@ export function AgentSelector({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
+          <PromptInputButton
             role="combobox"
             aria-expanded={open}
             data-agent-selector
-            className="h-8 justify-between max-w-[300px] min-w-0"
+            className="max-w-[300px] min-w-0"
           >
-            <Bot className="h-3 w-3 shrink-0 opacity-70" />
-            <span className="text-xs font-medium truncate flex-1 text-left">
+            <Bot className="size-4 shrink-0 opacity-70" />
+            <span className="truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>
-          </Button>
+          </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0" align="start">
           <Command>

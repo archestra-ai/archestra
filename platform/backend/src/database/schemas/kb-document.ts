@@ -8,7 +8,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
-  AclEntry,
   DocumentSourceType,
   EmbeddingStatus,
   KbDocumentMetadata,
@@ -34,7 +33,7 @@ const kbDocumentsTable = pgTable(
     content: text("content").notNull(),
     contentHash: text("content_hash").notNull(),
     sourceUrl: text("source_url"),
-    acl: jsonb("acl").$type<AclEntry[]>().notNull().default([]),
+    acl: jsonb("acl").$type<string[]>().notNull().default([]),
     metadata: jsonb("metadata").$type<KbDocumentMetadata>().default({}),
     embeddingStatus: text("embedding_status")
       .$type<EmbeddingStatus>()

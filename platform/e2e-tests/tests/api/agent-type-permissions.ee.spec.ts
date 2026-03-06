@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_NAMES } from "@shared";
 import { MARKETING_TEAM_NAME, MEMBER_EMAIL } from "../../consts";
 import { expect, test } from "./fixtures";
 
@@ -896,6 +897,98 @@ test.describe("Agent Type Permission Isolation", () => {
       expect(permissions.agent).toEqual(["read"]);
       expect(permissions.mcpGateway).toEqual(["read", "create"]);
       expect(permissions.llmProxy).toEqual(["read", "create", "update"]);
+    } finally {
+      // Restore original role
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: originalRole,
+          organizationId,
+        },
+      });
+      await deleteRole(request, customRole.id);
+    }
+  });
+
+  test("user without agent:admin cannot see built-in agents", async ({
+    request,
+    makeApiRequest,
+    createRole,
+    deleteRole,
+    memberRequest,
+    getActiveOrganizationId,
+  }) => {
+    const organizationId = await getActiveOrganizationId(request);
+    const timestamp = Date.now();
+
+    // Create a custom role with agent read but NO admin
+    const roleResponse = await createRole(request, {
+      name: `agent_no_admin_${timestamp}`,
+      permission: {
+        agent: ["read", "create", "update", "delete"],
+      },
+    });
+    const customRole = await roleResponse.json();
+
+    // Get member's membership ID
+    const membersResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/auth/organization/list-members",
+    });
+    const membersData = await membersResponse.json();
+    const memberMembership = membersData.members.find(
+      (m: { user: { email: string } }) => m.user.email === MEMBER_EMAIL,
+    );
+    const originalRole = memberMembership.role;
+
+    try {
+      // Assign custom role to member
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/auth/organization/update-member-role",
+        data: {
+          memberId: memberMembership.id,
+          role: customRole.role,
+          organizationId,
+        },
+      });
+
+      // Admin should see built-in agents
+      const adminResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/agents/all?agentType=agent",
+      });
+      const adminAgents = await adminResponse.json();
+      const adminBuiltIn = adminAgents.filter(
+        (a: { builtIn: boolean }) => a.builtIn,
+      );
+      expect(adminBuiltIn.length).toBeGreaterThan(0);
+      expect(
+        adminBuiltIn.some(
+          (a: { name: string }) =>
+            a.name === BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        ),
+      ).toBe(true);
+
+      // Member without agent:admin should NOT see built-in agents
+      const memberResponse = await makeApiRequest({
+        request: memberRequest,
+        method: "get",
+        urlSuffix: "/api/agents/all?agentType=agent",
+        ignoreStatusCheck: true,
+      });
+      expect(memberResponse.status()).toBe(200);
+      const memberAgents = await memberResponse.json();
+      const memberBuiltIn = memberAgents.filter(
+        (a: { builtIn: boolean }) => a.builtIn,
+      );
+      expect(memberBuiltIn).toHaveLength(0);
     } finally {
       // Restore original role
       await makeApiRequest({

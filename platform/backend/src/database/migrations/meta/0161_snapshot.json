@@ -1,5 +1,5 @@
 {
-  "id": "a04a7bf6-34f5-4435-9186-e4d54e9134ca",
+  "id": "11b0bb5c-d83d-46b8-9bf6-e8156a6d0ba2",
   "prevId": "a69150f8-dbca-482a-9a87-b66c37183968",
   "version": "7",
   "dialect": "postgresql",
@@ -1658,81 +1658,6 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.conversation_shares": {
-      "name": "conversation_shares",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "visibility": {
-          "name": "visibility",
-          "type": "conversation_share_visibility",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'organization'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "conversation_shares_conversation_id_conversations_id_fk": {
-          "name": "conversation_shares_conversation_id_conversations_id_fk",
-          "tableFrom": "conversation_shares",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "conversation_shares_conversation_id_unique": {
-          "name": "conversation_shares_conversation_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "conversation_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -4771,6 +4696,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "logo_dark": {
+          "name": "logo_dark",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -6329,13 +6260,6 @@
         "personal",
         "team",
         "org"
-      ]
-    },
-    "public.conversation_share_visibility": {
-      "name": "conversation_share_visibility",
-      "schema": "public",
-      "values": [
-        "organization"
       ]
     },
     "public.oauth_refresh_error_enum": {

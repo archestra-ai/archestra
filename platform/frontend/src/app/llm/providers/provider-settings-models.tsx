@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  ArrowLeftRight,
   Check,
   Loader2,
   RefreshCw,
@@ -170,10 +171,18 @@ export function ProviderSettingsModels() {
       },
       {
         accessorKey: "apiKeys",
-        header: "API Keys",
+        header: "Source",
         cell: ({ row }) => {
           const apiKeys = row.original.apiKeys;
           if (apiKeys.length === 0) {
+            if (row.original.discoveredViaLlmProxy) {
+              return (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <ArrowLeftRight className="h-3 w-3 shrink-0" />
+                  <span>LLM Proxy</span>
+                </Badge>
+              );
+            }
             return <span className="text-sm text-muted-foreground">-</span>;
           }
           return (

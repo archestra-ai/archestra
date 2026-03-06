@@ -407,14 +407,15 @@ export function ProviderSettingsApiKeys() {
               Manage API keys for LLM providers used in Chat and LLM Proxy
             </p>
           </div>
-          <Button
+          <PermissionButton
+            permissions={{ chatSettings: ["create"] }}
             className="shrink-0"
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.AddChatApiKeyButton}
           >
             <Plus className="h-4 w-4 mr-2" />
             Add API Key
-          </Button>
+          </PermissionButton>
         </div>
 
         {byosEnabled &&

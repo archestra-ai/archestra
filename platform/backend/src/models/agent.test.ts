@@ -1801,5 +1801,81 @@ describe("AgentModel", () => {
       expect(all).toHaveLength(1);
       expect(all[0].builtInAgentConfig).toBeTruthy();
     });
+
+    test("hides built-in agents from non-admin users", async () => {
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      // Admin can see built-in agents
+      const adminResults = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+      });
+      expect(adminResults).toHaveLength(2);
+
+      // Non-admin cannot see built-in agents
+      const nonAdminResults = await AgentModel.findAll(undefined, false, {
+        agentType: "agent",
+      });
+      expect(nonAdminResults).toHaveLength(1);
+      expect(nonAdminResults[0].name).toBe("Regular Agent");
+    });
+
+    test("findAllPaginated hides built-in agents from non-admin users", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      // Admin can see built-in agents
+      const adminResults = await AgentModel.findAllPaginated(
+        { limit: 20, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        { agentType: "agent" },
+        admin.id,
+        true,
+      );
+      expect(adminResults.data).toHaveLength(2);
+
+      // Non-admin cannot see built-in agents
+      const nonAdminResults = await AgentModel.findAllPaginated(
+        { limit: 20, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        { agentType: "agent" },
+        admin.id,
+        false,
+      );
+      expect(nonAdminResults.data).toHaveLength(1);
+      expect(nonAdminResults.data[0].name).toBe("Regular Agent");
+    });
   });
 });

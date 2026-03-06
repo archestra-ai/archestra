@@ -14,6 +14,7 @@ import logger from "@/logging";
 import {
   ApiKeyModelModel,
   ChatApiKeyModel,
+  ModelModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -577,6 +578,16 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await ChatApiKeyModel.delete(params.id);
+
+      // Clean up orphaned models that lost their last API key link.
+      // Models discovered via LLM Proxy are preserved for custom pricing.
+      const deletedCount = await ModelModel.deleteOrphanedModels();
+      if (deletedCount > 0) {
+        logger.info(
+          { deletedCount },
+          "Cleaned up orphaned models after API key deletion",
+        );
+      }
 
       return reply.send({ success: true });
     },

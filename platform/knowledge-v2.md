@@ -17,7 +17,7 @@
 - ✅ `/settings/knowledge` page — embedding model selector (3-small, 3-large, ada-002) with save/cancel
 - ✅ `embeddingModel` column on organization table with `.$type<EmbeddingModel>()`
 - ✅ `EmbeddingModelSchema` + `UpdateOrganizationSchema` extended with `embeddingModel`
-- ⬜ `ARCHESTRA_KB_EMBEDDING_API_KEY` env var — dedicated embedding API key (not yet wired)
+- ⬜ `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY` env var — dedicated embedding API key (not yet wired)
 
 ### Section 5: Database Schema
 - ✅ `kb_documents` table — source-of-truth with content hash, ACL JSONB, embedding status, source metadata
@@ -31,7 +31,7 @@
 - ✅ Chunker (`backend/src/knowledge-base/chunker.ts`) — token-aware recursive splitting with tests
 - ✅ Embedder (`backend/src/knowledge-base/embedder.ts`) — OpenAI embedding with batching, tests
 - ⬜ Wire embedder to use organization's `embeddingModel` setting
-- ⬜ Wire embedder to use `ARCHESTRA_KB_EMBEDDING_API_KEY` env var
+- ⬜ Wire embedder to use `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY` env var
 
 ### Section 7: Ingestion Pipeline
 - ✅ Connector sync refactored — connectors ingest into `kb_documents` directly (removed LightRAG delegation)

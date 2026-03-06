@@ -126,7 +126,7 @@ export const embeddingService = new EmbeddingService();
 export function startEmbeddingCron(): void {
   if (!config.kb.embeddingApiKey) {
     logger.info(
-      "[Embedder] ARCHESTRA_KB_EMBEDDING_API_KEY not set, embedding cron disabled",
+      "[Embedder] ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY not set, embedding cron disabled",
     );
     return;
   }

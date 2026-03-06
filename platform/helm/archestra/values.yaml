@@ -184,6 +184,11 @@ archestra:
     # If not set, defaults to "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest"
     baseImage: ""
 
+    # Namespace where knowledge base connector CronJobs will be created
+    # If not set, defaults to "archestra-connectors"
+    # A separate Role/RoleBinding is created in this namespace for CronJob management
+    connectorNamespace: ""
+
     # Kubernetes configuration for MCP Server Runtime
     # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
     kubernetes:

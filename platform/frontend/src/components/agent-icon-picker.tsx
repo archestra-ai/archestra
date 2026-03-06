@@ -1,7 +1,7 @@
 "use client";
 
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
-import { Bot, ImageIcon, SmileIcon, Upload, X } from "lucide-react";
+import { Bot, ImageIcon, Layers, SmileIcon, Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { ServiceLogoPicker } from "./service-logo-picker";
 
 const MAX_IMAGE_SIZE = 512 * 1024; // 512 KB
 
@@ -20,12 +21,15 @@ interface AgentIconPickerProps {
   value: string | null;
   onChange: (icon: string | null) => void;
   className?: string;
+  /** Show a "Logos" tab with pre-built service brand logos */
+  showLogos?: boolean;
 }
 
 export function AgentIconPicker({
   value,
   onChange,
   className,
+  showLogos = false,
 }: AgentIconPickerProps) {
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +39,14 @@ export function AgentIconPicker({
   const handleEmojiSelect = useCallback(
     (emoji: string) => {
       onChange(emoji);
+      setOpen(false);
+    },
+    [onChange],
+  );
+
+  const handleLogoSelect = useCallback(
+    (dataUrl: string) => {
+      onChange(dataUrl);
       setOpen(false);
     },
     [onChange],
@@ -77,6 +89,8 @@ export function AgentIconPicker({
     [onChange],
   );
 
+  const defaultTab = showLogos ? "logos" : "emoji";
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -115,8 +129,17 @@ export function AgentIconPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[352px] p-0" align="start" sideOffset={8}>
-        <Tabs defaultValue="emoji">
+        <Tabs defaultValue={defaultTab}>
           <TabsList className="w-full rounded-none border-b bg-transparent p-0 h-auto">
+            {showLogos && (
+              <TabsTrigger
+                value="logos"
+                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none gap-1.5 py-2.5"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Logos
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="emoji"
               className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none gap-1.5 py-2.5"
@@ -132,6 +155,16 @@ export function AgentIconPicker({
               Upload
             </TabsTrigger>
           </TabsList>
+          {showLogos && (
+            <TabsContent
+              value="logos"
+              className="m-0"
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              <ServiceLogoPicker onSelect={handleLogoSelect} />
+            </TabsContent>
+          )}
           <TabsContent
             value="emoji"
             className="m-0"

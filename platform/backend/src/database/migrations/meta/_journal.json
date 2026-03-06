@@ -1156,6 +1156,13 @@
       "when": 1772824201112,
       "tag": "0164_silky_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1772835869269,
+      "tag": "0165_third_crystal",
+      "breakpoints": true
     }
   ]
 }

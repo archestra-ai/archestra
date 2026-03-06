@@ -87835,6 +87835,10 @@
                         ],
                         "additionalProperties": false
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -87886,6 +87890,7 @@
                       "deploymentSpecYaml",
                       "userConfig",
                       "oauthConfig",
+                      "icon",
                       "createdAt",
                       "updatedAt",
                       "labels"
@@ -88514,6 +88519,10 @@
                       "supports_resource_metadata"
                     ]
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -88967,6 +88976,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -89018,6 +89031,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "icon",
                     "createdAt",
                     "updatedAt",
                     "labels"
@@ -89670,6 +89684,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -89721,6 +89739,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "icon",
                     "createdAt",
                     "updatedAt",
                     "labels"
@@ -90343,6 +90362,10 @@
                       "supports_resource_metadata"
                     ]
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -90803,6 +90826,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -90854,6 +90881,7 @@
                     "deploymentSpecYaml",
                     "userConfig",
                     "oauthConfig",
+                    "icon",
                     "createdAt",
                     "updatedAt",
                     "labels"

@@ -14,12 +14,14 @@ import {
   MoreVertical,
   Pencil,
   RefreshCw,
+  Server,
   Terminal,
   Trash2,
   User,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import {
@@ -89,13 +91,44 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
-  /** When true, auto-opens the assignments dialog */
-  autoOpenAssignmentsDialog?: boolean;
-  /** Called when the auto-opened assignments dialog is closed */
-  onAssignmentsDialogClose?: () => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };
+
+function McpCatalogIcon({
+  icon,
+  size = 20,
+}: {
+  icon?: string | null;
+  size?: number;
+}) {
+  if (!icon) {
+    return (
+      <Server
+        className="shrink-0 text-muted-foreground"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
+  if (icon.startsWith("data:")) {
+    return (
+      <Image
+        src={icon}
+        alt="MCP server icon"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-sm object-contain"
+      />
+    );
+  }
+
+  return (
+    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
+      {icon}
+    </span>
+  );
+}
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
 
@@ -117,8 +150,6 @@ export function McpServerCard({
   onEdit,
   onDelete,
   onCancelInstallation,
-  autoOpenAssignmentsDialog,
-  onAssignmentsDialogClose,
   isBuiltInPlaywright = false,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
@@ -190,22 +221,8 @@ export function McpServerCard({
     name: string;
   } | null>(null);
 
-  // Auto-open assignments dialog when requested by parent
-  // Ensure other dialogs are closed when auto-opening
-  useEffect(() => {
-    if (autoOpenAssignmentsDialog) {
-      setIsToolsDialogOpen(true);
-      setIsManageUsersDialogOpen(false);
-      setIsLogsDialogOpen(false);
-    }
-  }, [autoOpenAssignmentsDialog]);
-
-  // Handle assignments dialog close - notify parent if it was auto-opened
   const handleToolsDialogOpenChange = (open: boolean) => {
     setIsToolsDialogOpen(open);
-    if (!open && autoOpenAssignmentsDialog) {
-      onAssignmentsDialogClose?.();
-    }
   };
 
   const handleChatWithMcpServer = async () => {
@@ -225,6 +242,7 @@ export function McpServerCard({
           agentType: "agent",
           scope: "personal",
           teams: [],
+          icon: item.icon ?? undefined,
         }));
 
       if (agent && tools && tools.length > 0) {
@@ -862,6 +880,7 @@ export function McpServerCard({
               className="flex items-center gap-2 mb-1 overflow-hidden w-full"
               title={item.name}
             >
+              <McpCatalogIcon icon={item.icon} size={20} />
               <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
                 {item.name}
               </span>

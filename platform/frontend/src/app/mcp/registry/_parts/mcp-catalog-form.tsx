@@ -5,6 +5,7 @@ import type { archestraApiTypes } from "@shared";
 import { AlertCircle, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -87,6 +88,7 @@ export function McpCatalogForm({
       ? transformCatalogItemToFormValues(initialValues, undefined)
       : {
           name: "",
+          icon: null,
           serverType: serverType,
           serverUrl: "",
           authMethod: "none",
@@ -217,6 +219,11 @@ export function McpCatalogForm({
         )}
 
         <div className="space-y-4">
+          <AgentIconPicker
+            value={form.watch("icon") ?? null}
+            onChange={(icon) => form.setValue("icon", icon)}
+            showLogos
+          />
           <FormField
             control={form.control}
             name="name"
@@ -232,7 +239,9 @@ export function McpCatalogForm({
                     disabled={nameDisabled}
                   />
                 </FormControl>
-                <FormDescription>Display name for this server</FormDescription>
+                <FormDescription>
+                  Display name for this server
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

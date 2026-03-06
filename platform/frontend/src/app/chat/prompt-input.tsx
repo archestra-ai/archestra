@@ -9,7 +9,7 @@ import {
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
-import { PaperclipIcon, Plus } from "lucide-react";
+import { PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import {
@@ -19,7 +19,6 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
-  PromptInputHeader,
   type PromptInputMessage,
   PromptInputProvider,
   PromptInputSpeechButton,
@@ -30,9 +29,7 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 
-import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
-import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
@@ -44,9 +41,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
 
 interface ArchestraPromptInputProps {
@@ -77,8 +72,6 @@ interface ArchestraPromptInputProps {
   allowFileUploads?: boolean;
   /** Whether models are still loading - passed to API key selector */
   isModelsLoading?: boolean;
-  /** Callback to open edit agent dialog */
-  onEditAgent?: () => void;
   /** Estimated tokens used in the conversation (for context indicator) */
   tokensUsed?: number;
   /** Maximum context length of the selected model (for context indicator) */
@@ -114,7 +107,6 @@ const PromptInputContent = ({
   textareaRef: externalTextareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
-  onEditAgent,
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
@@ -136,10 +128,6 @@ const PromptInputContent = ({
   const acceptedFileTypes = getAcceptedFileTypes(inputModalities);
   const supportedTypesDescription =
     getSupportedFileTypesDescription(inputModalities);
-
-  // Check if agent has tools or delegations
-  const { data: tools = [] } = useProfileToolsWithIds(agentId);
-  const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
@@ -190,11 +178,6 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents
-  const hasTools = tools.length > 0;
-  const hasDelegatedAgents = delegatedAgents.length > 0;
-  const hasContent = hasTools || hasDelegatedAgents;
-
   // Determine if file uploads should be shown
   // 1. Organization must allow file uploads (allowFileUploads)
   // 2. Model must support at least one file type (modelSupportsFiles)
@@ -215,39 +198,6 @@ const PromptInputContent = ({
       onSubmit={handleWrappedSubmit}
       accept={acceptedFileTypes}
     >
-      {agentId && (
-        <PromptInputHeader>
-          {hasContent ? (
-            <>
-              {hasTools && (
-                <ChatToolsDisplay
-                  agentId={agentId}
-                  conversationId={conversationId}
-                />
-              )}
-              {hasDelegatedAgents && (
-                <AgentToolsDisplay
-                  agentId={agentId}
-                  conversationId={conversationId}
-                  addAgentsButton={null}
-                />
-              )}
-            </>
-          ) : (
-            <div className="flex items-start">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 gap-1.5 text-xs border-dashed"
-                onClick={onEditAgent}
-              >
-                <Plus className="h-3 w-3" />
-                <span>Add tools & sub-agents</span>
-              </Button>
-            </div>
-          )}
-        </PromptInputHeader>
-      )}
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -411,7 +361,6 @@ const ArchestraPromptInput = ({
   textareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
-  onEditAgent,
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
@@ -440,7 +389,6 @@ const ArchestraPromptInput = ({
           textareaRef={textareaRef}
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
-          onEditAgent={onEditAgent}
           tokensUsed={tokensUsed}
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}

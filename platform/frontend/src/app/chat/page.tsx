@@ -1480,7 +1480,6 @@ export default function ChatPage() {
                           organization?.allowChatFileUploads ?? false
                         }
                         isModelsLoading={isModelsLoading}
-                        onEditAgent={() => openDialog("edit-agent")}
                         tokensUsed={tokensUsed}
                         maxContextLength={selectedModelContextLength}
                         inputModalities={selectedModelInputModalities}
@@ -1546,7 +1545,6 @@ export default function ChatPage() {
                         organization?.allowChatFileUploads ?? false
                       }
                       isModelsLoading={isModelsLoading}
-                      onEditAgent={() => openDialog("edit-agent")}
                       inputModalities={selectedModelInputModalities}
                       agentLlmApiKeyId={
                         (

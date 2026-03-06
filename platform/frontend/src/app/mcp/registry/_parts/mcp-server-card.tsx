@@ -134,7 +134,7 @@ export function McpServerCard({
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
-  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+  const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();

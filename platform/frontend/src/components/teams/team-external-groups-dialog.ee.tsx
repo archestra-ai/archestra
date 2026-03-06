@@ -51,7 +51,7 @@ export function TeamExternalGroupsDialog({
       });
       return data;
     },
-    enabled: open && config.enterpriseLicenseActivated,
+    enabled: open && config.enterpriseFeatures.core,
   });
 
   const addMutation = useMutation({
@@ -99,7 +99,7 @@ export function TeamExternalGroupsDialog({
     addMutation.mutate(trimmed);
   };
 
-  if (!config.enterpriseLicenseActivated) {
+  if (!config.enterpriseFeatures.core) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[550px]">

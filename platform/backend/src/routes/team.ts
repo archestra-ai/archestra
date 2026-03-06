@@ -343,7 +343,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user, headers }, reply) => {
       // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
+      if (!config.enterpriseFeatures.core) {
         throw new ApiError(
           403,
           "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
@@ -392,7 +392,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
+      if (!config.enterpriseFeatures.core) {
         throw new ApiError(
           403,
           "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
@@ -447,7 +447,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id, groupId }, organizationId }, reply) => {
       // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
+      if (!config.enterpriseFeatures.core) {
         throw new ApiError(
           403,
           "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",

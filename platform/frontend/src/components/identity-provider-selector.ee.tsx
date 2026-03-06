@@ -53,7 +53,7 @@ export function IdentityProviderSelector({
 
   // Don't show SSO options if the enterprise license is not activated
   if (
-    !config.enterpriseLicenseActivated ||
+    !config.enterpriseFeatures.core ||
     isLoading ||
     identityProviders.length === 0
   ) {

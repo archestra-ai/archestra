@@ -48,6 +48,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useEnterpriseFeature } from "@/lib/features.hook";
 import { useGithubStars } from "@/lib/github.query";
 
 interface NavSubItem {
@@ -331,7 +332,7 @@ const NavSecondary = ({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {!config.enterpriseLicenseActivated && (
+          {!config.enterpriseFeatures.core && (
             <>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
@@ -402,6 +403,16 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
+
+  // Filter nav groups based on enterprise features
+  const filteredNavGroups = React.useMemo(() => {
+    if (knowledgeBaseEnabled) return contentNavGroups;
+    return contentNavGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.title !== "Knowledge"),
+    }));
+  }, [knowledgeBaseEnabled]);
 
   return (
     <Sidebar>
@@ -413,7 +424,7 @@ export function AppSidebar() {
           <>
             <NavPrimary
               items={headerNavItems}
-              groups={contentNavGroups}
+              groups={filteredNavGroups}
               pathname={pathname}
               searchParams={searchParams}
               permissionMap={permissionMap}
@@ -429,7 +440,7 @@ export function AppSidebar() {
             />
           </>
         )}
-        {!isAuthenticated && !config.enterpriseLicenseActivated && (
+        {!isAuthenticated && !config.enterpriseFeatures.core && (
           <NavSecondary
             items={[]}
             pathname={pathname}

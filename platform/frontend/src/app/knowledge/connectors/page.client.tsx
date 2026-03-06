@@ -12,7 +12,6 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
-import { formatCronSchedule } from "@/lib/format-cron";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +37,7 @@ import {
   useDeleteConnector,
   useUpdateConnector,
 } from "@/lib/connector.query";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { formatDate } from "@/lib/utils";
 
 type ConnectorItem =

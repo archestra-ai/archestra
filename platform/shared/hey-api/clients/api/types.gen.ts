@@ -20726,12 +20726,11 @@ export type GetConfigResponses = {
      */
     200: {
         features: {
-            'orchestrator-k8s-runtime': boolean;
+            orchestratorK8sRuntime: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
-            browserStreamingEnabled: boolean;
             incomingEmail: {
                 enabled: boolean;
                 provider?: 'outlook';
@@ -20743,6 +20742,10 @@ export type GetConfigResponses = {
             isQuickstart: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
+        };
+        enterpriseFeatures: {
+            core: boolean;
+            knowledgeBase: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -32989,6 +32992,8 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingApiKeySecretId: string | null;
     };
 };
 
@@ -33091,6 +33096,8 @@ export type UpdateOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingApiKeySecretId: string | null;
     };
 };
 

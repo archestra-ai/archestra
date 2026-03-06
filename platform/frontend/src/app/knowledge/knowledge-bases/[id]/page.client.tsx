@@ -40,11 +40,11 @@ import {
   useDeleteConnector,
   useUpdateConnector,
 } from "@/lib/connector.query";
+import { formatCronSchedule } from "@/lib/format-cron";
 import {
   useKnowledgeBase,
   useKnowledgeBaseHealth,
 } from "@/lib/knowledge-base.query";
-import { formatCronSchedule } from "@/lib/format-cron";
 import { cn, formatDate } from "@/lib/utils";
 
 export default function KnowledgeBaseDetailPage({ id }: { id: string }) {

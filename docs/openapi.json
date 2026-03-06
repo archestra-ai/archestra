@@ -69616,7 +69616,7 @@
                     "features": {
                       "type": "object",
                       "properties": {
-                        "orchestrator-k8s-runtime": {
+                        "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
                         "byosEnabled": {
@@ -69639,9 +69639,6 @@
                             "permissive",
                             "restrictive"
                           ]
-                        },
-                        "browserStreamingEnabled": {
-                          "type": "boolean"
                         },
                         "incomingEmail": {
                           "type": "object",
@@ -69684,18 +69681,33 @@
                         }
                       },
                       "required": [
-                        "orchestrator-k8s-runtime",
+                        "orchestratorK8sRuntime",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
-                        "browserStreamingEnabled",
                         "incomingEmail",
                         "mcpServerBaseImage",
                         "orchestratorK8sNamespace",
                         "isQuickstart",
                         "ngrokDomain",
                         "virtualKeyDefaultExpirationSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "enterpriseFeatures": {
+                      "type": "object",
+                      "properties": {
+                        "core": {
+                          "type": "boolean"
+                        },
+                        "knowledgeBase": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "core",
+                        "knowledgeBase"
                       ],
                       "additionalProperties": false
                     },
@@ -69727,6 +69739,7 @@
                   },
                   "required": [
                     "features",
+                    "enterpriseFeatures",
                     "providerBaseUrls"
                   ],
                   "additionalProperties": false
@@ -115878,6 +115891,16 @@
                     },
                     "allowChatFileUploads": {
                       "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingApiKeySecretId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "required": [
@@ -115895,7 +115918,9 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "allowChatFileUploads"
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingApiKeySecretId"
                   ],
                   "additionalProperties": false
                 }
@@ -116319,6 +116344,16 @@
                     },
                     "allowChatFileUploads": {
                       "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingApiKeySecretId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "required": [
@@ -116336,7 +116371,9 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "globalToolPolicy",
-                    "allowChatFileUploads"
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingApiKeySecretId"
                   ],
                   "additionalProperties": false
                 }

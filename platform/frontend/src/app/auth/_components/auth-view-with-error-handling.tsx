@@ -22,14 +22,14 @@ import {
 import config from "@/lib/config";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
-const { IdentityProviderSelector } = config.enterpriseLicenseActivated
+const { IdentityProviderSelector } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
     await import("@/components/identity-provider-selector.ee")
   : {
       IdentityProviderSelector: () => null,
     };
 
-const { usePublicIdentityProviders } = config.enterpriseLicenseActivated
+const { usePublicIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
     await import("@/lib/identity-provider.query.ee")
   : {
@@ -308,7 +308,7 @@ export function AuthViewWithErrorHandling({
     isBasicAuthDisabled &&
     hasIdentityProviders &&
     isSignInPage &&
-    config.enterpriseLicenseActivated
+    config.enterpriseFeatures.core
   ) {
     return (
       <div className="w-full max-w-md space-y-4">
@@ -428,7 +428,7 @@ export function AuthViewWithErrorHandling({
             }}
           />
         )}
-        {isSignInPage && config.enterpriseLicenseActivated && (
+        {isSignInPage && config.enterpriseFeatures.core && (
           <IdentityProviderSelector showDivider={!isBasicAuthDisabled} />
         )}
       </div>

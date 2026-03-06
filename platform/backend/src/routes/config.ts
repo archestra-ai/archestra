@@ -21,12 +21,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.strictObject({
             features: z.strictObject({
-              "orchestrator-k8s-runtime": z.boolean(),
+              orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
-              browserStreamingEnabled: z.boolean(),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
@@ -38,6 +37,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
+            }),
+            enterpriseFeatures: z.strictObject({
+              core: z.boolean(),
+              knowledgeBase: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -55,8 +58,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         features: {
-          ...config.features,
-          "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
+          orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
@@ -69,6 +71,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
         },
+        enterpriseFeatures: config.enterpriseFeatures,
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
           openrouter: config.llm.openrouter.baseUrl || null,

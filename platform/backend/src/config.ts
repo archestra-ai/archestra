@@ -681,15 +681,12 @@ const config = {
       return "anthropic";
     })(),
   },
-  features: {
-    /**
-     * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
-     * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
-     */
-    browserStreamingEnabled: true,
+  enterpriseFeatures: {
+    core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+    knowledgeBase:
+      process.env.ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED ===
+      "true",
   },
-  enterpriseLicenseActivated:
-    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { formatCronSchedule } from "@/lib/format-cron";
 import {
   FormControl,
   FormDescription,
@@ -19,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatCronSchedule } from "@/lib/format-cron";
 
 const PRESET_SCHEDULES = [
   { label: "Every 6 hours", value: "0 */6 * * *" },

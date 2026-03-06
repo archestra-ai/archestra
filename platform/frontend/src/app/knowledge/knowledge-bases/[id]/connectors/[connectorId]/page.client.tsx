@@ -8,7 +8,6 @@ import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
-import { formatCronSchedule } from "@/lib/format-cron";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,7 @@ import {
   useSyncConnector,
   useTestConnectorConnection,
 } from "@/lib/connector.query";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { useKnowledgeBase } from "@/lib/knowledge-base.query";
 import { formatDate } from "@/lib/utils";
 

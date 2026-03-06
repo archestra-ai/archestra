@@ -362,10 +362,9 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                         className="text-xs text-muted-foreground"
                         title={formatDate({ date: connector.lastSyncAt })}
                       >
-                        {formatDistanceToNow(
-                          new Date(connector.lastSyncAt),
-                          { addSuffix: true },
-                        )}
+                        {formatDistanceToNow(new Date(connector.lastSyncAt), {
+                          addSuffix: true,
+                        })}
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">

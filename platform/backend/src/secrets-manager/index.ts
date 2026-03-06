@@ -75,7 +75,7 @@ export async function createSecretManager(
   managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
 
   if (managerType === SecretsManagerType.Vault) {
-    if (!config.enterpriseLicenseActivated) {
+    if (!config.enterpriseFeatures.core) {
       logger.warn(
         "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault configured but Archestra enterprise license is not activated, falling back to DbSecretsManager.",
       );
@@ -106,7 +106,7 @@ export async function createSecretManager(
   }
 
   if (managerType === SecretsManagerType.BYOS_VAULT) {
-    if (!config.enterpriseLicenseActivated) {
+    if (!config.enterpriseFeatures.core) {
       logger.warn(
         "createSecretManager: ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT configured but Archestra enterprise license is not activated, falling back to DbSecretsManager.",
       );
@@ -190,7 +190,7 @@ export function secretManager(): ISecretManager {
 export function isByosEnabled(): boolean {
   return (
     secretManagerCoordinator.getManagerType() ===
-      SecretsManagerType.BYOS_VAULT && config.enterpriseLicenseActivated
+      SecretsManagerType.BYOS_VAULT && config.enterpriseFeatures.core
   );
 }
 

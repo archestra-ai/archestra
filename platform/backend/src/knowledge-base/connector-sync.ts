@@ -207,9 +207,7 @@ class ConnectorSyncService {
   }): Promise<boolean> {
     const { doc, knowledgeBase, connectorId, connectorType, log } = params;
 
-    const contentHash = createHash("sha256")
-      .update(doc.content)
-      .digest("hex");
+    const contentHash = createHash("sha256").update(doc.content).digest("hex");
 
     // Check for existing document with the same content hash (dedup)
     const existing = await KbDocumentModel.findByContentHash({

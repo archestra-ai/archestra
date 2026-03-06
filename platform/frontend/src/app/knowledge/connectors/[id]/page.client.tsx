@@ -17,17 +17,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
-import { formatCronSchedule } from "@/lib/format-cron";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-
-
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -54,6 +47,7 @@ import {
   useTestConnectorConnection,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/connector.query";
+import { formatCronSchedule } from "@/lib/format-cron";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { formatDate } from "@/lib/utils";
 

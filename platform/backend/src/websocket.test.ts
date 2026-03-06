@@ -5,23 +5,9 @@ import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
-import type * as originalConfigModule from "@/config";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      features: {
-        ...actual.default.features,
-        browserStreamingEnabled: true,
-      },
-    },
-  };
-});
 
 const { browserStreamFeature } = await import(
   "@/features/browser-stream/services/browser-stream.feature"

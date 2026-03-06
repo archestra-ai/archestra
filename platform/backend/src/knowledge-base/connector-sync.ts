@@ -80,6 +80,9 @@ class ConnectorSyncService {
       documentsIngested: 0,
     });
 
+    // Bind runId to logger so every log line in this sync includes it
+    const runLog = log.child({ runId: run.id, connectorId });
+
     // Update connector lastSyncStatus to running
     await KnowledgeBaseConnectorModel.update(connectorId, {
       lastSyncStatus: "running",
@@ -106,15 +109,14 @@ class ConnectorSyncService {
                 knowledgeBase: kb,
                 connectorId,
                 connectorType: connector.connectorType,
-                log,
+                log: runLog,
               });
               if (ingested) {
                 documentsIngested++;
               }
             } catch (docError) {
-              log.warn(
+              runLog.warn(
                 {
-                  connectorId,
                   knowledgeBaseId: kb.id,
                   documentId: doc.id,
                   error:
@@ -156,10 +158,8 @@ class ConnectorSyncService {
         lastSyncError: null,
       });
 
-      log.info(
+      runLog.info(
         {
-          connectorId,
-          runId: run.id,
           documentsProcessed,
           documentsIngested,
           knowledgeBaseCount: knowledgeBases.length,
@@ -186,8 +186,8 @@ class ConnectorSyncService {
         lastSyncError: errorMessage,
       });
 
-      log.error(
-        { connectorId, runId: run.id, error: errorMessage },
+      runLog.error(
+        { error: errorMessage },
         "[ConnectorSync] Sync failed",
       );
 

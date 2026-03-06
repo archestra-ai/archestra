@@ -814,7 +814,7 @@ export async function getChatMcpTools({
                     }
 
                     // Convert MCP content to string for AI SDK
-                    return (
+                    const archestraText = (
                       archestraResponse.content as Array<{
                         type: string;
                         text?: string;
@@ -826,6 +826,21 @@ export async function getChatMcpTools({
                           : JSON.stringify(item),
                       )
                       .join("\n");
+
+                    // Preserve _meta from MCP tool result (MCP Apps)
+                    const archestraMeta = (
+                      archestraResponse as {
+                        _meta?: Record<string, unknown>;
+                      }
+                    )._meta;
+                    if (
+                      archestraMeta &&
+                      Object.keys(archestraMeta).length > 0
+                    ) {
+                      return `${archestraText}\n<!--MCP_META:${JSON.stringify(archestraMeta)}-->`;
+                    }
+
+                    return archestraText;
                   }
 
                   // Execute non-Archestra tools via shared helper with browser sync
@@ -1240,7 +1255,9 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
   }
 
   // Convert MCP content to string for AI SDK
-  return (result.content as Array<{ type: string; text?: string }>)
+  const textContent = (
+    result.content as Array<{ type: string; text?: string }>
+  )
     .map((item: { type: string; text?: string }) => {
       if (item.type === "text" && item.text) {
         return item.text;
@@ -1248,6 +1265,15 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       return JSON.stringify(item);
     })
     .join("\n");
+
+  // Preserve _meta from MCP tool result (needed for MCP Apps rendering)
+  // Embed as a parseable JSON marker that the frontend can detect
+  const resultMeta = (result as { _meta?: Record<string, unknown> })._meta;
+  if (resultMeta && Object.keys(resultMeta).length > 0) {
+    return `${textContent}\n<!--MCP_META:${JSON.stringify(resultMeta)}-->`;
+  }
+
+  return textContent;
 }
 
 /**

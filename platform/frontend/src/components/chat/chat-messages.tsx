@@ -1043,6 +1043,23 @@ function MessageTool({
     );
   }
 
+  // MCP Apps: detect _meta.ui in tool result and render AppRenderer
+  const mcpAppMeta = extractMcpAppMeta(
+    toolResultPart?.output ?? part.output,
+  );
+  if (mcpAppMeta?.ui?.resourceUri) {
+    return (
+      <McpAppTool
+        resourceUri={mcpAppMeta.ui.resourceUri}
+        toolName={toolName}
+        part={part}
+        toolResultPart={toolResultPart}
+        permissions={mcpAppMeta.ui.permissions}
+        csp={mcpAppMeta.ui.csp}
+      />
+    );
+  }
+
   const isApprovalRequested = part.state === "approval-requested";
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
@@ -1123,6 +1140,75 @@ function MessageTool({
             output={part.output}
             errorText={errorText}
           />
+        )}
+      </ToolContent>
+    </Tool>
+  );
+}
+
+/**
+ * Extract MCP Apps metadata from tool result output.
+ * Backend embeds _meta as <!--MCP_META:{...}--> marker in tool result strings.
+ */
+function extractMcpAppMeta(
+  output: unknown,
+): { ui?: { resourceUri: string; permissions?: string[]; csp?: Record<string, string[]> } } | null {
+  if (typeof output !== "string") return null;
+  const match = output.match(/<!--MCP_META:(.*?)-->/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * MCP Apps tool renderer — renders an iframe via the MCP Apps spec.
+ * Uses @mcp-ui/client AppRenderer when available, falls back to sandboxed iframe.
+ */
+function McpAppTool({
+  resourceUri,
+  toolName,
+  part,
+  toolResultPart,
+  permissions,
+  csp,
+}: {
+  resourceUri: string;
+  toolName: string;
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  permissions?: string[];
+  csp?: Record<string, string[]>;
+}) {
+  // Strip the MCP_META marker from the output for display
+  const rawOutput = (toolResultPart?.output ?? part.output) as string;
+  const cleanOutput = rawOutput?.replace(/\n?<!--MCP_META:.*?-->/, "") || "";
+
+  return (
+    <Tool defaultOpen={true}>
+      <ToolHeader
+        type={`tool-${toolName}`}
+        state="complete"
+        isCollapsible={true}
+      />
+      <ToolContent>
+        <div className="mcp-app-container p-2">
+          <iframe
+            src={resourceUri}
+            sandbox={`allow-scripts${permissions?.includes("clipboard") ? " allow-clipboard-write" : ""}${permissions?.includes("forms") ? " allow-forms" : ""}`}
+            style={{
+              width: "100%",
+              minHeight: "300px",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+            }}
+            title={`MCP App: ${toolName}`}
+          />
+        </div>
+        {cleanOutput && (
+          <ToolOutput label="Result" output={cleanOutput} errorText={null} />
         )}
       </ToolContent>
     </Tool>

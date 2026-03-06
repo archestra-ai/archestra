@@ -29,6 +29,21 @@ export const AvailableToolAnalysisSchema = z.object({
   is_write: z.boolean().nullable(),
 });
 
+export const McpToolMetaUiSchema = z
+  .object({
+    resourceUri: z.string(),
+    permissions: z.array(z.string()).optional(),
+    csp: z.record(z.array(z.string())).optional(),
+  })
+  .optional();
+
+export const McpToolMetaSchema = z
+  .object({
+    ui: McpToolMetaUiSchema,
+  })
+  .passthrough()
+  .optional();
+
 export const AvailableToolSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -37,6 +52,7 @@ export const AvailableToolSchema = z.object({
   mcpServerId: z.string(),
   mcpServerName: z.string(),
   analysis: AvailableToolAnalysisSchema,
+  _meta: McpToolMetaSchema,
 });
 
 export type AvailableTool = z.infer<typeof AvailableToolSchema>;

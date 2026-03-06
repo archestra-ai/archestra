@@ -11,6 +11,7 @@ export type CommonMcpToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
 };
 
 export const CommonToolCallSchema = z
@@ -29,6 +30,7 @@ export type CommonToolResult = {
   content: unknown;
   isError: boolean;
   error?: string;
+  _meta?: Record<string, unknown>;
 };
 
 /**

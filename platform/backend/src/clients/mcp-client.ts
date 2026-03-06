@@ -318,6 +318,7 @@ class McpClient {
           !!result.isError,
           tool.responseModifierTemplate,
           authInfo,
+          (result as { _meta?: Record<string, unknown> })._meta,
         );
       } catch (error) {
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
@@ -1316,6 +1317,7 @@ class McpClient {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
     },
+    _meta?: Record<string, unknown>,
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -1328,6 +1330,7 @@ class McpClient {
       name: toolCall.name,
       content: modifiedContent,
       isError,
+      ...(_meta && Object.keys(_meta).length > 0 ? { _meta } : {}),
     };
 
     await this.persistToolCall(

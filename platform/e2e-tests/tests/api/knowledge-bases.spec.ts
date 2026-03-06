@@ -15,8 +15,6 @@ test.describe("Knowledge Bases API", () => {
 
       expect(kg).toHaveProperty("id");
       expect(kg.name).toBe(name);
-      expect(kg.provider).toBe("lightrag");
-      expect(kg.config).toEqual({ apiUrl: "http://localhost:9100" });
       expect(kg).toHaveProperty("createdAt");
       expect(kg).toHaveProperty("updatedAt");
 
@@ -45,8 +43,6 @@ test.describe("Knowledge Bases API", () => {
 
       expect(kg.id).toBe(created.id);
       expect(kg.name).toBe(name);
-      expect(kg.provider).toBe("lightrag");
-      expect(kg.config).toEqual({ apiUrl: "http://localhost:9100" });
 
       // Cleanup
       await deleteKnowledgeBase(request, kg.id);
@@ -106,19 +102,17 @@ test.describe("Knowledge Bases API", () => {
       const created = await createResponse.json();
 
       const updatedName = `E2E KG Updated ${uniqueSuffix}`;
-      const updatedConfig = { apiUrl: "http://localhost:9200" };
 
       const updateResponse = await makeApiRequest({
         request,
         method: "put",
         urlSuffix: `/api/knowledge-bases/${created.id}`,
-        data: { name: updatedName, config: updatedConfig },
+        data: { name: updatedName },
       });
       const updated = await updateResponse.json();
 
       expect(updated.id).toBe(created.id);
       expect(updated.name).toBe(updatedName);
-      expect(updated.config).toEqual(updatedConfig);
 
       // Verify changes persisted
       const getResponse = await makeApiRequest({
@@ -128,7 +122,6 @@ test.describe("Knowledge Bases API", () => {
       });
       const fetched = await getResponse.json();
       expect(fetched.name).toBe(updatedName);
-      expect(fetched.config).toEqual(updatedConfig);
 
       // Cleanup
       await deleteKnowledgeBase(request, created.id);
@@ -173,10 +166,7 @@ test.describe("Knowledge Bases API", () => {
         request,
         method: "post",
         urlSuffix: "/api/knowledge-bases",
-        data: {
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9100" },
-        },
+        data: {},
         ignoreStatusCheck: true,
       });
       expect(response.status()).toBe(400);
@@ -223,8 +213,6 @@ test.describe("Knowledge Bases API", () => {
         urlSuffix: "/api/knowledge-bases",
         data: {
           name: "Member KG Attempt",
-          provider: "lightrag",
-          config: { apiUrl: "http://localhost:9100" },
         },
         ignoreStatusCheck: true,
       });

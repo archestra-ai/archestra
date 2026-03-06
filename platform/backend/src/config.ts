@@ -430,17 +430,11 @@ const parsePositiveInt = (
 /**
  * Resolve the connector CronJob image.
  *
- * Priority:
- * 1. Explicit env var `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE` — always wins.
- * 2. Running inside a K8s cluster (`LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`) —
- *    auto-detect to `archestra/platform:<version>` (production/staging).
- * 3. Otherwise (local dev with a kubeconfig file) — return empty string so
- *    connector syncs run in-process via InProcessScheduler.
+ * When running inside a K8s cluster, auto-detect to `archestra/platform:<version>`.
+ * Otherwise (local dev with a kubeconfig file) return empty string so
+ * connector syncs run in-process via InProcessScheduler.
  */
 export const getConnectorImage = (): string => {
-  const explicit = process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE;
-  if (explicit) return explicit;
-
   const runningInsideCluster =
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
     "true";
@@ -696,7 +690,7 @@ const config = {
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.58", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.60", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -771,7 +765,7 @@ const config = {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },
   kb: {
-    openaiApiKey: process.env.ARCHESTRA_KB_OPENAI_API_KEY || "",
+    embeddingApiKey: process.env.ARCHESTRA_KB_EMBEDDING_API_KEY || "",
   },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",

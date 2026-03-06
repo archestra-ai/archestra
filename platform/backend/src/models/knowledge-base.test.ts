@@ -11,20 +11,15 @@ describe("KnowledgeBaseModel", () => {
       const kb = await KnowledgeBaseModel.create({
         organizationId: org.id,
         name: "My Knowledge Base",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
       });
 
       expect(kb.id).toBeDefined();
       expect(kb.organizationId).toBe(org.id);
       expect(kb.name).toBe("My Knowledge Base");
-      expect(kb.provider).toBe("lightrag");
-      expect(kb.config).toEqual({ apiUrl: "http://localhost:9621" });
       expect(kb.status).toBe("active");
       expect(kb.visibility).toBe("org-wide");
       expect(kb.teamIds).toEqual([]);
       expect(kb.description).toBeNull();
-      expect(kb.secretId).toBeNull();
       expect(kb.createdAt).toBeInstanceOf(Date);
       expect(kb.updatedAt).toBeInstanceOf(Date);
     });
@@ -37,8 +32,6 @@ describe("KnowledgeBaseModel", () => {
       const kb = await KnowledgeBaseModel.create({
         organizationId: org.id,
         name: "Team KB",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
         description: "A team-scoped KB",
         visibility: "team-scoped",
         teamIds: ["team-1", "team-2"],
@@ -120,8 +113,6 @@ describe("KnowledgeBaseModel", () => {
       const kb1 = await KnowledgeBaseModel.create({
         organizationId: org.id,
         name: "Older KB",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
       });
       // Manually set createdAt via update to guarantee different timestamps
       // Since we can't set createdAt via create, insert directly with db
@@ -135,8 +126,6 @@ describe("KnowledgeBaseModel", () => {
       const kb2 = await KnowledgeBaseModel.create({
         organizationId: org.id,
         name: "Newer KB",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
       });
       await db
         .update(schema.knowledgeBasesTable)
@@ -214,7 +203,6 @@ describe("KnowledgeBaseModel", () => {
 
       expect(updated).not.toBeNull();
       expect(updated?.name).toBe("Updated");
-      expect(updated?.provider).toBe(kb.provider);
     });
 
     test("updates a knowledge base description", async ({

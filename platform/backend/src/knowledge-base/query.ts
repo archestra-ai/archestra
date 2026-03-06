@@ -60,7 +60,7 @@ class QueryService {
 
   private getOpenAIClient(): OpenAI {
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: config.kb.openaiApiKey });
+      this.openai = new OpenAI({ apiKey: config.kb.embeddingApiKey });
     }
     return this.openai;
   }

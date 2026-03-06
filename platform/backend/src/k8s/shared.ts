@@ -15,6 +15,7 @@ export interface K8sClients {
   appsApi: k8s.AppsV1Api;
   batchApi: k8s.BatchV1Api;
   attach: k8s.Attach;
+  exec: k8s.Exec;
   log: k8s.Log;
   namespace: string;
 }
@@ -111,6 +112,7 @@ export function createK8sClients(
     appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api),
     batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api),
     attach: new k8s.Attach(kubeConfig),
+    exec: new k8s.Exec(kubeConfig),
     log: new k8s.Log(kubeConfig),
     namespace: resolvedNamespace,
   };

@@ -40,6 +40,19 @@ interface McpLogsSubscription {
   abortController: AbortController;
 }
 
+interface McpExecSubscription {
+  serverId: string;
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  k8sWs: {
+    readyState: number;
+    close: () => void;
+    on: (event: string, listener: (...args: unknown[]) => void) => void;
+    send: (data: Buffer | string) => void;
+  };
+}
+
 interface McpDeploymentStatusSubscription {
   interval: NodeJS.Timeout;
   lastStatuses: Record<string, McpDeploymentStatusEntry>;
@@ -57,6 +70,7 @@ const service = websocketService as unknown as {
     get: (ws: WS) => { intervalId: NodeJS.Timeout } | undefined;
   };
   mcpLogsSubscriptions: Map<WS, McpLogsSubscription>;
+  mcpExecSubscriptions: Map<WS, McpExecSubscription>;
   mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
   initBrowserStreamContextForTesting: () => void;
 };
@@ -70,6 +84,7 @@ describe("websocket authentication", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
   });
 
@@ -98,6 +113,7 @@ describe("websocket browser-stream authorization", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
   });
 
@@ -165,6 +181,7 @@ describe("websocket browser-stream screenshot handling", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
     // Mock Playwright tools as assigned so browser stream tests can proceed
     vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
@@ -236,6 +253,7 @@ describe("websocket MCP logs", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
   });
 
@@ -565,6 +583,7 @@ describe("websocket MCP deployment statuses", () => {
     service.clientContexts.clear();
     service.browserSubscriptions.clear();
     service.mcpLogsSubscriptions.clear();
+    service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
   });
 
@@ -926,5 +945,614 @@ describe("websocket MCP deployment statuses", () => {
     const secondSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(secondSubscription).toBeDefined();
     expect(secondSubscription?.interval).not.toBe(firstInterval);
+  });
+});
+
+describe("websocket MCP exec", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    service.clientContexts.clear();
+    service.browserSubscriptions.clear();
+    service.mcpLogsSubscriptions.clear();
+    service.mcpExecSubscriptions.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
+  });
+
+  afterEach(() => {
+    for (const sub of service.mcpExecSubscriptions.values()) {
+      sub.stdin.destroy();
+      sub.stdout.destroy();
+      sub.stderr.destroy();
+      if (sub.k8sWs.readyState <= 1) {
+        sub.k8sWs.close();
+      }
+    }
+    service.mcpExecSubscriptions.clear();
+  });
+
+  function makeMockK8sWs() {
+    let readyState = 1;
+    const listeners = new Map<string, ((...args: unknown[]) => void)[]>();
+    return {
+      get readyState() {
+        return readyState;
+      },
+      close: vi.fn(() => {
+        readyState = 3;
+      }),
+      on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        if (!listeners.has(event)) listeners.set(event, []);
+        listeners.get(event)?.push(listener);
+      }),
+      send: vi.fn(),
+      emit(event: string, ...args: unknown[]) {
+        for (const listener of listeners.get(event) ?? []) {
+          listener(...args);
+        }
+      },
+    } as unknown as WS & {
+      send: ReturnType<typeof vi.fn>;
+      close: ReturnType<typeof vi.fn>;
+      on: ReturnType<typeof vi.fn>;
+      emit: (event: string, ...args: unknown[]) => void;
+    };
+  }
+
+  test("rejects exec subscription for MCP server the user does not have access to", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const team = await makeTeam(org.id, owner.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: owner.id,
+      teamId: team.id,
+    });
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: otherUser.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "mcp_exec_error",
+        payload: {
+          serverId: mcpServer.id,
+          error: "MCP server not found",
+        },
+      }),
+    );
+    expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("returns error for non-existent MCP server", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    const nonExistentServerId = "00000000-0000-0000-0000-000000000000";
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: nonExistentServerId },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "mcp_exec_error",
+        payload: {
+          serverId: nonExistentServerId,
+          error: "MCP server not found",
+        },
+      }),
+    );
+    expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("allows MCP server admin to exec and creates subscription", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const adminUser = await makeUser();
+    const team = await makeTeam(org.id, owner.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: owner.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockResolvedValue({
+      k8sWs: mockK8sWs,
+      podName: "mcp-test-pod-abc123",
+    });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec -it ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: adminUser.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    // Should have sent exec_started
+    const sentMessages = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => JSON.parse(call[0] as string),
+    );
+    expect(sentMessages).toContainEqual({
+      type: "mcp_exec_started",
+      payload: {
+        serverId: mcpServer.id,
+        command: "kubectl exec -it ...",
+        podName: "mcp-test-pod-abc123",
+      },
+    });
+    expect(service.mcpExecSubscriptions.has(ws)).toBe(true);
+  });
+
+  test("sends exec error when runtime manager throws", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockRejectedValue(
+      new Error("No running pod found for this deployment"),
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "mcp_exec_error",
+        payload: {
+          serverId: mcpServer.id,
+          error: "No running pod found for this deployment",
+        },
+      }),
+    );
+    expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("forwards stdout data to client as exec_output", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockResolvedValue({
+      k8sWs: mockK8sWs,
+      podName: "mcp-test-pod",
+    });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    // Write to the stdout stream that was passed to execIntoMcpServer
+    const sub = service.mcpExecSubscriptions.get(ws);
+    expect(sub).toBeDefined();
+    sub?.stdout.write(Buffer.from("hello world"));
+
+    // Wait for stream data event to propagate
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const sentMessages = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => JSON.parse(call[0] as string),
+    );
+    expect(sentMessages).toContainEqual({
+      type: "mcp_exec_output",
+      payload: { serverId: mcpServer.id, data: "hello world" },
+    });
+  });
+
+  test("forwards input from client to stdin", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockResolvedValue({
+      k8sWs: mockK8sWs,
+      podName: "mcp-test-pod",
+    });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    const sub = service.mcpExecSubscriptions.get(ws);
+    expect(sub).toBeDefined();
+
+    // Collect data written to stdin
+    const stdinData: string[] = [];
+    sub?.stdin.on("data", (chunk: Buffer) => {
+      stdinData.push(chunk.toString());
+    });
+
+    // Send input from client
+    await service.handleMessage(
+      {
+        type: "mcp_exec_input",
+        payload: { serverId: mcpServer.id, data: "ls -la\n" },
+      },
+      ws,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(stdinData).toContain("ls -la\n");
+  });
+
+  test("sends resize command to K8s WebSocket", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockResolvedValue({
+      k8sWs: mockK8sWs,
+      podName: "mcp-test-pod",
+    });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    // Send resize from client
+    await service.handleMessage(
+      {
+        type: "mcp_exec_resize",
+        payload: { serverId: mcpServer.id, cols: 120, rows: 40 },
+      },
+      ws,
+    );
+
+    // Verify resize was sent to K8s WS with SPDY channel 4 prefix
+    expect(mockK8sWs.send).toHaveBeenCalled();
+    const sentBuf = mockK8sWs.send.mock.calls[0][0] as Buffer;
+    expect(sentBuf[0]).toBe(4); // SPDY channel 4 = resize
+    const resizeJson = sentBuf.subarray(1).toString();
+    expect(JSON.parse(resizeJson)).toEqual({ Width: 120, Height: 40 });
+  });
+
+  test("cleans up on unsubscribe", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockResolvedValue({
+      k8sWs: mockK8sWs,
+      podName: "mcp-test-pod",
+    });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    expect(service.mcpExecSubscriptions.has(ws)).toBe(true);
+
+    // Unsubscribe
+    await service.handleMessage(
+      {
+        type: "unsubscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
+    expect(mockK8sWs.close).toHaveBeenCalled();
+  });
+
+  test("unsubscribes previous exec when subscribing to new server", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer1 = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+    const mcpServer2 = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs1 = makeMockK8sWs();
+    const mockK8sWs2 = makeMockK8sWs();
+
+    const execSpy = vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer");
+    execSpy.mockResolvedValueOnce({
+      k8sWs: mockK8sWs1,
+      podName: "pod-1",
+    });
+    execSpy.mockResolvedValueOnce({
+      k8sWs: mockK8sWs2,
+      podName: "pod-2",
+    });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsAgentAdmin: false,
+      userIsMcpServerAdmin: true,
+    });
+
+    // Subscribe to first server
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer1.id },
+      },
+      ws,
+    );
+
+    expect(service.mcpExecSubscriptions.get(ws)?.serverId).toBe(mcpServer1.id);
+
+    // Subscribe to second server - should close first
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer2.id },
+      },
+      ws,
+    );
+
+    expect(mockK8sWs1.close).toHaveBeenCalled();
+    expect(service.mcpExecSubscriptions.get(ws)?.serverId).toBe(mcpServer2.id);
   });
 });

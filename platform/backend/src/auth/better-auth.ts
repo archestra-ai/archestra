@@ -362,7 +362,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     return ctx;
   }
 
-  logger.debug({ path, method }, "[auth:beforeHook] Processing auth request");
+  logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
 
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
@@ -570,7 +570,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     return ctx;
   }
 
-  logger.debug({ path, method }, "[auth:afterHook] Processing post-auth hook");
+  logger.trace({ path, method }, "[auth:afterHook] Processing post-auth hook");
 
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {

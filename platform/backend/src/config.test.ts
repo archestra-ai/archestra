@@ -912,8 +912,6 @@ describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     vi.resetModules();
-    // Clear K8s env vars by default
-    delete process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE;
     delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
     delete process.env
       .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
@@ -921,23 +919,6 @@ describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  test("should use explicit env var when set", async () => {
-    process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE =
-      "my-registry/my-image:v1";
-
-    const { default: cfg } = await import("./config");
-    expect(cfg.orchestrator.connectorImage).toBe("my-registry/my-image:v1");
-  });
-
-  test("should use explicit env var even when K8s is configured", async () => {
-    process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE =
-      "custom/image:latest";
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
-
-    const { default: cfg } = await import("./config");
-    expect(cfg.orchestrator.connectorImage).toBe("custom/image:latest");
   });
 
   test("should default to platform image when running inside K8s cluster", async () => {

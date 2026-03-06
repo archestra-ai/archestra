@@ -24,11 +24,7 @@ import {
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
 } from "@/types";
-import {
-  KnowledgeBaseProviderTypeSchema,
-  KnowledgeBaseVisibilitySchema,
-  LightragConfigSchema,
-} from "@/types/knowledge-base";
+import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 import {
   ConnectorConfigSchema,
   type ConnectorCredentials,
@@ -160,8 +156,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1),
           description: z.string().optional(),
-          provider: KnowledgeBaseProviderTypeSchema,
-          config: LightragConfigSchema,
           visibility: KnowledgeBaseVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
         }),
@@ -172,8 +166,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const kg = await KnowledgeBaseModel.create({
         organizationId,
         name: body.name,
-        provider: body.provider,
-        config: body.config,
         ...(body.description !== undefined && {
           description: body.description,
         }),
@@ -213,7 +205,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
-          config: LightragConfigSchema.optional(),
           visibility: KnowledgeBaseVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
         }),

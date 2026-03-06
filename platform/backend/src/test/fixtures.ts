@@ -830,7 +830,7 @@ async function makeOAuthRefreshToken(
 async function makeKnowledgeBase(
   organizationId: string,
   overrides: Partial<
-    Pick<InsertKnowledgeBase, "name" | "provider" | "config" | "status">
+    Pick<InsertKnowledgeBase, "name" | "status">
   > = {},
 ): Promise<KnowledgeBase> {
   const [result] = await db
@@ -838,8 +838,6 @@ async function makeKnowledgeBase(
     .values({
       organizationId,
       name: `Test KG ${crypto.randomUUID().substring(0, 8)}`,
-      provider: "lightrag",
-      config: { apiUrl: "http://localhost:9621" },
       ...overrides,
     })
     .returning();

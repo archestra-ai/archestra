@@ -949,7 +949,7 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
   - Knowledge Base sidebar section, settings, and API routes are only available when enabled
 
-- **`ARCHESTRA_KB_OPENAI_API_KEY`** - OpenAI API key used for generating embeddings.
+- **`ARCHESTRA_KB_EMBEDDING_API_KEY`** - API key for generating text embeddings (OpenAI-compatible endpoint).
   - Required for the chunking and embedding pipeline
   - Used by the embedder to call the OpenAI embeddings API (default model: `text-embedding-3-small`)
 
@@ -957,6 +957,3 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `archestra-connectors`
   - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE`** - Docker image for connector sync CronJobs.
-  - Optional — auto-detected as `archestra/platform:<version>` when running inside a K8s cluster
-  - When not set and not running inside K8s (local development), connector syncs run in-process

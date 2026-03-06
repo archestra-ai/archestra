@@ -109,7 +109,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
 
           // Send initial resize
           const dims = fitAddon.proposeDimensions();
-          if (dims) {
+          if (dims?.cols != null && dims?.rows != null) {
             websocketService.send({
               type: "mcp_exec_resize",
               payload: { serverId, cols: dims.cols, rows: dims.rows },
@@ -163,7 +163,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
         try {
           fitAddon.fit();
           const dims = fitAddon.proposeDimensions();
-          if (dims) {
+          if (dims?.cols != null && dims?.rows != null) {
             websocketService.send({
               type: "mcp_exec_resize",
               payload: { serverId, cols: dims.cols, rows: dims.rows },

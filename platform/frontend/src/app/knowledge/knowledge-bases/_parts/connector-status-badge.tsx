@@ -44,6 +44,12 @@ function getStatusConfig(status: string) {
         className: "bg-blue-500/10 text-blue-600 border border-blue-500/30",
         animated: true,
       };
+    case "partial":
+      return {
+        label: "Partial",
+        className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",
+        animated: false,
+      };
     default:
       return {
         label: status,

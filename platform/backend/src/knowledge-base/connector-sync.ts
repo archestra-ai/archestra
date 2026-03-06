@@ -29,7 +29,11 @@ import { getConnector } from "./connectors/registry";
 class ConnectorSyncService {
   async executeSync(
     connectorId: string,
-    options?: { logger?: pino.Logger; getLogOutput?: () => string },
+    options?: {
+      logger?: pino.Logger;
+      getLogOutput?: () => string;
+      maxDurationMs?: number;
+    },
   ): Promise<{ runId: string; status: string }> {
     const log = options?.logger ?? defaultLogger;
 
@@ -89,8 +93,31 @@ class ConnectorSyncService {
       lastSyncStatus: "running",
     });
 
+    // Estimate total items for progress display
+    try {
+      const totalItems = await connectorImpl.estimateTotalItems({
+        config: connector.config as Record<string, unknown>,
+        credentials,
+        checkpoint: connector.checkpoint as Record<string, unknown> | null,
+      });
+
+      if (totalItems !== null) {
+        await ConnectorRunModel.update(run.id, { totalItems });
+        runLog.info({ totalItems }, "[ConnectorSync] Estimated total items");
+      }
+    } catch (error) {
+      runLog.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[ConnectorSync] Failed to estimate total items, continuing without",
+      );
+    }
+
     let documentsProcessed = 0;
     let documentsIngested = 0;
+    const startTime = Date.now();
+    let stoppedEarly = false;
 
     try {
       const syncGenerator = connectorImpl.sync({
@@ -131,16 +158,56 @@ class ConnectorSyncService {
           }
         }
 
-        // Update run progress
+        // Update run progress + flush logs after each batch
         await ConnectorRunModel.update(run.id, {
           documentsProcessed,
           documentsIngested,
+          logs: options?.getLogOutput?.() ?? null,
         });
 
         // Update connector checkpoint
         await KnowledgeBaseConnectorModel.update(connectorId, {
           checkpoint: batch.checkpoint,
         });
+
+        // Check time budget: stop early if we've used 90% of maxDurationMs and there's more data
+        if (options?.maxDurationMs && batch.hasMore) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed > options.maxDurationMs * 0.9) {
+            stoppedEarly = true;
+            runLog.info(
+              {
+                elapsedMs: elapsed,
+                maxDurationMs: options.maxDurationMs,
+                documentsProcessed,
+              },
+              "[ConnectorSync] Time budget exceeded, stopping early for continuation",
+            );
+            break;
+          }
+        }
+      }
+
+      if (stoppedEarly) {
+        // Partial completion — will be continued by a follow-up run
+        await ConnectorRunModel.update(run.id, {
+          status: "partial",
+          completedAt: new Date(),
+          documentsProcessed,
+          documentsIngested,
+          logs: options?.getLogOutput?.() ?? null,
+        });
+
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastSyncStatus: "partial",
+        });
+
+        runLog.info(
+          { documentsProcessed, documentsIngested },
+          "[ConnectorSync] Partial sync completed, continuation needed",
+        );
+
+        return { runId: run.id, status: "partial" };
       }
 
       // On success

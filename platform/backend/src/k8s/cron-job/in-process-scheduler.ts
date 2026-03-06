@@ -1,6 +1,9 @@
 import { schedule as cronSchedule, type ScheduledTask } from "node-cron";
+import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
 import { connectorSyncService } from "@/knowledge-base/connector-sync";
 import logger from "@/logging";
+
+const MAX_CONTINUATIONS = 50;
 
 /**
  * In-process cron scheduler for connector syncs.
@@ -9,11 +12,13 @@ import logger from "@/logging";
  */
 class InProcessScheduler {
   private tasks = new Map<string, ScheduledTask>();
+  private continuationCounts = new Map<string, number>();
 
   schedule(params: { connectorId: string; schedule: string }): void {
     this.unschedule(params.connectorId);
 
     const task = cronSchedule(params.schedule, () => {
+      this.continuationCounts.delete(params.connectorId);
       this.runSync(params.connectorId);
     });
 
@@ -29,6 +34,7 @@ class InProcessScheduler {
     if (existing) {
       existing.stop();
       this.tasks.delete(connectorId);
+      this.continuationCounts.delete(connectorId);
       logger.info(
         { connectorId },
         "[InProcessScheduler] Unscheduled connector sync",
@@ -71,6 +77,7 @@ class InProcessScheduler {
       );
     }
     this.tasks.clear();
+    this.continuationCounts.clear();
   }
 
   private runSync(connectorId: string): void {
@@ -79,13 +86,39 @@ class InProcessScheduler {
       "[InProcessScheduler] Starting scheduled sync",
     );
 
+    const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
+
     connectorSyncService
-      .executeSync(connectorId)
+      .executeSync(connectorId, {
+        logger: capturingLogger,
+        getLogOutput,
+      })
       .then((result) => {
         logger.info(
           { connectorId, runId: result.runId, status: result.status },
           "[InProcessScheduler] Scheduled sync completed",
         );
+
+        // Auto-continue on partial result
+        if (result.status === "partial") {
+          const count = (this.continuationCounts.get(connectorId) ?? 0) + 1;
+          if (count < MAX_CONTINUATIONS) {
+            this.continuationCounts.set(connectorId, count);
+            logger.info(
+              { connectorId, continuationCount: count },
+              "[InProcessScheduler] Scheduling continuation sync in 5s",
+            );
+            setTimeout(() => this.runSync(connectorId), 5000);
+          } else {
+            logger.warn(
+              { connectorId, maxContinuations: MAX_CONTINUATIONS },
+              "[InProcessScheduler] Max continuations reached, stopping",
+            );
+            this.continuationCounts.delete(connectorId);
+          }
+        } else {
+          this.continuationCounts.delete(connectorId);
+        }
       })
       .catch((error) => {
         logger.error(
@@ -95,6 +128,7 @@ class InProcessScheduler {
           },
           "[InProcessScheduler] Scheduled sync failed",
         );
+        this.continuationCounts.delete(connectorId);
       });
   }
 }

@@ -1,5 +1,5 @@
 {
-  "id": "8aa99736-57cc-41bb-9343-101fe4efae76",
+  "id": "72322ae9-8e81-4e39-b77b-a907feedf40c",
   "prevId": "26a8fd16-1ef6-4dbf-9b68-9bdaf37341ca",
   "version": "7",
   "dialect": "postgresql",
@@ -1846,6 +1846,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": 0
+        },
+        "total_items": {
+          "name": "total_items",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "error": {
           "name": "error",

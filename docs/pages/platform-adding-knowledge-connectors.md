@@ -91,13 +91,14 @@ Create a new directory `backend/src/knowledge-base/connectors/github/` with a `g
 
 ### The Connector interface
 
-Every connector must implement three methods:
+Every connector must implement four methods:
 
-| Method                                      | Purpose                                                                                                         |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `validateConfig(config)`                    | Parse raw config with the Zod schema, run domain-specific checks (e.g., URL format). Return `{ valid, error? }` |
-| `testConnection({ config, credentials })`   | Make a lightweight API call to verify credentials work. Return `{ success, error? }`                            |
-| `sync({ config, credentials, checkpoint })` | Async generator that yields `ConnectorSyncBatch` objects, each containing documents and an updated checkpoint   |
+| Method                                                  | Purpose                                                                                                         |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `validateConfig(config)`                                | Parse raw config with the Zod schema, run domain-specific checks (e.g., URL format). Return `{ valid, error? }` |
+| `testConnection({ config, credentials })`               | Make a lightweight API call to verify credentials work. Return `{ success, error? }`                            |
+| `estimateTotalItems({ config, credentials, checkpoint })` | Return an estimated total item count for progress display, or `null` if unknown. The base class returns `null` by default — override to enable progress tracking. |
+| `sync({ config, credentials, checkpoint })`             | Async generator that yields `ConnectorSyncBatch` objects, each containing documents and an updated checkpoint   |
 
 ### Example implementation
 

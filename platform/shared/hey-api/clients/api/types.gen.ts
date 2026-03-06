@@ -28503,8 +28503,8 @@ export type GetConnectorRunsResponses = {
             completedAt: string | null;
             documentsProcessed: number | null;
             documentsIngested: number | null;
+            totalItems: number | null;
             error: string | null;
-            logs: string | null;
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
@@ -28604,6 +28604,7 @@ export type GetConnectorRunResponses = {
         completedAt: string | null;
         documentsProcessed: number | null;
         documentsIngested: number | null;
+        totalItems: number | null;
         error: string | null;
         logs: string | null;
         checkpoint: string | number | boolean | null | {

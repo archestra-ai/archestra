@@ -161,6 +161,13 @@ export interface Connector {
     credentials: ConnectorCredentials;
   }): Promise<{ success: boolean; error?: string }>;
 
+  /** Estimate the total number of items to sync (for progress display). Returns null if unknown. */
+  estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null>;
+
   sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

@@ -34,7 +34,8 @@ function reciprocalRankFusion<T>(params: {
         (bestItem.get(b[0])?.bestRank ?? Infinity)
       );
     })
-    .map(([id]) => bestItem.get(id)!.item);
+    .map(([id]) => bestItem.get(id)?.item)
+    .filter((item): item is T => item !== undefined);
 }
 
 export default reciprocalRankFusion;

@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ConnectorRunLogsDialog } from "@/app/knowledge/connectors/_parts/connector-run-logs-dialog";
 import {
   ConnectorStatusDot,
   getConnectorDotState,
@@ -59,9 +60,7 @@ import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { formatDate } from "@/lib/utils";
 
 type ConnectorRunItem =
-  archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number] & {
-    logs?: string | null;
-  };
+  archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number];
 
 export default function ConnectorDetailPage({
   connectorId,
@@ -96,7 +95,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
 
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 10;
-  const [selectedRun, setSelectedRun] = useState<ConnectorRunItem | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const { data: runsData, isPending: isRunsPending } = useConnectorRuns({
     connectorId,
@@ -150,7 +149,21 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     {
       id: "documentsProcessed",
       header: "Processed",
-      cell: ({ row }) => <div>{row.original.documentsProcessed ?? 0}</div>,
+      cell: ({ row }) => {
+        const processed = row.original.documentsProcessed ?? 0;
+        // totalItems will be available after codegen
+        const total = (row.original as Record<string, unknown>).totalItems as
+          | number
+          | null;
+        return (
+          <div>
+            {processed}
+            {total != null && (
+              <span className="text-muted-foreground"> / {total}</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "documentsIngested",
@@ -161,15 +174,12 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       id: "logs",
       header: "Logs",
       cell: ({ row }) => {
-        const run = row.original;
-        const hasLogs = run.logs || run.error;
-        if (!hasLogs) return <span className="text-muted-foreground">-</span>;
         return (
           <Button
             variant="ghost"
             size="sm"
             className="h-7 px-2"
-            onClick={() => setSelectedRun(run)}
+            onClick={() => setSelectedRunId(row.original.id)}
           >
             <FileText className="mr-1 h-3.5 w-3.5" />
             View
@@ -292,70 +302,11 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           )}
         </LoadingWrapper>
 
-        {/* Run logs dialog */}
-        <Dialog
-          open={selectedRun !== null}
-          onOpenChange={(open) => {
-            if (!open) setSelectedRun(null);
-          }}
-        >
-          <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                Sync Run Logs
-                {selectedRun && (
-                  <ConnectorStatusBadge status={selectedRun.status} />
-                )}
-              </DialogTitle>
-            </DialogHeader>
-            {selectedRun && (
-              <div className="flex-1 overflow-auto space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Started:</span>{" "}
-                    {formatDate({ date: selectedRun.startedAt })}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Completed:</span>{" "}
-                    {selectedRun.completedAt
-                      ? formatDate({ date: selectedRun.completedAt })
-                      : "-"}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Processed:</span>{" "}
-                    {selectedRun.documentsProcessed ?? 0}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Ingested:</span>{" "}
-                    {selectedRun.documentsIngested ?? 0}
-                  </div>
-                </div>
-                {selectedRun.error && (
-                  <div>
-                    <h4 className="text-sm font-medium text-destructive mb-1">
-                      Error
-                    </h4>
-                    <pre className="text-xs bg-destructive/10 text-destructive p-3 rounded-md whitespace-pre-wrap break-words max-h-32 overflow-auto">
-                      {selectedRun.error}
-                    </pre>
-                  </div>
-                )}
-                {selectedRun.logs ? (
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Output</h4>
-                    <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-words max-h-96 overflow-auto font-mono">
-                      {selectedRun.logs}
-                    </pre>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No logs available for this run.
-                  </p>
-                )}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        <ConnectorRunLogsDialog
+          connectorId={connectorId}
+          runId={selectedRunId}
+          onClose={() => setSelectedRunId(null)}
+        />
 
         <EditConnectorDialog
           connector={connector}

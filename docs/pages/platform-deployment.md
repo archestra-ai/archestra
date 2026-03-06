@@ -955,3 +955,8 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector sync CronJobs run.
   - Default: `archestra-connectors`
   - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)
+
+- **`ARCHESTRA_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.
+  - Default: `3300` (55 minutes)
+  - Only applies to K8s CronJob runs. When a sync exceeds 90% of this budget, it stops and creates a continuation Job to resume from the last checkpoint.
+  - Set to `0` to disable time-bounded runs.

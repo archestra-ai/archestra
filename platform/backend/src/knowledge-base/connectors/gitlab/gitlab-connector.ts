@@ -54,6 +54,51 @@ export class GitlabConnector extends BaseConnector {
     }
   }
 
+  async estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    const parsed = parseGitlabConfig(params.config);
+    if (!parsed) return null;
+
+    try {
+      const client = createGitlabClient(parsed, params.credentials);
+      const projects = await getProjects(client, parsed);
+      let total = 0;
+
+      for (const project of projects) {
+        if (parsed.includeIssues !== false) {
+          const result = await client.Issues.all({
+            projectId: project.id,
+            perPage: 1,
+            page: 1,
+            showExpanded: true,
+          });
+          // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker expanded response includes paginationInfo
+          const expanded = result as any;
+          total += expanded?.paginationInfo?.total ?? 0;
+        }
+
+        if (parsed.includeMergeRequests !== false) {
+          const result = await client.MergeRequests.all({
+            projectId: project.id,
+            perPage: 1,
+            page: 1,
+            showExpanded: true,
+          });
+          // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker expanded response includes paginationInfo
+          const expanded = result as any;
+          total += expanded?.paginationInfo?.total ?? 0;
+        }
+      }
+
+      return total > 0 ? total : null;
+    } catch {
+      return null;
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

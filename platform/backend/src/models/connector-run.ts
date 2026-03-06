@@ -6,7 +6,46 @@ import type {
   UpdateConnectorRun,
 } from "@/types";
 
+/** ConnectorRun without the `logs` field — used for list endpoints to avoid large payloads. */
+type ConnectorRunListItem = Omit<ConnectorRun, "logs">;
+
 class ConnectorRunModel {
+  /** List runs without the `logs` column (for list endpoints). */
+  static async findByConnectorList(params: {
+    connectorId: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConnectorRunListItem[]> {
+    const t = schema.connectorRunsTable;
+    let query = db
+      .select({
+        id: t.id,
+        connectorId: t.connectorId,
+        status: t.status,
+        startedAt: t.startedAt,
+        completedAt: t.completedAt,
+        documentsProcessed: t.documentsProcessed,
+        documentsIngested: t.documentsIngested,
+        totalItems: t.totalItems,
+        error: t.error,
+        checkpoint: t.checkpoint,
+        createdAt: t.createdAt,
+      })
+      .from(t)
+      .where(eq(t.connectorId, params.connectorId))
+      .orderBy(desc(t.startedAt))
+      .$dynamic();
+
+    if (params.limit !== undefined) {
+      query = query.limit(params.limit);
+    }
+    if (params.offset !== undefined) {
+      query = query.offset(params.offset);
+    }
+
+    return await query;
+  }
+
   static async findByConnector(params: {
     connectorId: string;
     limit?: number;

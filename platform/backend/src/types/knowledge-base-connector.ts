@@ -97,6 +97,9 @@ export type UpdateKnowledgeBaseConnector = z.infer<
 export const SelectConnectorRunSchema = createSelectSchema(
   schema.connectorRunsTable,
 );
+export const SelectConnectorRunListSchema = SelectConnectorRunSchema.omit({
+  logs: true,
+});
 export const InsertConnectorRunSchema = createInsertSchema(
   schema.connectorRunsTable,
 ).omit({ id: true, createdAt: true });
@@ -107,6 +110,7 @@ export const UpdateConnectorRunSchema = createUpdateSchema(
   completedAt: true,
   documentsProcessed: true,
   documentsIngested: true,
+  totalItems: true,
   error: true,
   logs: true,
   checkpoint: true,

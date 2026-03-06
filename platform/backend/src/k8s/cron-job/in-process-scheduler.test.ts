@@ -19,6 +19,13 @@ vi.mock("@/knowledge-base/connector-sync", () => ({
   },
 }));
 
+vi.mock("@/entrypoints/_shared/log-capture", () => ({
+  createCapturingLogger: () => ({
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: vi.fn() },
+    getLogOutput: () => "",
+  }),
+}));
+
 describe("InProcessScheduler", () => {
   let scheduler: {
     schedule: (params: { connectorId: string; schedule: string }) => void;
@@ -156,7 +163,13 @@ describe("InProcessScheduler", () => {
 
       // Wait for the async executeSync to complete
       await vi.waitFor(() => {
-        expect(mockExecuteSync).toHaveBeenCalledWith("conn-1");
+        expect(mockExecuteSync).toHaveBeenCalledWith(
+          "conn-1",
+          expect.objectContaining({
+            logger: expect.any(Object),
+            getLogOutput: expect.any(Function),
+          }),
+        );
       });
     });
 
@@ -169,8 +182,41 @@ describe("InProcessScheduler", () => {
       cronCallback();
 
       await vi.waitFor(() => {
-        expect(mockExecuteSync).toHaveBeenCalledWith("conn-1");
+        expect(mockExecuteSync).toHaveBeenCalledWith(
+          "conn-1",
+          expect.objectContaining({
+            logger: expect.any(Object),
+            getLogOutput: expect.any(Function),
+          }),
+        );
       });
+    });
+
+    test("auto-continues on partial result", async () => {
+      mockExecuteSync
+        .mockResolvedValueOnce({ runId: "run-1", status: "partial" })
+        .mockResolvedValueOnce({ runId: "run-2", status: "success" });
+
+      vi.useFakeTimers();
+
+      scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
+
+      const cronCallback = mockSchedule.mock.calls[0][1] as () => void;
+      cronCallback();
+
+      // Wait for first executeSync call
+      await vi.waitFor(() => {
+        expect(mockExecuteSync).toHaveBeenCalledTimes(1);
+      });
+
+      // Advance timer by 5s to trigger continuation
+      await vi.advanceTimersByTimeAsync(5000);
+
+      await vi.waitFor(() => {
+        expect(mockExecuteSync).toHaveBeenCalledTimes(2);
+      });
+
+      vi.useRealTimers();
     });
   });
 });

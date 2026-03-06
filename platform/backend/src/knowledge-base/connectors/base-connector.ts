@@ -30,6 +30,14 @@ export abstract class BaseConnector implements Connector {
     credentials: ConnectorCredentials;
   }): Promise<{ success: boolean; error?: string }>;
 
+  async estimateTotalItems(_params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    return null;
+  }
+
   abstract sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

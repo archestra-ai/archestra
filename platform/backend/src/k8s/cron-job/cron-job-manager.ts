@@ -148,6 +148,100 @@ class CronJobManager {
     logger.info({ connectorId, cronJobName }, "Resumed CronJob for connector");
   }
 
+  async triggerContinuationJob(params: {
+    connectorId: string;
+    continuationCount: number;
+  }): Promise<void> {
+    const containerImage = config.orchestrator.connectorImage;
+    if (!containerImage) {
+      // In-process mode: continuation is handled by InProcessScheduler
+      return;
+    }
+
+    const sanitizedId = sanitizeLabelValue(params.connectorId);
+    const jobName = `ac-cont-${sanitizedId}-${params.continuationCount}`.slice(
+      0,
+      MAX_CRONJOB_NAME_LENGTH,
+    );
+
+    const env = buildConnectorSyncEnv();
+    // Override/add continuation count env var
+    const filteredEnv = env.filter(
+      (e) => e.name !== "ARCHESTRA_CONNECTOR_CONTINUATION_COUNT",
+    );
+    filteredEnv.push({
+      name: "ARCHESTRA_CONNECTOR_CONTINUATION_COUNT",
+      value: String(params.continuationCount),
+    });
+
+    const job: k8s.V1Job = {
+      metadata: {
+        name: jobName,
+        namespace: this.namespace,
+        labels: {
+          app: "archestra-connector",
+          "connector-id": sanitizedId,
+          "continuation-count": String(params.continuationCount),
+        },
+      },
+      spec: {
+        activeDeadlineSeconds: ACTIVE_DEADLINE_SECONDS,
+        backoffLimit: 0,
+        ttlSecondsAfterFinished: 3600,
+        template: {
+          metadata: {
+            labels: {
+              app: "archestra-connector",
+              "connector-id": sanitizedId,
+            },
+          },
+          spec: {
+            restartPolicy: "Never",
+            containers: [
+              {
+                name: "worker",
+                image: containerImage,
+                command: ["node", "--enable-source-maps"],
+                args: [
+                  "dist/entrypoints/connector-sync.mjs",
+                  `--connector-id=${params.connectorId}`,
+                ],
+                workingDir: "/app/backend",
+                env: filteredEnv.map((e) => ({
+                  name: e.name,
+                  value: e.value,
+                })),
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    try {
+      await this.api.createNamespacedJob({
+        namespace: this.namespace,
+        body: job,
+      });
+      logger.info(
+        {
+          connectorId: params.connectorId,
+          jobName,
+          continuationCount: params.continuationCount,
+        },
+        "Created continuation Job",
+      );
+    } catch (error) {
+      logger.error(
+        {
+          connectorId: params.connectorId,
+          err: error,
+        },
+        "Failed to create continuation Job",
+      );
+    }
+  }
+
   async getCronJobStatus(connectorId: string): Promise<{
     lastScheduleTime?: Date;
     active: number;
@@ -249,6 +343,12 @@ function buildK8sCronJob(params: {
           activeDeadlineSeconds: ACTIVE_DEADLINE_SECONDS,
           backoffLimit: 2,
           template: {
+            metadata: {
+              labels: {
+                app: "archestra-connector",
+                "connector-id": sanitizeLabelValue(params.connectorId),
+              },
+            },
             spec: {
               restartPolicy: "Never",
               containers: [

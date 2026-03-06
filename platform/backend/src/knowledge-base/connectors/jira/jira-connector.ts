@@ -74,6 +74,43 @@ export class JiraConnector extends BaseConnector {
     }
   }
 
+  async estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    const parsed = parseJiraConfig(params.config);
+    if (!parsed) return null;
+
+    try {
+      const checkpoint = (params.checkpoint as JiraCheckpoint | null) ?? {
+        type: "jira" as const,
+      };
+      const jql = buildJql(parsed, checkpoint);
+
+      // Use classic JQL search with maxResults=0 to get total without fetching issues
+      if (parsed.isCloud) {
+        const client = createV3Client(parsed, params.credentials);
+        const result = await client.issueSearch.searchForIssuesUsingJql({
+          jql,
+          fields: ["summary"],
+          maxResults: 0,
+        });
+        return result.total ?? null;
+      }
+
+      const client = createV2Client(parsed, params.credentials);
+      const result = await client.issueSearch.searchForIssuesUsingJql({
+        jql,
+        fields: ["summary"],
+        maxResults: 0,
+      });
+      return result.total ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

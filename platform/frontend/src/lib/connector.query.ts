@@ -12,6 +12,7 @@ const {
   syncConnector,
   testConnectorConnection,
   getConnectorRuns,
+  getConnectorRun,
   assignConnectorToKnowledgeBases,
   unassignConnectorFromKnowledgeBase,
   getConnectorKnowledgeBases,
@@ -223,6 +224,31 @@ export function useConnectorRuns(params: {
         (r) => r.status === "running",
       );
       return hasRunning ? 3000 : false;
+    },
+  });
+}
+
+export function useConnectorRun(params: {
+  connectorId: string;
+  runId: string | null;
+}) {
+  const { connectorId, runId } = params;
+  return useQuery({
+    queryKey: ["connectors", connectorId, "runs", runId],
+    queryFn: async () => {
+      if (!runId) return null;
+      const { data, error } = await getConnectorRun({
+        path: { id: connectorId, runId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    enabled: !!connectorId && !!runId,
+    refetchInterval: (query) => {
+      return query.state.data?.status === "running" ? 2000 : false;
     },
   });
 }

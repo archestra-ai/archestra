@@ -20,6 +20,7 @@ import {
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
   PaginationQuerySchema,
+  SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
@@ -772,7 +773,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string() }),
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectConnectorRunSchema),
+          createPaginatedResponseSchema(SelectConnectorRunListSchema),
         ),
       },
     },
@@ -783,7 +784,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await findConnectorOrThrow(id, organizationId);
 
       const [data, total] = await Promise.all([
-        ConnectorRunModel.findByConnector({ connectorId: id, limit, offset }),
+        ConnectorRunModel.findByConnectorList({
+          connectorId: id,
+          limit,
+          offset,
+        }),
         ConnectorRunModel.countByConnector(id),
       ]);
 

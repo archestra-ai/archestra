@@ -23,6 +23,7 @@ const connectorRunsTable = pgTable(
     completedAt: timestamp("completed_at", { mode: "date" }),
     documentsProcessed: integer("documents_processed").default(0),
     documentsIngested: integer("documents_ingested").default(0),
+    totalItems: integer("total_items"),
     error: text("error"),
     logs: text("logs"),
     checkpoint: jsonb("checkpoint").$type<Record<string, unknown>>(),

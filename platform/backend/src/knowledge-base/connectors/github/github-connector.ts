@@ -55,6 +55,45 @@ export class GithubConnector extends BaseConnector {
     }
   }
 
+  async estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    const parsed = parseGithubConfig(params.config);
+    if (!parsed) return null;
+
+    try {
+      const octokit = createOctokit(parsed, params.credentials);
+      const repos = await getRepos(octokit, parsed);
+      let total = 0;
+
+      for (const repo of repos) {
+        if (parsed.includeIssues !== false) {
+          const result = await octokit.rest.search.issuesAndPullRequests({
+            q: `repo:${repo.owner}/${repo.name} is:issue`,
+            per_page: 1,
+          });
+          total += result.data.total_count;
+        }
+
+        if (parsed.includePullRequests !== false) {
+          const result = await octokit.rest.search.issuesAndPullRequests({
+            q: `repo:${repo.owner}/${repo.name} is:pr`,
+            per_page: 1,
+          });
+          total += result.data.total_count;
+        }
+
+        await this.rateLimit();
+      }
+
+      return total;
+    } catch {
+      return null;
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

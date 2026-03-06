@@ -55,6 +55,33 @@ export class ConfluenceConnector extends BaseConnector {
     }
   }
 
+  async estimateTotalItems(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    checkpoint: Record<string, unknown> | null;
+  }): Promise<number | null> {
+    const parsed = parseConfluenceConfig(params.config);
+    if (!parsed) return null;
+
+    try {
+      const checkpoint = (params.checkpoint as ConfluenceCheckpoint | null) ?? {
+        type: "confluence" as const,
+      };
+      const cql = buildCql(parsed, checkpoint);
+      const client = createConfluenceClient(parsed, params.credentials);
+
+      const result = await client.content.searchContentByCQL({
+        cql,
+        limit: 0,
+      });
+      // The REST API returns totalSize but the SDK type doesn't include it
+      // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
+      return (result as any).totalSize ?? result.size ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async *sync(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;

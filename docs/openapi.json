@@ -99937,11 +99937,13 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
-                          "error": {
+                          "totalItems": {
                             "nullable": true,
-                            "type": "string"
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
                           },
-                          "logs": {
+                          "error": {
                             "nullable": true,
                             "type": "string"
                           },
@@ -99991,8 +99993,8 @@
                           "completedAt",
                           "documentsProcessed",
                           "documentsIngested",
+                          "totalItems",
                           "error",
-                          "logs",
                           "checkpoint",
                           "createdAt"
                         ],
@@ -100329,6 +100331,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "totalItems": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "error": {
                       "nullable": true,
                       "type": "string"
@@ -100383,6 +100391,7 @@
                     "completedAt",
                     "documentsProcessed",
                     "documentsIngested",
+                    "totalItems",
                     "error",
                     "logs",
                     "checkpoint",

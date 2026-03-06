@@ -26,7 +26,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               core: z.boolean(),
             }),
             features: z.strictObject({
-              "orchestrator-k8s-runtime": z.boolean(),
+              orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               geminiVertexAiEnabled: z.boolean(),
@@ -67,7 +67,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           core: config.enterpriseFeatures.core,
         },
         features: {
-          "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
+          orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           geminiVertexAiEnabled: isVertexAiEnabled(),

@@ -677,7 +677,6 @@ const config = {
       return "anthropic";
     })(),
   },
-  features: {},
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   },

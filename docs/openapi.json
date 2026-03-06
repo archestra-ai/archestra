@@ -69553,7 +69553,7 @@
                     "features": {
                       "type": "object",
                       "properties": {
-                        "orchestrator-k8s-runtime": {
+                        "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
                         "byosEnabled": {
@@ -69639,7 +69639,7 @@
                         }
                       },
                       "required": [
-                        "orchestrator-k8s-runtime",
+                        "orchestratorK8sRuntime",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "geminiVertexAiEnabled",

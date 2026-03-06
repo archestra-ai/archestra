@@ -459,9 +459,9 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **MCP Server Runtime**:
 
 - Local MCP servers run in K8s pods (one pod per server) when K8s is configured
-- Feature flag `orchestrator-k8s-runtime` returned by `/api/features` endpoint
+- Feature flag `orchestratorK8sRuntime` returned by `/api/features` endpoint
 - Feature enabled when EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is configured
-- Frontend disables local MCP server functionality when feature is off (shows tooltip explaining orchestrator-k8s-runtime requirement)
+- Frontend disables local MCP server functionality when feature is off (shows tooltip explaining orchestratorK8sRuntime requirement)
 - Automatic pod lifecycle management (start/restart/stop)
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`

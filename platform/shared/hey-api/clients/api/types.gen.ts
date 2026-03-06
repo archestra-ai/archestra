@@ -20718,7 +20718,7 @@ export type GetConfigResponses = {
             core: boolean;
         };
         features: {
-            'orchestrator-k8s-runtime': boolean;
+            orchestratorK8sRuntime: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             geminiVertexAiEnabled: boolean;

@@ -305,7 +305,7 @@ export function useMcpDeploymentStatuses(): Record<
   const [statuses, setStatuses] = useState<
     Record<string, McpDeploymentStatusEntry>
   >({});
-  const isK8sEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+  const isK8sEnabled = useFeatureFlag("orchestratorK8sRuntime");
 
   useEffect(() => {
     if (!isK8sEnabled) return;

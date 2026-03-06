@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
-  Edit,
   FileText,
   Globe,
   Loader2,
@@ -31,11 +30,9 @@ import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-serv
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
-import { AgentSelector } from "@/components/chat/agent-selector";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
-import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
@@ -81,7 +78,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
@@ -517,6 +513,18 @@ export default function ChatPage() {
     [conversation, modelsByProvider, updateConversationMutation],
   );
 
+  // Handle agent change in existing conversation
+  const handleConversationAgentChange = useCallback(
+    (agentId: string) => {
+      if (!conversation) return;
+      updateConversationMutation.mutate({
+        id: conversation.id,
+        agentId,
+      });
+    },
+    [conversation, updateConversationMutation],
+  );
+
   // Find the specific internal agent for this conversation (if any)
   const _conversationInternalAgent = conversation?.agentId
     ? internalAgents.find((a) => a.id === conversation.agentId)
@@ -793,7 +801,6 @@ export default function ChatPage() {
 
   // Auto-focus textarea on initial page load
   useEffect(() => {
-    // Use requestAnimationFrame to ensure DOM is ready
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
     });
@@ -1202,45 +1209,17 @@ export default function ChatPage() {
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
 
-          <div className="sticky top-0 z-10 bg-background border-b p-2">
+          <div
+            className={cn(
+              "sticky top-0 z-10 bg-background border-b p-2",
+              !conversationId && "hidden",
+            )}
+          >
             <div className="relative flex items-center justify-between gap-2">
-              {/* Left side - agent selector */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {isAgentDeleted ? null : conversationId ? (
-                  <AgentSelector
-                    currentPromptId={
-                      conversation?.agent?.agentType === "agent"
-                        ? (conversation?.agentId ?? null)
-                        : null
-                    }
-                    currentAgentId={conversation?.agentId ?? ""}
-                    currentModel={conversation?.selectedModel ?? ""}
-                  />
-                ) : (
-                  <InitialAgentSelector
-                    currentAgentId={initialAgentId}
-                    onAgentChange={handleInitialAgentChange}
-                  />
-                )}
-                {/* Edit agent button */}
-                {!isAgentDeleted &&
-                  (conversationId ? conversation?.agentId : initialAgentId) && (
-                    <PermissionButton
-                      permissions={{ agent: ["update"] }}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openDialog("edit-agent")}
-                      title="Edit agent, tools, sub-agents"
-                      className="h-8 px-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </PermissionButton>
-                  )}
-              </div>
-              {/* Center - conversation title (absolutely positioned for true centering) */}
+              {/* Left side - conversation title */}
               {conversationId && conversation && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-sm text-muted-foreground truncate max-w-[300px] cursor-default pointer-events-auto">
+                <div className="flex items-center flex-shrink min-w-0">
+                  <h1 className="text-base font-normal text-muted-foreground truncate max-w-[300px] cursor-default">
                     {headerAnimatingTitles.has(conversation.id) ? (
                       <TypingText
                         text={getConversationDisplayTitle(
@@ -1257,7 +1236,7 @@ export default function ChatPage() {
                         conversation.messages,
                       )
                     )}
-                  </span>
+                  </h1>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}
@@ -1406,204 +1385,185 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* Chat content - hidden on mobile when panels are open */}
-          <div
-            className={cn(
-              "flex-1 overflow-y-auto relative",
-              (isArtifactOpen ||
-                (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
-                "hidden md:block",
-            )}
-          >
-            {isPlaywrightSetupRequired && !conversationId && (
-              <PlaywrightInstallDialog
-                agentId={playwrightSetupAgentId}
-                conversationId={conversationId}
-              />
-            )}
-            <ChatMessages
-              conversationId={conversationId}
-              agentId={currentProfileId || initialAgentId || undefined}
-              agentName={
-                _conversationInternalAgent?.name ||
-                internalAgents.find((a) => a.id === initialAgentId)?.name
-              }
-              suggestedPrompt={
-                conversationId
-                  ? undefined
-                  : internalAgents.find((a) => a.id === initialAgentId)
-                      ?.userPrompt
-              }
-              onSuggestedPromptClick={
-                conversationId
-                  ? undefined
-                  : () => {
-                      const selectedAgent = internalAgents.find(
-                        (a) => a.id === initialAgentId,
-                      );
-                      const userPrompt = selectedAgent?.userPrompt;
-                      if (!userPrompt) return;
-                      const syntheticEvent = {
-                        preventDefault: () => {},
-                      } as React.FormEvent<HTMLFormElement>;
-                      handleInitialSubmit(
-                        { text: userPrompt, files: [] },
-                        syntheticEvent,
-                      );
-                    }
-              }
-              hideArrow={isPlaywrightSetupVisible}
-              messages={messages}
-              status={status}
-              isLoadingConversation={isLoadingConversation}
-              onMessagesUpdate={setMessages}
-              onUserMessageEdit={(
-                editedMessage,
-                updatedMessages,
-                editedPartIndex,
-              ) => {
-                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
-                if (setMessages && sendMessage) {
-                  // Set flag to prevent message sync from overwriting our state
-                  userMessageJustEdited.current = true;
-
-                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
-                  const messagesWithoutEditedMessage = updatedMessages.slice(
-                    0,
-                    -1,
-                  );
-                  setMessages(messagesWithoutEditedMessage);
-
-                  // Send the edited message to generate new response (same as handleSubmit)
-                  // Use the specific part that was edited (via editedPartIndex) instead of finding
-                  // the first text part, in case the message has multiple text parts
-                  const editedPart = editedMessage.parts?.[editedPartIndex];
-                  const editedText =
-                    editedPart?.type === "text" ? editedPart.text : "";
-                  if (editedText?.trim()) {
-                    sendMessage({
-                      role: "user",
-                      parts: [{ type: "text", text: editedText }],
-                    });
+          {conversationId ? (
+            <>
+              {/* Chat content - hidden on mobile when panels are open */}
+              <div
+                className={cn(
+                  "flex-1 overflow-y-auto relative",
+                  (isArtifactOpen ||
+                    (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
+                    "hidden md:block",
+                )}
+              >
+                <ChatMessages
+                  conversationId={conversationId}
+                  agentId={currentProfileId || initialAgentId || undefined}
+                  agentName={
+                    _conversationInternalAgent?.name ||
+                    internalAgents.find((a) => a.id === initialAgentId)?.name
                   }
-                }
-              }}
-              error={error}
-              onToolApprovalResponse={
-                addToolApprovalResponse
-                  ? ({ id, approved, reason }) => {
-                      addToolApprovalResponse({ id, approved, reason });
+                  hideArrow={isPlaywrightSetupVisible}
+                  messages={messages}
+                  status={status}
+                  isLoadingConversation={isLoadingConversation}
+                  onMessagesUpdate={setMessages}
+                  onUserMessageEdit={(
+                    editedMessage,
+                    updatedMessages,
+                    editedPartIndex,
+                  ) => {
+                    if (setMessages && sendMessage) {
+                      userMessageJustEdited.current = true;
+                      const messagesWithoutEditedMessage =
+                        updatedMessages.slice(0, -1);
+                      setMessages(messagesWithoutEditedMessage);
+                      const editedPart = editedMessage.parts?.[editedPartIndex];
+                      const editedText =
+                        editedPart?.type === "text" ? editedPart.text : "";
+                      if (editedText?.trim()) {
+                        sendMessage({
+                          role: "user",
+                          parts: [{ type: "text", text: editedText }],
+                        });
+                      }
                     }
-                  : undefined
-              }
-            />
-          </div>
-
-          {isAgentDeleted ? (
-            <div className="sticky bottom-0 bg-background border-t p-4">
-              <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
-                  <div className="flex items-center gap-3 text-muted-foreground">
-                    <AlertTriangle className="h-5 w-5 text-amber-500" />
-                    <span>
-                      The agent associated with this conversation has been
-                      deleted.
-                    </span>
-                  </div>
-                  <Button onClick={() => router.push("/chat")}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Conversation
-                  </Button>
-                </div>
+                  }}
+                  error={error}
+                  onToolApprovalResponse={
+                    addToolApprovalResponse
+                      ? ({ id, approved, reason }) => {
+                          addToolApprovalResponse({ id, approved, reason });
+                        }
+                      : undefined
+                  }
+                />
               </div>
-            </div>
+
+              {isAgentDeleted ? (
+                <div className="sticky bottom-0 bg-background border-t p-4">
+                  <div className="max-w-4xl mx-auto">
+                    <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        <AlertTriangle className="h-5 w-5 text-amber-500" />
+                        <span>
+                          The agent associated with this conversation has been
+                          deleted.
+                        </span>
+                      </div>
+                      <Button onClick={() => router.push("/chat")}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Conversation
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                activeAgentId && (
+                  <div className="sticky bottom-0 bg-background border-t p-4">
+                    <div className="max-w-4xl mx-auto space-y-3">
+                      <ArchestraPromptInput
+                        onSubmit={handleSubmit}
+                        status={status}
+                        selectedModel={conversation?.selectedModel ?? ""}
+                        onModelChange={handleModelChange}
+                        messageCount={messages.length}
+                        agentId={conversation?.agent?.id ?? activeAgentId}
+                        conversationId={conversationId}
+                        currentConversationChatApiKeyId={
+                          conversation?.chatApiKeyId
+                        }
+                        currentProvider={currentProvider}
+                        textareaRef={textareaRef}
+                        onProviderChange={handleProviderChange}
+                        allowFileUploads={
+                          organization?.allowChatFileUploads ?? false
+                        }
+                        isModelsLoading={isModelsLoading}
+                        onEditAgent={() => openDialog("edit-agent")}
+                        tokensUsed={tokensUsed}
+                        maxContextLength={selectedModelContextLength}
+                        inputModalities={selectedModelInputModalities}
+                        agentLlmApiKeyId={
+                          conversation?.agent?.llmApiKeyId ?? null
+                        }
+                        submitDisabled={isPlaywrightSetupVisible}
+                        isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+                        selectorAgentId={conversation?.agentId ?? null}
+                        onAgentChange={handleConversationAgentChange}
+                      />
+                      <div className="text-center">
+                        <Version inline />
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+            </>
           ) : (
+            /* No active chat: centered prompt input */
             activeAgentId && (
-              <div className="sticky bottom-0 bg-background border-t p-4">
-                <div className="max-w-4xl mx-auto space-y-3">
-                  <ArchestraPromptInput
-                    onSubmit={
-                      conversationId && conversation?.agent?.id
-                        ? handleSubmit
-                        : handleInitialSubmit
-                    }
-                    status={
-                      conversationId && conversation?.agent?.id
-                        ? status
-                        : createConversationMutation.isPending
+              // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
+              // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
+              <div
+                className="flex-1 flex flex-col min-h-0"
+                onClick={(e) => {
+                  // Focus textarea when clicking empty space outside interactive elements
+                  if (
+                    e.target === e.currentTarget ||
+                    !(e.target as HTMLElement).closest(
+                      "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                    )
+                  ) {
+                    textareaRef.current?.focus();
+                  }
+                }}
+              >
+                {isPlaywrightSetupRequired && (
+                  <PlaywrightInstallDialog
+                    agentId={playwrightSetupAgentId}
+                    conversationId={conversationId}
+                  />
+                )}
+                <div className="flex-1 flex items-center justify-center p-4">
+                  <div className="w-full max-w-4xl">
+                    <ArchestraPromptInput
+                      onSubmit={handleInitialSubmit}
+                      status={
+                        createConversationMutation.isPending
                           ? "submitted"
                           : "ready"
-                    }
-                    selectedModel={
-                      conversationId && conversation?.agent?.id
-                        ? (conversation?.selectedModel ?? "")
-                        : initialModel
-                    }
-                    onModelChange={
-                      conversationId && conversation?.agent?.id
-                        ? handleModelChange
-                        : handleInitialModelChange
-                    }
-                    messageCount={
-                      conversationId && conversation?.agent?.id
-                        ? messages.length
-                        : undefined
-                    }
-                    agentId={
-                      conversationId && conversation?.agent?.id
-                        ? conversation.agent?.id
-                        : activeAgentId
-                    }
-                    conversationId={conversationId}
-                    currentConversationChatApiKeyId={
-                      conversationId && conversation?.agent?.id
-                        ? conversation?.chatApiKeyId
-                        : undefined
-                    }
-                    currentProvider={
-                      conversationId && conversation?.agent?.id
-                        ? currentProvider
-                        : initialProvider
-                    }
-                    textareaRef={textareaRef}
-                    initialApiKeyId={
-                      conversationId && conversation?.agent?.id
-                        ? undefined
-                        : initialApiKeyId
-                    }
-                    onApiKeyChange={
-                      conversationId && conversation?.agent?.id
-                        ? undefined
-                        : setInitialApiKeyId
-                    }
-                    onProviderChange={
-                      conversationId && conversation?.agent?.id
-                        ? handleProviderChange
-                        : handleInitialProviderChange
-                    }
-                    allowFileUploads={
-                      organization?.allowChatFileUploads ?? false
-                    }
-                    isModelsLoading={isModelsLoading}
-                    onEditAgent={() => openDialog("edit-agent")}
-                    tokensUsed={tokensUsed}
-                    maxContextLength={selectedModelContextLength}
-                    inputModalities={selectedModelInputModalities}
-                    agentLlmApiKeyId={
-                      conversationId && conversation?.agent?.id
-                        ? (conversation.agent?.llmApiKeyId ?? null)
-                        : ((
-                            internalAgents.find(
-                              (a) => a.id === initialAgentId,
-                            ) as Record<string, unknown> | undefined
-                          )?.llmApiKeyId as string | null)
-                    }
-                    submitDisabled={isPlaywrightSetupVisible}
-                    isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                  />
-                  <div className="text-center">
-                    <Version inline />
+                      }
+                      selectedModel={initialModel}
+                      onModelChange={handleInitialModelChange}
+                      agentId={activeAgentId}
+                      currentProvider={initialProvider}
+                      textareaRef={textareaRef}
+                      initialApiKeyId={initialApiKeyId}
+                      onApiKeyChange={setInitialApiKeyId}
+                      onProviderChange={handleInitialProviderChange}
+                      allowFileUploads={
+                        organization?.allowChatFileUploads ?? false
+                      }
+                      isModelsLoading={isModelsLoading}
+                      onEditAgent={() => openDialog("edit-agent")}
+                      inputModalities={selectedModelInputModalities}
+                      agentLlmApiKeyId={
+                        (
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
+                        )?.llmApiKeyId as string | null
+                      }
+                      submitDisabled={isPlaywrightSetupVisible}
+                      isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+                      selectorAgentId={initialAgentId}
+                      onAgentChange={handleInitialAgentChange}
+                    />
                   </div>
+                </div>
+                <div className="p-4 text-center">
+                  <Version inline />
                 </div>
               </div>
             )

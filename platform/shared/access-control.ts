@@ -26,7 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
   identityProvider: ["create", "read", "update", "delete"],
-  member: ["create", "update", "delete"],
+  member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete", "admin"],
@@ -589,6 +589,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
+  [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
 

@@ -23,6 +23,10 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import {
+  ActiveFilterBadges,
+  AgentScopeFilter,
+} from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LabelTags } from "@/components/label-tags";
@@ -194,12 +198,22 @@ function McpGateways({
     | "name"
     | "createdAt"
     | "toolsCount"
+    | "subagentsCount"
     | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
     | "desc"
     | null;
+  const scopeFromUrl = searchParams.get("scope") as
+    | "personal"
+    | "team"
+    | "org"
+    | "built_in"
+    | null;
+  const teamIdsFromUrl = searchParams.get("teamIds");
+  const authorIdsFromUrl = searchParams.get("authorIds");
+  const labelsFromUrl = searchParams.get("labels");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
@@ -217,6 +231,10 @@ function McpGateways({
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: ["mcp_gateway", "profile"],
+    scope: scopeFromUrl || undefined,
+    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
+    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
+    labels: labelsFromUrl || undefined,
   });
 
   const { data: userTeams } = useQuery({
@@ -406,7 +424,17 @@ function McpGateways({
     },
     {
       id: "subagentsCount",
-      header: "Subagents",
+      accessorKey: "subagentsCount",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Subagents
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => {
         const subagentsCount = row.original.tools.filter(
           (t) => t.delegateToAgentId,
@@ -418,7 +446,7 @@ function McpGateways({
       ? [
           {
             id: "team",
-            header: "Accessible to:",
+            header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: GatewayData } }) => (
               <VisibilityBadge
@@ -520,22 +548,26 @@ function McpGateways({
       >
         <div>
           <div>
-            <div className="mb-6">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <DebouncedInput
-                  placeholder="Search gateways by name..."
-                  initialValue={searchQuery}
-                  onChange={handleSearchChange}
-                  className="pl-9"
-                />
+            <div className="mb-6 flex flex-col gap-2">
+              <div className="flex items-center gap-4">
+                <div className="relative max-w-md flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <DebouncedInput
+                    placeholder="Search gateways by name..."
+                    initialValue={searchQuery}
+                    onChange={handleSearchChange}
+                    className="pl-9"
+                  />
+                </div>
+                <AgentScopeFilter onClearSearch={() => setSearchQuery("")} />
               </div>
+              <ActiveFilterBadges />
             </div>
 
             {!agents || agents.length === 0 ? (
               <div className="text-muted-foreground">
-                {nameFilter
-                  ? "No MCP gateways found matching your search"
+                {nameFilter || scopeFromUrl || labelsFromUrl
+                  ? "No MCP gateways found matching your filters"
                   : "No MCP gateways found"}
               </div>
             ) : (

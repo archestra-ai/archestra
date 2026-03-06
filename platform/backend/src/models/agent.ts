@@ -429,6 +429,10 @@ class AgentModel {
       name?: string;
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+      scope?: "personal" | "team" | "org" | "built_in";
+      teamIds?: string[];
+      authorIds?: string[];
+      labels?: Record<string, string[]>;
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -455,9 +459,73 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
     }
 
+    // Add scope filter if provided
+    if (filters?.scope === "built_in") {
+      whereConditions.push(eq(schema.agentsTable.builtIn, true));
+    } else if (filters?.scope === "personal") {
+      whereConditions.push(eq(schema.agentsTable.scope, "personal"));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    } else if (filters?.scope === "team") {
+      whereConditions.push(eq(schema.agentsTable.scope, "team"));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    } else if (filters?.scope === "org") {
+      whereConditions.push(eq(schema.agentsTable.scope, "org"));
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+
     // Hide built-in agents from non-admin users
     if (!isAgentAdmin) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+
+    // Add teamIds filter if provided (filter team-scoped agents by specific teams)
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      const agentIdsInTeams = await db
+        .selectDistinct({ agentId: schema.agentTeamsTable.agentId })
+        .from(schema.agentTeamsTable)
+        .where(inArray(schema.agentTeamsTable.teamId, filters.teamIds));
+
+      const ids = agentIdsInTeams.map((r) => r.agentId);
+      if (ids.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+      whereConditions.push(inArray(schema.agentsTable.id, ids));
+    }
+
+    // Add authorIds filter if provided (filter personal agents by owner)
+    if (filters?.authorIds && filters.authorIds.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.authorId, filters.authorIds),
+      );
+    }
+
+    // Add label filters if provided (AND across keys, OR within values)
+    if (filters?.labels) {
+      for (const [key, values] of Object.entries(filters.labels)) {
+        const agentIdsWithLabel = await db
+          .selectDistinct({ agentId: schema.agentLabelsTable.agentId })
+          .from(schema.agentLabelsTable)
+          .innerJoin(
+            schema.labelKeysTable,
+            eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+          )
+          .innerJoin(
+            schema.labelValuesTable,
+            eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+          )
+          .where(
+            and(
+              eq(schema.labelKeysTable.key, key),
+              inArray(schema.labelValuesTable.value, values),
+            ),
+          );
+
+        const ids = agentIdsWithLabel.map((r) => r.agentId);
+        if (ids.length === 0) {
+          return createPaginatedResult([], 0, pagination);
+        }
+        whereConditions.push(inArray(schema.agentsTable.id, ids));
+      }
     }
 
     // Apply access control filtering for non-agent admins
@@ -488,7 +556,32 @@ class AgentModel {
     const direction = sorting?.sortDirection === "asc" ? asc : desc;
 
     // Add sorting-specific joins and order by
-    if (sorting?.sortBy === "toolsCount") {
+    if (sorting?.sortBy === "subagentsCount") {
+      const subagentsCountSubquery = db
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          subagentsCount: count(schema.agentToolsTable.toolId).as(
+            "subagentsCount",
+          ),
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(sql`${schema.toolsTable.delegateToAgentId} IS NOT NULL`)
+        .groupBy(schema.agentToolsTable.agentId)
+        .as("subagentsCounts");
+
+      query = query
+        .leftJoin(
+          subagentsCountSubquery,
+          eq(schema.agentsTable.id, subagentsCountSubquery.agentId),
+        )
+        .orderBy(
+          direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
+        );
+    } else if (sorting?.sortBy === "toolsCount") {
       const toolsCountSubquery = db
         .select({
           agentId: schema.agentToolsTable.agentId,
@@ -621,8 +714,9 @@ class AgentModel {
       case "createdAt":
         return direction(schema.agentsTable.createdAt);
       case "toolsCount":
+      case "subagentsCount":
       case "team":
-        // toolsCount and team sorting use a separate query path (see lines 168-267).
+        // toolsCount, subagentsCount, and team sorting use a separate query path.
         // This fallback should never be reached for these sort types.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:

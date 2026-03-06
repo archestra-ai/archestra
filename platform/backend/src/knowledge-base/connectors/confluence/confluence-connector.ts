@@ -139,7 +139,7 @@ function createConfluenceClient(
     host,
     authentication: {
       basic: {
-        email: credentials.email,
+        email: credentials.email ?? "",
         apiToken: credentials.apiToken,
       },
     },

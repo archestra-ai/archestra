@@ -4,14 +4,16 @@ import { z } from "zod";
 
 const JIRA = z.literal("jira");
 const CONFLUENCE = z.literal("confluence");
+const GITHUB = z.literal("github");
+const GITLAB = z.literal("gitlab");
 
-export const ConnectorTypeSchema = z.union([JIRA, CONFLUENCE]);
+export const ConnectorTypeSchema = z.union([JIRA, CONFLUENCE, GITHUB, GITLAB]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
 // ===== Connector Credentials =====
 
 export const ConnectorCredentialsSchema = z.object({
-  email: z.string(),
+  email: z.string().optional(),
   apiToken: z.string(),
 });
 export type ConnectorCredentials = z.infer<typeof ConnectorCredentialsSchema>;
@@ -62,17 +64,59 @@ export const ConfluenceCheckpointSchema = z.object({
 });
 export type ConfluenceCheckpoint = z.infer<typeof ConfluenceCheckpointSchema>;
 
+// ===== GitHub Config & Checkpoint =====
+
+export const GithubConfigSchema = z.object({
+  type: GITHUB,
+  githubUrl: connectorUrlSchema,
+  owner: z.string(),
+  repos: z.array(z.string()).optional(),
+  includeIssues: z.boolean().optional(),
+  includePullRequests: z.boolean().optional(),
+  labelsToSkip: z.array(z.string()).optional(),
+});
+export type GithubConfig = z.infer<typeof GithubConfigSchema>;
+
+export const GithubCheckpointSchema = z.object({
+  type: GITHUB,
+  lastSyncedAt: z.string().optional(),
+});
+export type GithubCheckpoint = z.infer<typeof GithubCheckpointSchema>;
+
+// ===== GitLab Config & Checkpoint =====
+
+export const GitlabConfigSchema = z.object({
+  type: GITLAB,
+  gitlabUrl: connectorUrlSchema,
+  projectIds: z.array(z.number()).optional(),
+  groupId: z.string().optional(),
+  includeIssues: z.boolean().optional(),
+  includeMergeRequests: z.boolean().optional(),
+  labelsToSkip: z.array(z.string()).optional(),
+});
+export type GitlabConfig = z.infer<typeof GitlabConfigSchema>;
+
+export const GitlabCheckpointSchema = z.object({
+  type: GITLAB,
+  lastSyncedAt: z.string().optional(),
+});
+export type GitlabCheckpoint = z.infer<typeof GitlabCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
+  GithubConfigSchema,
+  GitlabConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
 export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   JiraCheckpointSchema,
   ConfluenceCheckpointSchema,
+  GithubCheckpointSchema,
+  GitlabCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

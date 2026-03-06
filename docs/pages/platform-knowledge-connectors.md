@@ -46,6 +46,36 @@ Ingests page content (HTML converted to plain text) from Confluence Cloud or Ser
 
 Authentication uses the same Atlassian email + API token as Jira. Incremental sync uses CQL `lastModified` queries.
 
+## GitHub
+
+Ingests issues, pull requests, and their comments from GitHub.com or GitHub Enterprise Server.
+
+| Field                  | Description                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| GitHub API URL         | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)                   |
+| Owner                  | GitHub organization or username that owns the repositories                                           |
+| Repositories           | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories)      |
+| Include Issues         | Toggle to sync issues and their comments (default: on)                                               |
+| Include Pull Requests  | Toggle to sync pull requests and their comments (default: on)                                        |
+| Labels to Skip         | Comma-separated labels to exclude (optional)                                                         |
+
+Authentication uses a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) (PAT). Incremental sync uses the `since` parameter on the issues API to fetch only items updated after the last sync.
+
+## GitLab
+
+Ingests issues, merge requests, and their comments from GitLab.com or self-hosted GitLab instances.
+
+| Field                    | Description                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| GitLab URL               | Instance URL (e.g., `https://gitlab.com` or your self-hosted URL)                          |
+| Group                    | GitLab group ID or path to scope project discovery (optional)                              |
+| Project IDs              | Comma-separated specific project IDs to sync (optional -- leave blank to sync all)         |
+| Include Issues           | Toggle to sync issues and their comments (default: on)                                     |
+| Include Merge Requests   | Toggle to sync merge requests and their comments (default: on)                             |
+| Labels to Skip           | Comma-separated labels to exclude (optional)                                               |
+
+Authentication uses a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/) (PAT). System-generated notes (assignment changes, label updates, etc.) are automatically filtered out. Incremental sync uses the `updated_after` parameter.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

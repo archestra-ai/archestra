@@ -55,6 +55,7 @@ export function useProfilesPaginated(params?: {
   scope?: "personal" | "team" | "org" | "built_in";
   teamIds?: string[];
   authorIds?: string[];
+  labels?: string;
 }) {
   const {
     initialData,
@@ -67,6 +68,7 @@ export function useProfilesPaginated(params?: {
     scope,
     teamIds,
     authorIds,
+    labels,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -81,6 +83,7 @@ export function useProfilesPaginated(params?: {
     scope === undefined &&
     teamIds === undefined &&
     authorIds === undefined &&
+    labels === undefined &&
     (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
 
   return useQuery({
@@ -96,6 +99,7 @@ export function useProfilesPaginated(params?: {
         scope,
         teamIds,
         authorIds,
+        labels,
       },
     ],
     queryFn: async () =>
@@ -111,6 +115,7 @@ export function useProfilesPaginated(params?: {
             scope,
             teamIds,
             authorIds,
+            labels,
           },
         })
       ).data ?? null,

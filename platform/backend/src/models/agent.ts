@@ -432,6 +432,7 @@ class AgentModel {
       scope?: "personal" | "team" | "org" | "built_in";
       teamIds?: string[];
       authorIds?: string[];
+      labels?: Record<string, string[]>;
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -491,6 +492,35 @@ class AgentModel {
       whereConditions.push(
         inArray(schema.agentsTable.authorId, filters.authorIds),
       );
+    }
+
+    // Add label filters if provided (AND across keys, OR within values)
+    if (filters?.labels) {
+      for (const [key, values] of Object.entries(filters.labels)) {
+        const agentIdsWithLabel = await db
+          .selectDistinct({ agentId: schema.agentLabelsTable.agentId })
+          .from(schema.agentLabelsTable)
+          .innerJoin(
+            schema.labelKeysTable,
+            eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+          )
+          .innerJoin(
+            schema.labelValuesTable,
+            eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+          )
+          .where(
+            and(
+              eq(schema.labelKeysTable.key, key),
+              inArray(schema.labelValuesTable.value, values),
+            ),
+          );
+
+        const ids = agentIdsWithLabel.map((r) => r.agentId);
+        if (ids.length === 0) {
+          return createPaginatedResult([], 0, pagination);
+        }
+        whereConditions.push(inArray(schema.agentsTable.id, ids));
+      }
     }
 
     // Apply access control filtering for non-agent admins

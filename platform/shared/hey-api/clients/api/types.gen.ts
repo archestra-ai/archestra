@@ -11651,6 +11651,10 @@ export type GetAgentsData = {
          * Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.
          */
         authorIds?: Array<string>;
+        /**
+         * Filter by labels. Format: key1:val1,val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';

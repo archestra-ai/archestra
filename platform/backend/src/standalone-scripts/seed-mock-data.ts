@@ -11,10 +11,10 @@ import {
   TeamModel,
 } from "@/models";
 import {
-  type MockAgentWithTeams,
   generateMockAgents,
   generateMockInteractions,
   generateMockTools,
+  type MockAgentWithTeams,
 } from "./mocks";
 
 // Set to true to create tools and interactions
@@ -106,11 +106,7 @@ async function seedMockData() {
     ADMIN_ROLE_NAME,
   );
   await TeamModel.addMember(managementTeam.id, admin2User.id, ADMIN_ROLE_NAME);
-  await TeamModel.addMember(
-    marketingTeam.id,
-    defaultAdmin.id,
-    ADMIN_ROLE_NAME,
-  );
+  await TeamModel.addMember(marketingTeam.id, defaultAdmin.id, ADMIN_ROLE_NAME);
   await TeamModel.addMember(marketingTeam.id, member1User.id, MEMBER_ROLE_NAME);
   await TeamModel.addMember(marketingTeam.id, member2User.id, MEMBER_ROLE_NAME);
   await TeamModel.addMember(

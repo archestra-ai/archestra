@@ -23,7 +23,10 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
-import { AgentScopeFilter } from "@/components/agent-scope-filter";
+import {
+  ActiveFilterBadges,
+  AgentScopeFilter,
+} from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LabelTags } from "@/components/label-tags";
@@ -204,6 +207,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     | null;
   const teamIdsFromUrl = searchParams.get("teamIds");
   const authorIdsFromUrl = searchParams.get("authorIds");
+  const labelsFromUrl = searchParams.get("labels");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
@@ -224,6 +228,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
+    labels: labelsFromUrl || undefined,
   });
 
   const { data: _teams } = useQuery({
@@ -468,22 +473,25 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       >
         <div>
           <div>
-            <div className="mb-6 flex items-center gap-4">
-              <div className="relative max-w-md flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <DebouncedInput
-                  placeholder="Search proxies by name..."
-                  initialValue={searchQuery}
-                  onChange={handleSearchChange}
-                  className="pl-9"
-                />
+            <div className="mb-6 flex flex-col gap-2">
+              <div className="flex items-center gap-4">
+                <div className="relative max-w-md flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <DebouncedInput
+                    placeholder="Search proxies by name..."
+                    initialValue={searchQuery}
+                    onChange={handleSearchChange}
+                    className="pl-9"
+                  />
+                </div>
+                <AgentScopeFilter onClearSearch={() => setSearchQuery("")} />
               </div>
-              <AgentScopeFilter onClearSearch={() => setSearchQuery("")} />
+              <ActiveFilterBadges />
             </div>
 
             {!agents || agents.length === 0 ? (
               <div className="text-muted-foreground">
-                {nameFilter || scopeFromUrl
+                {nameFilter || scopeFromUrl || labelsFromUrl
                   ? "No LLM proxies found matching your filters"
                   : "No LLM proxies found"}
               </div>

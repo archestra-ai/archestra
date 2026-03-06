@@ -913,7 +913,16 @@ description: "Connect Jira, Confluence, and other data sources to knowledge base
 
 ### Updates to Existing Docs
 
-**`../docs/pages/platform-deployment.md`** — Overhaul the "Knowledge Base Configuration" section with current env vars:
+**`../docs/pages/platform-deployment.md`** — Overhaul the "Knowledge Base Configuration" section with current env vars, and add pgvector requirements under "Production Recommendations > PostgreSQL Infrastructure":
+
+- Add a "pgvector Extension (Knowledge Base Feature)" subsection under "PostgreSQL Infrastructure" explaining:
+  - pgvector is required for the Knowledge Base enterprise feature
+  - The DB user needs `CREATE EXTENSION` privileges (typically superuser)
+  - Cloud-managed database instructions (RDS, Cloud SQL, Azure) — pgvector is a trusted/supported extension on all three
+  - Self-managed PostgreSQL instructions (install pgvector package, grant privileges)
+  - Migration failure behavior if pgvector is missing (only affects KB feature, not other features)
+
+Knowledge Base env vars:
 
 ```markdown
 ### Knowledge Base Configuration

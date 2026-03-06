@@ -50,9 +50,6 @@ function getDefaultModelPrice(model: string): {
 
 class ModelModel {
   /**
-   * Find all models
-   */
-  /**
    * Find all models discovered via LLM Proxy requests.
    */
   static async findLlmProxyModels(): Promise<Model[]> {

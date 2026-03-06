@@ -9,12 +9,12 @@ import {
 import {
   AlertTriangle,
   Code,
-  FileText,
   Info,
   MessageSquare,
   MoreVertical,
   Pencil,
   RefreshCw,
+  Terminal,
   Trash2,
   User,
   Wrench,
@@ -143,7 +143,7 @@ export function McpServerCard({
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
-  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+  const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();
@@ -338,8 +338,8 @@ export function McpServerCard({
       className="flex-1 h-8"
       onClick={() => setIsLogsDialogOpen(true)}
     >
-      <FileText className="h-3 w-3 mr-1" />
-      Logs
+      <Terminal className="h-3 w-3 mr-1" />
+      Debug
     </Button>
   ) : null;
 

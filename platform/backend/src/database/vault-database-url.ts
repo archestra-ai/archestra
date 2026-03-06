@@ -14,7 +14,7 @@ export const DATABASE_URL_VAULT_REF_ENV = "ARCHESTRA_DATABASE_URL_VAULT_REF";
 export function isReadonlyVaultEnabled(): boolean {
   const secretsManager =
     process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() === "READONLY_VAULT";
-  return secretsManager && config.enterpriseLicenseActivated;
+  return secretsManager && config.enterpriseFeatures.core;
 }
 
 /**

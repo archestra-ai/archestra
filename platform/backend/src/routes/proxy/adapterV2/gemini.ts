@@ -342,9 +342,7 @@ class GeminiRequestAdapter
       });
     }
 
-    if (config.features.browserStreamingEnabled) {
-      contents = this.convertToolResultContent(contents);
-    }
+    contents = this.convertToolResultContent(contents);
 
     return {
       ...this.request,

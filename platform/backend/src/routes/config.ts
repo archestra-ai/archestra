@@ -22,13 +22,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Config"],
         response: {
           200: z.strictObject({
+            enterpriseFeatures: z.strictObject({
+              core: z.boolean(),
+            }),
             features: z.strictObject({
-              "orchestrator-k8s-runtime": z.boolean(),
+              orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
-              browserStreamingEnabled: z.boolean(),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
@@ -61,9 +63,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         org?.globalToolPolicy ?? "permissive";
 
       return reply.send({
+        enterpriseFeatures: {
+          core: config.enterpriseFeatures.core,
+        },
         features: {
-          ...config.features,
-          "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
+          orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           geminiVertexAiEnabled: isVertexAiEnabled(),

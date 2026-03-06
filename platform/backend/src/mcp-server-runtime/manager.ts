@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as k8s from "@kubernetes/client-node";
-import { Attach } from "@kubernetes/client-node";
+import { Attach, Exec } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -92,6 +92,7 @@ export class McpServerRuntimeManager {
   private k8sAppsApi?: k8s.AppsV1Api;
   private k8sAttach?: Attach;
   private k8sLog?: k8s.Log;
+  private k8sExec?: Exec;
   private namespace: string = "default";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
@@ -127,6 +128,7 @@ export class McpServerRuntimeManager {
       this.k8sAppsApi = this.k8sConfig.makeApiClient(k8s.AppsV1Api);
       this.k8sAttach = new Attach(this.k8sConfig);
       this.k8sLog = new k8s.Log(this.k8sConfig);
+      this.k8sExec = new Exec(this.k8sConfig);
       this.namespace = namespace || this.namespace;
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config");
@@ -280,7 +282,7 @@ export class McpServerRuntimeManager {
         );
       }
 
-      if (!this.k8sAttach || !this.k8sLog) {
+      if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
         throw new Error("Kubernetes clients not initialized");
       }
 
@@ -348,17 +350,18 @@ export class McpServerRuntimeManager {
         }
       }
 
-      const k8sDeployment = new K8sDeployment(
+      const k8sDeployment = new K8sDeployment({
         mcpServer,
-        this.k8sApi,
-        this.k8sAppsApi,
-        this.k8sAttach,
-        this.k8sLog,
-        this.namespace,
+        k8sApi: this.k8sApi,
+        k8sAppsApi: this.k8sAppsApi,
+        k8sAttach: this.k8sAttach,
+        k8sLog: this.k8sLog,
+        namespace: this.namespace,
         catalogItem,
         userConfigValues,
-        effectiveEnvironmentValues,
-      );
+        environmentValues: effectiveEnvironmentValues,
+        k8sExec: this.k8sExec,
+      });
 
       // Register the deployment BEFORE starting it
       this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
@@ -457,7 +460,13 @@ export class McpServerRuntimeManager {
     }
 
     // Not in memory - try to load from database
-    if (!this.k8sApi || !this.k8sAppsApi || !this.k8sAttach || !this.k8sLog) {
+    if (
+      !this.k8sApi ||
+      !this.k8sAppsApi ||
+      !this.k8sAttach ||
+      !this.k8sLog ||
+      !this.k8sExec
+    ) {
       logger.warn(
         `Cannot load deployment for ${mcpServerId}: K8s clients not initialized`,
       );
@@ -490,15 +499,16 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
-      const k8sDeployment = new K8sDeployment(
+      const k8sDeployment = new K8sDeployment({
         mcpServer,
-        this.k8sApi,
-        this.k8sAppsApi,
-        this.k8sAttach,
-        this.k8sLog,
-        this.namespace,
+        k8sApi: this.k8sApi,
+        k8sAppsApi: this.k8sAppsApi,
+        k8sAttach: this.k8sAttach,
+        k8sLog: this.k8sLog,
+        namespace: this.namespace,
         catalogItem,
-      );
+        k8sExec: this.k8sExec,
+      });
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
       await k8sDeployment.resolveHttpEndpoint();
@@ -711,6 +721,31 @@ export class McpServerRuntimeManager {
       return this.getMcpServerLogsCommand(mcpServerId, lines);
     }
     return this.getMcpServerDescribeCommand(mcpServerId);
+  }
+
+  /**
+   * Exec into an MCP server pod, spawning an interactive shell.
+   * Returns the K8s WebSocket for bridging to a browser WebSocket.
+   */
+  async execIntoMcpServer(
+    mcpServerId: string,
+    stdin: import("node:stream").Readable,
+    stdout: import("node:stream").Writable,
+    stderr: import("node:stream").Writable,
+  ) {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    if (!k8sDeployment) {
+      throw new Error("MCP server not found");
+    }
+    return k8sDeployment.execIntoContainer(stdin, stdout, stderr);
+  }
+
+  /**
+   * Get the kubectl exec command for an MCP server
+   */
+  getExecCommand(mcpServerId: string): string {
+    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
+    return `kubectl exec -it -n ${this.namespace} $(kubectl get pods -n ${this.namespace} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
   }
 
   /**

@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -26,12 +25,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import websocketService from "@/lib/websocket";
 import {
   type DeploymentState,
   DeploymentStatusBanner,
   DeploymentStatusDot,
 } from "./deployment-status";
+import { McpExecTerminal } from "./mcp-exec-terminal";
 
 interface McpLogsDialogProps {
   open: boolean;
@@ -80,6 +86,7 @@ export function McpLogsDialog({
   deploymentStatuses,
   hideInstallationSelector = false,
 }: McpLogsDialogProps) {
+  const [activeTab, setActiveTab] = useState<"logs" | "debug">("logs");
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
@@ -252,6 +259,7 @@ export function McpLogsDialog({
       setCommand("");
       setAutoScroll(true);
       setServerId(null); // Reset selection so it picks first on reopen
+      setActiveTab("logs");
     }
   }, [open, stopStreaming]);
 
@@ -318,10 +326,12 @@ export function McpLogsDialog({
     ? deploymentStatuses[serverId]
     : null;
 
+  const isDebugDisabled = currentDeploymentStatus?.state !== "running";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-5xl h-[70vh] flex flex-col"
+        className="max-w-5xl h-[70vh] flex flex-col p-8"
         data-testid={E2eTestId.McpLogsDialog}
       >
         <DialogHeader className="flex-shrink-0">
@@ -329,17 +339,11 @@ export function McpLogsDialog({
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 overflow-hidden">
                 <Terminal className="h-5 w-5 flex-shrink-0" />
-                <span className="truncate">Logs: {serverName}</span>
+                <span className="truncate">{serverName}</span>
               </DialogTitle>
-              <DialogDescription>
-                View the recent logs from the MCP server deployment
-              </DialogDescription>
             </div>
             {!hideInstallationSelector && installs.length > 1 && (
               <div className="flex flex-col gap-1 flex-shrink-0">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Installation
-                </span>
                 <Select
                   value={serverId ?? undefined}
                   onValueChange={setServerId}
@@ -374,101 +378,165 @@ export function McpLogsDialog({
           </div>
         </DialogHeader>
 
-        <DeploymentStatusBanner status={currentDeploymentStatus} />
-
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
-          <div className="flex flex-col gap-2 flex-1 min-h-0">
-            <div className="flex items-center justify-between flex-shrink-0">
-              <h3 className="text-sm font-semibold">Deployment Logs</h3>
-              {!autoScroll && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={scrollToBottom}
-                  className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                >
-                  <ArrowDown className="mr-2 h-3 w-3" />
-                  Scroll to Bottom
-                </Button>
-              )}
-            </div>
-
-            <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
-              <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-auto">
-                <div className="p-4">
-                  {streamError ? (
-                    <div
-                      className="text-red-400 font-mono text-sm"
-                      data-testid={E2eTestId.McpLogsError}
-                    >
-                      Error loading logs: {streamError}
-                    </div>
-                  ) : isWaitingForLogs ? (
-                    <div className="text-emerald-400 font-mono text-sm">
-                      {streamingText}
-                    </div>
-                  ) : streamedLogs ? (
-                    <pre
-                      className="text-emerald-400 font-mono text-xs whitespace-pre-wrap"
-                      data-testid={E2eTestId.McpLogsContent}
-                    >
-                      {streamedLogs}
-                    </pre>
-                  ) : (
-                    <div className="text-slate-400 font-mono text-sm">
-                      No logs available
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-              <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
-                {isStreaming && !streamError ? (
-                  <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "logs" | "debug")}
+          className="flex flex-col flex-1 min-h-0"
+        >
+          <div className="flex items-center gap-4">
+            <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1">
+              <TabsTrigger
+                value="logs"
+                data-testid={E2eTestId.McpLogsTab}
+                className="px-6"
+              >
+                Logs
+              </TabsTrigger>
+              {isDebugDisabled ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <TabsTrigger
+                        value="debug"
+                        disabled
+                        data-testid={E2eTestId.McpDebugTab}
+                        className="px-6"
+                      >
+                        Shell
+                      </TabsTrigger>
                     </span>
-                    Streaming
-                  </div>
-                ) : (
-                  <div />
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopyLogs}
-                  disabled={!!streamError || !streamedLogs}
-                  className="h-6 px-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Pod must be running to start a shell session
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <TabsTrigger
+                  value="debug"
+                  data-testid={E2eTestId.McpDebugTab}
+                  className="px-6"
                 >
-                  <Copy className="h-3 w-3 mr-1" />
-                  {copied ? "Copied!" : "Copy"}
-                </Button>
-              </div>
-            </div>
+                  Shell
+                </TabsTrigger>
+              )}
+            </TabsList>
+            <DeploymentStatusBanner status={currentDeploymentStatus} />
           </div>
 
-          {command && (
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold">Manual Command</h3>
-              <div className="relative">
-                <ScrollArea className="rounded-md border bg-slate-950 p-3 pr-16">
-                  <code className="text-emerald-400 font-mono text-xs break-all">
-                    {command}
-                  </code>
-                </ScrollArea>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopyCommand}
-                  className="absolute top-1/2 -translate-y-1/2 right-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                >
-                  <Copy className="h-3 w-3" />
-                  {commandCopied ? " Copied!" : ""}
-                </Button>
+          <TabsContent
+            value="logs"
+            className="flex flex-col flex-1 min-h-0 mt-2"
+          >
+            <div className="flex flex-col gap-4 flex-1 min-h-0">
+              <div className="flex flex-col gap-2 flex-1 min-h-0">
+                <div className="flex items-center justify-between flex-shrink-0">
+                  <h3 className="text-sm font-semibold">Deployment Logs</h3>
+                  {!autoScroll && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={scrollToBottom}
+                      className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    >
+                      <ArrowDown className="mr-2 h-3 w-3" />
+                      Scroll to Bottom
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
+                  <ScrollArea
+                    ref={scrollAreaRef}
+                    className="flex-1 overflow-auto"
+                  >
+                    <div className="p-4">
+                      {streamError ? (
+                        <div
+                          className="text-red-400 font-mono text-sm"
+                          data-testid={E2eTestId.McpLogsError}
+                        >
+                          Error loading logs: {streamError}
+                        </div>
+                      ) : isWaitingForLogs ? (
+                        <div className="text-emerald-400 font-mono text-sm">
+                          {streamingText}
+                        </div>
+                      ) : streamedLogs ? (
+                        <pre
+                          className="text-emerald-400 font-mono text-xs whitespace-pre-wrap"
+                          data-testid={E2eTestId.McpLogsContent}
+                        >
+                          {streamedLogs}
+                        </pre>
+                      ) : (
+                        <div className="text-slate-400 font-mono text-sm">
+                          No logs available
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
+                    {isStreaming && !streamError ? (
+                      <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                        </span>
+                        Streaming
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyLogs}
+                      disabled={!!streamError || !streamedLogs}
+                      className="h-6 px-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      {copied ? "Copied!" : "Copy"}
+                    </Button>
+                  </div>
+                </div>
               </div>
+
+              {command && (
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold">Manual Command</h3>
+                  <div className="relative">
+                    <ScrollArea className="rounded-md border bg-slate-950 p-3 pr-16">
+                      <code className="text-emerald-400 font-mono text-xs break-all">
+                        {command}
+                      </code>
+                    </ScrollArea>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyCommand}
+                      className="absolute top-1/2 -translate-y-1/2 right-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {commandCopied ? " Copied!" : ""}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </TabsContent>
+
+          <TabsContent
+            value="debug"
+            className="flex flex-col flex-1 min-h-0 mt-2"
+          >
+            {serverId && (
+              <McpExecTerminal
+                serverId={serverId}
+                isActive={activeTab === "debug" && open}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

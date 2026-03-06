@@ -15,7 +15,7 @@
 5. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
 6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
-8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseLicenseActivated` checks instead to avoid bundling enterprise code into free builds
+8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
 9. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
 10. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 
@@ -459,9 +459,9 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **MCP Server Runtime**:
 
 - Local MCP servers run in K8s pods (one pod per server) when K8s is configured
-- Feature flag `orchestrator-k8s-runtime` returned by `/api/features` endpoint
+- Feature flag `orchestratorK8sRuntime` returned by `/api/features` endpoint
 - Feature enabled when EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is configured
-- Frontend disables local MCP server functionality when feature is off (shows tooltip explaining orchestrator-k8s-runtime requirement)
+- Frontend disables local MCP server functionality when feature is off (shows tooltip explaining orchestratorK8sRuntime requirement)
 - Automatic pod lifecycle management (start/restart/stop)
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`

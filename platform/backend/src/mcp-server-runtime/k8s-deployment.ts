@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
-import type { Attach } from "@kubernetes/client-node";
+import type { Attach, Exec } from "@kubernetes/client-node";
 import {
   type ImagePullSecretConfig,
   type LocalConfigSchema,
@@ -192,6 +192,19 @@ export const fetchPlatformPodTolerations = tolerationsFetcher.fetch;
 export const getCachedPlatformTolerations = tolerationsFetcher.getCached;
 export const resetPlatformTolerationsCache = tolerationsFetcher.resetCache;
 
+interface K8sDeploymentOptions {
+  mcpServer: McpServer;
+  k8sApi: k8s.CoreV1Api;
+  k8sAppsApi: k8s.AppsV1Api;
+  k8sAttach: Attach;
+  k8sLog: k8s.Log;
+  namespace: string;
+  catalogItem?: InternalMcpCatalog | null;
+  userConfigValues?: Record<string, string>;
+  environmentValues?: Record<string, string>;
+  k8sExec: Exec;
+}
+
 /**
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
  */
@@ -203,6 +216,7 @@ export default class K8sDeployment {
   private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
+  private k8sExec: Exec;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
@@ -216,27 +230,20 @@ export default class K8sDeployment {
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
 
-  constructor(
-    mcpServer: McpServer,
-    k8sApi: k8s.CoreV1Api,
-    k8sAppsApi: k8s.AppsV1Api,
-    k8sAttach: Attach,
-    k8sLog: k8s.Log,
-    namespace: string,
-    catalogItem?: InternalMcpCatalog | null,
-    userConfigValues?: Record<string, string>,
-    environmentValues?: Record<string, string>,
-  ) {
-    this.mcpServer = mcpServer;
-    this.k8sApi = k8sApi;
-    this.k8sAppsApi = k8sAppsApi;
-    this.k8sAttach = k8sAttach;
-    this.k8sLog = k8sLog;
-    this.defaultNamespace = namespace;
-    this.catalogItem = catalogItem;
-    this.userConfigValues = userConfigValues;
-    this.environmentValues = environmentValues;
-    this.deploymentName = K8sDeployment.constructDeploymentName(mcpServer);
+  constructor(options: K8sDeploymentOptions) {
+    this.mcpServer = options.mcpServer;
+    this.k8sApi = options.k8sApi;
+    this.k8sAppsApi = options.k8sAppsApi;
+    this.k8sAttach = options.k8sAttach;
+    this.k8sLog = options.k8sLog;
+    this.k8sExec = options.k8sExec;
+    this.defaultNamespace = options.namespace;
+    this.catalogItem = options.catalogItem;
+    this.userConfigValues = options.userConfigValues;
+    this.environmentValues = options.environmentValues;
+    this.deploymentName = K8sDeployment.constructDeploymentName(
+      options.mcpServer,
+    );
   }
 
   /**
@@ -2458,5 +2465,35 @@ export default class K8sDeployment {
    */
   getHttpEndpointUrl(): string | undefined {
     return this.httpEndpointUrl;
+  }
+
+  /**
+   * Exec into the container, spawning an interactive shell.
+   * Returns the K8s WebSocket for the caller to bridge to a browser WebSocket.
+   */
+  async execIntoContainer(
+    stdin: import("node:stream").Readable,
+    stdout: import("node:stream").Writable,
+    stderr: import("node:stream").Writable,
+    command: string[] = ["/bin/sh"],
+  ) {
+    const pod = await this.findPodForDeployment();
+    if (!pod?.metadata?.name) {
+      throw new Error("No running pod found for this deployment");
+    }
+
+    const podName = pod.metadata.name;
+    const k8sWs = await this.k8sExec.exec(
+      this.namespace,
+      podName,
+      "mcp-server",
+      command,
+      stdout,
+      stderr,
+      stdin,
+      true, // tty
+    );
+
+    return { k8sWs, podName };
   }
 }

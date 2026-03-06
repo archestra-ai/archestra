@@ -304,6 +304,24 @@ export function useUpdateOrganization(
   });
 }
 
+/**
+ * Get all members of the organization (for admin filtering)
+ */
+export function useOrganizationMembers(enabled = true) {
+  return useQuery({
+    queryKey: [...organizationKeys.all, "members"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getOrganizationMembers();
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled,
+  });
+}
+
 export type PendingSignupMember = {
   userId: string;
   provider: string | null;

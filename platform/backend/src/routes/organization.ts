@@ -263,6 +263,30 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/organization/members",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationMembers,
+        description: "Get all members of the organization",
+        tags: ["Organization"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              email: z.string(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const members = await MemberModel.findAllByOrganization(organizationId);
+      return reply.send(members);
+    },
+  );
+
+  fastify.get(
     "/api/organization/appearance",
     {
       schema: {

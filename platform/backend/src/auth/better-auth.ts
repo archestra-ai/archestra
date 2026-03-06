@@ -34,15 +34,14 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 
-const { ssoConfig, syncSsoRole, syncSsoTeams } =
-  config.enterpriseLicenseActivated
-    ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-      await import("./idp.ee")
-    : {
-        ssoConfig: undefined,
-        syncSsoRole: () => {},
-        syncSsoTeams: () => {},
-      };
+const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
+  ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
+    await import("./idp.ee")
+  : {
+      ssoConfig: undefined,
+      syncSsoRole: () => {},
+      syncSsoTeams: () => {},
+    };
 
 const APP_NAME = "Archestra";
 const {

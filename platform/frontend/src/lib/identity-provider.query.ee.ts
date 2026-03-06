@@ -26,7 +26,7 @@ export function usePublicIdentityProviders() {
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    enabled: config.enterpriseLicenseActivated,
+    enabled: config.enterpriseFeatures.core,
   });
 }
 
@@ -44,7 +44,7 @@ export function useIdentityProviders() {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseLicenseActivated,
+    enabled: config.enterpriseFeatures.core,
   });
 }
 
@@ -62,7 +62,7 @@ export function useIdentityProvider(id: string) {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseLicenseActivated,
+    enabled: config.enterpriseFeatures.core,
   });
 }
 

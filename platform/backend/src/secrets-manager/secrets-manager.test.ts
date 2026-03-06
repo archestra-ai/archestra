@@ -94,11 +94,10 @@ describe("SecretsManager", async () => {
 
   describe("createSecretManager", () => {
     const originalEnv = process.env;
-    const originalEnterpriseLicenseActivated =
-      config.enterpriseLicenseActivated;
+    const originalEnterpriseLicenseActivated = config.enterpriseFeatures.core;
 
     const setEnterpriseLicenseActivated = (value: boolean) => {
-      Object.defineProperty(config, "enterpriseLicenseActivated", {
+      Object.defineProperty(config.enterpriseFeatures, "core", {
         value,
         writable: true,
         configurable: true,

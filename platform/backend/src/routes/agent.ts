@@ -51,6 +51,34 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
               ),
+            scope: z
+              .enum(["personal", "team", "org", "built_in"])
+              .optional()
+              .describe("Filter by scope: personal, team, org, or built_in."),
+            teamIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by specific team IDs (comma-separated). Only used when scope=team.",
+              ),
+            authorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
+            labels: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by labels. Format: key1:val1,val2;key2:val3. AND across keys, OR within values.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -58,6 +86,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "name",
               "createdAt",
               "toolsCount",
+              "subagentsCount",
               "team",
             ] as const),
           ),
@@ -72,6 +101,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name,
           agentType,
           agentTypes,
+          scope,
+          teamIds,
+          authorIds,
+          labels,
           limit,
           offset,
           sortBy,
@@ -117,6 +150,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // agentTypes takes precedence over agentType
             agentType: agentTypes ? undefined : agentType,
             agentTypes,
+            scope,
+            teamIds,
+            // authorIds is admin-only
+            authorIds: isAdmin ? authorIds : undefined,
+            labels: parseLabelsParam(labels),
           },
           user.id,
           isAdmin,
@@ -733,3 +771,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default agentRoutes;
+
+function parseLabelsParam(
+  labels: string | undefined,
+): Record<string, string[]> | undefined {
+  if (!labels) return undefined;
+  const result: Record<string, string[]> = {};
+  for (const entry of labels.split(";")) {
+    const colonIdx = entry.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = entry.slice(0, colonIdx).trim();
+    const values = entry
+      .slice(colonIdx + 1)
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (key && values.length > 0) {
+      result[key] = values;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}

@@ -322,24 +322,22 @@ class CerebrasRequestAdapter
       messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
 
-    if (config.features.browserStreamingEnabled) {
-      messages = this.convertToolResultContent(messages);
-      const sizeBeforeStrip = estimateMessagesSize(messages);
-      messages = stripBrowserToolsResults(messages);
-      const sizeAfterStrip = estimateMessagesSize(messages);
+    messages = this.convertToolResultContent(messages);
+    const sizeBeforeStrip = estimateMessagesSize(messages);
+    messages = stripBrowserToolsResults(messages);
+    const sizeAfterStrip = estimateMessagesSize(messages);
 
-      if (sizeBeforeStrip.length !== sizeAfterStrip.length) {
-        logger.info(
-          {
-            sizeBeforeKB: Math.round(sizeBeforeStrip.length / 1024),
-            sizeAfterKB: Math.round(sizeAfterStrip.length / 1024),
-            savedKB: Math.round(
-              (sizeBeforeStrip.length - sizeAfterStrip.length) / 1024,
-            ),
-          },
-          "[CerebrasAdapter] Stripped browser tool results from messages",
-        );
-      }
+    if (sizeBeforeStrip.length !== sizeAfterStrip.length) {
+      logger.info(
+        {
+          sizeBeforeKB: Math.round(sizeBeforeStrip.length / 1024),
+          sizeAfterKB: Math.round(sizeAfterStrip.length / 1024),
+          savedKB: Math.round(
+            (sizeBeforeStrip.length - sizeAfterStrip.length) / 1024,
+          ),
+        },
+        "[CerebrasAdapter] Stripped browser tool results from messages",
+      );
     }
 
     return {

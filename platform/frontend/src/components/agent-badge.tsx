@@ -3,8 +3,15 @@ import { cn } from "@/lib/utils";
 
 const styles = {
   personal: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-  shared: "bg-green-500/10 text-green-600 border-green-500/30",
+  team: "bg-green-500/10 text-green-600 border-green-500/30",
+  org: "bg-amber-500/10 text-amber-600 border-amber-500/30",
   builtIn: "bg-purple-500/10 text-purple-600 border-purple-500/30",
+} as const;
+const labels = {
+  personal: "Personal",
+  team: "Team",
+  org: "Organization",
+  builtIn: "Built-in",
 } as const;
 const commonClasses = "text-[11px] shrink-0";
 
@@ -15,32 +22,12 @@ function AgentBadge({
   type: "personal" | "team" | "org" | "builtIn";
   className?: string;
 }) {
-  if (type === "builtIn") {
-    return (
-      <Badge
-        variant="outline"
-        className={cn(styles.builtIn, commonClasses, className)}
-      >
-        Built-In
-      </Badge>
-    );
-  }
-  if (type === "personal") {
-    return (
-      <Badge
-        variant="outline"
-        className={cn(styles.personal, commonClasses, className)}
-      >
-        Personal
-      </Badge>
-    );
-  }
+  const style = styles[type];
+  const label = labels[type];
+
   return (
-    <Badge
-      variant="outline"
-      className={cn(styles.shared, commonClasses, className)}
-    >
-      Shared
+    <Badge variant="outline" className={cn(style, commonClasses, className)}>
+      {label}
     </Badge>
   );
 }

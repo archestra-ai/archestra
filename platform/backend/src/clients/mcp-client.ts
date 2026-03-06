@@ -1034,7 +1034,7 @@ class McpClient {
    * Get appropriate transport based on server type and configuration
    */
   private shouldLimitConcurrency(): boolean {
-    return config.features.browserStreamingEnabled;
+    return true;
   }
 
   private getConcurrencyLimit(transportKind: TransportKind): number {

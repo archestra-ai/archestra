@@ -17,6 +17,7 @@ const organizationsTable = pgTable("organization", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
+  logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   limitCleanupInterval: varchar("limit_cleanup_interval")

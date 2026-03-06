@@ -109246,6 +109246,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -109334,6 +109338,7 @@
                     "name",
                     "slug",
                     "logo",
+                    "logoDark",
                     "createdAt",
                     "metadata",
                     "limitCleanupInterval",
@@ -109643,6 +109648,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "logoDark": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "onboardingComplete": {
                     "type": "boolean"
                   },
@@ -109675,6 +109684,10 @@
                       "type": "string"
                     },
                     "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -109766,6 +109779,7 @@
                     "name",
                     "slug",
                     "logo",
+                    "logoDark",
                     "createdAt",
                     "metadata",
                     "limitCleanupInterval",
@@ -110809,12 +110823,17 @@
                     "logo": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "theme",
                     "customFont",
-                    "logo"
+                    "logo",
+                    "logoDark"
                   ],
                   "additionalProperties": false
                 }

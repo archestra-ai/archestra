@@ -20,7 +20,7 @@ export function hasNewerVersion(
   const current = cleanVersionString(currentVersion);
   const latest = cleanVersionString(latestTagName);
 
-  const parsedCurrent = semver.valid(semver.coerce(current));
+  const parsedCurrent = semver.valid(current);
   const parsedLatest = semver.valid(semver.coerce(latest));
 
   if (!parsedCurrent || !parsedLatest) {

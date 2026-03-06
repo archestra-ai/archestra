@@ -53,6 +53,7 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { McpUiToolOutput, extractUIResource } from "./mcp-ui-tool-output";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -1111,18 +1112,26 @@ function MessageTool({
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
+          extractUIResource(toolResultPart.output) ? (
+            <McpUiToolOutput output={toolResultPart.output} />
+          ) : (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={toolResultPart.output}
+              errorText={errorText}
+            />
+          )
         )}
         {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
+          extractUIResource(part.output) ? (
+            <McpUiToolOutput output={part.output} />
+          ) : (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          )
         )}
       </ToolContent>
     </Tool>

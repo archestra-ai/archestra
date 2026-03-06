@@ -184,6 +184,11 @@ export default {
         env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true"
       );
     },
+    get fullWhiteLabeling() {
+      return (
+        env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_FULL_WHITE_LABELING") === "true"
+      );
+    },
   },
   /**
    * When true, hides the username/password login form and requires SSO for authentication.

@@ -15,7 +15,7 @@ async function getBuiltInAgent(
   const response = await makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/agents?agentTypes=agent&limit=100",
+    urlSuffix: "/api/agents?agentTypes=agent&scope=built_in&limit=100",
   });
   const result = await response.json();
   const agents = result.data ?? result;
@@ -159,10 +159,25 @@ test.describe("Built-In Agents API", () => {
     expect(builtIn).toBeTruthy();
   });
 
-  test("built-in agent included in /api/agents (agents management page)", async ({
+  test("built-in agent excluded from /api/agents by default, included with scope=built_in", async ({
     request,
     makeApiRequest,
   }) => {
+    // Without scope filter, built-in agents should be excluded
+    const defaultResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/agents?agentTypes=agent&limit=100",
+    });
+    const defaultResult = await defaultResponse.json();
+    const defaultAgents = defaultResult.data ?? defaultResult;
+    const excluded = defaultAgents.find(
+      (a: { builtInAgentConfig?: { name: string } }) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+    );
+    expect(excluded).toBeUndefined();
+
+    // With scope=built_in, built-in agents should be included
     const builtIn = await getBuiltInAgent(request, makeApiRequest);
     expect(builtIn).toBeTruthy();
     expect(builtIn.builtInAgentConfig?.name).toBe(

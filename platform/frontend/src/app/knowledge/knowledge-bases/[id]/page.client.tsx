@@ -217,9 +217,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
               <div>
                 <CardTitle>{knowledgeBase.name}</CardTitle>
                 {knowledgeBase.description && (
-                  <CardDescription>
-                    {knowledgeBase.description}
-                  </CardDescription>
+                  <CardDescription>{knowledgeBase.description}</CardDescription>
                 )}
               </div>
               <div className="flex items-center gap-2">

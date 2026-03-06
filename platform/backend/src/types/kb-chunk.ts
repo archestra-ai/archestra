@@ -1,13 +1,20 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AclEntrySchema } from "./kb-document";
 
-export const SelectKbChunkSchema = createSelectSchema(schema.kbChunksTable, {
-  acl: z.array(z.string()),
+// Shared field overrides for drizzle-zod schema generation
+const extendedFields = {
+  acl: z.array(AclEntrySchema),
   embedding: z.array(z.number()).nullable(),
-});
+};
+
+export const SelectKbChunkSchema = createSelectSchema(
+  schema.kbChunksTable,
+  extendedFields,
+);
 export const InsertKbChunkSchema = createInsertSchema(schema.kbChunksTable, {
-  acl: z.array(z.string()).optional(),
+  acl: z.array(AclEntrySchema).optional(),
   embedding: z.array(z.number()).nullable().optional(),
 }).omit({ id: true, createdAt: true, searchVector: true });
 

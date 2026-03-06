@@ -39,6 +39,7 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
+import type { AclEntry } from "@/types/kb-document";
 
 /**
  * Constants for Archestra MCP server
@@ -1824,7 +1825,7 @@ export async function executeArchestraTool(
         };
       }
 
-      let userAcl: string[] = ["org:*"];
+      let userAcl: AclEntry[] = ["org:*"];
       if (context.userId) {
         const [user, teamIds] = await Promise.all([
           UserModel.getById(context.userId),

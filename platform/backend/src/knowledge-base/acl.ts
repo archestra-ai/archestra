@@ -1,3 +1,4 @@
+import type { AclEntry } from "@/types/kb-document";
 import type { KnowledgeBaseVisibility } from "@/types/knowledge-base";
 
 /**
@@ -14,22 +15,26 @@ export function buildDocumentAcl(params: {
     groups?: string[];
     isPublic?: boolean;
   };
-}): string[] {
+}): AclEntry[] {
   switch (params.visibility) {
     case "org-wide":
       return ["org:*"];
     case "team-scoped":
-      return params.teamIds.map((id) => `team:${id}`);
+      return params.teamIds.map((id): AclEntry => `team:${id}`);
     case "auto-sync-permissions": {
-      const acl: string[] = [];
+      const acl: AclEntry[] = [];
       if (params.permissions?.isPublic) {
         acl.push("org:*");
       }
       if (params.permissions?.users) {
-        acl.push(...params.permissions.users.map((u) => `user_email:${u}`));
+        acl.push(
+          ...params.permissions.users.map((u): AclEntry => `user_email:${u}`),
+        );
       }
       if (params.permissions?.groups) {
-        acl.push(...params.permissions.groups.map((g) => `group:${g}`));
+        acl.push(
+          ...params.permissions.groups.map((g): AclEntry => `group:${g}`),
+        );
       }
       // Fallback: if no permissions extracted, grant org-wide access
       if (acl.length === 0) {
@@ -48,8 +53,8 @@ export function buildUserAcl(params: {
   userEmail: string;
   teamIds: string[];
   visibility: KnowledgeBaseVisibility;
-}): string[] {
-  const acl: string[] = [];
+}): AclEntry[] {
+  const acl: AclEntry[] = [];
 
   if (params.visibility === "org-wide") {
     acl.push("org:*");

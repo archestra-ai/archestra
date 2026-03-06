@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
+import type { AclEntry } from "@/types/kb-document";
 
 interface ChunkResult {
   content: string;
@@ -21,7 +22,7 @@ class QueryService {
   async query(params: {
     knowledgeBaseId: string;
     queryText: string;
-    userAcl: string[];
+    userAcl: AclEntry[];
     limit?: number;
   }): Promise<ChunkResult[]> {
     const { knowledgeBaseId, queryText, limit = 10 } = params;

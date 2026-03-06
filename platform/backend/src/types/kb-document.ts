@@ -6,6 +6,23 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
+/**
+ * ACL entry type for knowledge base documents and chunks.
+ * Used for query-time access control filtering via PostgreSQL's `?|` operator.
+ */
+export type AclEntry =
+  | "org:*"
+  | `team:${string}`
+  | `user_email:${string}`
+  | `group:${string}`;
+
+export const AclEntrySchema = z
+  .string()
+  .regex(
+    /^(org:\*|team:.+|user_email:.+|group:.+)$/,
+    "ACL entry must match org:*, team:<id>, user_email:<email>, or group:<id>",
+  );
+
 export const EmbeddingStatusSchema = z.enum([
   "pending",
   "processing",
@@ -17,21 +34,25 @@ export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 export const DocumentSourceTypeSchema = z.enum(["connector", "api"]);
 export type DocumentSourceType = z.infer<typeof DocumentSourceTypeSchema>;
 
+// Shared field overrides for drizzle-zod schema generation
+const extendedFields = {
+  sourceType: DocumentSourceTypeSchema,
+  embeddingStatus: EmbeddingStatusSchema,
+  acl: z.array(AclEntrySchema),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+};
+
 export const SelectKbDocumentSchema = createSelectSchema(
   schema.kbDocumentsTable,
-  {
-    sourceType: DocumentSourceTypeSchema,
-    embeddingStatus: EmbeddingStatusSchema,
-    acl: z.array(z.string()),
-    metadata: z.record(z.string(), z.unknown()).nullable(),
-  },
+  extendedFields,
 );
 export const InsertKbDocumentSchema = createInsertSchema(
   schema.kbDocumentsTable,
   {
+    ...extendedFields,
     sourceType: DocumentSourceTypeSchema,
     embeddingStatus: EmbeddingStatusSchema.optional(),
-    acl: z.array(z.string()).optional(),
+    acl: z.array(AclEntrySchema).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   },
 ).omit({ id: true, createdAt: true, updatedAt: true });
@@ -39,7 +60,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   schema.kbDocumentsTable,
   {
     embeddingStatus: EmbeddingStatusSchema.optional(),
-    acl: z.array(z.string()).optional(),
+    acl: z.array(AclEntrySchema).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   },
 ).pick({

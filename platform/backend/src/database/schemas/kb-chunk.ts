@@ -8,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AclEntry } from "@/types/kb-document";
 import kbDocumentsTable from "./kb-document";
 
 const vector = customType<{ data: number[]; driverParam: string }>({
@@ -40,7 +41,7 @@ const kbChunksTable = pgTable(
     chunkIndex: integer("chunk_index").notNull(),
     embedding: vector("embedding"),
     searchVector: tsvector("search_vector"),
-    acl: jsonb("acl").$type<string[]>().notNull().default([]),
+    acl: jsonb("acl").$type<AclEntry[]>().notNull().default([]),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [index("kb_chunks_document_id_idx").on(table.documentId)],

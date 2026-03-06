@@ -86,9 +86,6 @@ CREATE TABLE "knowledge_bases" (
 	"organization_id" text NOT NULL,
 	"name" text NOT NULL,
 	"description" text,
-	"provider" text NOT NULL,
-	"config" jsonb NOT NULL,
-	"secret_id" uuid,
 	"visibility" text DEFAULT 'org-wide' NOT NULL,
 	"team_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
@@ -109,7 +106,6 @@ ALTER TABLE "kb_documents" ADD CONSTRAINT "kb_documents_connector_id_knowledge_b
 ALTER TABLE "knowledge_base_connector_assignment" ADD CONSTRAINT "knowledge_base_connector_assignment_knowledge_base_id_knowledge_bases_id_fk" FOREIGN KEY ("knowledge_base_id") REFERENCES "public"."knowledge_bases"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "knowledge_base_connector_assignment" ADD CONSTRAINT "knowledge_base_connector_assignment_connector_id_knowledge_base_connectors_id_fk" FOREIGN KEY ("connector_id") REFERENCES "public"."knowledge_base_connectors"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "knowledge_base_connectors" ADD CONSTRAINT "knowledge_base_connectors_secret_id_secret_id_fk" FOREIGN KEY ("secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "knowledge_bases" ADD CONSTRAINT "knowledge_bases_secret_id_secret_id_fk" FOREIGN KEY ("secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "agent_connector_assignment_agent_idx" ON "agent_connector_assignment" USING btree ("agent_id");--> statement-breakpoint
 CREATE INDEX "agent_connector_assignment_connector_idx" ON "agent_connector_assignment" USING btree ("connector_id");--> statement-breakpoint
 CREATE INDEX "agent_knowledge_base_agent_idx" ON "agent_knowledge_base" USING btree ("agent_id");--> statement-breakpoint

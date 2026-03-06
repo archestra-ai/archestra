@@ -765,7 +765,8 @@ const config = {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },
   kb: {
-    embeddingApiKey: process.env.ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY || "",
+    embeddingApiKey:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY || "",
   },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",

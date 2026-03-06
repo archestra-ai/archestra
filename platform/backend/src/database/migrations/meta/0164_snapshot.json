@@ -3673,24 +3673,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "config": {
-          "name": "config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "visibility": {
           "name": "visibility",
           "type": "text",
@@ -3744,21 +3726,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "knowledge_bases_secret_id_secret_id_fk": {
-          "name": "knowledge_bases_secret_id_secret_id_fk",
-          "tableFrom": "knowledge_bases",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

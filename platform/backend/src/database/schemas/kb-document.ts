@@ -11,6 +11,7 @@ import type {
   AclEntry,
   DocumentSourceType,
   EmbeddingStatus,
+  KbDocumentMetadata,
 } from "@/types/kb-document";
 import knowledgeBasesTable from "./knowledge-base";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
@@ -34,7 +35,7 @@ const kbDocumentsTable = pgTable(
     contentHash: text("content_hash").notNull(),
     sourceUrl: text("source_url"),
     acl: jsonb("acl").$type<AclEntry[]>().notNull().default([]),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    metadata: jsonb("metadata").$type<KbDocumentMetadata>().default({}),
     embeddingStatus: text("embedding_status")
       .$type<EmbeddingStatus>()
       .notNull()

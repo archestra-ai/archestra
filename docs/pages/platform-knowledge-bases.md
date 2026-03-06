@@ -1,9 +1,9 @@
 ---
-title: Knowledge Bases
-category: Agents
-order: 6
-description: Automatic document ingestion into knowledge bases for enhanced retrieval
-lastUpdated: 2025-01-15
+title: Overview
+category: Knowledge
+order: 1
+description: Built-in RAG with pgvector for document ingestion, hybrid search, and retrieval
+lastUpdated: 2026-03-06
 ---
 
 <!--
@@ -11,124 +11,49 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
-Archestra can automatically ingest documents uploaded via Chat into a knowledge base. This enables graph-based retrieval augmented generation (GraphRAG) across all your organization's documents.
+Knowledge bases provide built-in retrieval augmented generation (RAG) powered by PostgreSQL and pgvector. Connectors sync data from external tools into knowledge bases, where documents are chunked, embedded, and indexed for hybrid search. Agents query their assigned knowledge bases at runtime via the `query_knowledge_base` tool.
 
-## How It Works
+> **Enterprise feature.** Knowledge bases require an enterprise license. Contact sales@archestra.ai for licensing information.
 
-When users upload documents through the Chat interface, Archestra automatically:
+## Architecture
 
-1. Extracts text content from supported file types
-2. Sends the content to the configured knowledge base provider
-3. The provider indexes the document for later retrieval
+The RAG stack runs entirely within PostgreSQL with zero external dependencies:
 
-This happens asynchronously in the background without blocking chat responses.
+- **Hybrid search** -- Combines dense vector similarity (pgvector) with BM-25 full-text search via Reciprocal Rank Fusion for high-quality retrieval
+- **Access control** -- Per-document ACL filtering ensures users only see documents they have access to
+- **Async embedding** -- Documents are chunked and embedded in the background using OpenAI-compatible embedding models
 
-## Supported File Types
+### Ingestion Pipeline
 
-Text-based documents that can be meaningfully indexed:
+1. Connectors fetch documents from external sources on a cron schedule
+2. Documents are split into chunks using a token-based splitter
+3. Chunks are embedded asynchronously and indexed for retrieval
 
-- **Text files**: `.txt`, `.md`, `.markdown`
-- **Data formats**: `.json`, `.csv`, `.xml`, `.yaml`, `.yml`
-- **Web files**: `.html`, `.htm`
-- **Code files**: `.js`, `.ts`, `.jsx`, `.tsx`, `.py`, `.java`, `.c`, `.cpp`, `.h`, `.hpp`, `.rs`, `.go`, `.rb`, `.php`, `.sh`, `.bash`, `.sql`, `.graphql`, `.css`, `.scss`, `.less`
+## Assigning Knowledge Bases
 
-Binary files (images, PDFs, etc.) are not currently supported.
+Knowledge bases can be assigned to both Agents and MCP Gateways. The relationship is many-to-many -- an agent can have multiple knowledge bases, and a knowledge base can be shared across agents.
 
-## Configuration
+Assign knowledge bases in the agent or MCP gateway dialog under the "Knowledge Base" section. Once assigned, the `query_knowledge_base` tool becomes available.
 
-Knowledge graphs are configured per Agent or MCP Gateway in the Archestra UI. Each Agent / MCP Gateway can be assigned a single knowledge base.
+### Visibility Modes
 
-Once assigned a knowledge base, the `query_knowledge_base` tool becomes available and, for Agents, documents uploaded via chat are automatically ingested into the Agent's assigned knowledge base.
-
-### LightRAG Provider
-
-[LightRAG](https://github.com/HKUDS/LightRAG) combines vector similarity search with graph-based retrieval for more accurate and contextual results.
-
-LightRAG requires:
-
-- A running LightRAG API server
-- Neo4j for graph storage
-- A vector database (e.g., Qdrant) for embeddings
-
-## Using the Knowledge Base
-
-### Built-in Query Tool (Recommended)
-
-Archestra includes a built-in `query_knowledge_base` tool. To use it:
-
-1. Assign a knowledge base to your Agent or MCP Gateway (see above)
-2. Go to **MCP Catalog** and find "Archestra"
-3. Assign the `query_knowledge_base` tool to your agent
-4. The tool will be available to agents using that profile
-
-### External MCP Server
-
-Alternatively, add the [LightRAG MCP server](https://github.com/brojd/lightrag-mcp) to your profiles for direct LightRAG access.
-
-## Query Modes
-
-The `query_knowledge_base` tool supports different query modes:
-
-| Mode     | Description                                      | Best For                  |
-| -------- | ------------------------------------------------ | ------------------------- |
-| `hybrid` | Combines local and global context (default)      | General queries           |
-| `local`  | Uses only local context from the knowledge base | Specific document lookups |
-| `global` | Uses global context across all documents         | Broad topic exploration   |
-| `naive`  | Simple RAG without graph-based retrieval         | Basic similarity search   |
+| Mode                      | Behavior                                                        |
+| ------------------------- | --------------------------------------------------------------- |
+| **Org-wide**              | All documents accessible to all users in the organization       |
+| **Team-scoped**           | Documents accessible only to members of the assigned teams      |
+| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups) |
 
 ## Connectors
 
-Connectors are data sources that automatically ingest external content into a knowledge base on a schedule. Instead of manually uploading documents via Chat, connectors pull data from tools your team already uses.
+Connectors pull data from external tools (Jira, Confluence, etc.) on a cron schedule. Each connector tracks a checkpoint for incremental sync -- only changes since the last run are processed. A connector can be assigned to multiple knowledge bases.
 
-Each connector runs as a Kubernetes CronJob that periodically fetches new and updated content, converts it to plain text, and sends it to the knowledge base provider. Syncs are incremental -- connectors track a checkpoint so only changes since the last run are processed.
+See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported connector types, configuration, and management.
 
-**Requirements**: Connectors need a configured K8s runtime (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`).
+## Environment Variables
 
-### Supported Connectors
+| Variable                                                   | Required | Description                                                            |
+| ---------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY`               | Yes      | API key for generating text embeddings (OpenAI-compatible endpoint)    |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE` | No       | K8s namespace for connector CronJobs (default: `archestra-connectors`) |
 
-#### Jira
-
-Ingests issue descriptions, comments, and metadata from Jira Cloud or Server.
-
-| Field                   | Description                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| Base URL                | Your Jira instance URL (e.g., `https://your-domain.atlassian.net`)                 |
-| Cloud Instance          | Toggle on for Jira Cloud, off for Jira Server/Data Center                          |
-| Project Key             | Filter issues to a single project (optional)                                       |
-| JQL Query               | Custom JQL to filter issues (optional, e.g., `project = PROJ AND status = "Done"`) |
-| Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional)                      |
-| Labels to Skip          | Comma-separated issue labels to exclude (optional)                                 |
-
-Authentication uses an Atlassian account email and [API token](https://id.atlassian.com/manage-profile/security/api-tokens).
-
-Incremental sync uses JQL time-range queries based on the `updated` field, so only issues modified since the last sync are fetched.
-
-#### Confluence
-
-Ingests page content (HTML converted to plain text) from Confluence Cloud or Server.
-
-| Field          | Description                                                                      |
-| -------------- | -------------------------------------------------------------------------------- |
-| URL            | Your Confluence instance URL (e.g., `https://your-domain.atlassian.net/wiki`)    |
-| Cloud Instance | Toggle on for Confluence Cloud, off for Server/Data Center                       |
-| Space Keys     | Comma-separated space keys to sync (optional, e.g., `ENG, DOCS`)                 |
-| Page IDs       | Comma-separated specific page IDs to sync (optional)                             |
-| CQL Query      | Custom CQL to filter content (optional, e.g., `space = "ENG" AND type = "page"`) |
-| Labels to Skip | Comma-separated labels to exclude (optional)                                     |
-| Batch Size     | Pages per batch (default: 50)                                                    |
-
-Authentication uses the same Atlassian email + API token as Jira.
-
-Incremental sync uses CQL `lastModified` queries to fetch only pages changed since the last run.
-
-### Schedules
-
-Connectors use cron expressions to define sync frequency.
-
-### Managing Connectors
-
-Connectors are managed from a knowledge base's detail page. After creation, you can:
-
-- **Test Connection** -- verifies credentials and connectivity before waiting for the first scheduled sync
-- **Trigger Sync** -- runs an immediate sync outside the schedule
-- **View Runs** -- see the history of sync runs with status, documents processed, and errors
+See [Platform Deployment](/docs/platform-deployment) for the full environment variable reference.

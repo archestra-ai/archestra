@@ -34,12 +34,15 @@ export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 export const DocumentSourceTypeSchema = z.enum(["connector", "api"]);
 export type DocumentSourceType = z.infer<typeof DocumentSourceTypeSchema>;
 
+export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
+export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
+
 // Shared field overrides for drizzle-zod schema generation
 const extendedFields = {
   sourceType: DocumentSourceTypeSchema,
   embeddingStatus: EmbeddingStatusSchema,
   acl: z.array(AclEntrySchema),
-  metadata: z.record(z.string(), z.unknown()).nullable(),
+  metadata: KbDocumentMetadataSchema.nullable(),
 };
 
 export const SelectKbDocumentSchema = createSelectSchema(
@@ -53,7 +56,7 @@ export const InsertKbDocumentSchema = createInsertSchema(
     sourceType: DocumentSourceTypeSchema,
     embeddingStatus: EmbeddingStatusSchema.optional(),
     acl: z.array(AclEntrySchema).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: KbDocumentMetadataSchema.optional(),
   },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKbDocumentSchema = createUpdateSchema(
@@ -61,7 +64,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   {
     embeddingStatus: EmbeddingStatusSchema.optional(),
     acl: z.array(AclEntrySchema).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: KbDocumentMetadataSchema.optional(),
   },
 ).pick({
   title: true,

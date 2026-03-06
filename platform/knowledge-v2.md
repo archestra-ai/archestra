@@ -4,6 +4,72 @@
 
 ---
 
+## Implementation Progress
+
+### Section 3: Enterprise Feature Flag
+- ✅ Restructure `GET /api/config` — `enterpriseFeatures: { core, knowledgeBase }` (merged via config cleanup PR #3159)
+- ✅ `useEnterpriseFeature()` hook reads from backend `/api/config` response
+- ✅ Conditional sidebar visibility — Knowledge Base section gated by `useEnterpriseFeature("knowledgeBase")`
+- ✅ Settings tab visibility — `/settings/knowledge` tab gated by `useEnterpriseFeature("knowledgeBase")`
+- ⬜ Remove `NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` from frontend (deferred — colleague's white-labeling branch)
+
+### Section 4: Embedding Configuration
+- ✅ `/settings/knowledge` page — embedding model selector (3-small, 3-large, ada-002) with save/cancel
+- ✅ `embeddingModel` column on organization table with `.$type<EmbeddingModel>()`
+- ✅ `EmbeddingModelSchema` + `UpdateOrganizationSchema` extended with `embeddingModel`
+- ⬜ `ARCHESTRA_KB_EMBEDDING_API_KEY` env var — dedicated embedding API key (not yet wired)
+
+### Section 5: Database Schema
+- ✅ `kb_documents` table — source-of-truth with content hash, ACL JSONB, embedding status, source metadata
+- ✅ `kb_chunks` table — pgvector `vector(1536)`, tsvector generated column, HNSW index
+- ✅ `agent_connector_assignments` table — direct agent-to-connector assignment
+- ✅ Drizzle migration (`0164_shallow_doctor_doom.sql`)
+- ✅ pgvector extension granted in dev postgres initdb
+- ✅ Drizzle-zod types and CRUD models (`kb-document.ts`, `kb-chunk.ts`)
+
+### Section 6: Chunking & Embedding
+- ✅ Chunker (`backend/src/knowledge-base/chunker.ts`) — token-aware recursive splitting with tests
+- ✅ Embedder (`backend/src/knowledge-base/embedder.ts`) — OpenAI embedding with batching, tests
+- ⬜ Wire embedder to use organization's `embeddingModel` setting
+- ⬜ Wire embedder to use `ARCHESTRA_KB_EMBEDDING_API_KEY` env var
+
+### Section 7: Ingestion Pipeline
+- ✅ Connector sync refactored — connectors ingest into `kb_documents` directly (removed LightRAG delegation)
+- ✅ Jira connector
+- ✅ Confluence connector
+- ⬜ SharePoint connector
+- ⬜ GitHub connector
+- ⬜ GitLab connector
+- ⬜ Chat file upload → `kb_documents` ingestion
+
+### Section 8: Query Pipeline
+- ✅ Hybrid search with RRF (`backend/src/knowledge-base/query.ts`) — vector + full-text with tests
+- ⬜ ACL filtering via `?|` operator on GIN-indexed JSONB
+- ⬜ Visibility modes (org-wide, team-scoped, auto-sync)
+
+### Section 9: Access Control
+- ⬜ ACL format (namespaced string arrays in JSONB)
+- ⬜ Connector permission extraction interface
+- ⬜ Connector permission sync
+
+### Section 10: Citations
+- ⬜ Structured chunk results with source metadata
+- ⬜ MCP tool `archestra__query_knowledge_base` returns citation metadata
+- ⬜ Frontend citation UI (replace mock data)
+
+### Section 11: Migration Path
+- ✅ Phase 1: Infrastructure — tables, pgvector extension, models
+- ✅ Phase 2: Core RAG — chunker, embedder, query, connector refactor
+- ⬜ Phase 3: New connectors (SharePoint, GitHub, GitLab)
+- ⬜ Phase 4: Agent association — wire MCP tool, citations
+- ⬜ Phase 5: Cleanup — remove LightRAG provider code
+
+### Section 12: Documentation
+- ⬜ New docs pages (knowledge base config, connectors)
+- ⬜ Updates to existing docs (platform deployment env vars)
+
+---
+
 ## 1. Current State
 
 ### Provider Architecture

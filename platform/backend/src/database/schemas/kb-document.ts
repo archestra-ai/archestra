@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { DocumentSourceType, EmbeddingStatus } from "@/types/kb-document";
 import knowledgeBasesTable from "./knowledge-base";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
@@ -18,7 +19,7 @@ const kbDocumentsTable = pgTable(
       .notNull()
       .references(() => knowledgeBasesTable.id, { onDelete: "cascade" }),
     organizationId: text("organization_id").notNull(),
-    sourceType: text("source_type").$type<"connector" | "api">().notNull(),
+    sourceType: text("source_type").$type<DocumentSourceType>().notNull(),
     sourceId: text("source_id"),
     connectorId: uuid("connector_id").references(
       () => knowledgeBaseConnectorsTable.id,
@@ -31,7 +32,7 @@ const kbDocumentsTable = pgTable(
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     embeddingStatus: text("embedding_status")
-      .$type<"pending" | "processing" | "completed" | "failed">()
+      .$type<EmbeddingStatus>()
       .notNull()
       .default("pending"),
     chunkCount: integer("chunk_count").notNull().default(0),

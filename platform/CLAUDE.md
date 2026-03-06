@@ -419,6 +419,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   export type InsertEntity = z.infer<typeof InsertEntitySchema>;
   export type UpdateEntity = z.infer<typeof UpdateEntitySchema>;
   ```
+- **Schema `$type<>` reuse**: In `database/schemas/*.ts`, never use inline literal union types for `.$type<>()` (e.g. `$type<"pending" | "completed">()`). Instead, define the type as a `z.enum()` in the corresponding `types/*.ts` file, infer the TS type, and reference it via `import type` in the schema: `.$type<EmbeddingStatus>()`. This keeps the type definition in one place and avoids drift between schema and types.
 
 **Team-based Access Control**:
 

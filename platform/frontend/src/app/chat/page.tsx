@@ -539,9 +539,6 @@ export default function ChatPage() {
   const isPlaywrightSetupVisible =
     isPlaywrightSetupRequired || isPlaywrightCheckLoading;
 
-  // Check if browser streaming feature is enabled
-  const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
-
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
@@ -1295,25 +1292,21 @@ export default function ChatPage() {
                   <FileText className="h-3 w-3 mr-1" />
                   Artifact
                 </Button>
-                {isBrowserStreamingEnabled && (
-                  <>
-                    <div className="w-px h-4 bg-border" />
-                    <Button
-                      variant={
-                        isBrowserPanelOpen && !isPlaywrightSetupVisible
-                          ? "secondary"
-                          : "ghost"
-                      }
-                      size="sm"
-                      onClick={toggleBrowserPanel}
-                      className="text-xs"
-                      disabled={isPlaywrightSetupVisible}
-                    >
-                      <Globe className="h-3 w-3 mr-1" />
-                      Browser
-                    </Button>
-                  </>
-                )}
+                <div className="w-px h-4 bg-border" />
+                <Button
+                  variant={
+                    isBrowserPanelOpen && !isPlaywrightSetupVisible
+                      ? "secondary"
+                      : "ghost"
+                  }
+                  size="sm"
+                  onClick={toggleBrowserPanel}
+                  className="text-xs"
+                  disabled={isPlaywrightSetupVisible}
+                >
+                  <Globe className="h-3 w-3 mr-1" />
+                  Browser
+                </Button>
               </div>
               {/* Right side - mobile: 3-dot dropdown */}
               <div className="flex md:hidden items-center gap-2 flex-shrink-0">
@@ -1351,17 +1344,15 @@ export default function ChatPage() {
                       <FileText className="h-4 w-4" />
                       {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
                     </DropdownMenuItem>
-                    {isBrowserStreamingEnabled && (
-                      <DropdownMenuItem
-                        onSelect={toggleBrowserPanel}
-                        disabled={isPlaywrightSetupVisible}
-                      >
-                        <Globe className="h-4 w-4" />
-                        {isBrowserPanelOpen && !isPlaywrightSetupVisible
-                          ? "Hide Browser"
-                          : "Show Browser"}
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem
+                      onSelect={toggleBrowserPanel}
+                      disabled={isPlaywrightSetupVisible}
+                    >
+                      <Globe className="h-4 w-4" />
+                      {isBrowserPanelOpen && !isPlaywrightSetupVisible
+                        ? "Hide Browser"
+                        : "Show Browser"}
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1370,17 +1361,13 @@ export default function ChatPage() {
 
           {/* Mobile: Inline artifact/browser panels below header */}
           {(isArtifactOpen ||
-            (isBrowserPanelOpen &&
-              isBrowserStreamingEnabled &&
-              !isPlaywrightSetupVisible)) && (
+            (isBrowserPanelOpen && !isPlaywrightSetupVisible)) && (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
               {isArtifactOpen && (
                 <div
                   className={cn(
                     "min-h-0 overflow-auto",
-                    isBrowserPanelOpen &&
-                      isBrowserStreamingEnabled &&
-                      !isPlaywrightSetupVisible
+                    isBrowserPanelOpen && !isPlaywrightSetupVisible
                       ? "h-1/2 border-b"
                       : "flex-1",
                   )}
@@ -1393,31 +1380,29 @@ export default function ChatPage() {
                   />
                 </div>
               )}
-              {isBrowserPanelOpen &&
-                isBrowserStreamingEnabled &&
-                !isPlaywrightSetupVisible && (
-                  <div
-                    className={cn(
-                      "min-h-0 overflow-auto",
-                      isArtifactOpen ? "h-1/2" : "flex-1",
-                    )}
-                  >
-                    <BrowserPanel
-                      isOpen={true}
-                      onClose={closeBrowserPanel}
-                      conversationId={conversationId}
-                      agentId={browserToolsAgentId}
-                      onCreateConversationWithUrl={
-                        handleCreateConversationWithUrl
-                      }
-                      isCreatingConversation={
-                        createConversationMutation.isPending
-                      }
-                      initialNavigateUrl={pendingBrowserUrl}
-                      onInitialNavigateComplete={handleInitialNavigateComplete}
-                    />
-                  </div>
-                )}
+              {isBrowserPanelOpen && !isPlaywrightSetupVisible && (
+                <div
+                  className={cn(
+                    "min-h-0 overflow-auto",
+                    isArtifactOpen ? "h-1/2" : "flex-1",
+                  )}
+                >
+                  <BrowserPanel
+                    isOpen={true}
+                    onClose={closeBrowserPanel}
+                    conversationId={conversationId}
+                    agentId={browserToolsAgentId}
+                    onCreateConversationWithUrl={
+                      handleCreateConversationWithUrl
+                    }
+                    isCreatingConversation={
+                      createConversationMutation.isPending
+                    }
+                    initialNavigateUrl={pendingBrowserUrl}
+                    onInitialNavigateComplete={handleInitialNavigateComplete}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1426,9 +1411,7 @@ export default function ChatPage() {
             className={cn(
               "flex-1 overflow-y-auto relative",
               (isArtifactOpen ||
-                (isBrowserPanelOpen &&
-                  isBrowserStreamingEnabled &&
-                  !isPlaywrightSetupVisible)) &&
+                (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
                 "hidden md:block",
             )}
           >
@@ -1634,11 +1617,7 @@ export default function ChatPage() {
           artifact={conversation?.artifact}
           isArtifactOpen={isArtifactOpen}
           onArtifactToggle={toggleArtifactPanel}
-          isBrowserOpen={
-            isBrowserPanelOpen &&
-            isBrowserStreamingEnabled &&
-            !isPlaywrightSetupVisible
-          }
+          isBrowserOpen={isBrowserPanelOpen && !isPlaywrightSetupVisible}
           onBrowserClose={closeBrowserPanel}
           conversationId={conversationId}
           agentId={browserToolsAgentId}

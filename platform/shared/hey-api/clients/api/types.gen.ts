@@ -21188,13 +21188,15 @@ export type GetConfigResponses = {
      * Default Response
      */
     200: {
+        enterpriseFeatures: {
+            core: boolean;
+        };
         features: {
-            'orchestrator-k8s-runtime': boolean;
+            orchestratorK8sRuntime: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
-            browserStreamingEnabled: boolean;
             incomingEmail: {
                 enabled: boolean;
                 provider?: 'outlook';

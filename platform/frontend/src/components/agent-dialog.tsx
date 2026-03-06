@@ -106,7 +106,7 @@ import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { cn } from "@/lib/utils";
 
-const { useIdentityProviders } = config.enterpriseLicenseActivated
+const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
     await import("@/lib/identity-provider.query.ee")
   : {

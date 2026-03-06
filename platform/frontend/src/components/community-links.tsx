@@ -14,7 +14,7 @@ export const COMMUNITY_BUG_REPORT_URL =
  * e.g. on the login page. Only renders in community edition.
  */
 export function CommunityLinks() {
-  if (config.enterpriseLicenseActivated) {
+  if (config.enterpriseFeatures.core) {
     return null;
   }
 

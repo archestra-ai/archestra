@@ -555,84 +555,7 @@ describe("McpClient", () => {
     });
 
     describe("Concurrency limiter", () => {
-      test("bypasses limiter when browser streaming is disabled", async () => {
-        const originalBrowserStreaming =
-          config.features.browserStreamingEnabled;
-        config.features.browserStreamingEnabled = false;
-
-        const clientWithInternals = mcpClient as unknown as {
-          connectionLimiter: {
-            runWithLimit: (
-              connectionKey: string,
-              limit: number,
-              fn: () => Promise<unknown>,
-            ) => Promise<unknown>;
-          };
-          getTransport: (
-            catalogItem: unknown,
-            targetLocalMcpServerId: string,
-            secrets: Record<string, unknown>,
-          ) => Promise<unknown>;
-          getTransportWithKind: (
-            catalogItem: unknown,
-            targetLocalMcpServerId: string,
-            secrets: Record<string, unknown>,
-            transportKind: "stdio" | "http",
-          ) => Promise<unknown>;
-        };
-
-        const runWithLimitSpy = vi.spyOn(
-          clientWithInternals.connectionLimiter,
-          "runWithLimit",
-        );
-        const getTransportSpy = vi.spyOn(clientWithInternals, "getTransport");
-
-        try {
-          const tool = await ToolModel.createToolIfNotExists({
-            name: "github-mcp-server__limiter_disabled",
-            description: "Limiter disabled tool",
-            parameters: {},
-            catalogId,
-          });
-
-          await AgentToolModel.create(agentId, tool.id, {
-            credentialSourceMcpServerId: mcpServerId,
-          });
-
-          mockCallTool.mockResolvedValueOnce({
-            content: [{ type: "text", text: "Limiter disabled" }],
-            isError: false,
-          });
-
-          const toolCall = {
-            id: "call_limiter_disabled",
-            name: "github-mcp-server__limiter_disabled",
-            arguments: {},
-          };
-
-          const result = await mcpClient.executeToolCall(toolCall, agentId);
-
-          expect(runWithLimitSpy).not.toHaveBeenCalled();
-          expect(getTransportSpy).toHaveBeenCalled();
-
-          expect(result).toEqual({
-            id: "call_limiter_disabled",
-            content: [{ type: "text", text: "Limiter disabled" }],
-            isError: false,
-            name: "github-mcp-server__limiter_disabled",
-          });
-        } finally {
-          config.features.browserStreamingEnabled = originalBrowserStreaming;
-          runWithLimitSpy.mockRestore();
-          getTransportSpy.mockRestore();
-        }
-      });
-
-      test("limits HTTP concurrency to 4 when browser streaming is enabled", async () => {
-        const originalBrowserStreaming =
-          config.features.browserStreamingEnabled;
-        config.features.browserStreamingEnabled = true;
-
+      test("limits HTTP concurrency to 4", async () => {
         const clientWithInternals = mcpClient as unknown as {
           connectionLimiter: {
             runWithLimit: (
@@ -701,7 +624,6 @@ describe("McpClient", () => {
             name: "github-mcp-server__limiter_http",
           });
         } finally {
-          config.features.browserStreamingEnabled = originalBrowserStreaming;
           runWithLimitSpy.mockRestore();
           getTransportSpy.mockRestore();
           getTransportWithKindSpy.mockRestore();
@@ -946,11 +868,7 @@ describe("McpClient", () => {
         });
       });
 
-      test("limits stdio concurrency to 1 when browser streaming is enabled", async () => {
-        const originalBrowserStreaming =
-          config.features.browserStreamingEnabled;
-        config.features.browserStreamingEnabled = true;
-
+      test("limits stdio concurrency to 1", async () => {
         const clientWithInternals = mcpClient as unknown as {
           connectionLimiter: {
             runWithLimit: (
@@ -1010,7 +928,6 @@ describe("McpClient", () => {
             isError: false,
           });
         } finally {
-          config.features.browserStreamingEnabled = originalBrowserStreaming;
           runWithLimitSpy.mockRestore();
         }
       });

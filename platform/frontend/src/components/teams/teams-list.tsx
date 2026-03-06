@@ -47,7 +47,7 @@ const TeamVaultFolderDialog = lazy(
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
 
-const { TeamExternalGroupsDialog } = config.enterpriseLicenseActivated
+const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
     await import("./team-external-groups-dialog.ee")
   : {
@@ -253,7 +253,7 @@ export function TeamsList() {
                         <TooltipContent>Configure Vault Folder</TooltipContent>
                       </Tooltip>
                     )}
-                    {config.enterpriseLicenseActivated && (
+                    {config.enterpriseFeatures.core && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <PermissionButton

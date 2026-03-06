@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.0.57"
+    "version": "1.0.58"
   },
   "components": {
     "schemas": {
@@ -71271,10 +71271,22 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "enterpriseFeatures": {
+                      "type": "object",
+                      "properties": {
+                        "core": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "core"
+                      ],
+                      "additionalProperties": false
+                    },
                     "features": {
                       "type": "object",
                       "properties": {
-                        "orchestrator-k8s-runtime": {
+                        "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
                         "byosEnabled": {
@@ -71297,9 +71309,6 @@
                             "permissive",
                             "restrictive"
                           ]
-                        },
-                        "browserStreamingEnabled": {
-                          "type": "boolean"
                         },
                         "incomingEmail": {
                           "type": "object",
@@ -71363,12 +71372,11 @@
                         }
                       },
                       "required": [
-                        "orchestrator-k8s-runtime",
+                        "orchestratorK8sRuntime",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
-                        "browserStreamingEnabled",
                         "incomingEmail",
                         "knowledgeGraph",
                         "mcpServerBaseImage",
@@ -71406,6 +71414,7 @@
                     }
                   },
                   "required": [
+                    "enterpriseFeatures",
                     "features",
                     "providerBaseUrls"
                   ],

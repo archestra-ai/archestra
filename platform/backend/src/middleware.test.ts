@@ -39,10 +39,10 @@ const createTestFastify = () => {
 
 describe.sequential("enterpriseLicenseMiddleware", () => {
   let fastify: ReturnType<typeof createTestFastify>;
-  const originalValue = config.enterpriseLicenseActivated;
+  const originalValue = config.enterpriseFeatures.core;
 
   const setEnterpriseLicenseActivated = (value: boolean) => {
-    Object.defineProperty(config, "enterpriseLicenseActivated", {
+    Object.defineProperty(config.enterpriseFeatures, "core", {
       value,
       writable: true,
       configurable: true,

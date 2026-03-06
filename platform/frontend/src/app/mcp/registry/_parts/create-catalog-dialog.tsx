@@ -47,7 +47,7 @@ export function CreateCatalogDialog({
   const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
   const createMutation = useCreateInternalMcpCatalogItem();
   const { data: catalogItems } = useInternalMcpCatalog();
-  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+  const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
 
   const handleClose = () => {
     setActiveTab("archestra-catalog");

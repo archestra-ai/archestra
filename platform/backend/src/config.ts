@@ -677,15 +677,9 @@ const config = {
       return "anthropic";
     })(),
   },
-  features: {
-    /**
-     * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
-     * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
-     */
-    browserStreamingEnabled: true,
+  enterpriseFeatures: {
+    core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   },
-  enterpriseLicenseActivated:
-    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,
@@ -697,7 +691,7 @@ const config = {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.57", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.58", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

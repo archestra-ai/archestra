@@ -40,7 +40,7 @@ const enterpriseLicenseMiddlewarePlugin: FastifyPluginAsync = async (
 ) => {
   fastify.addHook("preHandler", async (request) => {
     if (isEnterpriseOnlyRoute(request.url)) {
-      if (!config.enterpriseLicenseActivated) {
+      if (!config.enterpriseFeatures.core) {
         // Provide feature-specific error messages
         if (request.url.startsWith(IDENTITY_PROVIDERS_API_PREFIX)) {
           throw new ApiError(

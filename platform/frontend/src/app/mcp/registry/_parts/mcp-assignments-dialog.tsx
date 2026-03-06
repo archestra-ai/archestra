@@ -439,6 +439,7 @@ export function McpAssignmentsDialog({
                           currentCredentialId={assignment?.credentialId ?? null}
                           pendingChanges={pending}
                           onPendingChanges={updatePendingChanges}
+                          onRemove={handleProfileToggle}
                         />
                       );
                     })}
@@ -480,6 +481,7 @@ export function McpAssignmentsDialog({
                           currentCredentialId={assignment?.credentialId ?? null}
                           pendingChanges={pending}
                           onPendingChanges={updatePendingChanges}
+                          onRemove={handleProfileToggle}
                           showStatusDot
                         />
                       );
@@ -526,6 +528,8 @@ interface ProfileAssignmentPillProps {
   currentCredentialId: string | null;
   pendingChanges?: PendingChanges;
   onPendingChanges: (profileId: string, changes: PendingChanges) => void;
+  /** Called when the user clicks the remove button on the pill */
+  onRemove: (profileId: string) => void;
   showStatusDot?: boolean;
 }
 
@@ -538,6 +542,7 @@ function ProfileAssignmentPill({
   currentCredentialId,
   pendingChanges,
   onPendingChanges,
+  onRemove,
   showStatusDot,
 }: ProfileAssignmentPillProps) {
   const [open, setOpen] = useState(false);
@@ -610,27 +615,44 @@ function ProfileAssignmentPill({
       }}
       modal
     >
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={cn(
-            "h-8 px-3 gap-1.5 text-xs max-w-[250px]",
-            hasNoAssignments && "border-dashed opacity-50",
-            hasChanges && "border-primary",
-          )}
-        >
-          {showStatusDot && !hasNoAssignments && (
-            <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-          )}
-          {showStatusDot && <Bot className="h-3 w-3 shrink-0" />}
-          <span className="font-medium truncate">{profile.name}</span>
-          <span className="text-muted-foreground shrink-0">
-            ({toolCount}/{totalTools})
-          </span>
-          <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 px-3 gap-1.5 text-xs max-w-[250px]",
+              hasNoAssignments && "border-dashed opacity-50",
+              hasNoAssignments && "rounded-r-none border-r-0",
+              hasChanges && "border-primary",
+            )}
+          >
+            {showStatusDot && !hasNoAssignments && (
+              <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+            )}
+            {showStatusDot && <Bot className="h-3 w-3 shrink-0" />}
+            <span className="font-medium truncate">{profile.name}</span>
+            <span className="text-muted-foreground shrink-0">
+              ({toolCount}/{totalTools})
+            </span>
+            <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
+          </Button>
+        </PopoverTrigger>
+        {hasNoAssignments && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(profile.id);
+            }}
+            aria-label={`Remove ${profile.name}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
       <PopoverContent
         className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"

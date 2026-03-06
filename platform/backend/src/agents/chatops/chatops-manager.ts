@@ -312,6 +312,11 @@ export class ChatOpsManager {
     const message = await provider.parseWebhookNotification(body, headers);
     if (!message) return;
 
+    // Notify about missing scopes (rate-limited, at most once per 30 days)
+    if (provider.hasMissingScopes()) {
+      provider.notifyMissingScopes(message).catch(() => {});
+    }
+
     // Discover channels in background
     if (message.workspaceId) {
       this.discoverChannels({

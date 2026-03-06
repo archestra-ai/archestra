@@ -1,11 +1,10 @@
 "use client";
 
-import {
-  E2eTestId,
-  type McpExecClosedMessage,
-  type McpExecErrorMessage,
-  type McpExecOutputMessage,
-  type McpExecStartedMessage,
+import type {
+  McpExecClosedMessage,
+  McpExecErrorMessage,
+  McpExecOutputMessage,
+  McpExecStartedMessage,
 } from "@shared";
 import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";

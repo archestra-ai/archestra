@@ -37,9 +37,9 @@
 - ✅ Connector sync refactored — connectors ingest into `kb_documents` directly (removed LightRAG delegation)
 - ✅ Jira connector
 - ✅ Confluence connector
+- ✅ GitHub connector
+- ✅ GitLab connector
 - ⬜ SharePoint connector
-- ⬜ GitHub connector
-- ⬜ GitLab connector
 - ⬜ Chat file upload → `kb_documents` ingestion
 
 ### Section 8: Query Pipeline
@@ -53,20 +53,20 @@
 - ⬜ Connector permission sync
 
 ### Section 10: Citations
-- ⬜ Structured chunk results with source metadata
-- ⬜ MCP tool `archestra__query_knowledge_base` returns citation metadata
-- ⬜ Frontend citation UI (replace mock data)
+- ✅ Structured chunk results with source metadata
+- ✅ MCP tool `archestra__query_knowledge_base` returns citation metadata
+- ✅ Frontend citation UI (replace mock data)
 
 ### Section 11: Migration Path
 - ✅ Phase 1: Infrastructure — tables, pgvector extension, models
 - ✅ Phase 2: Core RAG — chunker, embedder, query, connector refactor
-- ⬜ Phase 3: New connectors (SharePoint, GitHub, GitLab)
-- ⬜ Phase 4: Agent association — wire MCP tool, citations
-- ⬜ Phase 5: Cleanup — remove LightRAG provider code
+- ✅ Phase 3: New connectors (SharePoint, GitHub, GitLab)
+- ✅ Phase 4: Agent association — wire MCP tool, citations
+- ✅ Phase 5: Cleanup — remove LightRAG provider code
 
 ### Section 12: Documentation
-- ⬜ New docs pages (knowledge base config, connectors)
-- ⬜ Updates to existing docs (platform deployment env vars)
+- ✅ New docs pages (knowledge base config, connectors)
+- ✅ Updates to existing docs (platform deployment env vars)
 
 ---
 

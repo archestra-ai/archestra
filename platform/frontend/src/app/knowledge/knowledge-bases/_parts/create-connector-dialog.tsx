@@ -31,10 +31,12 @@ import { Input } from "@/components/ui/input";
 import { useCreateConnector } from "@/lib/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { GithubConfigFields } from "./github-config-fields";
+import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 
-type ConnectorType = "jira" | "confluence";
+type ConnectorType = "jira" | "confluence" | "github" | "gitlab";
 
 const CONNECTOR_OPTIONS: {
   type: ConnectorType;
@@ -50,6 +52,16 @@ const CONNECTOR_OPTIONS: {
     type: "confluence",
     label: "Confluence",
     description: "Sync pages and spaces from Confluence",
+  },
+  {
+    type: "github",
+    label: "GitHub",
+    description: "Sync issues and pull requests from GitHub",
+  },
+  {
+    type: "gitlab",
+    label: "GitLab",
+    description: "Sync issues and merge requests from GitLab",
   },
 ];
 
@@ -91,7 +103,13 @@ export function CreateConnectorDialog({
   const handleSelectType = (type: ConnectorType) => {
     setSelectedType(type);
     form.setValue("connectorType", type);
-    form.setValue("config", { type, isCloud: true });
+    const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
+      jira: { type, isCloud: true },
+      confluence: { type, isCloud: true },
+      github: { type, githubUrl: "https://api.github.com" },
+      gitlab: { type, gitlabUrl: "https://gitlab.com" },
+    };
+    form.setValue("config", defaultConfigs[type]);
     setStep("configure");
   };
 
@@ -129,12 +147,8 @@ export function CreateConnectorDialog({
     onOpenChange(isOpen);
   };
 
-  const urlFieldName =
-    connectorType === "jira" ? "config.jiraBaseUrl" : "config.confluenceUrl";
-  const urlPlaceholder =
-    connectorType === "jira"
-      ? "https://your-domain.atlassian.net"
-      : "https://your-domain.atlassian.net/wiki";
+  const urlConfig = getUrlConfig(connectorType);
+  const needsEmail = connectorType === "jira" || connectorType === "confluence";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -216,57 +230,91 @@ export function CreateConnectorDialog({
 
                 <FormField
                   control={form.control}
-                  name={urlFieldName}
-                  rules={{ required: "URL is required" }}
+                  // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+                  name={urlConfig.fieldName as any}
+                  rules={{ required: `${urlConfig.label} is required` }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>URL</FormLabel>
+                      <FormLabel>{urlConfig.label}</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder={urlPlaceholder}
+                          placeholder={urlConfig.placeholder}
                           {...field}
                           value={(field.value as string) ?? ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Your {connectorType === "jira" ? "Jira" : "Confluence"}{" "}
-                        instance URL.
-                      </FormDescription>
+                      <FormDescription>{urlConfig.description}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="email"
-                  rules={{ required: "Email is required" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="email"
-                          placeholder="user@example.com"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {connectorType === "github" && (
+                  <FormField
+                    control={form.control}
+                    name="config.owner"
+                    rules={{ required: "Owner is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Owner</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="my-org"
+                            {...field}
+                            value={(field.value as string) ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          GitHub organization or username.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {needsEmail && (
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    rules={{ required: "Email is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="user@example.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}
                   name="apiToken"
-                  rules={{ required: "API token is required" }}
+                  rules={{
+                    required: needsEmail
+                      ? "API token is required"
+                      : "Personal access token is required",
+                  }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>API Token</FormLabel>
+                      <FormLabel>
+                        {needsEmail ? "API Token" : "Personal Access Token"}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="Your API token"
+                          placeholder={
+                            needsEmail
+                              ? "Your API token"
+                              : "Your personal access token"
+                          }
                           {...field}
                         />
                       </FormControl>
@@ -288,6 +336,12 @@ export function CreateConnectorDialog({
                     {connectorType === "confluence" && (
                       <ConfluenceConfigFields form={form} hideUrl />
                     )}
+                    {connectorType === "github" && (
+                      <GithubConfigFields form={form} hideUrl />
+                    )}
+                    {connectorType === "gitlab" && (
+                      <GitlabConfigFields form={form} hideUrl />
+                    )}
                   </CollapsibleContent>
                 </Collapsible>
 
@@ -308,4 +362,43 @@ export function CreateConnectorDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function getUrlConfig(type: ConnectorType): {
+  fieldName: string;
+  label: string;
+  placeholder: string;
+  description: string;
+} {
+  switch (type) {
+    case "jira":
+      return {
+        fieldName: "config.jiraBaseUrl",
+        label: "URL",
+        placeholder: "https://your-domain.atlassian.net",
+        description: "Your Jira instance URL.",
+      };
+    case "confluence":
+      return {
+        fieldName: "config.confluenceUrl",
+        label: "URL",
+        placeholder: "https://your-domain.atlassian.net/wiki",
+        description: "Your Confluence instance URL.",
+      };
+    case "github":
+      return {
+        fieldName: "config.githubUrl",
+        label: "GitHub API URL",
+        placeholder: "https://api.github.com",
+        description:
+          "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
+      };
+    case "gitlab":
+      return {
+        fieldName: "config.gitlabUrl",
+        label: "GitLab URL",
+        placeholder: "https://gitlab.com",
+        description: "Use https://gitlab.com or your self-hosted GitLab URL.",
+      };
+  }
 }

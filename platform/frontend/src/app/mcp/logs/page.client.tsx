@@ -109,9 +109,9 @@ function McpToolCallsTable({
   const handleProfileFilterChange = useCallback(
     (value: string) => {
       setProfileFilter(value);
-      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
       updateUrlParams({
         profileId: value === "all" ? null : value,
+        page: "1",
       });
     },
     [updateUrlParams],
@@ -121,9 +121,9 @@ function McpToolCallsTable({
   const handleSearchChange = useCallback(
     (value: string) => {
       setSearchFilter(value);
-      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
       updateUrlParams({
         search: value || null,
+        page: "1",
       });
     },
     [updateUrlParams],
@@ -135,10 +135,10 @@ function McpToolCallsTable({
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
         updateUrlParams({
           startDate,
           endDate,
+          page: "1",
         });
       },
       [updateUrlParams],

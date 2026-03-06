@@ -2,6 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
   loadKubeConfig,
+  sanitizeLabelValue,
   validateKubeconfig,
 } from "@/k8s/shared";
 import logger from "@/logging";
@@ -561,7 +562,7 @@ export class McpServerRuntimeManager {
     }
 
     const containerName = k8sDeployment.containerName;
-    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
+    const sanitizedId = sanitizeLabelValue(mcpServerId);
     return {
       logs: await k8sDeployment.getRecentLogs(lines),
       containerName,
@@ -598,7 +599,7 @@ export class McpServerRuntimeManager {
    * Get the kubectl command for streaming logs from an MCP server
    */
   getMcpServerLogsCommand(mcpServerId: string, lines: number = 100): string {
-    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
+    const sanitizedId = sanitizeLabelValue(mcpServerId);
     return `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
   }
 
@@ -606,7 +607,7 @@ export class McpServerRuntimeManager {
    * Get the kubectl command for describing pods for an MCP server
    */
   getMcpServerDescribeCommand(mcpServerId: string): string {
-    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
+    const sanitizedId = sanitizeLabelValue(mcpServerId);
     return `kubectl describe pods -n ${this.namespace} -l mcp-server-id=${sanitizedId}`;
   }
 
@@ -782,7 +783,7 @@ export class McpServerRuntimeManager {
             body: {
               metadata: {
                 labels: {
-                  "team-id": K8sDeployment.sanitizeLabelValue(teamId),
+                  "team-id": sanitizeLabelValue(teamId),
                 },
               },
             },

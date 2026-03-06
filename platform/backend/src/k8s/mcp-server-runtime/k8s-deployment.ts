@@ -245,7 +245,7 @@ export default class K8sDeployment {
    * Creates a deployment name in the format "mcp-<slugified-name>".
    */
   static constructDeploymentName(mcpServer: McpServer): string {
-    const slugified = K8sDeployment.ensureStringIsRfc1123Compliant(
+    const slugified = ensureStringIsRfc1123Compliant(
       mcpServer.name,
     );
     return `mcp-${slugified}`.substring(0, 253);
@@ -258,29 +258,6 @@ export default class K8sDeployment {
    */
   static constructK8sSecretName(mcpServerId: string): string {
     return `mcp-server-${mcpServerId}-secrets`;
-  }
-
-  /**
-   * Ensures a string is RFC 1123 compliant for Kubernetes DNS subdomain names and label values.
-   *
-   * According to RFC 1123, Kubernetes DNS subdomain names must:
-   * - contain no more than 253 characters
-   * - contain only lowercase alphanumeric characters, '-' or '.'
-   * - start with an alphanumeric character
-   * - end with an alphanumeric character
-   */
-  static ensureStringIsRfc1123Compliant(input: string): string {
-    return ensureStringIsRfc1123Compliant(input);
-  }
-
-  static sanitizeLabelValue(value: string): string {
-    return sanitizeLabelValue(value);
-  }
-
-  static sanitizeMetadataLabels(
-    labels: Record<string, string>,
-  ): Record<string, string> {
-    return sanitizeMetadataLabels(labels);
   }
 
   /**
@@ -328,7 +305,7 @@ export default class K8sDeployment {
       const secret: k8s.V1Secret = {
         metadata: {
           name: k8sSecretName,
-          labels: K8sDeployment.sanitizeMetadataLabels({
+          labels: sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
             "mcp-server-name": this.mcpServer.name,
@@ -529,10 +506,10 @@ export default class K8sDeployment {
 
       // Use sanitized server + username in secret name for kubectl traceability and uniqueness
       // K8s secret names must be DNS-1123 subdomain: max 253 chars, [a-z0-9.-], start/end alphanumeric
-      const sanitizedServer = K8sDeployment.ensureStringIsRfc1123Compliant(
+      const sanitizedServer = ensureStringIsRfc1123Compliant(
         entry.server,
       ).slice(0, 40);
-      const sanitizedUsername = K8sDeployment.ensureStringIsRfc1123Compliant(
+      const sanitizedUsername = ensureStringIsRfc1123Compliant(
         entry.username,
       ).slice(0, 20);
       const secretName =
@@ -557,7 +534,7 @@ export default class K8sDeployment {
       const k8sSecret: k8s.V1Secret = {
         metadata: {
           name: secretName,
-          labels: K8sDeployment.sanitizeMetadataLabels({
+          labels: sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
             type: "regcred",
@@ -623,7 +600,7 @@ export default class K8sDeployment {
    */
   async deleteDockerRegistrySecrets(): Promise<void> {
     try {
-      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
       const labelSelector = `mcp-server-id=${sanitizedId},type=regcred`;
 
       const secrets = await this.k8sApi.listNamespacedSecret({
@@ -688,7 +665,7 @@ export default class K8sDeployment {
    * These labels are used for identification and cannot be overridden by user configuration.
    */
   private getSystemLabels(): Record<string, string> {
-    return K8sDeployment.sanitizeMetadataLabels({
+    return sanitizeMetadataLabels({
       app: "mcp-server",
       "mcp-server-id": this.mcpServer.id,
       "mcp-server-name": this.mcpServer.name,
@@ -959,7 +936,7 @@ export default class K8sDeployment {
     );
 
     // System-managed labels that must always be present
-    const labels = K8sDeployment.sanitizeMetadataLabels({
+    const labels = sanitizeMetadataLabels({
       app: "mcp-server",
       "mcp-server-id": this.mcpServer.id,
       "mcp-server-name": this.mcpServer.name,
@@ -1580,7 +1557,7 @@ export default class K8sDeployment {
    */
   private async findPodForDeployment(): Promise<k8s.V1Pod | undefined> {
     try {
-      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -1610,7 +1587,7 @@ export default class K8sDeployment {
    */
   private async findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined> {
     try {
-      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -1632,7 +1609,7 @@ export default class K8sDeployment {
    */
   async getDeploymentEvents(): Promise<string> {
     try {
-      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
 
       // Get events from the namespace, filtering to those related to our deployment or pods
       const events = await this.k8sApi.listNamespacedEvent({
@@ -1704,7 +1681,7 @@ export default class K8sDeployment {
         namespace: this.namespace,
       });
 
-      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
 
       // Filter recent events (last 2 minutes) related to our deployment
       const twoMinutesAgo = Date.now() - TimeInMs.Minute * 2;
@@ -1933,13 +1910,13 @@ export default class K8sDeployment {
       const serviceSpec: k8s.V1Service = {
         metadata: {
           name: serviceName,
-          labels: K8sDeployment.sanitizeMetadataLabels({
+          labels: sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
           }),
         },
         spec: {
-          selector: K8sDeployment.sanitizeMetadataLabels({
+          selector: sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
           }),
@@ -2033,7 +2010,7 @@ export default class K8sDeployment {
         }
 
         // Check for failures in latest pods
-        const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+        const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
         const pods = await this.k8sApi.listNamespacedPod({
           namespace: this.namespace,
           labelSelector: `mcp-server-id=${sanitizedId}`,

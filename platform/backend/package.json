@@ -49,6 +49,7 @@
     "@better-auth/core": "1.4.19",
     "@better-auth/oauth-provider": "1.4.19",
     "@better-auth/sso": "1.4.19",
+    "@chonkiejs/core": "^0.0.7",
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "fastify/fastify-http-proxy#bbe97fb55de3f7e3d15f57791142f7d84abf5a96",

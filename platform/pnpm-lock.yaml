@@ -113,6 +113,9 @@ importers:
       '@better-auth/sso':
         specifier: 1.4.19
         version: 1.4.19(@better-auth/utils@0.3.0)(better-auth@1.4.19(drizzle-kit@0.31.8)(drizzle-orm@0.45.1(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(kysely@0.28.11)(pg@8.18.0))(next@16.1.6(@opentelemetry/api@1.9.0)(@playwright/test@1.58.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.18.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(jiti@2.6.1)(jsdom@28.0.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.1.8(zod@4.3.6))
+      '@chonkiejs/core':
+        specifier: ^0.0.7
+        version: 0.0.7
       '@fastify/cors':
         specifier: ^11.1.0
         version: 11.2.0
@@ -1317,6 +1320,12 @@ packages:
 
   '@chevrotain/utils@11.0.3':
     resolution: {integrity: sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ==}
+
+  '@chonkiejs/chunk@0.9.3':
+    resolution: {integrity: sha512-uUOeoFGY3s6kzAoKskI50weZN0zvW3oLwUijA1uX7Wxuy9yZStF2IvGuXRigMgP2g/L85lsotYGkjpBMLjQnrg==}
+
+  '@chonkiejs/core@0.0.7':
+    resolution: {integrity: sha512-R17OW9TT1x7B6lDKTCaMd6NluAObleN/cCQtUbMK2UcFOguJtQz/cL0n1t0AzJWBFMVgYP8EcqTFn/fcKhzPiA==}
 
   '@csstools/color-helpers@6.0.1':
     resolution: {integrity: sha512-NmXRccUJMk2AWA5A7e5a//3bCIMyOu2hAtdRYrhPPHjDxINuCwX1w6rnIZ4xjLcp0ayv6h8Pc3X0eJUGiAAXHQ==}
@@ -9905,6 +9914,12 @@ snapshots:
   '@chevrotain/types@11.0.3': {}
 
   '@chevrotain/utils@11.0.3': {}
+
+  '@chonkiejs/chunk@0.9.3': {}
+
+  '@chonkiejs/core@0.0.7':
+    dependencies:
+      '@chonkiejs/chunk': 0.9.3
 
   '@csstools/color-helpers@6.0.1': {}
 

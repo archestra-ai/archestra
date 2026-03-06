@@ -3,6 +3,7 @@ import type pino from "pino";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
+  KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
@@ -14,6 +15,7 @@ import type {
   ConnectorDocument,
 } from "@/types/knowledge-connector";
 import { buildDocumentAcl } from "./acl";
+import { chunkDocument } from "./chunker";
 import { getConnector } from "./connectors/registry";
 
 /**
@@ -259,6 +261,17 @@ class ConnectorSyncService {
         embeddingStatus: "pending",
       });
 
+      // Re-chunk: content changed, so replace stale chunks
+      await KbChunkModel.deleteByDocument(existingBySource.id);
+      await this.chunkAndStore({
+        documentId: existingBySource.id,
+        knowledgeBaseId: knowledgeBase.id,
+        title: doc.title,
+        content: doc.content,
+        acl,
+        log,
+      });
+
       log.debug(
         {
           documentId: doc.id,
@@ -271,7 +284,7 @@ class ConnectorSyncService {
     }
 
     // Create new document
-    await KbDocumentModel.create({
+    const created = await KbDocumentModel.create({
       knowledgeBaseId: knowledgeBase.id,
       organizationId: knowledgeBase.organizationId,
       sourceType: "connector",
@@ -288,6 +301,15 @@ class ConnectorSyncService {
       },
     });
 
+    await this.chunkAndStore({
+      documentId: created.id,
+      knowledgeBaseId: knowledgeBase.id,
+      title: doc.title,
+      content: doc.content,
+      acl,
+      log,
+    });
+
     log.debug(
       {
         documentId: doc.id,
@@ -296,6 +318,36 @@ class ConnectorSyncService {
       "[ConnectorSync] Document ingested into kb_documents",
     );
     return true;
+  }
+
+  private async chunkAndStore(params: {
+    documentId: string;
+    knowledgeBaseId: string;
+    title: string;
+    content: string;
+    acl: string[];
+    log: pino.Logger;
+  }): Promise<void> {
+    const { documentId, knowledgeBaseId, title, content, acl, log } = params;
+
+    const chunks = await chunkDocument({ title, content });
+
+    if (chunks.length === 0) return;
+
+    await KbChunkModel.insertMany(
+      chunks.map((chunk) => ({
+        documentId,
+        knowledgeBaseId,
+        content: chunk.content,
+        chunkIndex: chunk.chunkIndex,
+        acl,
+      })),
+    );
+
+    log.debug(
+      { documentId, chunkCount: chunks.length },
+      "[ConnectorSync] Document chunked and stored",
+    );
   }
 
   private async loadCredentials(

@@ -1,4 +1,10 @@
-import { index, pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  pgTable,
+  primaryKey,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 

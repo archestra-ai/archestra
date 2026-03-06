@@ -1,4 +1,5 @@
 import {
+  customType,
   index,
   integer,
   jsonb,
@@ -7,7 +8,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { customType } from "drizzle-orm/pg-core";
 import kbDocumentsTable from "./kb-document.ee";
 import knowledgeBasesTable from "./knowledge-base";
 
@@ -20,10 +20,7 @@ const vector = customType<{ data: number[]; driverParam: string }>({
   },
   fromDriver(value: unknown): number[] {
     const str = value as string;
-    return str
-      .slice(1, -1)
-      .split(",")
-      .map(Number);
+    return str.slice(1, -1).split(",").map(Number);
   },
 });
 

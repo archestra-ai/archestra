@@ -7,8 +7,8 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 import knowledgeBasesTable from "./knowledge-base";
+import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 const kbDocumentsTable = pgTable(
   "kb_documents",
@@ -18,9 +18,7 @@ const kbDocumentsTable = pgTable(
       .notNull()
       .references(() => knowledgeBasesTable.id, { onDelete: "cascade" }),
     organizationId: text("organization_id").notNull(),
-    sourceType: text("source_type")
-      .$type<"connector" | "api">()
-      .notNull(),
+    sourceType: text("source_type").$type<"connector" | "api">().notNull(),
     sourceId: text("source_id"),
     connectorId: uuid("connector_id").references(
       () => knowledgeBaseConnectorsTable.id,

@@ -1,5 +1,6 @@
 export * from "./account";
 export * from "./agent";
+export * from "./agent-connector-assignment.ee";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";
@@ -12,6 +13,8 @@ export * from "./identity-provider";
 export * from "./incoming-email";
 export * from "./interaction";
 export * from "./invitation";
+export * from "./kb-chunk.ee";
+export * from "./kb-document.ee";
 export * from "./knowledge-base";
 export * from "./knowledge-base-connector";
 export * from "./knowledge-connector";

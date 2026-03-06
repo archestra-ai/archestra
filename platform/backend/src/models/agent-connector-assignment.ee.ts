@@ -1,0 +1,69 @@
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import type { AgentConnectorAssignment } from "@/types";
+
+class AgentConnectorAssignmentModel {
+  static async findByAgent(
+    agentId: string,
+  ): Promise<AgentConnectorAssignment[]> {
+    return await db
+      .select()
+      .from(schema.agentConnectorAssignmentsTable)
+      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+  }
+
+  static async findByConnector(
+    connectorId: string,
+  ): Promise<AgentConnectorAssignment[]> {
+    return await db
+      .select()
+      .from(schema.agentConnectorAssignmentsTable)
+      .where(
+        eq(schema.agentConnectorAssignmentsTable.connectorId, connectorId),
+      );
+  }
+
+  static async assign(agentId: string, connectorId: string): Promise<void> {
+    await db
+      .insert(schema.agentConnectorAssignmentsTable)
+      .values({ agentId, connectorId })
+      .onConflictDoNothing();
+  }
+
+  static async unassign(
+    agentId: string,
+    connectorId: string,
+  ): Promise<boolean> {
+    const result = await db
+      .delete(schema.agentConnectorAssignmentsTable)
+      .where(
+        and(
+          eq(schema.agentConnectorAssignmentsTable.agentId, agentId),
+          eq(schema.agentConnectorAssignmentsTable.connectorId, connectorId),
+        ),
+      );
+
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  static async unassignAllFromAgent(agentId: string): Promise<number> {
+    const result = await db
+      .delete(schema.agentConnectorAssignmentsTable)
+      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+
+    return result.rowCount ?? 0;
+  }
+
+  static async getConnectorIds(agentId: string): Promise<string[]> {
+    const results = await db
+      .select({
+        connectorId: schema.agentConnectorAssignmentsTable.connectorId,
+      })
+      .from(schema.agentConnectorAssignmentsTable)
+      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+
+    return results.map((r) => r.connectorId);
+  }
+}
+
+export default AgentConnectorAssignmentModel;

@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
-import type { Attach } from "@kubernetes/client-node";
+import type { Attach, Exec } from "@kubernetes/client-node";
 import {
   type ImagePullSecretConfig,
   type LocalConfigSchema,
@@ -203,6 +203,7 @@ export default class K8sDeployment {
   private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
+  private k8sExec?: Exec;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
@@ -226,12 +227,14 @@ export default class K8sDeployment {
     catalogItem?: InternalMcpCatalog | null,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
+    k8sExec?: Exec,
   ) {
     this.mcpServer = mcpServer;
     this.k8sApi = k8sApi;
     this.k8sAppsApi = k8sAppsApi;
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
+    this.k8sExec = k8sExec;
     this.defaultNamespace = namespace;
     this.catalogItem = catalogItem;
     this.userConfigValues = userConfigValues;
@@ -2458,5 +2461,39 @@ export default class K8sDeployment {
    */
   getHttpEndpointUrl(): string | undefined {
     return this.httpEndpointUrl;
+  }
+
+  /**
+   * Exec into the container, spawning an interactive shell.
+   * Returns the K8s WebSocket for the caller to bridge to a browser WebSocket.
+   */
+  async execIntoContainer(
+    stdin: import("node:stream").Readable,
+    stdout: import("node:stream").Writable,
+    stderr: import("node:stream").Writable,
+    command: string[] = ["/bin/sh"],
+  ) {
+    if (!this.k8sExec) {
+      throw new Error("Kubernetes Exec client not initialized");
+    }
+
+    const pod = await this.findPodForDeployment();
+    if (!pod?.metadata?.name) {
+      throw new Error("No running pod found for this deployment");
+    }
+
+    const podName = pod.metadata.name;
+    const k8sWs = await this.k8sExec.exec(
+      this.namespace,
+      podName,
+      "mcp-server",
+      command,
+      stdout,
+      stderr,
+      stdin,
+      true, // tty
+    );
+
+    return { k8sWs, podName };
   }
 }

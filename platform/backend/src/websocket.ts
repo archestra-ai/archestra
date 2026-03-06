@@ -28,6 +28,19 @@ interface McpLogsSubscription {
   abortController: AbortController;
 }
 
+interface McpExecSubscription {
+  serverId: string;
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  k8sWs: {
+    readyState: number;
+    close: () => void;
+    on: (event: string, listener: (...args: unknown[]) => void) => void;
+    send: (data: Buffer | string) => void;
+  };
+}
+
 interface McpDeploymentStatusSubscription {
   interval: NodeJS.Timeout;
   lastStatuses: Record<string, McpDeploymentStatusEntry>;
@@ -49,6 +62,7 @@ type MessageHandler = (
 class WebSocketService {
   private wss: WebSocketServer | null = null;
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
+  private mcpExecSubscriptions: Map<WebSocket, McpExecSubscription> = new Map();
   private mcpDeploymentStatusSubscriptions: Map<
     WebSocket,
     McpDeploymentStatusSubscription
@@ -98,6 +112,34 @@ class WebSocketService {
     },
     unsubscribe_mcp_logs: (ws) => {
       this.unsubscribeMcpLogs(ws);
+    },
+    subscribe_mcp_exec: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_mcp_exec") return;
+      return this.handleSubscribeMcpExec(
+        ws,
+        message.payload.serverId,
+        clientContext,
+      );
+    },
+    unsubscribe_mcp_exec: (ws) => {
+      this.unsubscribeMcpExec(ws);
+    },
+    mcp_exec_input: (ws, message) => {
+      if (message.type !== "mcp_exec_input") return;
+      this.handleMcpExecInput(
+        ws,
+        message.payload.serverId,
+        message.payload.data,
+      );
+    },
+    mcp_exec_resize: (ws, message) => {
+      if (message.type !== "mcp_exec_resize") return;
+      this.handleMcpExecResize(
+        ws,
+        message.payload.serverId,
+        message.payload.cols,
+        message.payload.rows,
+      );
     },
     subscribe_mcp_deployment_statuses: (ws, _message, clientContext) => {
       return this.handleSubscribeMcpDeploymentStatuses(ws, clientContext);
@@ -176,6 +218,7 @@ class WebSocketService {
 
         ws.on("close", () => {
           this.unsubscribeMcpLogs(ws);
+          this.unsubscribeMcpExec(ws);
           this.unsubscribeMcpDeploymentStatuses(ws);
           logger.info(
             `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
@@ -186,6 +229,7 @@ class WebSocketService {
         ws.on("error", (error) => {
           logger.error({ error }, "WebSocket error");
           this.unsubscribeMcpLogs(ws);
+          this.unsubscribeMcpExec(ws);
           this.unsubscribeMcpDeploymentStatuses(ws);
           this.clientContexts.delete(ws);
         });
@@ -363,6 +407,158 @@ class WebSocketService {
         "MCP logs client unsubscribed",
       );
     }
+  }
+
+  private async handleSubscribeMcpExec(
+    ws: WebSocket,
+    serverId: string,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    this.unsubscribeMcpExec(ws);
+
+    const mcpServer = await McpServerModel.findById(
+      serverId,
+      clientContext.userId,
+      clientContext.userIsMcpServerAdmin,
+    );
+
+    if (!mcpServer) {
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: { serverId, error: "MCP server not found" },
+      });
+      return;
+    }
+
+    logger.info(
+      { serverId, userId: clientContext.userId },
+      "Exec session starting",
+    );
+
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+
+    try {
+      const { k8sWs, podName } =
+        await McpServerRuntimeManager.execIntoMcpServer(
+          serverId,
+          stdin,
+          stdout,
+          stderr,
+        );
+
+      this.mcpExecSubscriptions.set(ws, {
+        serverId,
+        stdin,
+        stdout,
+        stderr,
+        k8sWs,
+      });
+
+      const command = McpServerRuntimeManager.getExecCommand(serverId);
+      this.sendToClient(ws, {
+        type: "mcp_exec_started",
+        payload: { serverId, command, podName },
+      });
+
+      // Bridge K8s stdout/stderr -> client
+      stdout.on("data", (chunk: Buffer) => {
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_output",
+            payload: { serverId, data: chunk.toString() },
+          });
+        }
+      });
+
+      stderr.on("data", (chunk: Buffer) => {
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_output",
+            payload: { serverId, data: chunk.toString() },
+          });
+        }
+      });
+
+      // K8s WS close -> notify client
+      k8sWs.on("close", () => {
+        logger.info({ serverId }, "K8s exec WebSocket closed");
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_closed",
+            payload: { serverId },
+          });
+        }
+        this.unsubscribeMcpExec(ws);
+      });
+
+      k8sWs.on("error", (err: unknown) => {
+        logger.error({ err, serverId }, "K8s exec WebSocket error");
+        if (ws.readyState === WS.OPEN) {
+          this.sendToClient(ws, {
+            type: "mcp_exec_error",
+            payload: { serverId, error: "K8s connection error" },
+          });
+        }
+        this.unsubscribeMcpExec(ws);
+      });
+    } catch (error) {
+      logger.error({ error, serverId }, "Failed to start exec session");
+      stdin.destroy();
+      stdout.destroy();
+      stderr.destroy();
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: {
+          serverId,
+          error:
+            error instanceof Error ? error.message : "Failed to exec into pod",
+        },
+      });
+    }
+  }
+
+  private handleMcpExecInput(
+    ws: WebSocket,
+    serverId: string,
+    data: string,
+  ): void {
+    const sub = this.mcpExecSubscriptions.get(ws);
+    if (!sub || sub.serverId !== serverId) return;
+    sub.stdin.write(data);
+  }
+
+  private handleMcpExecResize(
+    ws: WebSocket,
+    serverId: string,
+    cols: number,
+    rows: number,
+  ): void {
+    const sub = this.mcpExecSubscriptions.get(ws);
+    if (!sub || sub.serverId !== serverId) return;
+
+    const resizeMsg = JSON.stringify({ Width: cols, Height: rows });
+    const resizeBuf = Buffer.alloc(resizeMsg.length + 1);
+    resizeBuf[0] = 4; // SPDY channel 4 = resize
+    resizeBuf.write(resizeMsg, 1);
+    if (sub.k8sWs.readyState <= 1) {
+      sub.k8sWs.send(resizeBuf);
+    }
+  }
+
+  private unsubscribeMcpExec(ws: WebSocket): void {
+    const sub = this.mcpExecSubscriptions.get(ws);
+    if (!sub) return;
+
+    sub.stdin.destroy();
+    sub.stdout.destroy();
+    sub.stderr.destroy();
+    if (sub.k8sWs.readyState <= 1) {
+      sub.k8sWs.close();
+    }
+    this.mcpExecSubscriptions.delete(ws);
+    logger.info({ serverId: sub.serverId }, "MCP exec client unsubscribed");
   }
 
   /**
@@ -571,6 +767,9 @@ class WebSocketService {
     }
     for (const [ws] of this.mcpLogsSubscriptions) {
       this.unsubscribeMcpLogs(ws);
+    }
+    for (const [ws] of this.mcpExecSubscriptions) {
+      this.unsubscribeMcpExec(ws);
     }
     for (const [ws] of this.mcpDeploymentStatusSubscriptions) {
       this.unsubscribeMcpDeploymentStatuses(ws);

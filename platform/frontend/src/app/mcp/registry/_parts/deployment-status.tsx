@@ -54,7 +54,7 @@ export function DeploymentStatusBanner({
   const state = status.state as DeploymentState;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 flex-shrink-0 min-w-0">
+    <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 flex-1 min-w-0">
       <DeploymentStatusDot state={state} />
       <span className="text-sm font-medium shrink-0">
         {getDeploymentLabel(state)}
@@ -65,9 +65,18 @@ export function DeploymentStatusBanner({
         </span>
       )}
       {status.error && (
-        <span className="text-sm text-destructive truncate min-w-0">
-          — {status.error}
-        </span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-sm text-destructive truncate min-w-0">
+                — {status.error}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-md break-words">
+              <p>{status.error}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
     </div>
   );

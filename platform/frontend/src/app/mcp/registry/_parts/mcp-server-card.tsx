@@ -8,11 +8,11 @@ import {
 import {
   AlertTriangle,
   Code,
-  FileText,
   Info,
   MoreVertical,
   Pencil,
   RefreshCw,
+  Terminal,
   Trash2,
   User,
   Wrench,
@@ -291,8 +291,8 @@ export function McpServerCard({
       className="flex-1 h-8"
       onClick={() => setIsLogsDialogOpen(true)}
     >
-      <FileText className="h-3 w-3 mr-1" />
-      Logs
+      <Terminal className="h-3 w-3 mr-1" />
+      Debug
     </Button>
   ) : null;
 

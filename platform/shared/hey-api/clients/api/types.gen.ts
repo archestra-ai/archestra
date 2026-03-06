@@ -26875,7 +26875,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27404,7 +27404,7 @@ export type GetConnectorsResponses = {
             id: string;
             organizationId: string;
             name: string;
-            connectorType: 'jira' | 'confluence';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27422,6 +27422,22 @@ export type GetConnectorsResponses = {
                 cqlQuery?: string;
                 labelsToSkip?: Array<string>;
                 batchSize?: number;
+            } | {
+                type: 'github';
+                githubUrl: unknown;
+                owner: string;
+                repos?: Array<string>;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                labelsToSkip?: Array<string>;
+            } | {
+                type: 'gitlab';
+                gitlabUrl: unknown;
+                projectIds?: Array<number>;
+                groupId?: string;
+                includeIssues?: boolean;
+                includeMergeRequests?: boolean;
+                labelsToSkip?: Array<string>;
             };
             secretId: string | null;
             schedule: string;
@@ -27456,7 +27472,7 @@ export type GetConnectorsResponse = GetConnectorsResponses[keyof GetConnectorsRe
 export type CreateConnectorData = {
     body: {
         name: string;
-        connectorType: 'jira' | 'confluence';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27474,9 +27490,25 @@ export type CreateConnectorData = {
             cqlQuery?: string;
             labelsToSkip?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: string;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: string;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            labelsToSkip?: Array<string>;
         };
         credentials: {
-            email: string;
+            email?: string;
             apiToken: string;
         };
         schedule?: string;
@@ -27555,7 +27587,7 @@ export type CreateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
-        connectorType: 'jira' | 'confluence';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27573,6 +27605,22 @@ export type CreateConnectorResponses = {
             cqlQuery?: string;
             labelsToSkip?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: unknown;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: unknown;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            labelsToSkip?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -27745,7 +27793,7 @@ export type GetConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
-        connectorType: 'jira' | 'confluence';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27763,6 +27811,22 @@ export type GetConnectorResponses = {
             cqlQuery?: string;
             labelsToSkip?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: unknown;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: unknown;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            labelsToSkip?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -27800,6 +27864,22 @@ export type UpdateConnectorData = {
             cqlQuery?: string;
             labelsToSkip?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: string;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: string;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            labelsToSkip?: Array<string>;
         };
         schedule?: string;
         enabled?: boolean;
@@ -27878,7 +27958,7 @@ export type UpdateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
-        connectorType: 'jira' | 'confluence';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27896,6 +27976,22 @@ export type UpdateConnectorResponses = {
             cqlQuery?: string;
             labelsToSkip?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'github';
+            githubUrl: unknown;
+            owner: string;
+            repos?: Array<string>;
+            includeIssues?: boolean;
+            includePullRequests?: boolean;
+            labelsToSkip?: Array<string>;
+        } | {
+            type: 'gitlab';
+            gitlabUrl: unknown;
+            projectIds?: Array<number>;
+            groupId?: string;
+            includeIssues?: boolean;
+            includeMergeRequests?: boolean;
+            labelsToSkip?: Array<string>;
         };
         secretId: string | null;
         schedule: string;

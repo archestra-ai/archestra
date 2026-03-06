@@ -93845,6 +93845,18 @@
                                       "enum": [
                                         "confluence"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "github"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "gitlab"
+                                      ]
                                     }
                                   ]
                                 }
@@ -95685,6 +95697,18 @@
                                 "enum": [
                                   "confluence"
                                 ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "github"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "gitlab"
+                                ]
                               }
                             ]
                           },
@@ -95771,6 +95795,83 @@
                                   "type",
                                   "confluenceUrl",
                                   "isCloud"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "github"
+                                    ]
+                                  },
+                                  "githubUrl": {},
+                                  "owner": {
+                                    "type": "string"
+                                  },
+                                  "repos": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includeIssues": {
+                                    "type": "boolean"
+                                  },
+                                  "includePullRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "labelsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "githubUrl",
+                                  "owner"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gitlab"
+                                    ]
+                                  },
+                                  "gitlabUrl": {},
+                                  "projectIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "groupId": {
+                                    "type": "string"
+                                  },
+                                  "includeIssues": {
+                                    "type": "boolean"
+                                  },
+                                  "includeMergeRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "labelsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "gitlabUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -96177,6 +96278,18 @@
                         "enum": [
                           "confluence"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "github"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "gitlab"
+                        ]
                       }
                     ]
                   },
@@ -96267,6 +96380,85 @@
                           "confluenceUrl",
                           "isCloud"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "github"
+                            ]
+                          },
+                          "githubUrl": {
+                            "type": "string"
+                          },
+                          "owner": {
+                            "type": "string"
+                          },
+                          "repos": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "includeIssues": {
+                            "type": "boolean"
+                          },
+                          "includePullRequests": {
+                            "type": "boolean"
+                          },
+                          "labelsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "githubUrl",
+                          "owner"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "gitlab"
+                            ]
+                          },
+                          "gitlabUrl": {
+                            "type": "string"
+                          },
+                          "projectIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          },
+                          "groupId": {
+                            "type": "string"
+                          },
+                          "includeIssues": {
+                            "type": "boolean"
+                          },
+                          "includeMergeRequests": {
+                            "type": "boolean"
+                          },
+                          "labelsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "gitlabUrl"
+                        ]
                       }
                     ]
                   },
@@ -96281,7 +96473,6 @@
                       }
                     },
                     "required": [
-                      "email",
                       "apiToken"
                     ]
                   },
@@ -96340,6 +96531,18 @@
                           "type": "string",
                           "enum": [
                             "confluence"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "gitlab"
                           ]
                         }
                       ]
@@ -96427,6 +96630,83 @@
                             "type",
                             "confluenceUrl",
                             "isCloud"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "github"
+                              ]
+                            },
+                            "githubUrl": {},
+                            "owner": {
+                              "type": "string"
+                            },
+                            "repos": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeIssues": {
+                              "type": "boolean"
+                            },
+                            "includePullRequests": {
+                              "type": "boolean"
+                            },
+                            "labelsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "githubUrl",
+                            "owner"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gitlab"
+                              ]
+                            },
+                            "gitlabUrl": {},
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "groupId": {
+                              "type": "string"
+                            },
+                            "includeIssues": {
+                              "type": "boolean"
+                            },
+                            "includeMergeRequests": {
+                              "type": "boolean"
+                            },
+                            "labelsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "gitlabUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -96782,6 +97062,18 @@
                           "enum": [
                             "confluence"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "gitlab"
+                          ]
                         }
                       ]
                     },
@@ -96868,6 +97160,83 @@
                             "type",
                             "confluenceUrl",
                             "isCloud"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "github"
+                              ]
+                            },
+                            "githubUrl": {},
+                            "owner": {
+                              "type": "string"
+                            },
+                            "repos": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeIssues": {
+                              "type": "boolean"
+                            },
+                            "includePullRequests": {
+                              "type": "boolean"
+                            },
+                            "labelsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "githubUrl",
+                            "owner"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gitlab"
+                              ]
+                            },
+                            "gitlabUrl": {},
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "groupId": {
+                              "type": "string"
+                            },
+                            "includeIssues": {
+                              "type": "boolean"
+                            },
+                            "includeMergeRequests": {
+                              "type": "boolean"
+                            },
+                            "labelsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "gitlabUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -97276,6 +97645,85 @@
                           "confluenceUrl",
                           "isCloud"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "github"
+                            ]
+                          },
+                          "githubUrl": {
+                            "type": "string"
+                          },
+                          "owner": {
+                            "type": "string"
+                          },
+                          "repos": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "includeIssues": {
+                            "type": "boolean"
+                          },
+                          "includePullRequests": {
+                            "type": "boolean"
+                          },
+                          "labelsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "githubUrl",
+                          "owner"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "gitlab"
+                            ]
+                          },
+                          "gitlabUrl": {
+                            "type": "string"
+                          },
+                          "projectIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          },
+                          "groupId": {
+                            "type": "string"
+                          },
+                          "includeIssues": {
+                            "type": "boolean"
+                          },
+                          "includeMergeRequests": {
+                            "type": "boolean"
+                          },
+                          "labelsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "gitlabUrl"
+                        ]
                       }
                     ]
                   },
@@ -97331,6 +97779,18 @@
                           "type": "string",
                           "enum": [
                             "confluence"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "gitlab"
                           ]
                         }
                       ]
@@ -97418,6 +97878,83 @@
                             "type",
                             "confluenceUrl",
                             "isCloud"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "github"
+                              ]
+                            },
+                            "githubUrl": {},
+                            "owner": {
+                              "type": "string"
+                            },
+                            "repos": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeIssues": {
+                              "type": "boolean"
+                            },
+                            "includePullRequests": {
+                              "type": "boolean"
+                            },
+                            "labelsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "githubUrl",
+                            "owner"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gitlab"
+                              ]
+                            },
+                            "gitlabUrl": {},
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "groupId": {
+                              "type": "string"
+                            },
+                            "includeIssues": {
+                              "type": "boolean"
+                            },
+                            "includeMergeRequests": {
+                              "type": "boolean"
+                            },
+                            "labelsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "gitlabUrl"
                           ],
                           "additionalProperties": false
                         }

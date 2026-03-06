@@ -382,6 +382,87 @@ describe("ConfluenceConnector", () => {
     });
   });
 
+  describe("trailing slash normalization", () => {
+    test("validates config with trailing slash", async () => {
+      const result = await connector.validateConfig({
+        confluenceUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("validates config without trailing slash", async () => {
+      const result = await connector.validateConfig({
+        confluenceUrl: "https://mycompany.atlassian.net",
+        isCloud: true,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("source URLs are identical regardless of trailing slash in config", async () => {
+      function makePage(id: string, title: string) {
+        return {
+          id,
+          title,
+          status: "current",
+          body: { storage: { value: "<p>Content</p>" } },
+          metadata: { labels: { results: [] } },
+          version: { when: "2024-01-15T10:00:00.000Z" },
+          _links: { webui: `/spaces/DEV/pages/${id}/${title}` },
+          space: { key: "DEV", name: "Development" },
+        };
+      }
+
+      // Test with trailing slash
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [makePage("123", "Test Page")],
+        size: 1,
+      });
+
+      const batchesWithSlash: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          confluenceUrl: "https://mycompany.atlassian.net/",
+          isCloud: true,
+          spaceKeys: ["DEV"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batchesWithSlash.push(batch);
+      }
+
+      // Test without trailing slash
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [makePage("123", "Test Page")],
+        size: 1,
+      });
+
+      const batchesWithoutSlash: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          confluenceUrl: "https://mycompany.atlassian.net",
+          isCloud: true,
+          spaceKeys: ["DEV"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batchesWithoutSlash.push(batch);
+      }
+
+      expect(batchesWithSlash[0].documents[0].sourceUrl).toBe(
+        "https://mycompany.atlassian.net/wiki/spaces/DEV/pages/123/Test Page",
+      );
+      expect(batchesWithoutSlash[0].documents[0].sourceUrl).toBe(
+        "https://mycompany.atlassian.net/wiki/spaces/DEV/pages/123/Test Page",
+      );
+      expect(batchesWithSlash[0].documents[0].sourceUrl).toBe(
+        batchesWithoutSlash[0].documents[0].sourceUrl,
+      );
+    });
+  });
+
   describe("stripHtmlTags", () => {
     test("strips simple HTML tags", () => {
       expect(stripHtmlTags("<p>Hello world</p>")).toBe("Hello world");

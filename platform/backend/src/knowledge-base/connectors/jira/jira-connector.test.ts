@@ -404,6 +404,92 @@ describe("JiraConnector", () => {
     });
   });
 
+  describe("trailing slash normalization", () => {
+    test("validates config with trailing slash", async () => {
+      const result = await connector.validateConfig({
+        jiraBaseUrl: "https://mycompany.atlassian.net/",
+        isCloud: true,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("validates config without trailing slash", async () => {
+      const result = await connector.validateConfig({
+        jiraBaseUrl: "https://mycompany.atlassian.net",
+        isCloud: true,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("source URLs are identical regardless of trailing slash in config", async () => {
+      function makeIssue(key: string) {
+        return {
+          key,
+          fields: {
+            summary: "Test",
+            description: "Desc",
+            comment: { comments: [] },
+            reporter: { displayName: "R" },
+            assignee: { displayName: "A" },
+            priority: { name: "Medium" },
+            status: { name: "Open" },
+            labels: [],
+            issuetype: { name: "Task" },
+            updated: "2024-01-15T10:00:00.000Z",
+          },
+        };
+      }
+
+      // Test with trailing slash
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [makeIssue("PROJ-1")],
+        nextPageToken: null,
+      });
+
+      const batchesWithSlash: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          jiraBaseUrl: "https://mycompany.atlassian.net/",
+          isCloud: true,
+          projectKey: "PROJ",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batchesWithSlash.push(batch);
+      }
+
+      // Test without trailing slash
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [makeIssue("PROJ-1")],
+        nextPageToken: null,
+      });
+
+      const batchesWithoutSlash: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          jiraBaseUrl: "https://mycompany.atlassian.net",
+          isCloud: true,
+          projectKey: "PROJ",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batchesWithoutSlash.push(batch);
+      }
+
+      expect(batchesWithSlash[0].documents[0].sourceUrl).toBe(
+        "https://mycompany.atlassian.net/browse/PROJ-1",
+      );
+      expect(batchesWithoutSlash[0].documents[0].sourceUrl).toBe(
+        "https://mycompany.atlassian.net/browse/PROJ-1",
+      );
+      expect(batchesWithSlash[0].documents[0].sourceUrl).toBe(
+        batchesWithoutSlash[0].documents[0].sourceUrl,
+      );
+    });
+  });
+
   describe("extractTextFromAdf", () => {
     test("returns empty string for null", () => {
       expect(extractTextFromAdf(null)).toBe("");

@@ -940,9 +940,23 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 ### Knowledge Base Configuration
 
-These environment variables configure the Knowledge Base feature. Knowledge graphs are configured per-agent in the Archestra UI — see [Knowledge Bases](/docs/platform-knowledge-bases) for setup instructions.
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
+These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors (Jira, Confluence) sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables the Knowledge Base enterprise feature.
+  - Set to `true` to enable
+  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
+  - Knowledge Base sidebar section, settings, and API routes are only available when enabled
+
+- **`ARCHESTRA_KB_OPENAI_API_KEY`** - OpenAI API key used for generating embeddings.
+  - Required for the chunking and embedding pipeline
+  - Used by the embedder to call the OpenAI embeddings API (default model: `text-embedding-3-small`)
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector sync CronJobs run.
   - Default: `archestra-connectors`
-  - Connectors (Jira, Confluence) use K8s CronJobs to run scheduled syncs into knowledge bases
   - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CRONJOB_IMAGE`** - Docker image for connector sync CronJobs.
+  - Optional — auto-detected as `archestra/platform:<version>` when running inside a K8s cluster
+  - When not set and not running inside K8s (local development), connector syncs run in-process

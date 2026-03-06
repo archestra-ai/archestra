@@ -186,10 +186,7 @@ class ConnectorSyncService {
         lastSyncError: errorMessage,
       });
 
-      runLog.error(
-        { error: errorMessage },
-        "[ConnectorSync] Sync failed",
-      );
+      runLog.error({ error: errorMessage }, "[ConnectorSync] Sync failed");
 
       return { runId: run.id, status: "failed" };
     }
@@ -265,7 +262,6 @@ class ConnectorSyncService {
       await KbChunkModel.deleteByDocument(existingBySource.id);
       await this.chunkAndStore({
         documentId: existingBySource.id,
-        knowledgeBaseId: knowledgeBase.id,
         title: doc.title,
         content: doc.content,
         acl,
@@ -303,7 +299,6 @@ class ConnectorSyncService {
 
     await this.chunkAndStore({
       documentId: created.id,
-      knowledgeBaseId: knowledgeBase.id,
       title: doc.title,
       content: doc.content,
       acl,
@@ -322,13 +317,12 @@ class ConnectorSyncService {
 
   private async chunkAndStore(params: {
     documentId: string;
-    knowledgeBaseId: string;
     title: string;
     content: string;
     acl: string[];
     log: pino.Logger;
   }): Promise<void> {
-    const { documentId, knowledgeBaseId, title, content, acl, log } = params;
+    const { documentId, title, content, acl, log } = params;
 
     const chunks = await chunkDocument({ title, content });
 
@@ -337,7 +331,6 @@ class ConnectorSyncService {
     await KbChunkModel.insertMany(
       chunks.map((chunk) => ({
         documentId,
-        knowledgeBaseId,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
         acl,

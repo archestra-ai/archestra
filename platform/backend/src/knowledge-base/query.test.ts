@@ -58,13 +58,11 @@ describe("QueryService", () => {
     await KbChunkModel.insertMany([
       {
         documentId: doc.id,
-        knowledgeBaseId: kb.id,
         content: "First chunk about TypeScript",
         chunkIndex: 0,
       },
       {
         documentId: doc.id,
-        knowledgeBaseId: kb.id,
         content: "Second chunk about JavaScript",
         chunkIndex: 1,
       },
@@ -149,7 +147,6 @@ describe("QueryService", () => {
     await KbChunkModel.insertMany([
       {
         documentId: doc.id,
-        knowledgeBaseId: kb.id,
         content: "Chunk without embedding",
         chunkIndex: 0,
       },
@@ -189,7 +186,6 @@ describe("QueryService", () => {
     // Insert 5 chunks with embeddings
     const chunkData = Array.from({ length: 5 }, (_, i) => ({
       documentId: doc.id,
-      knowledgeBaseId: kb.id,
       content: `Chunk ${i}`,
       chunkIndex: i,
     }));

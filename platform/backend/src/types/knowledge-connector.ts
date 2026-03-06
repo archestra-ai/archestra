@@ -20,7 +20,7 @@ export type ConnectorCredentials = z.infer<typeof ConnectorCredentialsSchema>;
 
 export const JiraConfigSchema = z.object({
   type: JIRA,
-  jiraBaseUrl: z.string(),
+  jiraBaseUrl: z.string().transform(stripTrailingSlashes),
   isCloud: z.boolean(),
   projectKey: z.string().optional(),
   jqlQuery: z.string().optional(),
@@ -40,7 +40,7 @@ export type JiraCheckpoint = z.infer<typeof JiraCheckpointSchema>;
 
 export const ConfluenceConfigSchema = z.object({
   type: CONFLUENCE,
-  confluenceUrl: z.string(),
+  confluenceUrl: z.string().transform(stripTrailingSlashes),
   isCloud: z.boolean(),
   spaceKeys: z.array(z.string()).optional(),
   pageIds: z.array(z.string()).optional(),
@@ -92,6 +92,12 @@ export interface ConnectorSyncBatch {
   documents: ConnectorDocument[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
+}
+
+// ===== Internal helpers =====
+
+function stripTrailingSlashes(url: string): string {
+  return url.replace(/\/+$/, "");
 }
 
 export interface Connector {

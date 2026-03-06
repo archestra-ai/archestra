@@ -55,13 +55,11 @@ describe("EmbeddingService", () => {
     await KbChunkModel.insertMany([
       {
         documentId: doc.id,
-        knowledgeBaseId: kb.id,
         content: "Chunk one content",
         chunkIndex: 0,
       },
       {
         documentId: doc.id,
-        knowledgeBaseId: kb.id,
         content: "Chunk two content",
         chunkIndex: 1,
       },
@@ -112,7 +110,6 @@ describe("EmbeddingService", () => {
     await KbChunkModel.insertMany([
       {
         documentId: doc.id,
-        knowledgeBaseId: kb.id,
         content: "Some chunk",
         chunkIndex: 0,
       },

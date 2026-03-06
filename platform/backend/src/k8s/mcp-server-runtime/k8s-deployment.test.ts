@@ -4370,4 +4370,3 @@ describe("K8sDeployment.collectImagePullSecretNames", () => {
     ]);
   });
 });
-

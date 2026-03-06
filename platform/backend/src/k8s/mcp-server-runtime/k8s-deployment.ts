@@ -245,9 +245,7 @@ export default class K8sDeployment {
    * Creates a deployment name in the format "mcp-<slugified-name>".
    */
   static constructDeploymentName(mcpServer: McpServer): string {
-    const slugified = ensureStringIsRfc1123Compliant(
-      mcpServer.name,
-    );
+    const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
     return `mcp-${slugified}`.substring(0, 253);
   }
 

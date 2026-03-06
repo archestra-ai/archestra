@@ -1,4 +1,4 @@
-import { count, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbChunk, KbChunk } from "@/types";
 
@@ -37,15 +37,6 @@ class KbChunkModel {
     return result.rowCount ?? 0;
   }
 
-  static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(schema.kbChunksTable)
-      .where(eq(schema.kbChunksTable.knowledgeBaseId, knowledgeBaseId));
-
-    return result?.count ?? 0;
-  }
-
   static async countByDocument(documentId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -70,7 +61,7 @@ class KbChunkModel {
         1 - (c.embedding <=> ${embeddingStr}::vector(1536)) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
-      WHERE c.knowledge_base_id = ${knowledgeBaseId}
+      WHERE d.knowledge_base_id = ${knowledgeBaseId}
         AND c.embedding IS NOT NULL
       ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)
       LIMIT ${limit}

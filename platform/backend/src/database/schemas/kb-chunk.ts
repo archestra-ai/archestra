@@ -9,7 +9,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import kbDocumentsTable from "./kb-document";
-import knowledgeBasesTable from "./knowledge-base";
 
 const vector = customType<{ data: number[]; driverParam: string }>({
   dataType() {
@@ -37,9 +36,6 @@ const kbChunksTable = pgTable(
     documentId: uuid("document_id")
       .notNull()
       .references(() => kbDocumentsTable.id, { onDelete: "cascade" }),
-    knowledgeBaseId: uuid("knowledge_base_id")
-      .notNull()
-      .references(() => knowledgeBasesTable.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
     chunkIndex: integer("chunk_index").notNull(),
     embedding: vector("embedding"),
@@ -47,10 +43,7 @@ const kbChunksTable = pgTable(
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
-  (table) => [
-    index("kb_chunks_document_id_idx").on(table.documentId),
-    index("kb_chunks_kb_id_idx").on(table.knowledgeBaseId),
-  ],
+  (table) => [index("kb_chunks_document_id_idx").on(table.documentId)],
 );
 
 export default kbChunksTable;

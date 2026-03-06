@@ -158,7 +158,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         return (
           <div>
             {processed}
-            {total != null && (
+            {total != null && total > 0 && (
               <span className="text-muted-foreground"> / {total}</span>
             )}
           </div>

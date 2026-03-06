@@ -54,7 +54,10 @@ export function ConnectorRunLogsDialog({
               <div>
                 <span className="text-muted-foreground">Progress:</span>{" "}
                 {run.documentsProcessed ?? 0}
-                {run.totalItems != null && ` / ${run.totalItems}`} processed
+                {run.totalItems != null &&
+                  run.totalItems > 0 &&
+                  ` / ${run.totalItems}`}{" "}
+                processed
               </div>
               <div>
                 <span className="text-muted-foreground">Ingested:</span>{" "}

@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
 import { cronJobManager } from "@/k8s/cron-job";
 import { connectorSyncService } from "@/knowledge-base/connector-sync";
 import { getConnector } from "@/knowledge-base/connectors/registry";
@@ -638,7 +639,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findConnectorOrThrow(id, organizationId);
 
-      const result = await connectorSyncService.executeSync(id);
+      const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
+      const result = await connectorSyncService.executeSync(id, {
+        logger: capturingLogger,
+        getLogOutput,
+      });
       return reply.send(result);
     },
   );

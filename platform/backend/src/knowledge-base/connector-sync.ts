@@ -101,7 +101,7 @@ class ConnectorSyncService {
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
       });
 
-      if (totalItems !== null) {
+      if (totalItems !== null && totalItems > 0) {
         await ConnectorRunModel.update(run.id, { totalItems });
         runLog.info({ totalItems }, "[ConnectorSync] Estimated total items");
       }

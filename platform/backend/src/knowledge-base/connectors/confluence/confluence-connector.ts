@@ -72,11 +72,12 @@ export class ConfluenceConnector extends BaseConnector {
 
       const result = await client.content.searchContentByCQL({
         cql,
-        limit: 0,
+        limit: 1,
       });
       // The REST API returns totalSize but the SDK type doesn't include it
       // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
-      return (result as any).totalSize ?? result.size ?? null;
+      const totalSize = (result as any).totalSize as number | undefined;
+      return totalSize ?? null;
     } catch {
       return null;
     }

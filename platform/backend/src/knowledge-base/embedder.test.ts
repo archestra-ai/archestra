@@ -81,8 +81,8 @@ describe("EmbeddingService", () => {
     expect(chunks[0].embedding).toHaveLength(1536);
     expect(chunks[1].embedding).toHaveLength(1536);
     // Verify first few values survive the round-trip through vector column
-    expect(chunks[0].embedding![0]).toBeCloseTo(emb0[0], 4);
-    expect(chunks[1].embedding![0]).toBeCloseTo(emb1[0], 4);
+    expect(chunks[0].embedding?.[0]).toBeCloseTo(emb0[0], 4);
+    expect(chunks[1].embedding?.[0]).toBeCloseTo(emb1[0], 4);
 
     expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
       model: "text-embedding-3-small",

@@ -3,7 +3,7 @@ title: Adding Knowledge Connectors
 category: Development
 order: 3
 description: Developer guide for implementing new knowledge base connectors in Archestra Platform
-lastUpdated: 2026-03-03
+lastUpdated: 2026-03-06
 ---
 
 <!--

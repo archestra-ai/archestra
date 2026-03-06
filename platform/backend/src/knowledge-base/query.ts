@@ -3,6 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import type { AclEntry } from "@/types/kb-document";
 import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
 
@@ -24,7 +25,7 @@ class QueryService {
   async query(params: {
     knowledgeBaseId: string;
     queryText: string;
-    userAcl: string[];
+    userAcl: AclEntry[];
     limit?: number;
   }): Promise<ChunkResult[]> {
     const { knowledgeBaseId, queryText, limit = 10 } = params;
@@ -105,7 +106,7 @@ class QueryService {
       topResults = await rerank({
         queryText,
         chunks: topResults,
-        openaiApiKey: config.kb.openaiApiKey,
+        openaiApiKey: config.kb.embeddingApiKey,
       });
       topResults = topResults.slice(0, limit);
 
@@ -151,7 +152,7 @@ class QueryService {
 
   private getOpenAIClient(): OpenAI {
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: config.kb.openaiApiKey });
+      this.openai = new OpenAI({ apiKey: config.kb.embeddingApiKey });
     }
     return this.openai;
   }

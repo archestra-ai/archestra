@@ -10,6 +10,7 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { KnowledgeBase } from "@/types";
+import type { AclEntry } from "@/types/kb-document";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -319,7 +320,7 @@ class ConnectorSyncService {
     documentId: string;
     title: string;
     content: string;
-    acl: string[];
+    acl: AclEntry[];
     log: pino.Logger;
   }): Promise<void> {
     const { documentId, title, content, acl, log } = params;

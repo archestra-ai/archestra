@@ -5,11 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import {
-  KnowledgeBaseProviderTypeSchema,
-  KnowledgeBaseVisibilitySchema,
-  LightragConfigSchema,
-} from "./knowledge-base";
+import { KnowledgeBaseVisibilitySchema } from "./knowledge-base";
 import {
   ConnectorCheckpointSchema,
   ConnectorConfigSchema,
@@ -21,8 +17,6 @@ import {
 export const SelectKnowledgeBaseSchema = createSelectSchema(
   schema.knowledgeBasesTable,
   {
-    provider: KnowledgeBaseProviderTypeSchema,
-    config: LightragConfigSchema,
     visibility: KnowledgeBaseVisibilitySchema,
     teamIds: z.array(z.string()),
   },
@@ -30,8 +24,6 @@ export const SelectKnowledgeBaseSchema = createSelectSchema(
 export const InsertKnowledgeBaseSchema = createInsertSchema(
   schema.knowledgeBasesTable,
   {
-    provider: KnowledgeBaseProviderTypeSchema,
-    config: LightragConfigSchema,
     visibility: KnowledgeBaseVisibilitySchema.optional(),
     teamIds: z.array(z.string()).optional(),
   },
@@ -39,15 +31,12 @@ export const InsertKnowledgeBaseSchema = createInsertSchema(
 export const UpdateKnowledgeBaseSchema = createUpdateSchema(
   schema.knowledgeBasesTable,
   {
-    config: LightragConfigSchema.optional(),
     visibility: KnowledgeBaseVisibilitySchema.optional(),
     teamIds: z.array(z.string()).optional(),
   },
 ).pick({
   name: true,
   description: true,
-  config: true,
-  secretId: true,
   status: true,
   visibility: true,
   teamIds: true,

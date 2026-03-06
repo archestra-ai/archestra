@@ -7,7 +7,11 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { DocumentSourceType, EmbeddingStatus } from "@/types/kb-document";
+import type {
+  DocumentSourceType,
+  EmbeddingStatus,
+  KbDocumentMetadata,
+} from "@/types/kb-document";
 import knowledgeBasesTable from "./knowledge-base";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
@@ -30,7 +34,7 @@ const kbDocumentsTable = pgTable(
     contentHash: text("content_hash").notNull(),
     sourceUrl: text("source_url"),
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    metadata: jsonb("metadata").$type<KbDocumentMetadata>().default({}),
     embeddingStatus: text("embedding_status")
       .$type<EmbeddingStatus>()
       .notNull()

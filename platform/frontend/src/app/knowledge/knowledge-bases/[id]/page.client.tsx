@@ -216,9 +216,9 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>{knowledgeBase.name}</CardTitle>
-                <CardDescription>
-                  Provider: {knowledgeBase.provider}
-                </CardDescription>
+                {knowledgeBase.description && (
+                  <CardDescription>{knowledgeBase.description}</CardDescription>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Badge

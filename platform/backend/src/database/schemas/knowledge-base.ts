@@ -6,12 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type {
-  KnowledgeBaseProviderType,
-  KnowledgeBaseVisibility,
-  LightragConfig,
-} from "@/types/knowledge-base";
-import secretTable from "./secret";
+import type { KnowledgeBaseVisibility } from "@/types/knowledge-base";
 
 const knowledgeBasesTable = pgTable(
   "knowledge_bases",
@@ -20,11 +15,6 @@ const knowledgeBasesTable = pgTable(
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    provider: text("provider").$type<KnowledgeBaseProviderType>().notNull(),
-    config: jsonb("config").$type<LightragConfig>().notNull(),
-    secretId: uuid("secret_id").references(() => secretTable.id, {
-      onDelete: "set null",
-    }),
     visibility: text("visibility")
       .$type<KnowledgeBaseVisibility>()
       .notNull()

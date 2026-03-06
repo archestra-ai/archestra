@@ -115,7 +115,7 @@ class EmbeddingService {
 
   private getOpenAIClient(): OpenAI {
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: config.kb.openaiApiKey });
+      this.openai = new OpenAI({ apiKey: config.kb.embeddingApiKey });
     }
     return this.openai;
   }
@@ -124,9 +124,9 @@ class EmbeddingService {
 export const embeddingService = new EmbeddingService();
 
 export function startEmbeddingCron(): void {
-  if (!config.kb.openaiApiKey) {
+  if (!config.kb.embeddingApiKey) {
     logger.info(
-      "[Embedder] ARCHESTRA_KB_OPENAI_API_KEY not set, embedding cron disabled",
+      "[Embedder] ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY not set, embedding cron disabled",
     );
     return;
   }

@@ -1,5 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
-import type { Attach, Log } from "@kubernetes/client-node";
+import type { Attach, Exec, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import { vi } from "vitest";
 import type { z } from "zod";
@@ -49,17 +49,18 @@ function createK8sDeploymentInstance(
       )
     : undefined;
 
-  return new K8sDeployment(
-    mockMcpServer,
-    mockK8sApi,
-    mockK8sAppsApi,
-    mockK8sAttach,
-    mockK8sLog,
-    "default",
-    null, // catalogItem
+  return new K8sDeployment({
+    mcpServer: mockMcpServer,
+    k8sApi: mockK8sApi,
+    k8sAppsApi: mockK8sAppsApi,
+    k8sAttach: mockK8sAttach,
+    k8sLog: mockK8sLog,
+    k8sExec: {} as Exec,
+    namespace: "default",
+    catalogItem: null,
     userConfigValues,
-    stringEnvironmentValues,
-  );
+    environmentValues: stringEnvironmentValues,
+  });
 }
 
 describe("K8sDeployment.createContainerEnvFromConfig", () => {
@@ -464,17 +465,18 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const mockK8sLog = {} as k8s.Log;
     const namespace = "default";
 
-    return new K8sDeployment(
-      mcpServer,
-      mockK8sApi,
-      mockK8sAppsApi,
-      mockK8sAttach,
-      mockK8sLog,
-      namespace,
-      null, // catalogItem
+    return new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: mockK8sAppsApi,
+      k8sAttach: mockK8sAttach,
+      k8sLog: mockK8sLog,
+      k8sExec: {} as Exec,
+      namespace: namespace,
+      catalogItem: null,
       userConfigValues,
       environmentValues,
-    );
+    });
   }
 
   test("generates basic deploymentSpec for stdio-based MCP server without HTTP port", () => {
@@ -645,17 +647,16 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
-    const k8sDeployment = new K8sDeployment(
-      mcpServer,
-      mockK8sApi,
-      mockK8sAppsApi,
-      mockK8sAttach,
-      mockK8sLog,
-      "default",
-      undefined,
-      undefined,
-      environmentValues,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: mockK8sAppsApi,
+      k8sAttach: mockK8sAttach,
+      k8sLog: mockK8sLog,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      environmentValues: environmentValues,
+    });
 
     const needsHttp = false;
     const httpPort = 8080;
@@ -1046,17 +1047,16 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
-    const k8sDeployment = new K8sDeployment(
-      mcpServer,
-      mockK8sApi,
-      mockK8sAppsApi,
-      mockK8sAttach,
-      mockK8sLog,
-      "default",
-      undefined,
-      undefined,
-      environmentValues,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: mockK8sAppsApi,
+      k8sAttach: mockK8sAttach,
+      k8sLog: mockK8sLog,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      environmentValues: environmentValues,
+    });
 
     const needsHttp = true;
     const httpPort = 8000;
@@ -2281,15 +2281,16 @@ spec:
       catalogId: "catalog-yaml",
     } as McpServer;
 
-    return new K8sDeployment(
-      mcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as k8s.Attach,
-      {} as k8s.Log,
-      "default",
-      catalogItem,
-    );
+    return new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: catalogItem,
+    });
   }
 
   test("applies platform nodeSelector when YAML has none", () => {
@@ -2455,17 +2456,17 @@ describe("K8sDeployment.createK8sSecret", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      mockK8sApi as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      secretData,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      environmentValues: secretData,
+    });
   }
 
   test("creates K8s secret successfully", async () => {
@@ -2780,17 +2781,16 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    const k8sDeployment = new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as k8s.Attach,
-      {} as k8s.Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
 
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "node",
@@ -2825,17 +2825,16 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    const k8sDeployment = new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as k8s.Attach,
-      {} as k8s.Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
 
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "docker",
@@ -2874,17 +2873,16 @@ describe("K8sDeployment.deleteK8sSecret", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      mockK8sApi as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("deletes K8s secret successfully", async () => {
@@ -2958,17 +2956,16 @@ describe("K8sDeployment.deleteK8sService", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      mockK8sApi as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("deletes K8s service successfully", async () => {
@@ -3042,17 +3039,16 @@ describe("K8sDeployment.constructHttpServiceName", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("generates service name within 63-character K8s limit for short names", () => {
@@ -3174,17 +3170,16 @@ describe("K8sDeployment.stopDeployment", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      mockK8sApi as k8s.CoreV1Api,
-      mockK8sAppsApi as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("stops deployment successfully", async () => {
@@ -3259,17 +3254,16 @@ describe("K8sDeployment.removeDeployment", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      mockK8sApi as k8s.CoreV1Api,
-      mockK8sAppsApi as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("removes deployment, service, and secret", async () => {
@@ -3349,17 +3343,16 @@ describe("K8sDeployment.statusSummary", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "test-namespace",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "test-namespace",
+      catalogItem: null,
+    });
   }
 
   test("returns correct status summary for not_created state", () => {
@@ -3393,17 +3386,16 @@ describe("K8sDeployment.containerName", () => {
       catalogId: "test-catalog-id",
     } as McpServer;
 
-    const k8sDeployment = new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
 
     expect(k8sDeployment.containerName).toBe("mcp-my-server");
   });
@@ -3417,17 +3409,16 @@ describe("K8sDeployment.k8sNamespace", () => {
       catalogId: "test-catalog-id",
     } as McpServer;
 
-    const k8sDeployment = new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "custom-namespace",
-      null,
-      undefined,
-      undefined,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "custom-namespace",
+      catalogItem: null,
+    });
 
     expect(k8sDeployment.k8sNamespace).toBe("custom-namespace");
   });
@@ -3441,17 +3432,16 @@ describe("K8sDeployment.k8sDeploymentName", () => {
       catalogId: "test-catalog-id",
     } as McpServer;
 
-    const k8sDeployment = new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
 
     expect(k8sDeployment.k8sDeploymentName).toBe("mcp-my-mcp-server");
   });
@@ -3920,17 +3910,16 @@ describe("K8sDeployment.getRecentLogs", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sDeployment(
-      mockMcpServer,
-      mockK8sApi as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as Attach,
-      {} as Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("returns 'Pod not found or not running' when no pod exists", async () => {
@@ -4075,15 +4064,16 @@ describe("K8sDeployment.createDockerRegistrySecrets", () => {
       replaceNamespacedSecret: mockReplaceSecret,
     } as unknown as k8s.CoreV1Api;
 
-    return new K8sDeployment(
-      mcpServer,
-      mockK8sApi,
-      {} as k8s.AppsV1Api,
-      {} as k8s.Attach,
-      {} as k8s.Log,
-      "default",
-      null,
-    );
+    return new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
   }
 
   test("returns empty array when imagePullSecrets is undefined", async () => {

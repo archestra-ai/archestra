@@ -87,6 +87,7 @@ export const E2eTestId = {
   McpLogsError: "mcp-logs-error",
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
+  McpLogsTab: "mcp-logs-tab",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

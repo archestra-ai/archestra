@@ -860,7 +860,16 @@ export function InternalMCPCatalog({
 
   const sortInstalledFirst = (items: CatalogItem[]) =>
     [...items].sort((a, b) => {
-      // Sort priority: builtin > remote > local
+      // Primary sort: connected (has installations) first
+      const aConnected = installedServers?.some((s) => s.catalogId === a.id)
+        ? 0
+        : 1;
+      const bConnected = installedServers?.some((s) => s.catalogId === b.id)
+        ? 0
+        : 1;
+      if (aConnected !== bConnected) return aConnected - bConnected;
+
+      // Secondary sort priority: builtin > remote > local
       const getPriority = (item: CatalogItem) => {
         if (item.serverType === "builtin" || isPlaywrightCatalogItem(item.id))
           return 0;
@@ -871,7 +880,7 @@ export function InternalMCPCatalog({
       const priorityDiff = getPriority(a) - getPriority(b);
       if (priorityDiff !== 0) return priorityDiff;
 
-      // Secondary sort by createdAt (newest first)
+      // Tertiary sort by createdAt (newest first)
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 

@@ -47,6 +47,7 @@ vi.mock("@kubernetes/client-node", () => {
     BatchV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
+    Exec: vi.fn(),
   };
 });
 
@@ -89,13 +90,13 @@ describe("validateKubeconfig", () => {
   });
 
   test("should not throw when no path provided", async () => {
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig(undefined)).not.toThrow();
   });
 
   test("should throw error when kubeconfig file does not exist", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/nonexistent/path")).toThrow(
       /❌ Kubeconfig file not found/,
     );
@@ -104,7 +105,7 @@ describe("validateKubeconfig", () => {
   test("should throw error when kubeconfig file cannot be parsed", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue("invalid yaml content");
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Malformed kubeconfig: could not parse YAML/,
     );
@@ -118,7 +119,7 @@ describe("validateKubeconfig", () => {
         users: [],
       }),
     );
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: clusters section missing/,
     );
@@ -133,7 +134,7 @@ describe("validateKubeconfig", () => {
         users: [],
       }),
     );
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: clusters section missing/,
     );
@@ -148,7 +149,7 @@ describe("validateKubeconfig", () => {
         users: [{ name: "test" }],
       }),
     );
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: cluster entry is missing required fields/,
     );
@@ -163,7 +164,7 @@ describe("validateKubeconfig", () => {
         users: [{ name: "test" }],
       }),
     );
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: contexts section missing/,
     );
@@ -178,7 +179,7 @@ describe("validateKubeconfig", () => {
         users: [],
       }),
     );
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: users section missing/,
     );
@@ -193,7 +194,7 @@ describe("validateKubeconfig", () => {
         users: [{ name: "test" }],
       }),
     );
-    const { validateKubeconfig } = await import("./manager");
+    const { validateKubeconfig } = await import("@/k8s/shared");
     expect(() => validateKubeconfig("/path")).not.toThrow();
   });
 });

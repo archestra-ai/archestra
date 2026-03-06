@@ -16,7 +16,6 @@ test.describe("Config endpoint", () => {
       features: Record<string, unknown>;
       enterpriseFeatures: Record<string, unknown>;
       providerBaseUrls: Record<string, string | null>;
-      enterpriseFeatures: Record<string, unknown>;
     };
 
     // Verify top-level structure

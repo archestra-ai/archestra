@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.0.58"
+    "version": "1.0.60"
   },
   "components": {
     "schemas": {
@@ -37008,6 +37008,12 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "connectorIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           }
                         },
                         "required": [
@@ -37038,7 +37044,8 @@
                           "tools",
                           "teams",
                           "labels",
-                          "knowledgeBaseIds"
+                          "knowledgeBaseIds",
+                          "connectorIds"
                         ],
                         "additionalProperties": false
                       }
@@ -37454,6 +37461,13 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "connectorIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -37782,6 +37796,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -37812,7 +37832,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -38402,6 +38423,12 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "connectorIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -38432,7 +38459,8 @@
                       "tools",
                       "teams",
                       "labels",
-                      "knowledgeBaseIds"
+                      "knowledgeBaseIds",
+                      "connectorIds"
                     ],
                     "additionalProperties": false
                   }
@@ -38977,6 +39005,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -39007,7 +39041,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -39551,6 +39586,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -39581,7 +39622,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -40137,6 +40179,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -40167,7 +40215,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -40533,6 +40582,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "connectorIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -40868,6 +40923,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -40898,7 +40959,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -41707,6 +41769,12 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "connectorIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         }
                       },
                       "required": [
@@ -41737,7 +41805,8 @@
                         "tools",
                         "teams",
                         "labels",
-                        "knowledgeBaseIds"
+                        "knowledgeBaseIds",
+                        "connectorIds"
                       ],
                       "additionalProperties": false
                     },
@@ -42350,6 +42419,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -42380,7 +42455,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -93720,33 +93796,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "provider": {
-                            "type": "string",
-                            "enum": [
-                              "lightrag"
-                            ]
-                          },
-                          "config": {
-                            "type": "object",
-                            "properties": {
-                              "apiUrl": {
-                                "type": "string"
-                              },
-                              "apiKey": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "apiUrl"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "secretId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "visibility": {
                             "type": "string",
                             "enum": [
@@ -93840,9 +93889,6 @@
                           "organizationId",
                           "name",
                           "description",
-                          "provider",
-                          "config",
-                          "secretId",
                           "visibility",
                           "teamIds",
                           "status",
@@ -94136,26 +94182,6 @@
                   "description": {
                     "type": "string"
                   },
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "lightrag"
-                    ]
-                  },
-                  "config": {
-                    "type": "object",
-                    "properties": {
-                      "apiUrl": {
-                        "type": "string"
-                      },
-                      "apiKey": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "apiUrl"
-                    ]
-                  },
                   "visibility": {
                     "type": "string",
                     "enum": [
@@ -94172,9 +94198,7 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "provider",
-                  "config"
+                  "name"
                 ]
               }
             }
@@ -94203,33 +94227,6 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "provider": {
-                      "type": "string",
-                      "enum": [
-                        "lightrag"
-                      ]
-                    },
-                    "config": {
-                      "type": "object",
-                      "properties": {
-                        "apiUrl": {
-                          "type": "string"
-                        },
-                        "apiKey": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "apiUrl"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "secretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "visibility": {
                       "type": "string",
@@ -94262,9 +94259,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "provider",
-                    "config",
-                    "secretId",
                     "visibility",
                     "teamIds",
                     "status",
@@ -94529,33 +94523,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "provider": {
-                      "type": "string",
-                      "enum": [
-                        "lightrag"
-                      ]
-                    },
-                    "config": {
-                      "type": "object",
-                      "properties": {
-                        "apiUrl": {
-                          "type": "string"
-                        },
-                        "apiKey": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "apiUrl"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "secretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "visibility": {
                       "type": "string",
                       "enum": [
@@ -94587,9 +94554,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "provider",
-                    "config",
-                    "secretId",
                     "visibility",
                     "teamIds",
                     "status",
@@ -94833,20 +94797,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "config": {
-                    "type": "object",
-                    "properties": {
-                      "apiUrl": {
-                        "type": "string"
-                      },
-                      "apiKey": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "apiUrl"
-                    ]
-                  },
                   "visibility": {
                     "type": "string",
                     "enum": [
@@ -94899,33 +94849,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "provider": {
-                      "type": "string",
-                      "enum": [
-                        "lightrag"
-                      ]
-                    },
-                    "config": {
-                      "type": "object",
-                      "properties": {
-                        "apiUrl": {
-                          "type": "string"
-                        },
-                        "apiKey": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "apiUrl"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "secretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "visibility": {
                       "type": "string",
                       "enum": [
@@ -94957,9 +94880,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "provider",
-                    "config",
-                    "secretId",
                     "visibility",
                     "teamIds",
                     "status",
@@ -98874,33 +98794,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "provider": {
-                            "type": "string",
-                            "enum": [
-                              "lightrag"
-                            ]
-                          },
-                          "config": {
-                            "type": "object",
-                            "properties": {
-                              "apiUrl": {
-                                "type": "string"
-                              },
-                              "apiKey": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "apiUrl"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "secretId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "visibility": {
                             "type": "string",
                             "enum": [
@@ -98932,9 +98825,6 @@
                           "organizationId",
                           "name",
                           "description",
-                          "provider",
-                          "config",
-                          "secretId",
                           "visibility",
                           "teamIds",
                           "status",

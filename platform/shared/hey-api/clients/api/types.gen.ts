@@ -11799,6 +11799,7 @@ export type GetAgentsResponses = {
             }>;
             authorName?: string | null;
             knowledgeBaseIds: Array<string>;
+            connectorIds: Array<string>;
         }>;
         pagination: {
             currentPage: number;
@@ -11843,6 +11844,7 @@ export type CreateAgentData = {
             valueId?: string;
         }>;
         knowledgeBaseIds?: Array<string>;
+        connectorIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -11984,6 +11986,7 @@ export type CreateAgentResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     };
 };
 
@@ -12144,6 +12147,7 @@ export type GetAllAgentsResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     }>;
 };
 
@@ -12291,6 +12295,7 @@ export type GetDefaultMcpGatewayResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     };
 };
 
@@ -12438,6 +12443,7 @@ export type GetDefaultLlmProxyResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     };
 };
 
@@ -12666,6 +12672,7 @@ export type GetAgentResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     };
 };
 
@@ -12701,6 +12708,7 @@ export type UpdateAgentData = {
             valueId?: string;
         }>;
         knowledgeBaseIds?: Array<string>;
+        connectorIds?: Array<string>;
     };
     path: {
         id: string;
@@ -12844,6 +12852,7 @@ export type UpdateAgentResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     };
 };
 
@@ -12994,6 +13003,7 @@ export type GetAgentVersionsResponses = {
             }>;
             authorName?: string | null;
             knowledgeBaseIds: Array<string>;
+            connectorIds: Array<string>;
         };
         history: Array<{
             version: number;
@@ -13155,6 +13165,7 @@ export type RollbackAgentResponses = {
         }>;
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
     };
 };
 
@@ -26856,12 +26867,6 @@ export type GetKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            provider: 'lightrag';
-            config: {
-                apiUrl: string;
-                apiKey?: string;
-            };
-            secretId: string | null;
             visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
             status: string;
@@ -26896,11 +26901,6 @@ export type CreateKnowledgeBaseData = {
     body: {
         name: string;
         description?: string;
-        provider: 'lightrag';
-        config: {
-            apiUrl: string;
-            apiKey?: string;
-        };
         visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
     };
@@ -26977,12 +26977,6 @@ export type CreateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        provider: 'lightrag';
-        config: {
-            apiUrl: string;
-            apiKey?: string;
-        };
-        secretId: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         status: string;
@@ -27149,12 +27143,6 @@ export type GetKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        provider: 'lightrag';
-        config: {
-            apiUrl: string;
-            apiKey?: string;
-        };
-        secretId: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         status: string;
@@ -27169,10 +27157,6 @@ export type UpdateKnowledgeBaseData = {
     body?: {
         name?: string;
         description?: string | null;
-        config?: {
-            apiUrl: string;
-            apiKey?: string;
-        };
         visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
     };
@@ -27251,12 +27235,6 @@ export type UpdateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        provider: 'lightrag';
-        config: {
-            apiUrl: string;
-            apiKey?: string;
-        };
-        secretId: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         status: string;
@@ -28173,12 +28151,6 @@ export type GetConnectorKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            provider: 'lightrag';
-            config: {
-                apiUrl: string;
-                apiKey?: string;
-            };
-            secretId: string | null;
             visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
             status: string;

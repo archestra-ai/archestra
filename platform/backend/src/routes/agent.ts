@@ -9,6 +9,7 @@ import {
 import {
   AgentLabelModel,
   AgentModel,
+  KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
@@ -347,6 +348,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Validate connectorIds if provided
+      if (body.connectorIds && body.connectorIds.length > 0) {
+        if (agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        for (const connectorId of body.connectorIds) {
+          const connector =
+            await KnowledgeBaseConnectorModel.findById(connectorId);
+          if (!connector || connector.organizationId !== organizationId) {
+            throw new ApiError(404, `Connector not found: ${connectorId}`);
+          }
+        }
+      }
+
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
@@ -523,6 +541,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const kb = await KnowledgeBaseModel.findById(kbId);
           if (!kb || kb.organizationId !== organizationId) {
             throw new ApiError(404, `Knowledge base not found: ${kbId}`);
+          }
+        }
+      }
+
+      // Validate connectorIds if provided
+      if (body.connectorIds && body.connectorIds.length > 0) {
+        if (existingAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        for (const connectorId of body.connectorIds) {
+          const connector =
+            await KnowledgeBaseConnectorModel.findById(connectorId);
+          if (!connector || connector.organizationId !== organizationId) {
+            throw new ApiError(404, `Connector not found: ${connectorId}`);
           }
         }
       }

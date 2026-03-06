@@ -72,6 +72,23 @@ const UnsubscribeMcpLogsPayloadSchema = z.object({
   serverId: z.string().uuid(),
 });
 
+// MCP Exec payloads
+const SubscribeMcpExecPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+});
+const UnsubscribeMcpExecPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+});
+const McpExecInputPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+  data: z.string(),
+});
+const McpExecResizePayloadSchema = z.object({
+  serverId: z.string().uuid(),
+  cols: z.number().int().min(1),
+  rows: z.number().int().min(1),
+});
+
 // MCP Deployment Status payloads
 const SubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
 const UnsubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
@@ -123,6 +140,22 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("unsubscribe_mcp_logs"),
     payload: UnsubscribeMcpLogsPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_mcp_exec"),
+    payload: SubscribeMcpExecPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_mcp_exec"),
+    payload: UnsubscribeMcpExecPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("mcp_exec_input"),
+    payload: McpExecInputPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("mcp_exec_resize"),
+    payload: McpExecResizePayloadSchema,
   }),
   z.object({
     type: z.literal("subscribe_mcp_deployment_statuses"),
@@ -250,6 +283,39 @@ export type McpLogsErrorMessage = {
   };
 };
 
+// MCP Exec server -> client messages
+export type McpExecStartedMessage = {
+  type: "mcp_exec_started";
+  payload: {
+    serverId: string;
+    command: string;
+    podName: string;
+  };
+};
+
+export type McpExecOutputMessage = {
+  type: "mcp_exec_output";
+  payload: {
+    serverId: string;
+    data: string;
+  };
+};
+
+export type McpExecErrorMessage = {
+  type: "mcp_exec_error";
+  payload: {
+    serverId: string;
+    error: string;
+  };
+};
+
+export type McpExecClosedMessage = {
+  type: "mcp_exec_closed";
+  payload: {
+    serverId: string;
+  };
+};
+
 // MCP Deployment Status server -> client messages
 export const MCP_DEPLOYMENT_STATES = [
   "not_created",
@@ -293,6 +359,10 @@ export type ServerWebSocketMessage =
   | BrowserSetZoomResultMessage
   | McpLogsMessage
   | McpLogsErrorMessage
+  | McpExecStartedMessage
+  | McpExecOutputMessage
+  | McpExecErrorMessage
+  | McpExecClosedMessage
   | McpDeploymentStatusesMessage
   | ErrorMessage;
 

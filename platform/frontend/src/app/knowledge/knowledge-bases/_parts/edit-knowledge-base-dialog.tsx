@@ -15,7 +15,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,8 +30,6 @@ type KnowledgeBaseItem =
 interface EditKnowledgeBaseFormValues {
   name: string;
   description: string;
-  apiUrl: string;
-  apiKey: string;
 }
 
 export function EditKnowledgeBaseDialog({
@@ -54,8 +51,6 @@ export function EditKnowledgeBaseDialog({
     defaultValues: {
       name: knowledgeBase.name,
       description: knowledgeBase.description ?? "",
-      apiUrl: knowledgeBase.config.apiUrl,
-      apiKey: "",
     },
   });
 
@@ -64,8 +59,6 @@ export function EditKnowledgeBaseDialog({
       form.reset({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
-        apiUrl: knowledgeBase.config.apiUrl,
-        apiKey: "",
       });
       setVisibility(knowledgeBase.visibility);
       setTeamIds(knowledgeBase.teamIds);
@@ -80,10 +73,6 @@ export function EditKnowledgeBaseDialog({
         description: values.description || null,
         visibility,
         teamIds: visibility === "team-scoped" ? teamIds : [],
-        config: {
-          apiUrl: values.apiUrl,
-          ...(values.apiKey ? { apiKey: values.apiKey } : {}),
-        },
       },
     });
     if (result) {
@@ -142,41 +131,6 @@ export function EditKnowledgeBaseDialog({
               onVisibilityChange={setVisibility}
               teamIds={teamIds}
               onTeamIdsChange={setTeamIds}
-            />
-
-            <FormField
-              control={form.control}
-              name="apiUrl"
-              rules={{ required: "API URL is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>API URL</FormLabel>
-                  <FormControl>
-                    <Input placeholder="http://localhost:9621" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    The URL of the knowledge base API server.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="apiKey"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>API Key (optional)</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="sk-..." {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Leave empty to keep the existing key.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
             />
 
             <DialogFooter>

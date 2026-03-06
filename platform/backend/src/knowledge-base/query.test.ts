@@ -26,7 +26,7 @@ vi.mock("@/config", async (importOriginal) => {
     default: {
       ...original.default,
       kb: {
-        openaiApiKey: "test-api-key",
+        embeddingApiKey: "test-api-key",
         hybridSearchEnabled: true,
         rerankerEnabled: false,
       },

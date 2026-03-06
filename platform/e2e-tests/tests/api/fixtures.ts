@@ -949,19 +949,13 @@ const clearWiremockRequests = async (request: APIRequestContext) => {
  * Create a knowledge base
  * (authnz is handled by the authenticated session)
  */
-const createKnowledgeBase = async (
-  request: APIRequestContext,
-  name?: string,
-  overrides?: { provider?: string; config?: Record<string, unknown> },
-) =>
+const createKnowledgeBase = async (request: APIRequestContext, name?: string) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/knowledge-bases",
     data: {
       name: name ?? `Test KG ${crypto.randomUUID().slice(0, 8)}`,
-      provider: overrides?.provider ?? "lightrag",
-      config: overrides?.config ?? { apiUrl: "http://localhost:9100" },
     },
   });
 

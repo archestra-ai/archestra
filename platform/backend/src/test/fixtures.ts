@@ -208,6 +208,7 @@ async function makeAgent(
     teams: [],
     labels: [],
     knowledgeBaseIds: [],
+    connectorIds: [],
   };
   return await AgentModel.create(
     {
@@ -829,17 +830,13 @@ async function makeOAuthRefreshToken(
  */
 async function makeKnowledgeBase(
   organizationId: string,
-  overrides: Partial<
-    Pick<InsertKnowledgeBase, "name" | "provider" | "config" | "status">
-  > = {},
+  overrides: Partial<Pick<InsertKnowledgeBase, "name" | "status">> = {},
 ): Promise<KnowledgeBase> {
   const [result] = await db
     .insert(schema.knowledgeBasesTable)
     .values({
       organizationId,
       name: `Test KG ${crypto.randomUUID().substring(0, 8)}`,
-      provider: "lightrag",
-      config: { apiUrl: "http://localhost:9621" },
       ...overrides,
     })
     .returning();

@@ -36664,6 +36664,7 @@
                 "name",
                 "createdAt",
                 "toolsCount",
+                "subagentsCount",
                 "team"
               ]
             },

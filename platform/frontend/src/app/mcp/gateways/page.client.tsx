@@ -198,6 +198,7 @@ function McpGateways({
     | "name"
     | "createdAt"
     | "toolsCount"
+    | "subagentsCount"
     | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
@@ -423,7 +424,17 @@ function McpGateways({
     },
     {
       id: "subagentsCount",
-      header: "Subagents",
+      accessorKey: "subagentsCount",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Subagents
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => {
         const subagentsCount = row.original.tools.filter(
           (t) => t.delegateToAgentId,

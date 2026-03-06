@@ -11657,7 +11657,7 @@ export type GetAgentsData = {
         labels?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'team';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/agents';

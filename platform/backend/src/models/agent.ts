@@ -556,7 +556,32 @@ class AgentModel {
     const direction = sorting?.sortDirection === "asc" ? asc : desc;
 
     // Add sorting-specific joins and order by
-    if (sorting?.sortBy === "toolsCount") {
+    if (sorting?.sortBy === "subagentsCount") {
+      const subagentsCountSubquery = db
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          subagentsCount: count(schema.agentToolsTable.toolId).as(
+            "subagentsCount",
+          ),
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(sql`${schema.toolsTable.delegateToAgentId} IS NOT NULL`)
+        .groupBy(schema.agentToolsTable.agentId)
+        .as("subagentsCounts");
+
+      query = query
+        .leftJoin(
+          subagentsCountSubquery,
+          eq(schema.agentsTable.id, subagentsCountSubquery.agentId),
+        )
+        .orderBy(
+          direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
+        );
+    } else if (sorting?.sortBy === "toolsCount") {
       const toolsCountSubquery = db
         .select({
           agentId: schema.agentToolsTable.agentId,
@@ -689,8 +714,9 @@ class AgentModel {
       case "createdAt":
         return direction(schema.agentsTable.createdAt);
       case "toolsCount":
+      case "subagentsCount":
       case "team":
-        // toolsCount and team sorting use a separate query path (see lines 168-267).
+        // toolsCount, subagentsCount, and team sorting use a separate query path.
         // This fallback should never be reached for these sort types.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:

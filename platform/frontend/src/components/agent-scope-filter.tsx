@@ -11,7 +11,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -105,9 +104,9 @@ export function AgentScopeFilter({
   );
 
   const handleAuthorIdsChange = useCallback(
-    (value: string) => {
+    (values: string[]) => {
       updateUrlParams({
-        authorIds: value === "all" ? null : value,
+        authorIds: values.length > 0 ? values.join(",") : null,
       });
     },
     [updateUrlParams],
@@ -130,13 +129,11 @@ export function AgentScopeFilter({
   );
 
   const memberItems = useMemo(
-    () => [
-      { value: "all", label: "All users" },
-      ...(members ?? []).map((m) => ({
+    () =>
+      (members ?? []).map((m) => ({
         value: m.id,
         label: m.name || m.email,
       })),
-    ],
     [members],
   );
 
@@ -152,7 +149,7 @@ export function AgentScopeFilter({
           <SelectItem value="personal">Personal</SelectItem>
           <SelectItem value="team">Team</SelectItem>
           <SelectItem value="org">Organization</SelectItem>
-          {showBuiltIn && (
+          {showBuiltIn && isAdmin && (
             <>
               <SelectSeparator />
               <SelectItem value="built_in">Built-in</SelectItem>
@@ -172,12 +169,14 @@ export function AgentScopeFilter({
         />
       )}
       {scope === "personal" && isAdmin && (
-        <SearchableSelect
-          value={selectedAuthorIds[0] ?? "all"}
+        <MultiSelect
+          value={selectedAuthorIds}
           onValueChange={handleAuthorIdsChange}
           items={memberItems}
           placeholder="All users"
-          className="w-[200px]"
+          className="w-[220px]"
+          showSelectedBadges={false}
+          selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
         />
       )}
       <LabelSelect />
@@ -202,14 +201,26 @@ export function ActiveFilterBadges() {
   const pathname = usePathname();
 
   const teamIdsParam = searchParams.get("teamIds");
+  const authorIdsParam = searchParams.get("authorIds");
   const labelsParam = searchParams.get("labels");
+  const scopeParam = searchParams.get("scope");
   const { data: teams } = useTeams();
+  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: members } = useOrganizationMembers(
+    !!isAdmin && scopeParam === "personal",
+  );
 
   const selectedTeams = useMemo(() => {
     if (!teamIdsParam || !teams) return [];
     const ids = teamIdsParam.split(",");
     return teams.filter((t) => ids.includes(t.id));
   }, [teamIdsParam, teams]);
+
+  const selectedUsers = useMemo(() => {
+    if (!authorIdsParam || !members) return [];
+    const ids = authorIdsParam.split(",");
+    return members.filter((m) => ids.includes(m.id));
+  }, [authorIdsParam, members]);
 
   const parsedLabels = useMemo(
     () => parseLabelsParam(labelsParam),
@@ -229,6 +240,23 @@ export function ActiveFilterBadges() {
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [teamIdsParam, searchParams, router, pathname],
+  );
+
+  const handleRemoveUser = useCallback(
+    (userId: string) => {
+      const ids = (authorIdsParam ?? "")
+        .split(",")
+        .filter((id) => id !== userId);
+      const params = new URLSearchParams(searchParams.toString());
+      if (ids.length > 0) {
+        params.set("authorIds", ids.join(","));
+      } else {
+        params.delete("authorIds");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [authorIdsParam, searchParams, router, pathname],
   );
 
   const handleRemoveLabel = useCallback(
@@ -253,9 +281,10 @@ export function ActiveFilterBadges() {
   );
 
   const hasTeams = selectedTeams.length > 0;
+  const hasUsers = selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
 
-  if (!hasTeams && !hasLabels) return null;
+  if (!hasTeams && !hasUsers && !hasLabels) return null;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -272,6 +301,27 @@ export function ActiveFilterBadges() {
               <button
                 type="button"
                 onClick={() => handleRemoveTeam(team.id)}
+                className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      {hasUsers && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground">Users</span>
+          {selectedUsers.map((user) => (
+            <Badge
+              key={user.id}
+              variant="outline"
+              className="gap-1 pr-1 bg-blue-500/10 text-blue-600 border-blue-500/30"
+            >
+              {user.name || user.email}
+              <button
+                type="button"
+                onClick={() => handleRemoveUser(user.id)}
                 className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
               >
                 <X className="h-3 w-3" />

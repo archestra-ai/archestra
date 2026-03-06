@@ -26,7 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
   identityProvider: ["create", "read", "update", "delete"],
-  member: ["create", "update", "delete"],
+  member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete", "admin"],

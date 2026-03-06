@@ -86,6 +86,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "name",
               "createdAt",
               "toolsCount",
+              "subagentsCount",
               "team",
             ] as const),
           ),

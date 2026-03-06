@@ -48,7 +48,7 @@ export function useProfilesPaginated(params?: {
   initialData?: archestraApiTypes.GetAgentsResponses["200"];
   limit?: number;
   offset?: number;
-  sortBy?: "name" | "createdAt" | "toolsCount" | "team";
+  sortBy?: "name" | "createdAt" | "toolsCount" | "subagentsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
   agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];

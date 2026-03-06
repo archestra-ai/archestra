@@ -1,6 +1,6 @@
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
-export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment.ee";
+export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
@@ -20,8 +20,8 @@ export { default as IncomingEmailSubscriptionModel } from "./incoming-email-subs
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
-export { default as KbChunkModel } from "./kb-chunk.ee";
-export { default as KbDocumentModel } from "./kb-document.ee";
+export { default as KbChunkModel } from "./kb-chunk";
+export { default as KbDocumentModel } from "./kb-document";
 export { default as KnowledgeBaseModel } from "./knowledge-base";
 export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connector";
 export { default as LimitModel, LimitValidationService } from "./limit";

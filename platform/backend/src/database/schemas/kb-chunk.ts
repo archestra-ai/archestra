@@ -8,7 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import kbDocumentsTable from "./kb-document.ee";
+import kbDocumentsTable from "./kb-document";
 import knowledgeBasesTable from "./knowledge-base";
 
 const vector = customType<{ data: number[]; driverParam: string }>({

@@ -1,6 +1,6 @@
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
-export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment.ee";
+export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
@@ -24,8 +24,8 @@ export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
-export { default as kbChunksTable } from "./kb-chunk.ee";
-export { default as kbDocumentsTable } from "./kb-document.ee";
+export { default as kbChunksTable } from "./kb-chunk";
+export { default as kbDocumentsTable } from "./kb-document";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,

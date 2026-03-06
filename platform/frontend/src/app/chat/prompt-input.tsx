@@ -30,7 +30,9 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
+import { AgentSelector } from "@/components/chat/agent-selector";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
+import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
@@ -89,6 +91,16 @@ interface ArchestraPromptInputProps {
   submitDisabled?: boolean;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
+  /** Initial agent ID for agent selector in initial chat mode */
+  initialAgentId?: string | null;
+  /** Callback when agent changes in initial chat mode */
+  onAgentChange?: (agentId: string) => void;
+  /** Current prompt ID for agent selector in active conversation mode */
+  currentPromptId?: string | null;
+  /** Current agent ID for agent selector in active conversation mode */
+  currentConversationAgentId?: string;
+  /** Current model for agent selector in active conversation mode */
+  currentConversationModel?: string;
 }
 
 // Inner component that has access to the controller context
@@ -115,6 +127,11 @@ const PromptInputContent = ({
   agentLlmApiKeyId,
   submitDisabled = false,
   isPlaywrightSetupVisible = false,
+  initialAgentId,
+  onAgentChange,
+  currentPromptId,
+  currentConversationAgentId,
+  currentConversationModel,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -255,6 +272,7 @@ const PromptInputContent = ({
             placeholder="Type a message..."
             ref={textareaRef}
             className="px-4"
+            autoFocus
             disabled={submitDisabled}
             disableEnterSubmit={status !== "ready" && status !== "error"}
             data-testid={E2eTestId.ChatPromptTextarea}
@@ -319,6 +337,18 @@ const PromptInputContent = ({
               </TooltipContent>
             </Tooltip>
           )}
+          {initialAgentId !== undefined && onAgentChange ? (
+            <InitialAgentSelector
+              currentAgentId={initialAgentId}
+              onAgentChange={onAgentChange}
+            />
+          ) : currentConversationAgentId ? (
+            <AgentSelector
+              currentPromptId={currentPromptId ?? null}
+              currentAgentId={currentConversationAgentId}
+              currentModel={currentConversationModel ?? ""}
+            />
+          ) : null}
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={onModelChange}
@@ -403,6 +433,11 @@ const ArchestraPromptInput = ({
   agentLlmApiKeyId,
   submitDisabled,
   isPlaywrightSetupVisible,
+  initialAgentId,
+  onAgentChange,
+  currentPromptId,
+  currentConversationAgentId,
+  currentConversationModel,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -430,6 +465,11 @@ const ArchestraPromptInput = ({
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+          initialAgentId={initialAgentId}
+          onAgentChange={onAgentChange}
+          currentPromptId={currentPromptId}
+          currentConversationAgentId={currentConversationAgentId}
+          currentConversationModel={currentConversationModel}
         />
       </PromptInputProvider>
     </div>

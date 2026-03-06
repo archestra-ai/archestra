@@ -1182,6 +1182,7 @@ export function AgentDialog({
                         setLlmApiKeyId(null);
                         lastAutoSelectedProviderRef.current = null;
                       }}
+                      variant="outline"
                     />
 
                     {/* API Key Selector Pill */}
@@ -1205,12 +1206,12 @@ export function AgentDialog({
                             </>
                           ) : (
                             <span className="text-muted-foreground">
-                              Select API key...
+                              Dynamic API key
                             </span>
                           )}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-80 p-0" align="start">
+                      <PopoverContent className="w-96 p-0" align="start">
                         <Command>
                           <CommandInput placeholder="Search API keys..." />
                           <CommandList>
@@ -1225,7 +1226,8 @@ export function AgentDialog({
                                 }}
                               >
                                 <span className="text-muted-foreground">
-                                  None (use default)
+                                  Dynamic API key (resolved at runtime:
+                                  org-wide → team → personal)
                                 </span>
                                 {!llmApiKeyId && (
                                   <CheckIcon className="ml-auto h-4 w-4" />

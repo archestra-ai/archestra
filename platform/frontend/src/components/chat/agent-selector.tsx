@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Bot, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
@@ -102,7 +102,7 @@ export function AgentSelector({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            variant="outline"
+            variant="ghost"
             role="combobox"
             aria-expanded={open}
             data-agent-selector
@@ -112,11 +112,6 @@ export function AgentSelector({
             <span className="text-xs font-medium truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>
-            {open ? (
-              <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-            ) : (
-              <ChevronRight className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0" align="start">

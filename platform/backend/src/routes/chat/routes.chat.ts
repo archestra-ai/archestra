@@ -38,6 +38,7 @@ import {
   ConversationModel,
   MessageModel,
   TeamModel,
+  ToolModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
@@ -573,6 +574,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: z.string(),
               description: z.string(),
               parameters: z.record(z.string(), z.any()).nullable(),
+              meta: z.record(z.string(), z.any()).nullable().optional(),
             }),
           ),
         ),
@@ -602,14 +604,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // No conversation context here as this is just fetching available tools
       });
 
+      // Also fetch database definitions to retrieve metadata
+      const dbTools = await ToolModel.getMcpToolsAssignedToAgent([], agent.id);
+
       // Convert AI SDK Tool format to simple array for frontend
-      const tools = Object.entries(mcpTools).map(([name, tool]) => ({
-        name,
-        description: tool.description || "",
-        parameters:
-          (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
-            ?.jsonSchema || null,
-      }));
+      const tools = Object.entries(mcpTools).map(([name, tool]) => {
+        const dbToolFilter = dbTools.find(t => t.name === name);
+        return {
+          name,
+          description: tool.description || "",
+          parameters:
+            (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
+              ?.jsonSchema || null,
+          meta: dbToolFilter?.meta ?? null,
+        };
+      });
 
       return reply.send(tools);
     },

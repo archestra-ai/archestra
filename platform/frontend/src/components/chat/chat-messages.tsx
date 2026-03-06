@@ -43,6 +43,8 @@ import {
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { useChatProfileMcpTools } from "@/lib/chat.query";
+import { AppRenderer } from "@mcp-ui/client";
 import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -565,10 +567,10 @@ export function ChatMessages({
                                 const isLastParsedTextPart =
                                   parsedIdx ===
                                   parsedParts.length -
-                                    1 -
-                                    [...parsedParts]
-                                      .reverse()
-                                      .findIndex((p) => p.type === "text");
+                                  1 -
+                                  [...parsedParts]
+                                    .reverse()
+                                    .findIndex((p) => p.type === "text");
                                 return (
                                   <EditableAssistantMessage
                                     key={parsedKey}
@@ -855,18 +857,18 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <div className="absolute bottom-[-10] left-0">
-              <Message from="assistant">
-                <Image
-                  src={"/logo.png"}
-                  alt="Loading logo"
-                  width={30}
-                  height={30}
-                  className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-                />
-              </Message>
-            </div>
-          )}
+              <div className="absolute bottom-[-10] left-0">
+                <Message from="assistant">
+                  <Image
+                    src={"/logo.png"}
+                    alt="Loading logo"
+                    width={30}
+                    height={30}
+                    className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                  />
+                </Message>
+              </div>
+            )}
         </div>
       </ConversationContent>
       <ConversationScrollButton />
@@ -935,6 +937,9 @@ function MessageTool({
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
+  const { data: profileMcpTools } = useChatProfileMcpTools(agentId);
+  const resourceUri = profileMcpTools?.find((t) => t.toolName === toolName)?.meta?.ui?.resourceUri as string | undefined;
+
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
     : tryToExtractErrorFromOutput(part.output);
@@ -967,7 +972,7 @@ function MessageTool({
           onReauth={
             onReauthMcp && ids.catalogId && ids.serverId
               ? () =>
-                  onReauthMcp(ids.catalogId as string, ids.serverId as string)
+                onReauthMcp(ids.catalogId as string, ids.serverId as string)
               : undefined
           }
         />
@@ -1007,7 +1012,7 @@ function MessageTool({
           onReauth={
             onReauthMcp && ids.catalogId && ids.serverId
               ? () =>
-                  onReauthMcp(ids.catalogId as string, ids.serverId as string)
+                onReauthMcp(ids.catalogId as string, ids.serverId as string)
               : undefined
           }
         />
@@ -1047,10 +1052,10 @@ function MessageTool({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
-      errorText ||
-      isApprovalRequested ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
+    errorText ||
+    isApprovalRequested ||
+    (toolResultPart && Boolean(toolResultPart.output)) ||
+    (!toolResultPart && Boolean(part.output)),
   );
 
   // Show logs button for failed tool calls
@@ -1074,55 +1079,67 @@ function MessageTool({
         actionButton={logsButton}
       />
       <ToolContent>
-        {hasInput ? <ToolInput input={part.input} /> : null}
-        {isApprovalRequested &&
-          onToolApprovalResponse &&
-          "approval" in part &&
-          part.approval?.id && (
-            <div className="flex items-center gap-2 px-4 pb-4">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: true,
-                  });
-                }}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: false,
-                    reason: "User denied",
-                  });
-                }}
-              >
-                Deny
-              </Button>
-            </div>
-          )}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
-        )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
+        {resourceUri ? (
+          <div className="mt-4">
+            <AppRenderer
+              resourceUri={resourceUri}
+              args={part.input}
+              result={toolResultPart ? toolResultPart.output : part.output}
+            />
+          </div>
+        ) : (
+          <>
+            {hasInput ? <ToolInput input={part.input} /> : null}
+            {isApprovalRequested &&
+              onToolApprovalResponse &&
+              "approval" in part &&
+              part.approval?.id && (
+                <div className="flex items-center gap-2 px-4 pb-4">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToolApprovalResponse({
+                        id: (part as { approval: { id: string } }).approval.id,
+                        approved: true,
+                      });
+                    }}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToolApprovalResponse({
+                        id: (part as { approval: { id: string } }).approval.id,
+                        approved: false,
+                        reason: "User denied",
+                      });
+                    }}
+                  >
+                    Deny
+                  </Button>
+                </div>
+              )}
+            {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+            {toolResultPart && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={toolResultPart.output}
+                errorText={errorText}
+              />
+            )}
+            {!toolResultPart && Boolean(part.output) && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={part.output}
+                errorText={errorText}
+              />
+            )}
+          </>
         )}
       </ToolContent>
     </Tool>

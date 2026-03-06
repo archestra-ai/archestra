@@ -190,10 +190,10 @@ class McpServerModel {
       if (!serversMap.has(row.server.id)) {
         const teamDetails = row.server.teamId
           ? {
-              teamId: row.server.teamId,
-              name: row.teamName || "",
-              createdAt: row.server.createdAt,
-            }
+            teamId: row.server.teamId,
+            name: row.teamName || "",
+            createdAt: row.server.createdAt,
+          }
           : null;
 
         const secretStorageType = computeSecretStorageType(
@@ -279,10 +279,10 @@ class McpServerModel {
     // Build teamDetails from the joined team data
     const teamDetails = result.server.teamId
       ? {
-          teamId: result.server.teamId,
-          name: result.teamName || "",
-          createdAt: result.server.createdAt,
-        }
+        teamId: result.server.teamId,
+        name: result.teamName || "",
+        createdAt: result.server.createdAt,
+      }
       : null;
 
     // Compute secret storage type
@@ -533,6 +533,7 @@ class McpServerModel {
         name: tool.name,
         description: tool.description || `Tool: ${tool.name}`,
         inputSchema: tool.inputSchema,
+        meta: tool._meta,
       }));
     } catch (error) {
       logger.error(
@@ -582,10 +583,10 @@ class McpServerModel {
 
     const teamDetails = result.server.teamId
       ? {
-          teamId: result.server.teamId,
-          name: result.teamName || "",
-          createdAt: result.server.createdAt,
-        }
+        teamId: result.server.teamId,
+        name: result.teamName || "",
+        createdAt: result.server.createdAt,
+      }
       : null;
 
     return {

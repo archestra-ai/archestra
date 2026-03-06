@@ -43,6 +43,7 @@ const toolsTable = pgTable(
       .$type<ToolParametersContent>()
       .notNull()
       .default({}),
+    meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
     description: text("description"),
     policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
       mode: "date",

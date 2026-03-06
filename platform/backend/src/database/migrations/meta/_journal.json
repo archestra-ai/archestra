@@ -1128,6 +1128,13 @@
       "when": 1772675149517,
       "tag": "0160_tranquil_psylocke",
       "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1772743867600,
+      "tag": "0161_thick_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

@@ -11763,6 +11763,9 @@ export type GetAgentsResponses = {
                 parameters?: {
                     [key: string]: unknown;
                 };
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
                 description: string | null;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
@@ -11946,6 +11949,9 @@ export type CreateAgentResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -12105,6 +12111,9 @@ export type GetAllAgentsResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -12251,6 +12260,9 @@ export type GetDefaultMcpGatewayResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -12397,6 +12409,9 @@ export type GetDefaultLlmProxyResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -12624,6 +12639,9 @@ export type GetAgentResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -12800,6 +12818,9 @@ export type UpdateAgentResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -12949,6 +12970,9 @@ export type GetAgentVersionsResponses = {
                 parameters?: {
                     [key: string]: unknown;
                 };
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
                 description: string | null;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
@@ -13109,6 +13133,9 @@ export type RollbackAgentResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             description: string | null;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
@@ -13872,6 +13899,9 @@ export type GetAgentToolsResponses = {
         parameters?: {
             [key: string]: unknown;
         };
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         description: string | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
@@ -19080,6 +19110,9 @@ export type GetChatAgentMcpToolsResponses = {
         name: string;
         description: string;
         parameters: {
+            [key: string]: unknown;
+        } | null;
+        meta?: {
             [key: string]: unknown;
         } | null;
     }>;
@@ -33810,6 +33843,9 @@ export type GetToolsResponses = {
         parameters?: {
             [key: string]: unknown;
         };
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         description: string | null;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;

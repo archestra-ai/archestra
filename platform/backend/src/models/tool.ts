@@ -211,15 +211,15 @@ class ToolModel {
         .where(
           tool.catalogId
             ? and(
-                isNull(schema.toolsTable.agentId),
-                eq(schema.toolsTable.catalogId, tool.catalogId),
-                eq(schema.toolsTable.name, tool.name),
-              )
+              isNull(schema.toolsTable.agentId),
+              eq(schema.toolsTable.catalogId, tool.catalogId),
+              eq(schema.toolsTable.name, tool.name),
+            )
             : and(
-                isNull(schema.toolsTable.agentId),
-                isNull(schema.toolsTable.catalogId),
-                eq(schema.toolsTable.name, tool.name),
-              ),
+              isNull(schema.toolsTable.agentId),
+              isNull(schema.toolsTable.catalogId),
+              eq(schema.toolsTable.name, tool.name),
+            ),
         );
       return existingTool;
     }
@@ -439,6 +439,7 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
+      meta?: Record<string, unknown>;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -491,6 +492,7 @@ class ToolModel {
           description: tool.description,
           parameters: tool.parameters,
           catalogId: tool.catalogId,
+          meta: tool.meta,
           agentId: null,
         });
       }
@@ -729,6 +731,7 @@ class ToolModel {
       useDynamicTeamCredential: boolean;
       catalogId: string | null;
       catalogName: string | null;
+      meta: Record<string, unknown> | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -748,6 +751,7 @@ class ToolModel {
           schema.agentToolsTable.useDynamicTeamCredential,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -991,8 +995,8 @@ class ToolModel {
       const rawName =
         lastSeparatorIndex !== -1
           ? tool.name.slice(
-              lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
-            )
+            lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
+          )
           : tool.name;
       const rawNameLower = rawName.toLowerCase();
 
@@ -1038,8 +1042,8 @@ class ToolModel {
         rawName =
           lastSeparatorIndex !== -1
             ? tool.name.slice(
-                lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
-              )
+              lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
+            )
             : tool.name;
       }
       // Lookup with lowercase key for case-insensitive matching
@@ -1119,8 +1123,8 @@ class ToolModel {
       const rawName =
         lastSeparatorIndex !== -1
           ? tool.name
-              .slice(lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length)
-              .toLowerCase()
+            .slice(lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length)
+            .toLowerCase()
           : tool.name.toLowerCase();
       syncedToolsByRawName.set(rawName, tool);
     }
@@ -1137,10 +1141,10 @@ class ToolModel {
         const rawName =
           lastSeparatorIndex !== -1
             ? orphanedTool.name
-                .slice(
-                  lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
-                )
-                .toLowerCase()
+              .slice(
+                lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
+              )
+              .toLowerCase()
             : orphanedTool.name.toLowerCase();
 
         const targetTool = syncedToolsByRawName.get(rawName);
@@ -1572,9 +1576,9 @@ class ToolModel {
     // Subquery to get tools that have at least one assignment (with access control)
     const assignmentConditions = accessibleAgentIds
       ? and(
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-          inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
-        )
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+      )
       : eq(schema.agentToolsTable.toolId, schema.toolsTable.id);
 
     // Count subquery for assignment count (with access control)

@@ -36853,6 +36853,39 @@
                                     }
                                   ]
                                 },
+                                "meta": {
+                                  "nullable": true,
+                                  "anyOf": [
+                                    {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "nullable": true,
+                                          "enum": [
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {}
+                                    }
+                                  ]
+                                },
                                 "description": {
                                   "nullable": true,
                                   "type": "string"
@@ -36891,6 +36924,7 @@
                                 "mcpServerId",
                                 "delegateToAgentId",
                                 "name",
+                                "meta",
                                 "description",
                                 "policiesAutoConfiguredAt",
                                 "policiesAutoConfiguringStartedAt",
@@ -37613,6 +37647,39 @@
                               }
                             ]
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -37651,6 +37718,7 @@
                           "mcpServerId",
                           "delegateToAgentId",
                           "name",
+                          "meta",
                           "description",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
@@ -38226,6 +38294,39 @@
                                 }
                               ]
                             },
+                            "meta": {
+                              "nullable": true,
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": {}
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {}
+                                }
+                              ]
+                            },
                             "description": {
                               "nullable": true,
                               "type": "string"
@@ -38264,6 +38365,7 @@
                             "mcpServerId",
                             "delegateToAgentId",
                             "name",
+                            "meta",
                             "description",
                             "policiesAutoConfiguredAt",
                             "policiesAutoConfiguringStartedAt",
@@ -38794,6 +38896,39 @@
                               }
                             ]
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -38832,6 +38967,7 @@
                           "mcpServerId",
                           "delegateToAgentId",
                           "name",
+                          "meta",
                           "description",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
@@ -39361,6 +39497,39 @@
                               }
                             ]
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -39399,6 +39568,7 @@
                           "mcpServerId",
                           "delegateToAgentId",
                           "name",
+                          "meta",
                           "description",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
@@ -39940,6 +40110,39 @@
                               }
                             ]
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -39978,6 +40181,7 @@
                           "mcpServerId",
                           "delegateToAgentId",
                           "name",
+                          "meta",
                           "description",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
@@ -40658,6 +40862,39 @@
                               }
                             ]
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -40696,6 +40933,7 @@
                           "mcpServerId",
                           "delegateToAgentId",
                           "name",
+                          "meta",
                           "description",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
@@ -41490,6 +41728,39 @@
                                   }
                                 ]
                               },
+                              "meta": {
+                                "nullable": true,
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "enum": [
+                                          null
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {}
+                                  }
+                                ]
+                              },
                               "description": {
                                 "nullable": true,
                                 "type": "string"
@@ -41528,6 +41799,7 @@
                               "mcpServerId",
                               "delegateToAgentId",
                               "name",
+                              "meta",
                               "description",
                               "policiesAutoConfiguredAt",
                               "policiesAutoConfiguringStartedAt",
@@ -42126,6 +42398,39 @@
                               }
                             ]
                           },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
@@ -42164,6 +42469,7 @@
                           "mcpServerId",
                           "delegateToAgentId",
                           "name",
+                          "meta",
                           "description",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
@@ -44739,6 +45045,39 @@
                           }
                         ]
                       },
+                      "meta": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "description": {
                         "nullable": true,
                         "type": "string"
@@ -44777,6 +45116,7 @@
                       "mcpServerId",
                       "delegateToAgentId",
                       "name",
+                      "meta",
                       "description",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
@@ -63774,6 +64114,11 @@
                         "type": "string"
                       },
                       "parameters": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      "meta": {
                         "nullable": true,
                         "type": "object",
                         "additionalProperties": {}
@@ -117998,6 +118343,39 @@
                           }
                         ]
                       },
+                      "meta": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "description": {
                         "nullable": true,
                         "type": "string"
@@ -118068,6 +118446,7 @@
                       "catalogId",
                       "delegateToAgentId",
                       "name",
+                      "meta",
                       "description",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",

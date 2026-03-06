@@ -218,9 +218,18 @@ export class McpServerRuntimeManager {
         const secret = await secretManager().getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
+          // Filter to keys this server needs
+          const expectedKeys = new Set(
+            (catalogItem?.localConfig?.environment ?? [])
+              .filter((e) => e.type === "secret")
+              .map((e) => e.key),
+          );
+
           secretData = {};
           for (const [key, value] of Object.entries(secret.secret)) {
-            secretData[key] = String(value);
+            if (!expectedKeys.size || expectedKeys.has(key)) {
+              secretData[key] = String(value);
+            }
           }
 
           // Use secret data as environmentValues if not explicitly provided

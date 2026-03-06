@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbChunk, KbChunk } from "@/types";
 

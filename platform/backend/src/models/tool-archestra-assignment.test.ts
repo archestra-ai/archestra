@@ -8,21 +8,14 @@ import ToolModel from "./tool";
 describe("Archestra Tools Dynamic Assignment", () => {
   test("agents get Archestra tools after explicit assignment", async ({
     makeAgent,
+    makeKnowledgeBase,
     seedAndAssignArchestraTools,
   }) => {
     // Create a new agent
     const agent = await makeAgent({ name: "New Agent" });
 
     // Create a knowledge base and assign to agent so KG tool is visible
-    const [kg] = await db
-      .insert(schema.knowledgeBasesTable)
-      .values({
-        name: "Test KG",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
-        organizationId: agent.organizationId,
-      })
-      .returning();
+    const kg = await makeKnowledgeBase(agent.organizationId);
     await db
       .update(schema.agentsTable)
       .set({ knowledgeBaseId: kg.id })
@@ -50,20 +43,13 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
   test("does not duplicate Archestra tools on subsequent getMcpToolsByAgent calls", async ({
     makeAgent,
+    makeKnowledgeBase,
     seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
     // Create a knowledge base and assign to agent so KG tool is visible
-    const [kg] = await db
-      .insert(schema.knowledgeBasesTable)
-      .values({
-        name: "Test KG",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
-        organizationId: agent.organizationId,
-      })
-      .returning();
+    const kg = await makeKnowledgeBase(agent.organizationId);
     await db
       .update(schema.agentsTable)
       .set({ knowledgeBaseId: kg.id })
@@ -86,6 +72,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
   test("getMcpToolsByAgent includes both Archestra and MCP server tools", async ({
     makeAgent,
+    makeKnowledgeBase,
     makeTool,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -96,15 +83,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const agent = await makeAgent({ name: "Test Agent" });
 
     // Create a knowledge base and assign to agent so KG tool is visible
-    const [kg] = await db
-      .insert(schema.knowledgeBasesTable)
-      .values({
-        name: "Test KG",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
-        organizationId: agent.organizationId,
-      })
-      .returning();
+    const kg = await makeKnowledgeBase(agent.organizationId);
     await db
       .update(schema.agentsTable)
       .set({ knowledgeBaseId: kg.id })
@@ -155,21 +134,14 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
   test("does not include proxy-discovered tools in getMcpToolsByAgent", async ({
     makeAgent,
+    makeKnowledgeBase,
     makeTool,
     seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
     // Create a knowledge base and assign to agent so KG tool is visible
-    const [kg] = await db
-      .insert(schema.knowledgeBasesTable)
-      .values({
-        name: "Test KG",
-        provider: "lightrag",
-        config: { apiUrl: "http://localhost:9621" },
-        organizationId: agent.organizationId,
-      })
-      .returning();
+    const kg = await makeKnowledgeBase(agent.organizationId);
     await db
       .update(schema.agentsTable)
       .set({ knowledgeBaseId: kg.id })

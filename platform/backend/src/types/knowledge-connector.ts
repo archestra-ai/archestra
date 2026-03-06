@@ -16,11 +16,16 @@ export const ConnectorCredentialsSchema = z.object({
 });
 export type ConnectorCredentials = z.infer<typeof ConnectorCredentialsSchema>;
 
+// ===== Shared =====
+
+/** Use for any connector URL field — normalizes trailing slashes at parse time. */
+const connectorUrlSchema = z.string().transform(stripTrailingSlashes);
+
 // ===== Jira Config & Checkpoint =====
 
 export const JiraConfigSchema = z.object({
   type: JIRA,
-  jiraBaseUrl: z.string().transform(stripTrailingSlashes),
+  jiraBaseUrl: connectorUrlSchema,
   isCloud: z.boolean(),
   projectKey: z.string().optional(),
   jqlQuery: z.string().optional(),
@@ -40,7 +45,7 @@ export type JiraCheckpoint = z.infer<typeof JiraCheckpointSchema>;
 
 export const ConfluenceConfigSchema = z.object({
   type: CONFLUENCE,
-  confluenceUrl: z.string().transform(stripTrailingSlashes),
+  confluenceUrl: connectorUrlSchema,
   isCloud: z.boolean(),
   spaceKeys: z.array(z.string()).optional(),
   pageIds: z.array(z.string()).optional(),

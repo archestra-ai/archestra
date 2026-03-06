@@ -28,7 +28,7 @@ CREATE TABLE "kb_chunks" (
 	"content" text NOT NULL,
 	"chunk_index" integer NOT NULL,
 	"embedding" vector(1536),
-	"search_vector" "tsvector",
+	"search_vector" tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
 	"acl" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
@@ -119,7 +119,6 @@ CREATE INDEX "knowledge_base_connectors_organization_id_idx" ON "knowledge_base_
 CREATE INDEX "knowledge_bases_organization_id_idx" ON "knowledge_bases" USING btree ("organization_id");--> statement-breakpoint
 ALTER TABLE "agents" ADD CONSTRAINT "agents_knowledge_base_id_knowledge_bases_id_fk" FOREIGN KEY ("knowledge_base_id") REFERENCES "public"."knowledge_bases"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "organization" ADD CONSTRAINT "organization_embedding_api_key_secret_id_secret_id_fk" FOREIGN KEY ("embedding_api_key_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "kb_chunks" ALTER COLUMN "search_vector" SET DATA TYPE tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;--> statement-breakpoint
 CREATE INDEX "kb_chunks_embedding_idx" ON "kb_chunks" USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);--> statement-breakpoint
 CREATE INDEX "kb_chunks_search_vector_idx" ON "kb_chunks" USING gin ("search_vector");--> statement-breakpoint
 CREATE INDEX "kb_chunks_acl_idx" ON "kb_chunks" USING gin ("acl" jsonb_path_ops);--> statement-breakpoint

@@ -12,6 +12,7 @@ helm_remote(
     'auth.database=archestra_dev',
     'auth.username=archestra',
     'auth.password=archestra_dev_password',
+    'auth.postgresPassword=archestra_dev_password',
 
     # NOTE: Bitnami is archiving their image.. see these github comments for details
     # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
@@ -29,7 +30,13 @@ helm_remote(
     # Increase probe timeout to accommodate slower responses
     'primary.livenessProbe.timeoutSeconds=10',
     'primary.readinessProbe.timeoutSeconds=10',
-    'primary.startupProbe.timeoutSeconds=10'
+    'primary.startupProbe.timeoutSeconds=10',
+
+    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+    # Must run as the postgres superuser (not the default auth.username).
+    'primary.initdb.user=postgres',
+    'primary.initdb.password=archestra_dev_password',  # matches auth.postgresPassword
+    'primary.initdb.scripts.grant-superuser\\.sql=ALTER USER archestra WITH SUPERUSER;',
   ]
 )
 

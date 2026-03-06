@@ -43,7 +43,6 @@ import {
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
-import { useConversationShare } from "@/lib/chat-share.query";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import {
   ChatApiKeyForm,
@@ -103,6 +102,7 @@ import {
   useChatApiKeys,
   useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
+import { useConversationShare } from "@/lib/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
@@ -157,7 +157,9 @@ export default function ChatPage() {
   >(undefined);
 
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const { data: conversationShare } = useConversationShare(conversationId ?? undefined);
+  const { data: conversationShare } = useConversationShare(
+    conversationId ?? undefined,
+  );
   const isShared = !!conversationShare;
 
   // Dialog management for MCP installation

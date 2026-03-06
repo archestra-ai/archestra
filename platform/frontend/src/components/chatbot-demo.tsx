@@ -411,7 +411,6 @@ const ChatBotDemo = ({
 
                         // Handle tool-* prefixed parts (persisted tool calls from DB)
                         if (_isToolPrefixedPart(part)) {
-
                           // Look ahead for tool result and dual LLM analysis
                           let toolResultPart = null;
                           let dualLlmPart: DualLlmPart | null = null;
@@ -603,9 +602,7 @@ export type PartialUIMessage = Partial<UIMessage> & {
 };
 
 // Type guard for tool-* prefixed parts (persisted tool calls from DB)
-function _isToolPrefixedPart(
-  part: unknown,
-): part is {
+function _isToolPrefixedPart(part: unknown): part is {
   type: string;
   toolCallId: string;
   state: string;

@@ -295,6 +295,7 @@ export function useUpdateOrganization(
         theme: updatedOrganization.theme,
         customFont: updatedOrganization.customFont,
         logo: updatedOrganization.logo,
+        logoDark: updatedOrganization.logoDark,
       });
       // Invalidate config cache since globalToolPolicy comes from organization record
       queryClient.invalidateQueries({ queryKey: ["config"] });

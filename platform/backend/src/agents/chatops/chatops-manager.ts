@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -310,6 +311,11 @@ export class ChatOpsManager {
     const headers: Record<string, string | string[] | undefined> = {};
     const message = await provider.parseWebhookNotification(body, headers);
     if (!message) return;
+
+    // Notify about missing scopes (rate-limited, at most once per 30 days)
+    if (provider.hasMissingScopes()) {
+      provider.notifyMissingScopes(message).catch(() => {});
+    }
 
     // Discover channels in background
     if (message.workspaceId) {
@@ -1357,14 +1363,28 @@ async function getDefaultOrganizationId(): Promise<string> {
  * Uses the thread ID when available (threaded conversations), otherwise
  * falls back to the channel ID (non-threaded DMs/channels).
  * Prefixed with provider to avoid collisions across providers.
+ *
+ * MS Teams DM channel IDs can be 100+ chars. Long session IDs overflow the
+ * 128-char Prometheus exemplar label budget, so we hash identifiers that
+ * would push the total past a safe length.
  */
 export function buildChatOpsSessionId(
   providerId: string,
   channelId: string,
   threadId?: string,
 ): string {
-  return `chatops:${providerId}:${threadId ?? channelId}`;
+  const id = threadId ?? channelId;
+  const prefix = `chatops:${providerId}:`;
+  if (prefix.length + id.length <= MAX_SESSION_ID_LENGTH) {
+    return `${prefix}${id}`;
+  }
+  const hash = createHash("sha256").update(id).digest("hex").slice(0, 16);
+  return `${prefix}${hash}`;
 }
+
+// Prometheus exemplar labels allow 128 UTF-8 chars total (keys + values).
+// traceID (7+32) + spanID (6+16) = 61; remaining for sessionID key (9) + value = 58.
+const MAX_SESSION_ID_LENGTH = 58;
 
 function stripThinkingBlocks(text: string): string {
   return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();

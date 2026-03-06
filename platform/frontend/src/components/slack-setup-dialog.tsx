@@ -1,5 +1,6 @@
 "use client";
 
+import { SLACK_REQUIRED_BOT_SCOPES } from "@shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -471,22 +472,7 @@ function buildSlackManifest(params: {
     },
     oauth_config: {
       scopes: {
-        bot: [
-          "assistant:write",
-          "commands",
-          "app_mentions:read",
-          "channels:history",
-          "channels:read",
-          "chat:write",
-          "files:read",
-          "groups:history",
-          "groups:read",
-          "im:history",
-          "im:read",
-          "im:write",
-          "users:read",
-          "users:read.email",
-        ],
+        bot: SLACK_REQUIRED_BOT_SCOPES,
       },
     },
     settings: {

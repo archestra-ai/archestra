@@ -18,7 +18,7 @@ export function useOrgTheme() {
   const { data: appearance, isLoading: isLoadingAppearance } =
     usePublicAppearance();
 
-  const { theme: themeFromBackend, logo } = appearance ?? {};
+  const { theme: themeFromBackend, logo, logoDark } = appearance ?? {};
 
   const updateThemeMutation = useUpdateOrganization(
     "Appearance settings updated",
@@ -72,6 +72,7 @@ export function useOrgTheme() {
       setPreviewTheme: undefined,
       saveAppearance: undefined,
       logo,
+      logoDark,
       DEFAULT_THEME,
       isLoadingAppearance,
       applyThemeOnUI,
@@ -84,6 +85,7 @@ export function useOrgTheme() {
     setPreviewTheme: setCurrentUITheme,
     saveAppearance,
     logo,
+    logoDark,
     DEFAULT_THEME,
     isLoadingAppearance,
     applyThemeOnUI,

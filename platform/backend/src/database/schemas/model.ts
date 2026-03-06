@@ -73,6 +73,13 @@ const modelsTable = pgTable(
       scale: 2,
     }),
 
+    /** Whether this model was discovered via an LLM Proxy request (ensureModelExists).
+     * Models with this flag are preserved even without API key links,
+     * so users can define custom token pricing for metrics. */
+    discoveredViaLlmProxy: boolean("discovered_via_llm_proxy")
+      .notNull()
+      .default(false),
+
     /** When this metadata was last synced from external source */
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" })
       .notNull()

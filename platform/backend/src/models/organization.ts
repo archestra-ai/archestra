@@ -120,6 +120,7 @@ class OrganizationModel {
         theme: schema.organizationsTable.theme,
         customFont: schema.organizationsTable.customFont,
         logo: schema.organizationsTable.logo,
+        logoDark: schema.organizationsTable.logoDark,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -130,6 +131,7 @@ class OrganizationModel {
         theme: DEFAULT_THEME_ID,
         customFont: "lato" as OrganizationCustomFont,
         logo: null,
+        logoDark: null,
       };
     }
 

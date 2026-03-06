@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, ilike, or, sql } from "drizzle-orm";
+import { and, eq, ilike, notInArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -50,8 +50,15 @@ function getDefaultModelPrice(model: string): {
 
 class ModelModel {
   /**
-   * Find all models
+   * Find all models discovered via LLM Proxy requests.
    */
+  static async findLlmProxyModels(): Promise<Model[]> {
+    return await db
+      .select()
+      .from(schema.modelsTable)
+      .where(eq(schema.modelsTable.discoveredViaLlmProxy, true));
+  }
+
   static async findAll(params?: {
     search?: string;
     provider?: SupportedProvider;
@@ -281,6 +288,30 @@ class ModelModel {
   }
 
   /**
+   * Delete orphaned models that have no API key links and were NOT
+   * discovered via LLM Proxy. LLM Proxy models are preserved so users
+   * can define custom token pricing for metrics.
+   */
+  static async deleteOrphanedModels(): Promise<number> {
+    const orphaned = await db
+      .delete(schema.modelsTable)
+      .where(
+        and(
+          eq(schema.modelsTable.discoveredViaLlmProxy, false),
+          notInArray(
+            schema.modelsTable.id,
+            db
+              .selectDistinct({ modelId: schema.apiKeyModelsTable.modelId })
+              .from(schema.apiKeyModelsTable),
+          ),
+        ),
+      )
+      .returning({ id: schema.modelsTable.id });
+
+    return orphaned.length;
+  }
+
+  /**
    * Update custom pricing for a model by its internal UUID.
    * Set to null to reset to default pricing.
    */
@@ -303,7 +334,8 @@ class ModelModel {
 
   /**
    * Ensure a model entry exists for the given modelId and provider.
-   * Creates a stub entry with ON CONFLICT DO NOTHING if it doesn't exist.
+   * Marks the model as discovered via LLM Proxy so it's preserved even
+   * without API key links (users can set custom pricing for metrics).
    * Used by LLM proxy to ensure models are tracked even before models.dev sync.
    */
   static async ensureModelExists(
@@ -316,10 +348,14 @@ class ModelModel {
         externalId: `${provider}/${modelId}`,
         provider,
         modelId,
+        discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoNothing({
+      .onConflictDoUpdate({
         target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+        set: {
+          discoveredViaLlmProxy: true,
+        },
       });
   }
 

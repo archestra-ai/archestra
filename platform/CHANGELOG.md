@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.59](https://github.com/archestra-ai/archestra/compare/platform-v1.0.58...platform-v1.0.59) (2026-03-06)
+
+
+### Features
+
+* chat with mcp ([#3161](https://github.com/archestra-ai/archestra/issues/3161)) ([d08504f](https://github.com/archestra-ai/archestra/commit/d08504f2532c03850b215fc296915561d889e4fd))
+* exec mcp server pods from UI ([#3160](https://github.com/archestra-ai/archestra/issues/3160)) ([4209c0b](https://github.com/archestra-ai/archestra/commit/4209c0bfbb1eb6b1a08b9c1ba67e8275c50ee1f8))
+
+
+### Dependencies
+
+* bump dompurify from 3.3.1 to 3.3.2 in /platform ([#3155](https://github.com/archestra-ai/archestra/issues/3155)) ([c6068a0](https://github.com/archestra-ai/archestra/commit/c6068a033ced56c4cd0e67a8bd11f05ffc2d5247))
+* bump fastify from 5.7.4 to 5.8.1 in /platform ([#3154](https://github.com/archestra-ai/archestra/issues/3154)) ([a59fb7c](https://github.com/archestra-ai/archestra/commit/a59fb7c5c07d9c660717e6ae34d2ba223aa7fd12))
+
+
+### Code Refactoring
+
+* replace enterpriseLicenseActivated with enterpriseFeatures.core and remove browserStreamingEnabled ([#3159](https://github.com/archestra-ai/archestra/issues/3159)) ([e35b759](https://github.com/archestra-ai/archestra/commit/e35b7594809f5e425866b8bcdc91028561f6e81e))
+
 ## [1.0.58](https://github.com/archestra-ai/archestra/compare/platform-v1.0.57...platform-v1.0.58) (2026-03-06)
 
 

@@ -471,6 +471,10 @@ class AgentModel {
     } else if (filters?.scope === "org") {
       whereConditions.push(eq(schema.agentsTable.scope, "org"));
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    } else {
+      // No scope filter: exclude built-in agents by default.
+      // Built-in agents are only shown when explicitly filtered via scope=built_in.
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
     // Hide built-in agents from non-admin users

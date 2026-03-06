@@ -145,7 +145,6 @@ export function AgentScopeFilter({
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
           <SelectItem value="all">All types</SelectItem>
-          <SelectSeparator />
           <SelectItem value="personal">Personal</SelectItem>
           <SelectItem value="team">Team</SelectItem>
           <SelectItem value="org">Organization</SelectItem>

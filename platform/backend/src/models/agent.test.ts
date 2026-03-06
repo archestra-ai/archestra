@@ -1856,7 +1856,7 @@ describe("AgentModel", () => {
         },
       });
 
-      // Admin can see built-in agents
+      // Admin without scope filter excludes built-in agents by default
       const adminResults = await AgentModel.findAllPaginated(
         { limit: 20, offset: 0 },
         { sortBy: "createdAt", sortDirection: "desc" },
@@ -1864,7 +1864,21 @@ describe("AgentModel", () => {
         admin.id,
         true,
       );
-      expect(adminResults.data).toHaveLength(2);
+      expect(adminResults.data).toHaveLength(1);
+      expect(adminResults.data[0].name).toBe("Regular Agent");
+
+      // Admin with scope=built_in sees only built-in agents
+      const builtInResults = await AgentModel.findAllPaginated(
+        { limit: 20, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        { agentType: "agent", scope: "built_in" },
+        admin.id,
+        true,
+      );
+      expect(builtInResults.data).toHaveLength(1);
+      expect(builtInResults.data[0].name).toBe(
+        BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      );
 
       // Non-admin cannot see built-in agents
       const nonAdminResults = await AgentModel.findAllPaginated(

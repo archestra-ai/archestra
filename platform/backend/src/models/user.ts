@@ -76,7 +76,7 @@ class UserModel {
    * Get a user by ID with their organization membership
    */
   static async getById(id: string) {
-    logger.debug("UserModel.getById: fetching user");
+    logger.trace("UserModel.getById: fetching user");
     const [user] = await db
       .select({
         ...getTableColumns(schema.usersTable),
@@ -89,7 +89,7 @@ class UserModel {
       )
       .where(eq(schema.usersTable.id, id))
       .limit(1);
-    logger.debug({ found: !!user }, "UserModel.getById: completed");
+    logger.trace({ found: !!user }, "UserModel.getById: completed");
     return user;
   }
 

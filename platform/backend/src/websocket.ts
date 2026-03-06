@@ -508,13 +508,21 @@ class WebSocketService {
       stdin.destroy();
       stdout.destroy();
       stderr.destroy();
+
+      let errorMsg = "Failed to exec into pod";
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error
+      ) {
+        errorMsg = String((error as { message: unknown }).message);
+      }
+
       this.sendToClient(ws, {
         type: "mcp_exec_error",
-        payload: {
-          serverId,
-          error:
-            error instanceof Error ? error.message : "Failed to exec into pod",
-        },
+        payload: { serverId, error: errorMsg },
       });
     }
   }

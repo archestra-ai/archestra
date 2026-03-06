@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.60](https://github.com/archestra-ai/archestra/compare/platform-v1.0.59...platform-v1.0.60) (2026-03-06)
+
+
+### Bug Fixes
+
+* add missing verb for pods/exec ([#3166](https://github.com/archestra-ai/archestra/issues/3166)) ([81e4d03](https://github.com/archestra-ai/archestra/commit/81e4d031bd05b0ad1f417b306914be9abe035768))
+* chat with mcp ([#3163](https://github.com/archestra-ai/archestra/issues/3163)) ([4557bce](https://github.com/archestra-ai/archestra/commit/4557bce91b3b9b885584be34ec11df177ed6fedd))
+* reduce noisy auth and user model logs to trace level ([#3167](https://github.com/archestra-ai/archestra/issues/3167)) ([212a5e8](https://github.com/archestra-ai/archestra/commit/212a5e81bf72597032a0e1782ecd600494ae4aa4))
+
+
+### Miscellaneous Chores
+
+* exclude builtin agents in filters by default ([#3162](https://github.com/archestra-ai/archestra/issues/3162)) ([35303ae](https://github.com/archestra-ai/archestra/commit/35303aeaaaeab26e318a2d980b48098716095a98))
+
 ## [1.0.59](https://github.com/archestra-ai/archestra/compare/platform-v1.0.58...platform-v1.0.59) (2026-03-06)
 
 

@@ -1,11 +1,10 @@
 "use client";
 
-import {
-  E2eTestId,
-  type McpExecClosedMessage,
-  type McpExecErrorMessage,
-  type McpExecOutputMessage,
-  type McpExecStartedMessage,
+import type {
+  McpExecClosedMessage,
+  McpExecErrorMessage,
+  McpExecOutputMessage,
+  McpExecStartedMessage,
 } from "@shared";
 import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -109,7 +108,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
 
           // Send initial resize
           const dims = fitAddon.proposeDimensions();
-          if (dims) {
+          if (dims?.cols != null && dims?.rows != null) {
             websocketService.send({
               type: "mcp_exec_resize",
               payload: { serverId, cols: dims.cols, rows: dims.rows },
@@ -163,7 +162,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
         try {
           fitAddon.fit();
           const dims = fitAddon.proposeDimensions();
-          if (dims) {
+          if (dims?.cols != null && dims?.rows != null) {
             websocketService.send({
               type: "mcp_exec_resize",
               payload: { serverId, cols: dims.cols, rows: dims.rows },
@@ -224,10 +223,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
   }, [command]);
 
   return (
-    <div
-      className="flex flex-col gap-4 flex-1 min-h-0"
-      data-testid={E2eTestId.McpDebugTerminal}
-    >
+    <div className="flex flex-col gap-4 flex-1 min-h-0">
       <div className="flex flex-col gap-2 flex-1 min-h-0">
         <h3 className="text-sm font-semibold flex-shrink-0">
           Interactive Shell

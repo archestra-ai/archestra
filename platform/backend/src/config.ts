@@ -770,6 +770,9 @@ const config = {
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },
+  kb: {
+    openaiApiKey: process.env.ARCHESTRA_KB_OPENAI_API_KEY || "",
+  },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",

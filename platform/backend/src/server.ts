@@ -694,6 +694,10 @@ const start = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
+    // Start embedding cron to process pending document embeddings
+    const { startEmbeddingCron } = await import("@/knowledge-base/embedder");
+    startEmbeddingCron();
+
     // Reconcile CronJobs for knowledge base connectors
     // Ensures CronJobs exist for all enabled connectors (e.g., if a CronJob was deleted)
     reconcileConnectorCronJobs().catch((error) => {

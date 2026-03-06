@@ -1,6 +1,18 @@
-import { count, eq } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbChunk, KbChunk } from "@/types";
+
+interface VectorSearchResult {
+  id: string;
+  content: string;
+  chunkIndex: number;
+  documentId: string;
+  title: string;
+  sourceUrl: string | null;
+  sourceType: string;
+  metadata: Record<string, unknown> | null;
+  score: number;
+}
 
 class KbChunkModel {
   static async findByDocument(documentId: string): Promise<KbChunk[]> {
@@ -41,6 +53,52 @@ class KbChunkModel {
       .where(eq(schema.kbChunksTable.documentId, documentId));
 
     return result?.count ?? 0;
+  }
+
+  static async vectorSearch(params: {
+    knowledgeBaseId: string;
+    queryEmbedding: number[];
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const { knowledgeBaseId, queryEmbedding, limit = 10 } = params;
+    const embeddingStr = `[${queryEmbedding.join(",")}]`;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.title, d.source_url AS "sourceUrl", d.source_type AS "sourceType", d.metadata,
+        1 - (c.embedding <=> ${embeddingStr}::vector(1536)) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      WHERE c.knowledge_base_id = ${knowledgeBaseId}
+        AND c.embedding IS NOT NULL
+      ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  static async updateEmbeddings(
+    updates: Array<{ chunkId: string; embedding: number[] }>,
+  ): Promise<void> {
+    if (updates.length === 0) return;
+
+    const values = updates
+      .map(
+        (u) =>
+          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(1536))`,
+      )
+      .join(", ");
+
+    await db.execute(
+      sql.raw(`
+        UPDATE kb_chunks AS c
+        SET embedding = v.embedding
+        FROM (VALUES ${values}) AS v(id, embedding)
+        WHERE c.id = v.id
+      `),
+    );
   }
 }
 

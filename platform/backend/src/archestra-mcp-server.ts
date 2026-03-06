@@ -11,17 +11,22 @@ import {
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
+import { buildUserAcl } from "@/knowledge-base/acl";
+import { queryService } from "@/knowledge-base/query";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
   InternalMcpCatalogModel,
+  KnowledgeBaseModel,
   LimitModel,
   McpServerModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
+  UserModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
 import { ProviderError } from "@/routes/chat/errors";
@@ -1752,17 +1757,89 @@ export async function executeArchestraTool(
       "query_knowledge_base tool called",
     );
 
-    // TODO: Replace with hybrid search query builder (pgvector + BM-25 RRF)
-    // once the query pipeline (query.ee.ts) is implemented.
-    return {
-      content: [
+    try {
+      const query = args?.query as string | undefined;
+      if (!query) {
+        return {
+          content: [
+            { type: "text", text: "Error: query parameter is required" },
+          ],
+          isError: true,
+        };
+      }
+
+      const agent = await AgentModel.findById(contextAgent.id);
+      if (!agent?.knowledgeBaseId) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No knowledge base assigned to this agent. Assign a knowledge base in agent settings to enable knowledge search.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const kb = await KnowledgeBaseModel.findById(agent.knowledgeBaseId);
+      if (!kb) {
+        return {
+          content: [{ type: "text", text: "Knowledge base not found." }],
+          isError: true,
+        };
+      }
+
+      let userAcl: string[] = ["org:*"];
+      if (context.userId) {
+        const [user, teamIds] = await Promise.all([
+          UserModel.getById(context.userId),
+          TeamModel.getUserTeamIds(context.userId),
+        ]);
+        if (user?.email) {
+          userAcl = buildUserAcl({
+            userEmail: user.email,
+            teamIds,
+            visibility: kb.visibility,
+          });
+        }
+      }
+
+      const results = await queryService.query({
+        knowledgeBaseId: agent.knowledgeBaseId,
+        queryText: query,
+        userAcl,
+        limit: 10,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              results,
+              totalChunks: results.length,
+            }),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error(
         {
-          type: "text",
-          text: "Knowledge base query is being migrated to the built-in pgvector RAG stack. This tool will be available once the query pipeline is implemented.",
+          agentId: contextAgent.id,
+          error: error instanceof Error ? error.message : String(error),
         },
-      ],
-      isError: true,
-    };
+        "query_knowledge_base failed",
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error querying knowledge base: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {

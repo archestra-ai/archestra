@@ -69,7 +69,7 @@ export function PageLayout({
     <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
         <div className={cn("mx-auto", maxWidth, "px-6 pt-6 md:px-6")}>
-          <div className="flex justify-between items-start sm:flex-row sm:justify-between sm:items-start">
+          <div className="flex justify-between items-center sm:flex-row sm:justify-between sm:items-center">
             <h1 className="mb-2 text-2xl font-semibold tracking-tight">
               {title}
             </h1>

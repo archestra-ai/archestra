@@ -5,8 +5,6 @@ import { formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   Check,
-  ChevronDown,
-  ChevronRight,
   Globe,
   Info,
   Link2,
@@ -19,6 +17,10 @@ import {
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  ConnectorStatusDot,
+  getConnectorDotState,
+} from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -34,7 +36,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -54,7 +55,6 @@ import {
   useAssignConnectorToKnowledgeBases,
   useConnectors,
   useDeleteConnector,
-  useUpdateConnector,
 } from "@/lib/connector.query";
 import {
   useDeleteKnowledgeBase,
@@ -66,6 +66,15 @@ import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
+
+const AGENT_TYPE_LABELS: Record<string, string> = {
+  agent: "Agent",
+  mcp_gateway: "MCP Gateway",
+};
+
+function formatAgentType(agentType: string): string {
+  return AGENT_TYPE_LABELS[agentType] ?? agentType;
+}
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -87,19 +96,6 @@ function KnowledgeBasesList() {
   const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
     null,
   );
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
-  const toggleExpanded = useCallback((id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
 
   const items = knowledgeBases?.data ?? [];
 
@@ -129,8 +125,6 @@ function KnowledgeBasesList() {
                 <KnowledgeBaseCard
                   key={kb.id}
                   kb={kb}
-                  isExpanded={expandedIds.has(kb.id)}
-                  onToggle={() => toggleExpanded(kb.id)}
                   onEdit={() => setEditingItem(kb)}
                   onDelete={() => setDeletingId(kb.id)}
                 />
@@ -166,14 +160,10 @@ function KnowledgeBasesList() {
 
 function KnowledgeBaseCard({
   kb,
-  isExpanded,
-  onToggle,
   onEdit,
   onDelete,
 }: {
   kb: KnowledgeBaseItem;
-  isExpanded: boolean;
-  onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -181,20 +171,13 @@ function KnowledgeBaseCard({
   const isOrgWide = kb.visibility === "org-wide";
   const isAutoSync = kb.visibility === "auto-sync-permissions";
   const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
-  const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
   const totalConnectors = kb.connectors.length;
 
   return (
     <div className="rounded-lg border">
       {/* Card header */}
-      <button
-        type="button"
-        className="flex w-full items-center gap-4 px-5 py-4 cursor-pointer hover:bg-muted transition-colors text-left"
-        onClick={onToggle}
-      >
-        <ExpandIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
-
-        <div className="flex flex-col gap-0.5 min-w-0">
+      <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 text-left">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <span className="text-xl font-semibold">{kb.name}</span>
           {kb.description && (
             <span className="text-sm text-muted-foreground truncate">
@@ -202,12 +185,10 @@ function KnowledgeBaseCard({
             </span>
           )}
         </div>
-
-        <div className="flex items-center shrink-0 ml-auto divide-x">
+        <div className="flex items-center gap-x-6 shrink-0 order-last lg:order-none w-full lg:w-auto pl-9 lg:pl-0">
           <StatItem label="Connectors" value={String(totalConnectors)} />
           <StatItem label="Docs Indexed" value={String(kb.totalDocsIndexed)} />
           <StatItem
-            className="w-[160px]"
             label="Visibility"
             value={
               <Badge variant="outline" className="gap-1.5">
@@ -221,7 +202,7 @@ function KnowledgeBaseCard({
             }
           />
           <StatItem
-            label="Assigned Profiles"
+            label="Assigned To"
             value={
               kb.assignedAgents.length > 0 ? (
                 <TooltipProvider>
@@ -238,8 +219,8 @@ function KnowledgeBaseCard({
                             key={agent.id}
                             className="flex items-center gap-1.5 text-xs"
                           >
-                            <span className="text-muted-foreground capitalize">
-                              {agent.agentType.replace("_", " ")}
+                            <span className="text-muted-foreground">
+                              {formatAgentType(agent.agentType)}
                             </span>
                             <span>{agent.name}</span>
                           </div>
@@ -254,7 +235,6 @@ function KnowledgeBaseCard({
             }
           />
         </div>
-
         <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
@@ -287,14 +267,12 @@ function KnowledgeBaseCard({
             <Trash2 className="h-4 w-4 text-muted-foreground" />
           </Button>
         </div>
-      </button>
+      </div>
 
-      {/* Expanded connectors panel */}
-      {isExpanded && (
-        <div className="border-t">
-          <ExpandedConnectors knowledgeBaseId={kb.id} />
-        </div>
-      )}
+      {/* Connectors panel */}
+      <div className="border-t">
+        <ExpandedConnectors knowledgeBaseId={kb.id} />
+      </div>
 
       <AddConnectorDialog
         knowledgeBaseId={kb.id}
@@ -316,7 +294,7 @@ function StatItem({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col gap-0.5 px-6", className)}>
+    <div className={cn("flex flex-col gap-0.5", className)}>
       <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
@@ -330,18 +308,10 @@ type ConnectorItem =
 
 function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
-  const updateConnector = useUpdateConnector();
   const [editingConnector, setEditingConnector] =
     useState<ConnectorItem | null>(null);
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
-  );
-
-  const handleToggleEnabled = useCallback(
-    async (connectorId: string, enabled: boolean) => {
-      await updateConnector.mutateAsync({ id: connectorId, body: { enabled } });
-    },
-    [updateConnector],
   );
 
   if (isPending) {
@@ -383,20 +353,22 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             <TableRow key={connector.id} className="hover:bg-muted/50">
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                  <ConnectorStatusDot state={getConnectorDotState(connector)} />
+                  <Badge variant="secondary" className="gap-1.5 capitalize">
                     <ConnectorTypeIcon
                       type={connector.connectorType}
-                      className="h-6 w-6"
+                      className="h-3.5 w-3.5"
                     />
-                  </div>
+                    {connector.connectorType}
+                  </Badge>
                   <span className="font-medium">{connector.name}</span>
                 </div>
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-2">
-                  <div className="flex items-center gap-2 mr-4">
-                    <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                    {connector.lastSyncAt ? (
+                  {connector.lastSyncAt ? (
+                    <>
+                      <ConnectorStatusBadge status={connector.lastSyncStatus} />
                       <span
                         className="text-xs text-muted-foreground"
                         title={formatDate({ date: connector.lastSyncAt })}
@@ -405,21 +377,12 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                           addSuffix: true,
                         })}
                       </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Never
-                      </span>
-                    )}
-                  </div>
-                  <Switch
-                    checked={connector.enabled}
-                    onCheckedChange={(checked) =>
-                      handleToggleEnabled(connector.id, checked)
-                    }
-                  />
-                  <span className="text-sm w-14">
-                    {connector.enabled ? "Active" : "Paused"}
-                  </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Never synced
+                    </span>
+                  )}
                 </div>
               </TableCell>
               <TableCell>
@@ -431,7 +394,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                     asChild
                   >
                     <Link
-                      href={`/knowledge/knowledge-bases/${knowledgeBaseId}/connectors/${connector.id}`}
+                      href={`/knowledge/connectors/${connector.id}?from=knowledge-bases`}
                     >
                       <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     </Link>

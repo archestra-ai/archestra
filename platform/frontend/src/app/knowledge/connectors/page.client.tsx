@@ -7,20 +7,19 @@ import Link from "next/link";
 import type React from "react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  ConnectorStatusDot,
+  getConnectorDotState,
+} from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -31,23 +30,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useConnectors,
-  useDeleteConnector,
-  useUpdateConnector,
-} from "@/lib/connector.query";
+import { useConnectors, useDeleteConnector } from "@/lib/connector.query";
 import { formatCronSchedule } from "@/lib/format-cron";
 import { formatDate } from "@/lib/utils";
 
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
+
+const AGENT_TYPE_LABELS: Record<string, string> = {
+  agent: "Agent",
+  mcp_gateway: "MCP Gateway",
+};
+
+function formatAgentType(agentType: string): string {
+  return AGENT_TYPE_LABELS[agentType] ?? agentType;
+}
 
 export default function ConnectorsPage() {
   return (
@@ -61,22 +64,11 @@ export default function ConnectorsPage() {
 
 function ConnectorsList() {
   const { data: connectors, isPending } = useConnectors();
-  const updateConnector = useUpdateConnector();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConnector, setEditingConnector] =
     useState<ConnectorItem | null>(null);
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
-  );
-
-  const handleToggleEnabled = useCallback(
-    async (connectorId: string, enabled: boolean) => {
-      await updateConnector.mutateAsync({
-        id: connectorId,
-        body: { enabled },
-      });
-    },
-    [updateConnector],
   );
 
   const items = connectors?.data ?? [];
@@ -108,7 +100,6 @@ function ConnectorsList() {
                 <ConnectorCard
                   key={connector.id}
                   connector={connector}
-                  onToggleEnabled={handleToggleEnabled}
                   onEdit={() => setEditingConnector(connector)}
                   onDelete={() => setDeletingConnectorId(connector.id)}
                 />
@@ -144,12 +135,10 @@ function ConnectorsList() {
 
 function ConnectorCard({
   connector,
-  onToggleEnabled,
   onEdit,
   onDelete,
 }: {
   connector: ConnectorItem;
-  onToggleEnabled: (connectorId: string, enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -163,18 +152,17 @@ function ConnectorCard({
       <Card className="cursor-pointer transition-all hover:border-foreground/30 hover:shadow-md group-hover:bg-accent/30">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                <ConnectorTypeIcon
-                  type={connector.connectorType}
-                  className="h-6 w-6"
-                />
-              </div>
+            <div className="flex items-center gap-2.5">
+              <ConnectorStatusDot state={getConnectorDotState(connector)} />
               <div>
                 <CardTitle className="text-base">{connector.name}</CardTitle>
-                <CardDescription className="capitalize">
+                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-3.5 w-3.5"
+                  />
                   {connector.connectorType}
-                </CardDescription>
+                </Badge>
               </div>
             </div>
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only prevents link navigation */}
@@ -200,46 +188,33 @@ function ConnectorCard({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ConnectorStatusBadge status={connector.lastSyncStatus} />
-              {connector.lastSyncAt ? (
+          <div className="flex items-center gap-2">
+            {connector.lastSyncAt ? (
+              <>
+                <ConnectorStatusBadge status={connector.lastSyncStatus} />
                 <span
                   className="text-xs text-muted-foreground"
                   title={formatDate({ date: connector.lastSyncAt })}
                 >
-                  Last run{" "}
                   {formatDistanceToNow(new Date(connector.lastSyncAt), {
                     addSuffix: true,
                   })}
                 </span>
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  Never synced
-                </span>
-              )}
-            </div>
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only prevents link navigation */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only prevents link navigation */}
-            <div className="flex items-center gap-2" onClick={stopPropagation}>
-              <Switch
-                checked={connector.enabled}
-                onCheckedChange={(checked) =>
-                  onToggleEnabled(connector.id, checked)
-                }
-              />
-              <span className="text-sm w-14">
-                {connector.enabled ? "Active" : "Paused"}
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Never synced
               </span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Database className="h-3.5 w-3.5" />
+              <span>{formatCronSchedule(connector.schedule)}</span>
             </div>
+            <AssignedAgentsTooltip connector={connector} />
           </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Database className="h-3.5 w-3.5" />
-            <span>{formatCronSchedule(connector.schedule)}</span>
-          </div>
-
-          <AssignedAgentsTooltip connector={connector} />
         </CardContent>
       </Card>
     </Link>
@@ -257,18 +232,15 @@ function AssignedAgentsTooltip({ connector }: { connector: ConnectorItem }) {
         <TooltipTrigger asChild>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5" />
-            <span>
-              {assignedAgents.length} profile
-              {assignedAgents.length > 1 ? "s" : ""}
-            </span>
+            <span>Assigned to {assignedAgents.length}</span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom">
           <div className="space-y-1">
             {assignedAgents.map((agent) => (
               <div key={agent.id} className="flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground capitalize">
-                  {agent.agentType.replace("_", " ")}
+                <span className="text-muted-foreground">
+                  {formatAgentType(agent.agentType)}
                 </span>
                 <span>{agent.name}</span>
               </div>

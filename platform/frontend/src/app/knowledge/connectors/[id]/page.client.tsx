@@ -6,21 +6,28 @@ import {
   ArrowLeft,
   Database,
   FileText,
+  Pencil,
   Play,
   Plug,
   Plus,
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  ConnectorStatusDot,
+  getConnectorDotState,
+} from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -71,9 +78,21 @@ export default function ConnectorDetailPage({
 }
 
 function ConnectorDetail({ connectorId }: { connectorId: string }) {
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from");
+  const backHref =
+    from === "knowledge-bases"
+      ? "/knowledge/knowledge-bases"
+      : "/knowledge/connectors";
+  const backLabel =
+    from === "knowledge-bases"
+      ? "Back to Knowledge Bases"
+      : "Back to Connectors";
+
   const { data: connector, isPending } = useConnector(connectorId);
   const syncConnector = useSyncConnector();
   const testConnection = useTestConnectorConnection();
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 10;
@@ -175,81 +194,78 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   return (
     <PageLayout
       title={
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/knowledge/connectors">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <ConnectorTypeIcon
-            type={connector.connectorType}
-            className="h-5 w-5"
-          />
-          <span>{connector.name}</span>
+        <div className="flex items-center gap-2.5">
+          <ConnectorStatusDot state={getConnectorDotState(connector)} />
+          <div>
+            <span>{connector.name}</span>
+            <div>
+              <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                <ConnectorTypeIcon
+                  type={connector.connectorType}
+                  className="h-3.5 w-3.5"
+                />
+                {connector.connectorType}
+              </Badge>
+            </div>
+          </div>
         </div>
       }
-      description={
-        <div className="flex items-center gap-2">
-          <Link
-            href="/knowledge/connectors"
-            className="text-muted-foreground hover:text-foreground"
+      description=""
+      actionButton={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={syncConnector.isPending}
           >
-            Connectors
-          </Link>
-          <span className="text-muted-foreground">/</span>
-          <span>{connector.name}</span>
+            <Play className="mr-2 h-4 w-4" />
+            {syncConnector.isPending ? "Starting..." : "Sync Now"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTestConnection}
+            disabled={testConnection.isPending}
+          >
+            <Plug className="mr-2 h-4 w-4" />
+            {testConnection.isPending ? "Testing..." : "Test Connection"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditOpen(true)}
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
         </div>
       }
     >
       <div className="space-y-6">
-        {/* Connector info + actions */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span title={connector.connectorType} className="capitalize">
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-8 w-8"
-                  />
-                </span>
-                <CardTitle>{connector.name}</CardTitle>
-                <span className="text-xs text-muted-foreground">
-                  {formatCronSchedule(connector.schedule)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                <Badge variant={connector.enabled ? "default" : "secondary"}>
-                  {connector.enabled ? "Enabled" : "Disabled"}
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSync}
-                  disabled={syncConnector.isPending}
-                >
-                  <Play className="mr-2 h-4 w-4" />
-                  {syncConnector.isPending ? "Starting..." : "Sync Now"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTestConnection}
-                  disabled={testConnection.isPending}
-                >
-                  <Plug className="mr-2 h-4 w-4" />
-                  {testConnection.isPending ? "Testing..." : "Test Connection"}
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={backHref}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {backLabel}
+          </Link>
+        </Button>
 
-        {/* Knowledge Base Assignments */}
-        <KnowledgeBaseAssignments connectorId={connectorId} />
+        <div className="rounded-lg border p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <MetadataItem label="Schedule">
+              <div>{formatCronSchedule(connector.schedule)}</div>
+            </MetadataItem>
+            <MetadataItem label="Last Sync">
+              <div>
+                {connector.lastSyncAt
+                  ? formatDate({ date: connector.lastSyncAt })
+                  : "Never"}
+              </div>
+            </MetadataItem>
+            <KnowledgeBasesMetadataItem connectorId={connectorId} />
+          </div>
+        </div>
 
-        {/* Sync Runs */}
         <h2 className="text-lg font-semibold">Sync Runs</h2>
 
         <LoadingWrapper
@@ -340,12 +356,18 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             )}
           </DialogContent>
         </Dialog>
+
+        <EditConnectorDialog
+          connector={connector}
+          open={isEditOpen}
+          onOpenChange={setIsEditOpen}
+        />
       </div>
     </PageLayout>
   );
 }
 
-function KnowledgeBaseAssignments({ connectorId }: { connectorId: string }) {
+function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
   const { data: assignedKbs, isPending } =
     useConnectorKnowledgeBases(connectorId);
   const { data: allKbs } = useKnowledgeBases();
@@ -378,49 +400,52 @@ function KnowledgeBaseAssignments({ connectorId }: { connectorId: string }) {
     [connectorId, unassignMutation],
   );
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Knowledge Bases</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsAddDialogOpen(true)}
-          disabled={availableKbs.length === 0}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Assign
-        </Button>
-      </div>
+  const kbItems = assignedKbs?.data ?? [];
 
-      <LoadingWrapper
-        isPending={isPending}
-        loadingFallback={<LoadingSpinner />}
-      >
-        {(assignedKbs?.data ?? []).length === 0 ? (
-          <div className="text-sm text-muted-foreground">
-            Not assigned to any knowledge bases.
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {(assignedKbs?.data ?? []).map((kb) => (
-              <Badge key={kb.id} variant="secondary" className="gap-1.5 pr-1">
-                <Database className="h-3 w-3" />
-                {kb.name}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-4 w-4 ml-1 hover:bg-destructive/20"
-                  onClick={() => handleUnassign(kb.id)}
-                  disabled={unassignMutation.isPending}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
-            ))}
-          </div>
-        )}
-      </LoadingWrapper>
+  return (
+    <MetadataItem label="Knowledge Bases">
+      {isPending ? (
+        <LoadingSpinner />
+      ) : kbItems.length === 0 ? (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">None</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={() => setIsAddDialogOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {kbItems.map((kb) => (
+            <Badge key={kb.id} variant="secondary" className="gap-1 pr-1">
+              <Database className="h-3 w-3" />
+              {kb.name}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-4 w-4 ml-0.5 hover:bg-destructive/20"
+                onClick={() => handleUnassign(kb.id)}
+                disabled={unassignMutation.isPending}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          ))}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={() => setIsAddDialogOpen(true)}
+            disabled={availableKbs.length === 0}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
 
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-md">
@@ -463,6 +488,6 @@ function KnowledgeBaseAssignments({ connectorId }: { connectorId: string }) {
           </DialogForm>
         </DialogContent>
       </Dialog>
-    </div>
+    </MetadataItem>
   );
 }

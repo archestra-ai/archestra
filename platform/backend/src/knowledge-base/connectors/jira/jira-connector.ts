@@ -1,4 +1,9 @@
-import { ClientType, createClient } from "jira.js";
+import {
+  ClientType,
+  createClient,
+  type Version2Client,
+  type Version3Client,
+} from "jira.js";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -160,7 +165,11 @@ export class JiraConnector extends BaseConnector {
 
 // ===== Module-level helpers =====
 
-function createV3Client(config: JiraConfig, credentials: ConnectorCredentials) {
+function createV3Client(
+  config: JiraConfig,
+  credentials: ConnectorCredentials,
+): Version3Client {
+  // @ts-expect-error jira.js@5.3.1 overload resolution broken: private 'client' property intersects to 'never'
   return createClient(ClientType.Version3, {
     host: config.jiraBaseUrl.replace(/\/+$/, ""),
     authentication: {
@@ -169,10 +178,14 @@ function createV3Client(config: JiraConfig, credentials: ConnectorCredentials) {
         apiToken: credentials.apiToken,
       },
     },
-  });
+  }) as unknown as Version3Client;
 }
 
-function createV2Client(config: JiraConfig, credentials: ConnectorCredentials) {
+function createV2Client(
+  config: JiraConfig,
+  credentials: ConnectorCredentials,
+): Version2Client {
+  // @ts-expect-error jira.js@5.3.1 overload resolution broken: private 'client' property intersects to 'never'
   return createClient(ClientType.Version2, {
     host: config.jiraBaseUrl.replace(/\/+$/, ""),
     authentication: {
@@ -181,7 +194,7 @@ function createV2Client(config: JiraConfig, credentials: ConnectorCredentials) {
         apiToken: credentials.apiToken,
       },
     },
-  });
+  }) as unknown as Version2Client;
 }
 
 function issuesToDocuments(

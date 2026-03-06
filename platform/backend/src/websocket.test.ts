@@ -24,7 +24,7 @@ const { browserStreamFeature } = await import(
 );
 const { default: websocketService } = await import("@/websocket");
 const { default: McpServerRuntimeManager } = await import(
-  "@/mcp-server-runtime/manager"
+  "@/k8s/mcp-server-runtime/manager"
 );
 
 interface WebSocketClientContext {
@@ -358,10 +358,9 @@ describe("websocket MCP logs", () => {
     ).mockResolvedValue(
       "kubectl logs -n test -l mcp-server-id=test --tail=100 -f",
     );
-    vi.spyOn(
-      McpServerRuntimeManager,
-      "streamMcpServerLogs",
-    ).mockResolvedValue();
+    vi.spyOn(McpServerRuntimeManager, "streamMcpServerLogs").mockResolvedValue(
+      undefined,
+    );
 
     await service.handleMessage(
       {
@@ -426,10 +425,9 @@ describe("websocket MCP logs", () => {
     ).mockResolvedValue(
       "kubectl logs -n test -l mcp-server-id=test --tail=100 -f",
     );
-    vi.spyOn(
-      McpServerRuntimeManager,
-      "streamMcpServerLogs",
-    ).mockResolvedValue();
+    vi.spyOn(McpServerRuntimeManager, "streamMcpServerLogs").mockResolvedValue(
+      undefined,
+    );
 
     await service.handleMessage(
       {
@@ -536,10 +534,9 @@ describe("websocket MCP logs", () => {
     ).mockResolvedValue(
       "kubectl logs -n test -l mcp-server-id=test --tail=100 -f",
     );
-    vi.spyOn(
-      McpServerRuntimeManager,
-      "streamMcpServerLogs",
-    ).mockResolvedValue();
+    vi.spyOn(McpServerRuntimeManager, "streamMcpServerLogs").mockResolvedValue(
+      undefined,
+    );
 
     // Subscribe to first server
     await service.handleMessage(

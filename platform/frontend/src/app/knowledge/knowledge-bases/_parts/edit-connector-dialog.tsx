@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useUpdateConnector } from "@/lib/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -36,11 +37,16 @@ import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 
-type ConnectorItem =
-  archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
+type ConnectorItem = Pick<
+  archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
+  "id" | "name" | "config" | "schedule" | "enabled"
+> & {
+  connectorType: string;
+};
 
 interface EditConnectorFormValues {
   name: string;
+  enabled: boolean;
   config: Record<string, unknown>;
   schedule: string;
 }
@@ -59,6 +65,7 @@ export function EditConnectorDialog({
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
       name: connector.name,
+      enabled: connector.enabled,
       config: connector.config as Record<string, unknown>,
       schedule: connector.schedule,
     },
@@ -68,6 +75,7 @@ export function EditConnectorDialog({
     if (open) {
       form.reset({
         name: connector.name,
+        enabled: connector.enabled,
         config: connector.config as Record<string, unknown>,
         schedule: connector.schedule,
       });
@@ -82,6 +90,7 @@ export function EditConnectorDialog({
       id: connector.id,
       body: {
         name: values.name,
+        enabled: values.enabled,
         config:
           values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
         schedule: values.schedule,
@@ -94,7 +103,7 @@ export function EditConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
@@ -148,8 +157,31 @@ export function EditConnectorDialog({
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="enabled"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <FormLabel className="text-sm font-medium">
+                      Enabled
+                    </FormLabel>
+                    <FormDescription className="text-xs">
+                      When disabled, scheduled syncs will not run.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
             <Collapsible>
-              <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group rounded-lg border p-3">
+              <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
                 <span className="text-sm font-medium">Advanced</span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
               </CollapsibleTrigger>

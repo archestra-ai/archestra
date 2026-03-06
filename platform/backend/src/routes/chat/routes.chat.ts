@@ -1369,7 +1369,7 @@ async function persistNewMessages(
       );
     } else {
       // For onError, just strip without detailed logging
-      messagesToStore = stripImagesFromMessages(messagesToStore);
+      messagesToStore = stripImagesFromMessages(messagesToSave);
     }
 
     // Append only new messages with timestamps

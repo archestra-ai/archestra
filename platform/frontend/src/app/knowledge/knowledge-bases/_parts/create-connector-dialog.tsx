@@ -152,7 +152,7 @@ export function CreateConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         {step === "select" ? (
           <>
             <DialogHeader>
@@ -324,7 +324,7 @@ export function CreateConnectorDialog({
                 />
 
                 <Collapsible>
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group rounded-lg border p-3">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
                     <span className="text-sm font-medium">Advanced</span>
                     <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>

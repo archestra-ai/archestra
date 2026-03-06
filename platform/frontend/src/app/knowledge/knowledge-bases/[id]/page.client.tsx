@@ -88,9 +88,9 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
 
   const handleRowClick = useCallback(
     (row: ConnectorItem) => {
-      router.push(`/knowledge/knowledge-bases/${id}/connectors/${row.id}`);
+      router.push(`/knowledge/connectors/${row.id}`);
     },
-    [router, id],
+    [router],
   );
 
   const columns: ColumnDef<ConnectorItem>[] = [

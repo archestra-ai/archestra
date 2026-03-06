@@ -6,6 +6,9 @@ import { connectorSyncService } from "@/knowledge-base/connector-sync";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
+  AgentConnectorAssignmentModel,
+  AgentKnowledgeBaseModel,
+  AgentModel,
   ConnectorRunModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
@@ -33,6 +36,12 @@ import {
   ConnectorTypeSchema,
 } from "@/types/knowledge-connector";
 
+const AssignedAgentSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  agentType: z.string(),
+});
+
 const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   connectors: z.array(
     z.object({
@@ -42,6 +51,7 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
     }),
   ),
   totalDocsIndexed: z.number(),
+  assignedAgents: z.array(AssignedAgentSummarySchema),
 });
 
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -71,10 +81,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
 
       const kbIds = knowledgeBases.map((kb) => kb.id);
-      const [allConnectors, docsIndexedByKbId] = await Promise.all([
-        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
-        ConnectorRunModel.sumDocsIngestedByKnowledgeBaseIds(kbIds),
-      ]);
+      const [allConnectors, docsIndexedByKbId, agentIdsByKbId] =
+        await Promise.all([
+          KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
+          ConnectorRunModel.sumDocsIngestedByKnowledgeBaseIds(kbIds),
+          AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
+        ]);
+
+      // Collect all unique agent IDs and batch-fetch their names
+      const allAgentIds = [...new Set([...agentIdsByKbId.values()].flat())];
+      const agentDetailsMap = new Map<
+        string,
+        { id: string; name: string; agentType: string }
+      >();
+      if (allAgentIds.length > 0) {
+        const agents = await AgentModel.findByOrganizationId(organizationId);
+        for (const agent of agents) {
+          if (allAgentIds.includes(agent.id)) {
+            agentDetailsMap.set(agent.id, {
+              id: agent.id,
+              name: agent.name,
+              agentType: agent.agentType,
+            });
+          }
+        }
+      }
 
       const connectorsByKbId = new Map<
         string,
@@ -94,6 +125,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...kb,
         connectors: connectorsByKbId.get(kb.id) ?? [],
         totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
+        assignedAgents: (agentIdsByKbId.get(kb.id) ?? [])
+          .map((id) => agentDetailsMap.get(id))
+          .filter(
+            (a): a is { id: string; name: string; agentType: string } =>
+              a !== undefined,
+          ),
       }));
 
       const currentPage = Math.floor(offset / limit) + 1;
@@ -276,7 +313,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           knowledgeBaseId: z.string().optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectKnowledgeBaseConnectorSchema),
+          createPaginatedResponseSchema(
+            SelectKnowledgeBaseConnectorSchema.extend({
+              assignedAgents: z.array(AssignedAgentSummarySchema),
+            }),
+          ),
         ),
       },
     },
@@ -307,11 +348,55 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ]);
       }
 
+      // Enrich connectors with assigned agents
+      const connectorIds = data.map((c) => c.id);
+      const agentAssignments = await Promise.all(
+        connectorIds.map((cId) =>
+          AgentConnectorAssignmentModel.findByConnector(cId),
+        ),
+      );
+      const allAgentIdsForConnectors = [
+        ...new Set(agentAssignments.flat().map((a) => a.agentId)),
+      ];
+      const connectorAgentDetailsMap = new Map<
+        string,
+        { id: string; name: string; agentType: string }
+      >();
+      if (allAgentIdsForConnectors.length > 0) {
+        const agents = await AgentModel.findByOrganizationId(organizationId);
+        for (const agent of agents) {
+          if (allAgentIdsForConnectors.includes(agent.id)) {
+            connectorAgentDetailsMap.set(agent.id, {
+              id: agent.id,
+              name: agent.name,
+              agentType: agent.agentType,
+            });
+          }
+        }
+      }
+
+      const agentIdsByConnector = new Map<string, string[]>();
+      for (const assignment of agentAssignments.flat()) {
+        const list = agentIdsByConnector.get(assignment.connectorId) ?? [];
+        list.push(assignment.agentId);
+        agentIdsByConnector.set(assignment.connectorId, list);
+      }
+
+      const enrichedData = data.map((connector) => ({
+        ...connector,
+        assignedAgents: (agentIdsByConnector.get(connector.id) ?? [])
+          .map((id) => connectorAgentDetailsMap.get(id))
+          .filter(
+            (a): a is { id: string; name: string; agentType: string } =>
+              a !== undefined,
+          ),
+      }));
+
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
 
       return reply.send({
-        data,
+        data: enrichedData,
         pagination: {
           currentPage,
           limit,

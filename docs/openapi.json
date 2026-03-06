@@ -36820,12 +36820,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "knowledgeBaseId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -37008,6 +37002,12 @@
                           "authorName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "knowledgeBaseIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           }
                         },
                         "required": [
@@ -37031,14 +37031,14 @@
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
-                          "knowledgeBaseId",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
                           "updatedAt",
                           "tools",
                           "teams",
-                          "labels"
+                          "labels",
+                          "knowledgeBaseIds"
                         ],
                         "additionalProperties": false
                       }
@@ -37390,12 +37390,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "knowledgeBaseId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -37452,6 +37446,13 @@
                         "key",
                         "value"
                       ]
+                    }
+                  },
+                  "knowledgeBaseIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 },
@@ -37592,12 +37593,6 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "knowledgeBaseId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -37781,6 +37776,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -37804,14 +37805,14 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "knowledgeBaseIds"
                   ],
                   "additionalProperties": false
                 }
@@ -38213,12 +38214,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "knowledgeBaseId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -38401,6 +38396,12 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "knowledgeBaseIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -38424,14 +38425,14 @@
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
-                      "knowledgeBaseId",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
                       "updatedAt",
                       "tools",
                       "teams",
-                      "labels"
+                      "labels",
+                      "knowledgeBaseIds"
                     ],
                     "additionalProperties": false
                   }
@@ -38788,12 +38789,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeBaseId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38976,6 +38971,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -38999,14 +39000,14 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "knowledgeBaseIds"
                   ],
                   "additionalProperties": false
                 }
@@ -39362,12 +39363,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeBaseId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -39550,6 +39545,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -39573,14 +39574,14 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "knowledgeBaseIds"
                   ],
                   "additionalProperties": false
                 }
@@ -39948,12 +39949,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeBaseId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -40136,6 +40131,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -40159,14 +40160,14 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "knowledgeBaseIds"
                   ],
                   "additionalProperties": false
                 }
@@ -40470,12 +40471,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "knowledgeBaseId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -40531,6 +40526,12 @@
                         "key",
                         "value"
                       ]
+                    }
+                  },
+                  "knowledgeBaseIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 }
@@ -40678,12 +40679,6 @@
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "knowledgeBaseId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -40867,6 +40862,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -40890,14 +40891,14 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "knowledgeBaseIds"
                   ],
                   "additionalProperties": false
                 }
@@ -41518,12 +41519,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "knowledgeBaseId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
                         "builtInAgentConfig": {
                           "nullable": true,
                           "oneOf": [
@@ -41706,6 +41701,12 @@
                         "authorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "knowledgeBaseIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         }
                       },
                       "required": [
@@ -41729,14 +41730,14 @@
                         "llmApiKeyId",
                         "llmModel",
                         "identityProviderId",
-                        "knowledgeBaseId",
                         "builtInAgentConfig",
                         "builtIn",
                         "createdAt",
                         "updatedAt",
                         "tools",
                         "teams",
-                        "labels"
+                        "labels",
+                        "knowledgeBaseIds"
                       ],
                       "additionalProperties": false
                     },
@@ -42161,12 +42162,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "knowledgeBaseId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -42349,6 +42344,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -42372,14 +42373,14 @@
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
-                    "knowledgeBaseId",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
                     "updatedAt",
                     "tools",
                     "teams",
-                    "labels"
+                    "labels",
+                    "knowledgeBaseIds"
                   ],
                   "additionalProperties": false
                 }
@@ -93809,6 +93810,29 @@
                           },
                           "totalDocsIndexed": {
                             "type": "number"
+                          },
+                          "assignedAgents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "agentType": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "agentType"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -93825,7 +93849,8 @@
                           "createdAt",
                           "updatedAt",
                           "connectors",
-                          "totalDocsIndexed"
+                          "totalDocsIndexed",
+                          "assignedAgents"
                         ],
                         "additionalProperties": false
                       }
@@ -95754,9 +95779,7 @@
                                       "jira"
                                     ]
                                   },
-                                  "jiraBaseUrl": {
-                                    "type": "string"
-                                  },
+                                  "jiraBaseUrl": {},
                                   "isCloud": {
                                     "type": "boolean"
                                   },
@@ -95795,9 +95818,7 @@
                                       "confluence"
                                     ]
                                   },
-                                  "confluenceUrl": {
-                                    "type": "string"
-                                  },
+                                  "confluenceUrl": {},
                                   "isCloud": {
                                     "type": "boolean"
                                   },
@@ -95900,6 +95921,29 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "assignedAgents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "agentType": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "agentType"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -95916,7 +95960,8 @@
                           "lastSyncError",
                           "checkpoint",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "assignedAgents"
                         ],
                         "additionalProperties": false
                       }
@@ -96390,9 +96435,7 @@
                                 "jira"
                               ]
                             },
-                            "jiraBaseUrl": {
-                              "type": "string"
-                            },
+                            "jiraBaseUrl": {},
                             "isCloud": {
                               "type": "boolean"
                             },
@@ -96431,9 +96474,7 @@
                                 "confluence"
                               ]
                             },
-                            "confluenceUrl": {
-                              "type": "string"
-                            },
+                            "confluenceUrl": {},
                             "isCloud": {
                               "type": "boolean"
                             },
@@ -96835,9 +96876,7 @@
                                 "jira"
                               ]
                             },
-                            "jiraBaseUrl": {
-                              "type": "string"
-                            },
+                            "jiraBaseUrl": {},
                             "isCloud": {
                               "type": "boolean"
                             },
@@ -96876,9 +96915,7 @@
                                 "confluence"
                               ]
                             },
-                            "confluenceUrl": {
-                              "type": "string"
-                            },
+                            "confluenceUrl": {},
                             "isCloud": {
                               "type": "boolean"
                             },
@@ -97389,9 +97426,7 @@
                                 "jira"
                               ]
                             },
-                            "jiraBaseUrl": {
-                              "type": "string"
-                            },
+                            "jiraBaseUrl": {},
                             "isCloud": {
                               "type": "boolean"
                             },
@@ -97430,9 +97465,7 @@
                                 "confluence"
                               ]
                             },
-                            "confluenceUrl": {
-                              "type": "string"
-                            },
+                            "confluenceUrl": {},
                             "isCloud": {
                               "type": "boolean"
                             },

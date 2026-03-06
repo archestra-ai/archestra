@@ -1769,7 +1769,7 @@ export async function executeArchestraTool(
       }
 
       const agent = await AgentModel.findById(contextAgent.id);
-      if (!agent?.knowledgeBaseId) {
+      if (!agent?.knowledgeBaseIds?.length) {
         return {
           content: [
             {
@@ -1781,8 +1781,14 @@ export async function executeArchestraTool(
         };
       }
 
-      const kb = await KnowledgeBaseModel.findById(agent.knowledgeBaseId);
-      if (!kb) {
+      // Query all assigned knowledge bases and merge results
+      const kbs = await Promise.all(
+        agent.knowledgeBaseIds.map((id) => KnowledgeBaseModel.findById(id)),
+      );
+      const validKbs = kbs.filter(
+        (kb): kb is NonNullable<typeof kb> => kb !== null,
+      );
+      if (validKbs.length === 0) {
         return {
           content: [{ type: "text", text: "Knowledge base not found." }],
           isError: true,
@@ -1796,20 +1802,35 @@ export async function executeArchestraTool(
           TeamModel.getUserTeamIds(context.userId),
         ]);
         if (user?.email) {
+          // Use the broadest visibility among all assigned KBs
+          const visibility = validKbs.some((kb) => kb.visibility === "org-wide")
+            ? "org-wide"
+            : validKbs.some((kb) => kb.visibility === "team-scoped")
+              ? "team-scoped"
+              : "auto-sync-permissions";
           userAcl = buildUserAcl({
             userEmail: user.email,
             teamIds,
-            visibility: kb.visibility,
+            visibility,
           });
         }
       }
 
-      const results = await queryService.query({
-        knowledgeBaseId: agent.knowledgeBaseId,
-        queryText: query,
-        userAcl,
-        limit: 10,
-      });
+      const allResults = await Promise.all(
+        validKbs.map((kb) =>
+          queryService.query({
+            knowledgeBaseId: kb.id,
+            queryText: query,
+            userAcl,
+            limit: 10,
+          }),
+        ),
+      );
+      // Flatten and take top results by score
+      const results = allResults
+        .flat()
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, 10);
 
       return {
         content: [

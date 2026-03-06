@@ -1,6 +1,7 @@
 export * from "./account";
 export * from "./agent";
 export * from "./agent-connector-assignment";
+export * from "./agent-knowledge-base";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";

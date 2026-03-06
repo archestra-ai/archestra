@@ -627,7 +627,7 @@ export function AgentDialog({
     null,
   );
   const [scope, setScope] = useState<"personal" | "team" | "org">("personal");
-  const [knowledgeBaseId, setKnowledgeBaseId] = useState<string | null>(null);
+  const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
     useState(false);
 
@@ -675,10 +675,10 @@ export function AgentDialog({
         // Identity provider ID (for MCP Gateway JWKS auth)
         setIdentityProviderId(agentData.identityProviderId ?? null);
         // Knowledge graph
-        setKnowledgeBaseId(
-          ((agentData as Record<string, unknown>).knowledgeBaseId as
-            | string
-            | null) ?? null,
+        setKnowledgeBaseIds(
+          ((agentData as Record<string, unknown>).knowledgeBaseIds as
+            | string[]
+            | undefined) ?? [],
         );
         // Scope
         setScope(
@@ -712,7 +712,7 @@ export function AgentDialog({
         setLabels([]);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(null);
-        setKnowledgeBaseId(null);
+        setKnowledgeBaseIds([]);
         setScope("personal");
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
@@ -936,7 +936,7 @@ export function AgentDialog({
               identityProviderId: identityProviderId || null,
             }),
             ...(agentType !== "llm_proxy" && {
-              knowledgeBaseId: knowledgeBaseId || null,
+              knowledgeBaseIds: knowledgeBaseIds,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -965,7 +965,7 @@ export function AgentDialog({
             identityProviderId: identityProviderId || null,
           }),
           ...(agentType !== "llm_proxy" && {
-            knowledgeBaseId: knowledgeBaseId || null,
+            knowledgeBaseIds: knowledgeBaseIds,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1027,7 +1027,7 @@ export function AgentDialog({
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
     identityProviderId,
-    knowledgeBaseId,
+    knowledgeBaseIds,
     scope,
     agentType,
     agent,
@@ -1381,59 +1381,89 @@ export function AgentDialog({
                   />
                 </div>
 
-                {/* Knowledge Base */}
+                {/* Knowledge Bases */}
                 {knowledgeBases.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Knowledge Base</Label>
+                    <Label>Knowledge Bases</Label>
                     <p className="text-sm text-muted-foreground">
-                      Attach a knowledge base to enable RAG queries against
-                      indexed documents and automatic document ingestion from
-                      chat uploads.
+                      Attach knowledge bases to enable RAG queries against
+                      indexed documents.
                     </p>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={knowledgeBaseId ?? "none"}
-                        onValueChange={(value) =>
-                          setKnowledgeBaseId(value === "none" ? null : value)
-                        }
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between font-normal"
+                        >
+                          {knowledgeBaseIds.length === 0
+                            ? "No Knowledge Bases"
+                            : `${knowledgeBaseIds.length} knowledge base${knowledgeBaseIds.length > 1 ? "s" : ""} selected`}
+                          <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-[--radix-popover-trigger-width] p-0"
+                        align="start"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="No Knowledge Base" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">
-                            No Knowledge Base
-                          </SelectItem>
-                          {knowledgeBases.map((kg) => (
-                            <SelectItem key={kg.id} value={kg.id}>
-                              {kg.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {knowledgeBaseId &&
-                        (() => {
-                          const selectedKb = knowledgeBases.find(
-                            (kb) => kb.id === knowledgeBaseId,
-                          );
-                          const connectors = selectedKb?.connectors ?? [];
-                          if (connectors.length === 0) return null;
-                          const uniqueTypes = [
-                            ...new Set(connectors.map((c) => c.connectorType)),
-                          ];
-                          return (
-                            <div className="flex items-center gap-1">
-                              {uniqueTypes.map((type) => (
-                                <ConnectorTypeIcon
-                                  key={type}
-                                  type={type}
-                                  className="h-5 w-5"
-                                />
-                              ))}
-                            </div>
-                          );
-                        })()}
-                    </div>
+                        <Command>
+                          <CommandInput placeholder="Search knowledge bases..." />
+                          <CommandList>
+                            <CommandEmpty>
+                              No knowledge bases found.
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {knowledgeBases.map((kb) => {
+                                const isSelected = knowledgeBaseIds.includes(
+                                  kb.id,
+                                );
+                                return (
+                                  <CommandItem
+                                    key={kb.id}
+                                    onSelect={() => {
+                                      setKnowledgeBaseIds((prev) =>
+                                        isSelected
+                                          ? prev.filter((id) => id !== kb.id)
+                                          : [...prev, kb.id],
+                                      );
+                                    }}
+                                  >
+                                    <div
+                                      className={cn(
+                                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
+                                        isSelected
+                                          ? "bg-primary border-primary text-primary-foreground"
+                                          : "opacity-50",
+                                      )}
+                                    >
+                                      {isSelected && (
+                                        <CheckIcon className="h-3 w-3" />
+                                      )}
+                                    </div>
+                                    <span className="flex-1">{kb.name}</span>
+                                    <div className="flex items-center gap-1 ml-2">
+                                      {[
+                                        ...new Set(
+                                          kb.connectors?.map(
+                                            (c: { connectorType: string }) =>
+                                              c.connectorType,
+                                          ) ?? [],
+                                        ),
+                                      ].map((type: string) => (
+                                        <ConnectorTypeIcon
+                                          key={type}
+                                          type={type}
+                                          className="h-4 w-4"
+                                        />
+                                      ))}
+                                    </div>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 )}
               </div>

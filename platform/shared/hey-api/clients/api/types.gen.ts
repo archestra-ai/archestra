@@ -11750,7 +11750,6 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
-            knowledgeBaseId: string | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
@@ -11799,6 +11798,7 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            knowledgeBaseIds: Array<string>;
         }>;
         pagination: {
             currentPage: number;
@@ -11831,7 +11831,6 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
-        knowledgeBaseId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -11843,6 +11842,7 @@ export type CreateAgentData = {
             keyId?: string;
             valueId?: string;
         }>;
+        knowledgeBaseIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -11935,7 +11935,6 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -11984,6 +11983,7 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     };
 };
 
@@ -12095,7 +12095,6 @@ export type GetAllAgentsResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12144,6 +12143,7 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     }>;
 };
 
@@ -12242,7 +12242,6 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12291,6 +12290,7 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     };
 };
 
@@ -12389,7 +12389,6 @@ export type GetDefaultLlmProxyResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12438,6 +12437,7 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     };
 };
 
@@ -12617,7 +12617,6 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12666,6 +12665,7 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     };
 };
 
@@ -12689,7 +12689,6 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         identityProviderId?: string | null;
-        knowledgeBaseId?: string | null;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12701,6 +12700,7 @@ export type UpdateAgentData = {
             keyId?: string;
             valueId?: string;
         }>;
+        knowledgeBaseIds?: Array<string>;
     };
     path: {
         id: string;
@@ -12795,7 +12795,6 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -12844,6 +12843,7 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     };
 };
 
@@ -12945,7 +12945,6 @@ export type GetAgentVersionsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             identityProviderId: string | null;
-            knowledgeBaseId: string | null;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
@@ -12994,6 +12993,7 @@ export type GetAgentVersionsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            knowledgeBaseIds: Array<string>;
         };
         history: Array<{
             version: number;
@@ -13106,7 +13106,6 @@ export type RollbackAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         identityProviderId: string | null;
-        knowledgeBaseId: string | null;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
@@ -13155,6 +13154,7 @@ export type RollbackAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
     };
 };
 
@@ -26873,6 +26873,11 @@ export type GetKnowledgeBasesResponses = {
                 connectorType: 'jira' | 'confluence';
             }>;
             totalDocsIndexed: number;
+            assignedAgents: Array<{
+                id: string;
+                name: string;
+                agentType: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -27424,7 +27429,7 @@ export type GetConnectorsResponses = {
             connectorType: 'jira' | 'confluence';
             config: {
                 type: 'jira';
-                jiraBaseUrl: string;
+                jiraBaseUrl: unknown;
                 isCloud: boolean;
                 projectKey?: string;
                 jqlQuery?: string;
@@ -27432,7 +27437,7 @@ export type GetConnectorsResponses = {
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'confluence';
-                confluenceUrl: string;
+                confluenceUrl: unknown;
                 isCloud: boolean;
                 spaceKeys?: Array<string>;
                 pageIds?: Array<string>;
@@ -27451,6 +27456,11 @@ export type GetConnectorsResponses = {
             } | Array<unknown> | null;
             createdAt: string;
             updatedAt: string;
+            assignedAgents: Array<{
+                id: string;
+                name: string;
+                agentType: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -27570,7 +27580,7 @@ export type CreateConnectorResponses = {
         connectorType: 'jira' | 'confluence';
         config: {
             type: 'jira';
-            jiraBaseUrl: string;
+            jiraBaseUrl: unknown;
             isCloud: boolean;
             projectKey?: string;
             jqlQuery?: string;
@@ -27578,7 +27588,7 @@ export type CreateConnectorResponses = {
             labelsToSkip?: Array<string>;
         } | {
             type: 'confluence';
-            confluenceUrl: string;
+            confluenceUrl: unknown;
             isCloud: boolean;
             spaceKeys?: Array<string>;
             pageIds?: Array<string>;
@@ -27760,7 +27770,7 @@ export type GetConnectorResponses = {
         connectorType: 'jira' | 'confluence';
         config: {
             type: 'jira';
-            jiraBaseUrl: string;
+            jiraBaseUrl: unknown;
             isCloud: boolean;
             projectKey?: string;
             jqlQuery?: string;
@@ -27768,7 +27778,7 @@ export type GetConnectorResponses = {
             labelsToSkip?: Array<string>;
         } | {
             type: 'confluence';
-            confluenceUrl: string;
+            confluenceUrl: unknown;
             isCloud: boolean;
             spaceKeys?: Array<string>;
             pageIds?: Array<string>;
@@ -27893,7 +27903,7 @@ export type UpdateConnectorResponses = {
         connectorType: 'jira' | 'confluence';
         config: {
             type: 'jira';
-            jiraBaseUrl: string;
+            jiraBaseUrl: unknown;
             isCloud: boolean;
             projectKey?: string;
             jqlQuery?: string;
@@ -27901,7 +27911,7 @@ export type UpdateConnectorResponses = {
             labelsToSkip?: Array<string>;
         } | {
             type: 'confluence';
-            confluenceUrl: string;
+            confluenceUrl: unknown;
             isCloud: boolean;
             spaceKeys?: Array<string>;
             pageIds?: Array<string>;

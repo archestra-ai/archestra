@@ -32,6 +32,7 @@ import type {
   SortingQuery,
   UpdateAgent,
 } from "@/types";
+import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
@@ -61,8 +62,24 @@ class AgentModel {
     }
   }
 
+  /**
+   * Populate knowledgeBaseIds on agents via batch lookup from the junction table.
+   */
+  private static async populateKnowledgeBaseIds(
+    agents: Agent[],
+  ): Promise<void> {
+    const agentIds = agents.map((a) => a.id);
+    if (agentIds.length === 0) return;
+
+    const kbMap =
+      await AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds);
+    for (const agent of agents) {
+      agent.knowledgeBaseIds = kbMap.get(agent.id) ?? [];
+    }
+  }
+
   static async create(
-    { teams, labels, ...agent }: InsertAgent,
+    { teams, labels, knowledgeBaseIds, ...agent }: InsertAgent,
     authorId?: string,
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -90,6 +107,14 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
+    // Assign knowledge bases if provided
+    if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
+      await AgentKnowledgeBaseModel.syncForAgent(
+        createdAgent.id,
+        knowledgeBaseIds,
+      );
+    }
+
     // For internal agents, create a delegation tool so other agents can delegate to this one
     if (createdAgent.agentType === "agent") {
       await ToolModel.findOrCreateDelegationTool(createdAgent.id);
@@ -115,6 +140,7 @@ class AgentModel {
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
+      knowledgeBaseIds: knowledgeBaseIds ?? [],
     };
   }
 
@@ -196,6 +222,7 @@ class AgentModel {
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
           labels: [],
+          knowledgeBaseIds: [],
         });
       }
 
@@ -220,7 +247,10 @@ class AgentModel {
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
-    await AgentModel.populateAuthorNames(agents);
+    await Promise.all([
+      AgentModel.populateAuthorNames(agents),
+      AgentModel.populateKnowledgeBaseIds(agents),
+    ]);
 
     return agents;
   }
@@ -253,9 +283,10 @@ class AgentModel {
       return [];
     }
 
-    const [teamsMap, labelsMap, toolsResult] = await Promise.all([
+    const [teamsMap, labelsMap, kbMap, toolsResult] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       db
         .select({
           agentId: schema.agentToolsTable.agentId,
@@ -285,6 +316,7 @@ class AgentModel {
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
+      knowledgeBaseIds: kbMap.get(agent.id) || [],
     }));
   }
 
@@ -322,9 +354,10 @@ class AgentModel {
       return [];
     }
 
-    const [teamsMap, labelsMap, toolsResult] = await Promise.all([
+    const [teamsMap, labelsMap, kbMap, toolsResult] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       db
         .select({
           agentId: schema.agentToolsTable.agentId,
@@ -354,6 +387,7 @@ class AgentModel {
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
+      knowledgeBaseIds: kbMap.get(agent.id) || [],
     }));
   }
 
@@ -673,6 +707,7 @@ class AgentModel {
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
           labels: [],
+          knowledgeBaseIds: [],
         });
       }
 
@@ -697,7 +732,10 @@ class AgentModel {
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
-    await AgentModel.populateAuthorNames(agents);
+    await Promise.all([
+      AgentModel.populateAuthorNames(agents),
+      AgentModel.populateKnowledgeBaseIds(agents),
+    ]);
 
     return createPaginatedResult(agents, Number(totalResult), pagination);
   }
@@ -795,14 +833,18 @@ class AgentModel {
       .map((row) => row.tools)
       .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
-    const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
-    const labels = await AgentLabelModel.getLabelsForAgent(id);
+    const [teams, labels, knowledgeBaseIds] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+    ]);
 
     const result: Agent = {
       ...agent,
       tools,
       teams,
       labels,
+      knowledgeBaseIds,
     };
 
     await AgentModel.populateAuthorNames([result]);
@@ -868,6 +910,9 @@ class AgentModel {
       tools,
       teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
       labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+      knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
+        agent.id,
+      ),
     };
   }
 
@@ -907,6 +952,9 @@ class AgentModel {
         tools,
         teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+        knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
+          agent.id,
+        ),
       };
     }
 
@@ -934,9 +982,11 @@ class AgentModel {
 
   static async update(
     id: string,
-    { teams, labels, ...agent }: Partial<UpdateAgent>,
+    { teams, labels, knowledgeBaseIds, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
-    let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
+    let updatedAgent:
+      | Omit<Agent, "tools" | "teams" | "labels" | "knowledgeBaseIds">
+      | undefined;
 
     // Fetch existing agent to check for name changes (needed for delegation tool sync)
     const [existingAgent] = await db
@@ -998,24 +1048,32 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
-    const [toolRows, currentTeams, currentLabels] = await Promise.all([
-      db
-        .select({ tool: schema.toolsTable })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .where(eq(schema.agentToolsTable.agentId, updatedAgent.id)),
-      AgentTeamModel.getTeamDetailsForAgent(id),
-      AgentLabelModel.getLabelsForAgent(id),
-    ]);
+    // Sync knowledge base assignments if knowledgeBaseIds is provided
+    if (knowledgeBaseIds !== undefined) {
+      await AgentKnowledgeBaseModel.syncForAgent(id, knowledgeBaseIds);
+    }
+
+    const [toolRows, currentTeams, currentLabels, currentKbIds] =
+      await Promise.all([
+        db
+          .select({ tool: schema.toolsTable })
+          .from(schema.agentToolsTable)
+          .innerJoin(
+            schema.toolsTable,
+            eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          )
+          .where(eq(schema.agentToolsTable.agentId, updatedAgent.id)),
+        AgentTeamModel.getTeamDetailsForAgent(id),
+        AgentLabelModel.getLabelsForAgent(id),
+        AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+      ]);
 
     return {
       ...updatedAgent,
       tools: toolRows.map((row) => row.tool),
       teams: currentTeams,
       labels: currentLabels,
+      knowledgeBaseIds: currentKbIds,
     };
   }
 
@@ -1184,6 +1242,9 @@ class AgentModel {
       tools: toolRows.map((r) => r.tool),
       teams,
       labels,
+      knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
+        row.id,
+      ),
     };
   }
 

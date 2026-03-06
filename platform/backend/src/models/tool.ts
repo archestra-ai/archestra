@@ -375,9 +375,9 @@ class ToolModel {
    * All tools are linked via the agent_tools junction table.
    */
   static async getToolsByAgent(agentId: string): Promise<Tool[]> {
-    const [assignedToolIds, knowledgeBaseId] = await Promise.all([
+    const [assignedToolIds, hasKnowledgeBase] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentKnowledgeBaseId(agentId),
+      ToolModel.getAgentHasKnowledgeBase(agentId),
     ]);
 
     if (assignedToolIds.length === 0) {
@@ -390,7 +390,7 @@ class ToolModel {
       .where(inArray(schema.toolsTable.id, assignedToolIds))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return ToolModel.filterUnavailableTools(tools, knowledgeBaseId);
+    return ToolModel.filterUnavailableTools(tools, hasKnowledgeBase);
   }
 
   /**
@@ -402,13 +402,13 @@ class ToolModel {
    * explicitly assigned like any other MCP server tools.
    */
   static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
-    // Get tool IDs assigned via junction table (MCP tools) and agent's KG assignment
-    const [assignedToolIds, knowledgeBaseId] = await Promise.all([
+    // Get tool IDs assigned via junction table (MCP tools) and agent's KB assignment
+    const [assignedToolIds, hasKnowledgeBase] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentKnowledgeBaseId(agentId),
+      ToolModel.getAgentHasKnowledgeBase(agentId),
     ]);
 
-    if (assignedToolIds.length === 0 && !knowledgeBaseId) {
+    if (assignedToolIds.length === 0 && !hasKnowledgeBase) {
       return [];
     }
 
@@ -435,7 +435,7 @@ class ToolModel {
 
     // Auto-inject query_knowledge_base when the agent has a knowledge base assigned,
     // regardless of whether the tool was manually assigned
-    if (knowledgeBaseId) {
+    if (hasKnowledgeBase) {
       const hasKbTool = tools.some(
         (t) => t.name === TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
       );
@@ -449,7 +449,7 @@ class ToolModel {
       }
     }
 
-    return ToolModel.filterUnavailableTools(tools, knowledgeBaseId);
+    return ToolModel.filterUnavailableTools(tools, hasKnowledgeBase);
   }
 
   /**
@@ -1804,30 +1804,30 @@ class ToolModel {
   // =============================================================================
 
   /**
-   * Look up an agent's knowledgeBaseId.
+   * Check if an agent has any knowledge bases assigned.
    */
-  private static async getAgentKnowledgeBaseId(
+  private static async getAgentHasKnowledgeBase(
     agentId: string,
-  ): Promise<string | null> {
-    const [row] = await db
-      .select({ knowledgeBaseId: schema.agentsTable.knowledgeBaseId })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, agentId));
-    return row?.knowledgeBaseId ?? null;
+  ): Promise<boolean> {
+    const rows = await db
+      .select({
+        knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
+      })
+      .from(schema.agentKnowledgeBasesTable)
+      .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
+      .limit(1);
+    return rows.length > 0;
   }
 
   /**
    * Filter out tools that should not be visible based on current configuration.
    * Filters out the query_knowledge_base tool when the agent has no knowledge base assigned.
-   *
-   * @param tools - Tools to filter
-   * @param agentKnowledgeBaseId - The agent's knowledgeBaseId (null/undefined = no KG assigned)
    */
   private static filterUnavailableTools<T extends { name: string }>(
     tools: T[],
-    agentKnowledgeBaseId?: string | null,
+    hasKnowledgeBase: boolean,
   ): T[] {
-    if (agentKnowledgeBaseId) {
+    if (hasKnowledgeBase) {
       return tools;
     }
     return tools.filter((t) => t.name !== TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);

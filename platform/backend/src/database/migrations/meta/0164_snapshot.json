@@ -1,5 +1,5 @@
 {
-  "id": "bf49c72d-fcee-44c8-9df8-167714e9cfad",
+  "id": "8aa99736-57cc-41bb-9343-101fe4efae76",
   "prevId": "26a8fd16-1ef6-4dbf-9b68-9bdaf37341ca",
   "version": "7",
   "dialect": "postgresql",
@@ -200,6 +200,104 @@
           "columns": [
             "agent_id",
             "connector_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.agent_knowledge_base": {
+      "name": "agent_knowledge_base",
+      "schema": "",
+      "columns": {
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "knowledge_base_id": {
+          "name": "knowledge_base_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agent_knowledge_base_agent_idx": {
+          "name": "agent_knowledge_base_agent_idx",
+          "columns": [
+            {
+              "expression": "agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_knowledge_base_kb_idx": {
+          "name": "agent_knowledge_base_kb_idx",
+          "columns": [
+            {
+              "expression": "knowledge_base_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_knowledge_base_agent_id_agents_id_fk": {
+          "name": "agent_knowledge_base_agent_id_agents_id_fk",
+          "tableFrom": "agent_knowledge_base",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_knowledge_base_knowledge_base_id_knowledge_bases_id_fk": {
+          "name": "agent_knowledge_base_knowledge_base_id_knowledge_bases_id_fk",
+          "tableFrom": "agent_knowledge_base",
+          "tableTo": "knowledge_bases",
+          "columnsFrom": [
+            "knowledge_base_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "agent_knowledge_base_agent_id_knowledge_base_id_pk": {
+          "name": "agent_knowledge_base_agent_id_knowledge_base_id_pk",
+          "columns": [
+            "agent_id",
+            "knowledge_base_id"
           ]
         }
       },
@@ -629,12 +727,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "knowledge_base_id": {
-          "name": "knowledge_base_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
           "type": "jsonb",
@@ -776,19 +868,6 @@
           "tableTo": "identity_provider",
           "columnsFrom": [
             "identity_provider_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_knowledge_base_id_knowledge_bases_id_fk": {
-          "name": "agents_knowledge_base_id_knowledge_bases_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "knowledge_bases",
-          "columnsFrom": [
-            "knowledge_base_id"
           ],
           "columnsTo": [
             "id"
@@ -1892,6 +1971,81 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.conversation_shares": {
+      "name": "conversation_shares",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "conversation_share_visibility",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'organization'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "conversation_shares_conversation_id_conversations_id_fk": {
+          "name": "conversation_shares_conversation_id_conversations_id_fk",
+          "tableFrom": "conversation_shares",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "conversation_shares_conversation_id_unique": {
+          "name": "conversation_shares_conversation_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "conversation_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.conversations": {
       "name": "conversations",
       "schema": "",
@@ -2969,12 +3123,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "knowledge_base_id": {
-          "name": "knowledge_base_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "content": {
           "name": "content",
           "type": "text",
@@ -3029,21 +3177,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "kb_chunks_kb_id_idx": {
-          "name": "kb_chunks_kb_id_idx",
-          "columns": [
-            {
-              "expression": "knowledge_base_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3053,19 +3186,6 @@
           "tableTo": "kb_documents",
           "columnsFrom": [
             "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kb_chunks_knowledge_base_id_knowledge_bases_id_fk": {
-          "name": "kb_chunks_knowledge_base_id_knowledge_bases_id_fk",
-          "tableFrom": "kb_chunks",
-          "tableTo": "knowledge_bases",
-          "columnsFrom": [
-            "knowledge_base_id"
           ],
           "columnsTo": [
             "id"
@@ -7207,81 +7327,6 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
-    },
-    "public.conversation_shares": {
-      "name": "conversation_shares",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "visibility": {
-          "name": "visibility",
-          "type": "conversation_share_visibility",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'organization'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "conversation_shares_conversation_id_conversations_id_fk": {
-          "name": "conversation_shares_conversation_id_conversations_id_fk",
-          "tableFrom": "conversation_shares",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "conversation_shares_conversation_id_unique": {
-          "name": "conversation_shares_conversation_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "conversation_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -7294,19 +7339,19 @@
         "org"
       ]
     },
+    "public.conversation_share_visibility": {
+      "name": "conversation_share_visibility",
+      "schema": "public",
+      "values": [
+        "organization"
+      ]
+    },
     "public.oauth_refresh_error_enum": {
       "name": "oauth_refresh_error_enum",
       "schema": "public",
       "values": [
         "refresh_failed",
         "no_refresh_token"
-      ]
-    },
-    "public.conversation_share_visibility": {
-      "name": "conversation_share_visibility",
-      "schema": "public",
-      "values": [
-        "organization"
       ]
     }
   },

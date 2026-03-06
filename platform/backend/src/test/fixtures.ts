@@ -207,6 +207,7 @@ async function makeAgent(
     scope: "org",
     teams: [],
     labels: [],
+    knowledgeBaseIds: [],
   };
   return await AgentModel.create(
     {

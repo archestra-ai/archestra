@@ -331,17 +331,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate knowledgeBaseId if provided
-      if (body.knowledgeBaseId) {
+      // Validate knowledgeBaseIds if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
         if (agentType === "llm_proxy") {
           throw new ApiError(
             400,
-            "Knowledge graphs cannot be assigned to LLM Proxy agents",
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
           );
         }
-        const kg = await KnowledgeBaseModel.findById(body.knowledgeBaseId);
-        if (!kg || kg.organizationId !== organizationId) {
-          throw new ApiError(404, "Knowledge graph not found");
+        for (const kbId of body.knowledgeBaseIds) {
+          const kb = await KnowledgeBaseModel.findById(kbId);
+          if (!kb || kb.organizationId !== organizationId) {
+            throw new ApiError(404, `Knowledge base not found: ${kbId}`);
+          }
         }
       }
 
@@ -509,17 +511,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
-      // Validate knowledgeBaseId if provided
-      if (body.knowledgeBaseId) {
+      // Validate knowledgeBaseIds if provided
+      if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
         if (existingAgent.agentType === "llm_proxy") {
           throw new ApiError(
             400,
-            "Knowledge graphs cannot be assigned to LLM Proxy agents",
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
           );
         }
-        const kg = await KnowledgeBaseModel.findById(body.knowledgeBaseId);
-        if (!kg || kg.organizationId !== organizationId) {
-          throw new ApiError(404, "Knowledge graph not found");
+        for (const kbId of body.knowledgeBaseIds) {
+          const kb = await KnowledgeBaseModel.findById(kbId);
+          if (!kb || kb.organizationId !== organizationId) {
+            throw new ApiError(404, `Knowledge base not found: ${kbId}`);
+          }
         }
       }
 

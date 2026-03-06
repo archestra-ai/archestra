@@ -269,16 +269,10 @@ describe("KbChunkModel", () => {
   });
 
   describe("vectorSearch", () => {
-    test.skip(
-      "vectorSearch requires pgvector extension which is not available in PGlite test DB",
-      async () => {},
-    );
+    test.skip("vectorSearch requires pgvector extension which is not available in PGlite test DB", async () => {});
   });
 
   describe("updateEmbeddings", () => {
-    test.skip(
-      "updateEmbeddings requires pgvector extension which is not available in PGlite test DB",
-      async () => {},
-    );
+    test.skip("updateEmbeddings requires pgvector extension which is not available in PGlite test DB", async () => {});
   });
 });

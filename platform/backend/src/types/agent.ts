@@ -141,6 +141,7 @@ export const SelectAgentSchema = createSelectSchema(
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
+  knowledgeBaseIds: z.array(z.string()),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -154,6 +155,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
     scope: AgentScopeSchema,
+    knowledgeBaseIds: z.array(z.string()).default([]),
   })
   .omit({
     id: true,
@@ -178,6 +180,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     teams: z.array(z.string()),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     scope: AgentScopeSchema,
+    knowledgeBaseIds: z.array(z.string()),
   })
   .omit({
     id: true,
@@ -208,7 +211,7 @@ export const AgentVersionsResponseSchema = z.object({
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;
-export type InsertAgent = z.infer<typeof InsertAgentSchema>;
+export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 export type AgentVersionsResponse = z.infer<typeof AgentVersionsResponseSchema>;
 

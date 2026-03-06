@@ -188,9 +188,9 @@ const PromptInputContent = ({
   // Check if there are tools, delegated agents, or a knowledge base
   const hasTools = tools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
-  const knowledgeBaseId = (
-    agentData as Record<string, unknown> | null | undefined
-  )?.knowledgeBaseId as string | null | undefined;
+  const knowledgeBaseIds =
+    ((agentData as Record<string, unknown> | null | undefined)
+      ?.knowledgeBaseIds as string[] | undefined) ?? [];
   const hasContent = hasTools || hasDelegatedAgents;
 
   // Determine if file uploads should be shown
@@ -215,8 +215,8 @@ const PromptInputContent = ({
     >
       {agentId && (
         <PromptInputHeader>
-          {knowledgeBaseId && (
-            <KnowledgeBaseIndicator knowledgeBaseId={knowledgeBaseId} />
+          {knowledgeBaseIds.length > 0 && (
+            <KnowledgeBaseIndicator knowledgeBaseIds={knowledgeBaseIds} />
           )}
           {hasContent ? (
             <>
@@ -373,10 +373,7 @@ const PromptInputContent = ({
         <div className="flex items-center gap-2">
           <KnowledgeBaseUploadIndicator
             attachmentCount={controller.attachments.files.length}
-            hasKnowledgeBase={
-              !!(agentData as Record<string, unknown> | null | undefined)
-                ?.knowledgeBaseId
-            }
+            hasKnowledgeBase={knowledgeBaseIds.length > 0}
           />
           <PromptInputSpeechButton
             textareaRef={textareaRef}

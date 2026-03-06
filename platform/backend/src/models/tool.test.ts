@@ -4,7 +4,6 @@ import {
   TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
-import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -1400,9 +1399,8 @@ describe("ToolModel", () => {
         organizationId: org.id,
       });
       await db
-        .update(schema.agentsTable)
-        .set({ knowledgeBaseId: kg.id })
-        .where(eq(schema.agentsTable.id, agent.id));
+        .insert(schema.agentKnowledgeBasesTable)
+        .values({ agentId: agent.id, knowledgeBaseId: kg.id });
 
       // Assign default tools
       await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
@@ -1482,9 +1480,8 @@ describe("ToolModel", () => {
       // Create agent and assign the KG
       const agent = await makeAgent({ organizationId: org.id });
       await db
-        .update(schema.agentsTable)
-        .set({ knowledgeBaseId: kg.id })
-        .where(eq(schema.agentsTable.id, agent.id));
+        .insert(schema.agentKnowledgeBasesTable)
+        .values({ agentId: agent.id, knowledgeBaseId: kg.id });
 
       await seedAndAssignArchestraTools(agent.id);
 

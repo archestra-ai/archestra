@@ -25,7 +25,6 @@ export const agentScopeEnum = pgEnum("agent_scope", [
 
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
-import knowledgeBasesTable from "./knowledge-base";
 import usersTable from "./user";
 
 /**
@@ -102,12 +101,6 @@ const agentsTable = pgTable(
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(
       () => identityProvidersTable.id,
-      { onDelete: "set null" },
-    ),
-
-    /** Optional Knowledge Base assigned to this agent for querying/ingestion */
-    knowledgeBaseId: uuid("knowledge_base_id").references(
-      () => knowledgeBasesTable.id,
       { onDelete: "set null" },
     ),
 

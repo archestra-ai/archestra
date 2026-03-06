@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -17,9 +16,8 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Create a knowledge base and assign to agent so KG tool is visible
     const kg = await makeKnowledgeBase(agent.organizationId);
     await db
-      .update(schema.agentsTable)
-      .set({ knowledgeBaseId: kg.id })
-      .where(eq(schema.agentsTable.id, agent.id));
+      .insert(schema.agentKnowledgeBasesTable)
+      .values({ agentId: agent.id, knowledgeBaseId: kg.id });
 
     // Explicitly seed and assign Archestra tools
     await seedAndAssignArchestraTools(agent.id);
@@ -51,9 +49,8 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Create a knowledge base and assign to agent so KG tool is visible
     const kg = await makeKnowledgeBase(agent.organizationId);
     await db
-      .update(schema.agentsTable)
-      .set({ knowledgeBaseId: kg.id })
-      .where(eq(schema.agentsTable.id, agent.id));
+      .insert(schema.agentKnowledgeBasesTable)
+      .values({ agentId: agent.id, knowledgeBaseId: kg.id });
 
     // Seed and assign Archestra tools first
     await seedAndAssignArchestraTools(agent.id);
@@ -85,9 +82,8 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Create a knowledge base and assign to agent so KG tool is visible
     const kg = await makeKnowledgeBase(agent.organizationId);
     await db
-      .update(schema.agentsTable)
-      .set({ knowledgeBaseId: kg.id })
-      .where(eq(schema.agentsTable.id, agent.id));
+      .insert(schema.agentKnowledgeBasesTable)
+      .values({ agentId: agent.id, knowledgeBaseId: kg.id });
 
     // Seed and assign Archestra tools first
     await seedAndAssignArchestraTools(agent.id);
@@ -143,9 +139,8 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Create a knowledge base and assign to agent so KG tool is visible
     const kg = await makeKnowledgeBase(agent.organizationId);
     await db
-      .update(schema.agentsTable)
-      .set({ knowledgeBaseId: kg.id })
-      .where(eq(schema.agentsTable.id, agent.id));
+      .insert(schema.agentKnowledgeBasesTable)
+      .values({ agentId: agent.id, knowledgeBaseId: kg.id });
 
     // Seed and assign Archestra tools first
     await seedAndAssignArchestraTools(agent.id);

@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { formatDistanceToNow } from "date-fns";
-import { Database, Pencil, Plus, Trash2 } from "lucide-react";
+import { Database, Pencil, Plus, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { useCallback, useState } from "react";
@@ -32,6 +32,12 @@ import {
 } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useConnectors,
   useDeleteConnector,
@@ -232,9 +238,45 @@ function ConnectorCard({
             <Database className="h-3.5 w-3.5" />
             <span>{formatCronSchedule(connector.schedule)}</span>
           </div>
+
+          <AssignedAgentsTooltip connector={connector} />
         </CardContent>
       </Card>
     </Link>
+  );
+}
+
+function AssignedAgentsTooltip({ connector }: { connector: ConnectorItem }) {
+  const { assignedAgents } = connector;
+
+  if (!assignedAgents || assignedAgents.length === 0) return null;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            <span>
+              {assignedAgents.length} profile
+              {assignedAgents.length > 1 ? "s" : ""}
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <div className="space-y-1">
+            {assignedAgents.map((agent) => (
+              <div key={agent.id} className="flex items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground capitalize">
+                  {agent.agentType.replace("_", " ")}
+                </span>
+                <span>{agent.name}</span>
+              </div>
+            ))}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -44,6 +44,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
   useConnectors,
@@ -212,6 +218,39 @@ function KnowledgeBaseCard({
                     ? "Org-wide"
                     : "Team-scoped"}
               </Badge>
+            }
+          />
+          <StatItem
+            label="Assigned Profiles"
+            value={
+              kb.assignedAgents.length > 0 ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-default">
+                        {String(kb.assignedAgents.length)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <div className="space-y-1">
+                        {kb.assignedAgents.map((agent) => (
+                          <div
+                            key={agent.id}
+                            className="flex items-center gap-1.5 text-xs"
+                          >
+                            <span className="text-muted-foreground capitalize">
+                              {agent.agentType.replace("_", " ")}
+                            </span>
+                            <span>{agent.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                "0"
+              )
             }
           />
         </div>

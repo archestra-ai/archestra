@@ -91,7 +91,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   conversation: ["create", "read", "update", "delete"],
   limit: ["read"],
   llmModels: ["read"],
-  chatSettings: ["read"],
+  chatSettings: ["create", "read", "update", "delete"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],

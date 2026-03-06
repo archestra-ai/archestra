@@ -350,18 +350,18 @@ export class McpServerRuntimeManager {
         }
       }
 
-      const k8sDeployment = new K8sDeployment(
+      const k8sDeployment = new K8sDeployment({
         mcpServer,
-        this.k8sApi,
-        this.k8sAppsApi,
-        this.k8sAttach,
-        this.k8sLog,
-        this.namespace,
+        k8sApi: this.k8sApi,
+        k8sAppsApi: this.k8sAppsApi,
+        k8sAttach: this.k8sAttach,
+        k8sLog: this.k8sLog,
+        namespace: this.namespace,
         catalogItem,
         userConfigValues,
-        effectiveEnvironmentValues,
-        this.k8sExec,
-      );
+        environmentValues: effectiveEnvironmentValues,
+        k8sExec: this.k8sExec,
+      });
 
       // Register the deployment BEFORE starting it
       this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
@@ -499,18 +499,16 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
-      const k8sDeployment = new K8sDeployment(
+      const k8sDeployment = new K8sDeployment({
         mcpServer,
-        this.k8sApi,
-        this.k8sAppsApi,
-        this.k8sAttach,
-        this.k8sLog,
-        this.namespace,
+        k8sApi: this.k8sApi,
+        k8sAppsApi: this.k8sAppsApi,
+        k8sAttach: this.k8sAttach,
+        k8sLog: this.k8sLog,
+        namespace: this.namespace,
         catalogItem,
-        undefined,
-        undefined,
-        this.k8sExec,
-      );
+        k8sExec: this.k8sExec,
+      });
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
       await k8sDeployment.resolveHttpEndpoint();

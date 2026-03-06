@@ -192,6 +192,19 @@ export const fetchPlatformPodTolerations = tolerationsFetcher.fetch;
 export const getCachedPlatformTolerations = tolerationsFetcher.getCached;
 export const resetPlatformTolerationsCache = tolerationsFetcher.resetCache;
 
+interface K8sDeploymentOptions {
+  mcpServer: McpServer;
+  k8sApi: k8s.CoreV1Api;
+  k8sAppsApi: k8s.AppsV1Api;
+  k8sAttach: Attach;
+  k8sLog: k8s.Log;
+  namespace: string;
+  catalogItem?: InternalMcpCatalog | null;
+  userConfigValues?: Record<string, string>;
+  environmentValues?: Record<string, string>;
+  k8sExec?: Exec;
+}
+
 /**
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
  */
@@ -217,29 +230,20 @@ export default class K8sDeployment {
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
 
-  constructor(
-    mcpServer: McpServer,
-    k8sApi: k8s.CoreV1Api,
-    k8sAppsApi: k8s.AppsV1Api,
-    k8sAttach: Attach,
-    k8sLog: k8s.Log,
-    namespace: string,
-    catalogItem?: InternalMcpCatalog | null,
-    userConfigValues?: Record<string, string>,
-    environmentValues?: Record<string, string>,
-    k8sExec?: Exec,
-  ) {
-    this.mcpServer = mcpServer;
-    this.k8sApi = k8sApi;
-    this.k8sAppsApi = k8sAppsApi;
-    this.k8sAttach = k8sAttach;
-    this.k8sLog = k8sLog;
-    this.k8sExec = k8sExec;
-    this.defaultNamespace = namespace;
-    this.catalogItem = catalogItem;
-    this.userConfigValues = userConfigValues;
-    this.environmentValues = environmentValues;
-    this.deploymentName = K8sDeployment.constructDeploymentName(mcpServer);
+  constructor(options: K8sDeploymentOptions) {
+    this.mcpServer = options.mcpServer;
+    this.k8sApi = options.k8sApi;
+    this.k8sAppsApi = options.k8sAppsApi;
+    this.k8sAttach = options.k8sAttach;
+    this.k8sLog = options.k8sLog;
+    this.k8sExec = options.k8sExec;
+    this.defaultNamespace = options.namespace;
+    this.catalogItem = options.catalogItem;
+    this.userConfigValues = options.userConfigValues;
+    this.environmentValues = options.environmentValues;
+    this.deploymentName = K8sDeployment.constructDeploymentName(
+      options.mcpServer,
+    );
   }
 
   /**

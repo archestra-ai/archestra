@@ -202,7 +202,7 @@ interface K8sDeploymentOptions {
   catalogItem?: InternalMcpCatalog | null;
   userConfigValues?: Record<string, string>;
   environmentValues?: Record<string, string>;
-  k8sExec?: Exec;
+  k8sExec: Exec;
 }
 
 /**
@@ -216,7 +216,7 @@ export default class K8sDeployment {
   private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
-  private k8sExec?: Exec;
+  private k8sExec: Exec;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
@@ -2477,10 +2477,6 @@ export default class K8sDeployment {
     stderr: import("node:stream").Writable,
     command: string[] = ["/bin/sh"],
   ) {
-    if (!this.k8sExec) {
-      throw new Error("Kubernetes Exec client not initialized");
-    }
-
     const pod = await this.findPodForDeployment();
     if (!pod?.metadata?.name) {
       throw new Error("No running pod found for this deployment");

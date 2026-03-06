@@ -86,7 +86,7 @@ export function McpLogsDialog({
   deploymentStatuses,
   hideInstallationSelector = false,
 }: McpLogsDialogProps) {
-  const [activeTab, setActiveTab] = useState<string>("logs");
+  const [activeTab, setActiveTab] = useState<"logs" | "debug">("logs");
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
@@ -380,7 +380,7 @@ export function McpLogsDialog({
 
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={(v) => setActiveTab(v as "logs" | "debug")}
           className="flex flex-col flex-1 min-h-0"
         >
           <div className="flex items-center gap-4">

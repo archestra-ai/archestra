@@ -1,5 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
-import type { Attach, Log } from "@kubernetes/client-node";
+import type { Attach, Exec, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import { vi } from "vitest";
 import type { z } from "zod";
@@ -55,6 +55,7 @@ function createK8sDeploymentInstance(
     k8sAppsApi: mockK8sAppsApi,
     k8sAttach: mockK8sAttach,
     k8sLog: mockK8sLog,
+    k8sExec: {} as Exec,
     namespace: "default",
     catalogItem: null,
     userConfigValues,
@@ -609,6 +610,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       k8sAppsApi: mockK8sAppsApi,
       k8sAttach: mockK8sAttach,
       k8sLog: mockK8sLog,
+      k8sExec: {} as Exec,
       namespace: namespace,
       catalogItem: null,
       userConfigValues,
@@ -790,6 +792,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       k8sAppsApi: mockK8sAppsApi,
       k8sAttach: mockK8sAttach,
       k8sLog: mockK8sLog,
+      k8sExec: {} as Exec,
       namespace: "default",
       environmentValues: environmentValues,
     });
@@ -1189,6 +1192,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       k8sAppsApi: mockK8sAppsApi,
       k8sAttach: mockK8sAttach,
       k8sLog: mockK8sLog,
+      k8sExec: {} as Exec,
       namespace: "default",
       environmentValues: environmentValues,
     });
@@ -2422,6 +2426,7 @@ spec:
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as k8s.Attach,
       k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: catalogItem,
     });
@@ -2596,6 +2601,7 @@ describe("K8sDeployment.createK8sSecret", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
       environmentValues: secretData,
@@ -2920,6 +2926,7 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as k8s.Attach,
       k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -2963,6 +2970,7 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as k8s.Attach,
       k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3010,6 +3018,7 @@ describe("K8sDeployment.deleteK8sSecret", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3092,6 +3101,7 @@ describe("K8sDeployment.deleteK8sService", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3174,6 +3184,7 @@ describe("K8sDeployment.constructHttpServiceName", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3304,6 +3315,7 @@ describe("K8sDeployment.stopDeployment", () => {
       k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3387,6 +3399,7 @@ describe("K8sDeployment.removeDeployment", () => {
       k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3475,6 +3488,7 @@ describe("K8sDeployment.statusSummary", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "test-namespace",
       catalogItem: null,
     });
@@ -3517,6 +3531,7 @@ describe("K8sDeployment.containerName", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -3539,6 +3554,7 @@ describe("K8sDeployment.k8sNamespace", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "custom-namespace",
       catalogItem: null,
     });
@@ -3561,6 +3577,7 @@ describe("K8sDeployment.k8sDeploymentName", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -4038,6 +4055,7 @@ describe("K8sDeployment.getRecentLogs", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });
@@ -4191,6 +4209,7 @@ describe("K8sDeployment.createDockerRegistrySecrets", () => {
       k8sAppsApi: {} as k8s.AppsV1Api,
       k8sAttach: {} as k8s.Attach,
       k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
       namespace: "default",
       catalogItem: null,
     });

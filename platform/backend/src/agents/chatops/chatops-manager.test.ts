@@ -1530,4 +1530,21 @@ describe("buildChatOpsSessionId", () => {
       "chatops:ms-teams:CH1",
     );
   });
+
+  test("hashes long MS Teams DM channel IDs to stay within exemplar budget", () => {
+    const longChannelId =
+      "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
+    const result = buildChatOpsSessionId("ms-teams", longChannelId);
+
+    expect(result).toMatch(/^chatops:ms-teams:[a-f0-9]{16}$/);
+    expect(result.length).toBeLessThanOrEqual(58);
+  });
+
+  test("produces same hash for same channel ID (deterministic)", () => {
+    const longChannelId =
+      "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
+    const a = buildChatOpsSessionId("ms-teams", longChannelId);
+    const b = buildChatOpsSessionId("ms-teams", longChannelId);
+    expect(a).toBe(b);
+  });
 });

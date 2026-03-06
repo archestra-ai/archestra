@@ -8,7 +8,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
+import {
+  useDefaultCredentialsEnabled,
+  useHasPermissions,
+} from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatures } from "@/lib/config.query";
 
@@ -18,12 +21,20 @@ export function SidebarWarningsAccordion() {
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: canUpdateOrg } = useHasPermissions({
+    organization: ["update"],
+  });
 
   const isPermissive = features?.globalToolPolicy === "permissive";
 
   const showSecurityEngineWarning =
-    !!session && !isLoadingFeatures && features !== undefined && isPermissive;
+    !!session &&
+    canUpdateOrg &&
+    !isLoadingFeatures &&
+    features !== undefined &&
+    isPermissive;
   const showDefaultCredsWarning =
+    canUpdateOrg &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&

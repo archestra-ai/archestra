@@ -30,6 +30,7 @@ export default function AppearanceSettingsPage() {
     applyThemeOnUI,
     saveAppearance,
     logo,
+    logoDark,
     DEFAULT_THEME,
     isLoadingAppearance,
   } = orgTheme ?? {
@@ -63,7 +64,11 @@ export default function AppearanceSettingsPage() {
     <div>
       <div className="space-y-6">
         <LightDarkToggle currentThemeId={currentUITheme} />
-        <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
+        <LogoUpload
+          currentLogo={logo}
+          currentLogoDark={logoDark}
+          onLogoChange={handleLogoChange}
+        />
         <ThemeSelector
           selectedTheme={currentUITheme}
           onThemeSelect={(themeId) => {

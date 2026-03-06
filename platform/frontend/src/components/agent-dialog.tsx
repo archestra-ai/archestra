@@ -1088,10 +1088,10 @@ export function AgentDialog({
             <div className="rounded-lg border bg-card p-4 space-y-4">
               {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
               {!isBuiltIn && (
-                <div className="space-y-2">
-                  <Label htmlFor="agentName">Name *</Label>
-                  <div className="flex items-center gap-3">
-                    <AgentIconPicker value={icon} onChange={setIcon} />
+                <div className="space-y-4">
+                  <AgentIconPicker value={icon} onChange={setIcon} />
+                  <div className="space-y-2">
+                    <Label htmlFor="agentName">Name *</Label>
                     <Input
                       id="agentName"
                       value={name}

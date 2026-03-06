@@ -132,7 +132,12 @@ export function AgentIconPicker({
               Upload
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="emoji" className="m-0">
+          <TabsContent
+            value="emoji"
+            className="m-0"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
             <EmojiPicker
               onEmojiSelect={handleEmojiSelect}
               emojisPerRow={8}

@@ -84,12 +84,19 @@ export const OrganizationCompressionScopeSchema = z.enum([
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
 
+export const EmbeddingModelSchema = z.enum([
+  "text-embedding-3-small",
+  "text-embedding-3-large",
+  "text-embedding-ada-002",
+]);
+
 const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
+  embeddingModel: EmbeddingModelSchema.nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -100,6 +107,7 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 );
+
 export const UpdateOrganizationSchema = z.object({
   ...extendedFields,
   logo: Base64PngSchema,
@@ -109,6 +117,7 @@ export const UpdateOrganizationSchema = z.object({
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   allowChatFileUploads: z.boolean(),
+  embeddingModel: EmbeddingModelSchema,
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<
@@ -122,3 +131,4 @@ export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type UpdateOrganization = z.infer<typeof UpdateOrganizationSchema>;
 export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;
+export type EmbeddingModel = z.infer<typeof EmbeddingModelSchema>;

@@ -3,6 +3,7 @@
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useEnterpriseFeature } from "@/lib/features.hook";
 import { useSecretsType } from "@/lib/secrets.query";
 
 export default function SettingsLayout({
@@ -19,6 +20,7 @@ export default function SettingsLayout({
   });
 
   const { data: secretsType } = useSecretsType();
+  const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
 
   const tabs = [
     { label: "Your Account", href: "/settings/account" },
@@ -44,6 +46,9 @@ export default function SettingsLayout({
         ]
       : []),
     { label: "Appearance", href: "/settings/appearance" },
+    ...(knowledgeBaseEnabled
+      ? [{ label: "Knowledge", href: "/settings/knowledge" }]
+      : []),
     /**
      * Secrets tab is only shown when using Vault storage (not DB).
      */

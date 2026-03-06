@@ -115894,7 +115894,12 @@
                     },
                     "embeddingModel": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "text-embedding-3-small",
+                        "text-embedding-3-large",
+                        "text-embedding-ada-002"
+                      ]
                     },
                     "embeddingApiKeySecretId": {
                       "nullable": true,
@@ -116216,6 +116221,14 @@
                       "restrictive"
                     ]
                   },
+                  "embeddingModel": {
+                    "type": "string",
+                    "enum": [
+                      "text-embedding-3-small",
+                      "text-embedding-3-large",
+                      "text-embedding-ada-002"
+                    ]
+                  },
                   "logo": {
                     "nullable": true,
                     "type": "string"
@@ -116347,7 +116360,12 @@
                     },
                     "embeddingModel": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "text-embedding-3-small",
+                        "text-embedding-3-large",
+                        "text-embedding-ada-002"
+                      ]
                     },
                     "embeddingApiKeySecretId": {
                       "nullable": true,

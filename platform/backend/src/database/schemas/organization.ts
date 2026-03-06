@@ -8,6 +8,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  EmbeddingModel,
   GlobalToolPolicy,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
@@ -55,7 +56,9 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /** Embedding model for knowledge base RAG (enterprise feature) */
-  embeddingModel: text("embedding_model").default("text-embedding-3-small"),
+  embeddingModel: text("embedding_model")
+    .$type<EmbeddingModel>()
+    .default("text-embedding-3-small"),
 
   /** Secret ID storing the embedding API key (enterprise feature) */
   embeddingApiKeySecretId: uuid("embedding_api_key_secret_id").references(

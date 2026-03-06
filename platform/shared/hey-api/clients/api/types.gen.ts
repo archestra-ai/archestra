@@ -32992,7 +32992,7 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
         embeddingApiKeySecretId: string | null;
     };
 };
@@ -33006,6 +33006,7 @@ export type UpdateOrganizationData = {
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
         compressionScope?: 'organization' | 'team';
         globalToolPolicy?: 'permissive' | 'restrictive';
+        embeddingModel?: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
         logo?: string | null;
         logoDark?: string | null;
         onboardingComplete?: boolean;
@@ -33096,7 +33097,7 @@ export type UpdateOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
         embeddingApiKeySecretId: string | null;
     };
 };

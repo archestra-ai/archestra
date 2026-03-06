@@ -784,7 +784,7 @@ export function AssignedToolsTable({
         </div>
 
         {/* Bulk actions - Desktop */}
-        <div className="hidden md:flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
+        <div className="hidden lg:flex flex-wrap items-center gap-4 p-4 bg-muted/50 border border-border rounded-lg">
           <div className="flex items-center gap-3">
             {hasSelection ? (
               <>
@@ -793,7 +793,7 @@ export function AssignedToolsTable({
                     {selectedTools.length}
                   </span>
                 </div>
-                <span className="text-sm font-medium">
+                <span className="text-sm font-medium whitespace-nowrap">
                   {selectedTools.length === 1
                     ? "tool selected"
                     : "tools selected"}
@@ -803,12 +803,12 @@ export function AssignedToolsTable({
                 )}
               </>
             ) : (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
                 Select tools to apply bulk actions
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap ml-auto">
             <WithPermissions
               permissions={{ policy: ["update"] }}
               noPermissionHandle="tooltip"
@@ -924,7 +924,7 @@ export function AssignedToolsTable({
         </div>
 
         {/* Bulk actions - Mobile */}
-        <div className="flex flex-col gap-3 p-3 bg-muted/50 border border-border rounded-lg md:hidden">
+        <div className="flex flex-col gap-3 p-3 bg-muted/50 border border-border rounded-lg lg:hidden">
           {/* Title / selection info */}
           <div className="flex items-center gap-2">
             {hasSelection ? (

@@ -487,6 +487,7 @@ const AgentToolsEditorContent = forwardRef<
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
           onClearPendingChanges={clearPendingChanges}
+          onRemove={handleCatalogToggle}
           autoOpen={catalog.id === autoOpenCatalogId}
           onAutoOpened={() => setAutoOpenCatalogId(null)}
         />
@@ -513,6 +514,8 @@ interface McpServerPillProps {
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
   onClearPendingChanges: (catalogId: string) => void;
+  /** Called when the user clicks the remove button on the pill */
+  onRemove: (catalogId: string) => void;
   /** When true, the pill's popover opens automatically after mount */
   autoOpen?: boolean;
   /** Called after the auto-open has been consumed */
@@ -525,6 +528,7 @@ function McpServerPill({
   initialPendingChanges,
   onPendingChanges,
   onClearPendingChanges,
+  onRemove,
   autoOpen,
   onAutoOpened,
 }: McpServerPillProps) {
@@ -637,9 +641,12 @@ function McpServerPill({
     return null;
   }
 
-  const hasAssignedTools = assignedTools.length > 0;
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
+  const displayedCount = hasPendingChanges
+    ? selectedToolIds.size
+    : assignedCount;
+  const isEmpty = displayedCount === 0;
 
   // Show credential selector for non-builtin, non-Playwright servers that have credentials available
   const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
@@ -657,25 +664,38 @@ function McpServerPill({
       }}
       modal
     >
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={cn(
-            "h-8 px-3 gap-1.5 text-xs",
-            (hasPendingChanges
-              ? selectedToolIds.size === 0
-              : !hasAssignedTools) && "border-dashed opacity-50",
-            hasPendingChanges && "border-primary opacity-100",
-          )}
-        >
-          <span className="font-medium">{catalogItem.name}</span>
-          <span className="text-muted-foreground">
-            ({hasPendingChanges ? selectedToolIds.size : assignedCount})
-          </span>
-          <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 px-3 gap-1.5 text-xs",
+              isEmpty && "border-dashed opacity-50",
+              isEmpty && "rounded-r-none border-r-0",
+              hasPendingChanges && "border-primary opacity-100",
+            )}
+          >
+            <span className="font-medium">{catalogItem.name}</span>
+            <span className="text-muted-foreground">({displayedCount})</span>
+            <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
+          </Button>
+        </PopoverTrigger>
+        {isEmpty && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(catalogItem.id);
+            }}
+            aria-label={`Remove ${catalogItem.name}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
       <PopoverContent
         className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"

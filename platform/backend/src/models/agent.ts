@@ -157,8 +157,8 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
     }
 
-    // Exclude built-in agents (e.g. for chat dropdown)
-    if (options?.excludeBuiltIn) {
+    // Exclude built-in agents when explicitly requested or when user is not an admin
+    if (options?.excludeBuiltIn || !isAgentAdmin) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
@@ -453,6 +453,11 @@ class AgentModel {
     // Add agentType filter if provided (single type, backwards compatible)
     else if (filters?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
+    }
+
+    // Hide built-in agents from non-admin users
+    if (!isAgentAdmin) {
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
     // Apply access control filtering for non-agent admins

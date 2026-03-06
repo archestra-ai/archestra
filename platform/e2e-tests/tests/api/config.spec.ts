@@ -26,7 +26,6 @@ test.describe("Config endpoint", () => {
     expect(features).toHaveProperty("orchestrator-k8s-runtime");
     expect(features).toHaveProperty("byosEnabled");
     expect(features).toHaveProperty("globalToolPolicy");
-    expect(features).toHaveProperty("browserStreamingEnabled");
     expect(features).toHaveProperty("incomingEmail");
     expect(features).toHaveProperty("knowledgeGraph");
     expect(features).toHaveProperty("mcpServerBaseImage");

@@ -11,16 +11,11 @@ import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
-// Mock config to ENABLE the feature for these tests
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
   return {
     default: {
       ...actual.default,
-      features: {
-        ...actual.default.features,
-        browserStreamingEnabled: true, // Feature is enabled for these tests
-      },
     },
   };
 });

@@ -315,7 +315,7 @@ const NavSecondary = ({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {!config.enterpriseLicenseActivated && (
+          {!config.enterpriseFeatures.core && (
             <>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
@@ -413,7 +413,7 @@ export function AppSidebar() {
             />
           </>
         )}
-        {!isAuthenticated && !config.enterpriseLicenseActivated && (
+        {!isAuthenticated && !config.enterpriseFeatures.core && (
           <NavSecondary
             items={[]}
             pathname={pathname}

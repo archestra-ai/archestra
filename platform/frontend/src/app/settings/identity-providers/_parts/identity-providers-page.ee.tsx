@@ -313,7 +313,7 @@ export function IdentityProvidersSettingsContent() {
   );
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!config.enterpriseLicenseActivated) {
+  if (!config.enterpriseFeatures.core) {
     return (
       <div>
         <div className="mb-8">

@@ -33,7 +33,7 @@ export default function SettingsLayout({
            * Identity Providers tab is only shown when enterprise license is activated
            * and the user has the permission to read identity providers.
            */
-          ...(config.enterpriseLicenseActivated && userCanReadIdentityProviders
+          ...(config.enterpriseFeatures.core && userCanReadIdentityProviders
             ? [
                 {
                   label: "Identity Providers",

@@ -69538,6 +69538,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "enterpriseFeatures": {
+                      "type": "object",
+                      "properties": {
+                        "core": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "core"
+                      ],
+                      "additionalProperties": false
+                    },
                     "features": {
                       "type": "object",
                       "properties": {
@@ -69564,9 +69576,6 @@
                             "permissive",
                             "restrictive"
                           ]
-                        },
-                        "browserStreamingEnabled": {
-                          "type": "boolean"
                         },
                         "incomingEmail": {
                           "type": "object",
@@ -69635,7 +69644,6 @@
                         "byosVaultKvVersion",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
-                        "browserStreamingEnabled",
                         "incomingEmail",
                         "knowledgeGraph",
                         "mcpServerBaseImage",
@@ -69673,6 +69681,7 @@
                     }
                   },
                   "required": [
+                    "enterpriseFeatures",
                     "features",
                     "providerBaseUrls"
                   ],

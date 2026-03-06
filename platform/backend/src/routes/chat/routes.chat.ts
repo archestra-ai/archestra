@@ -258,9 +258,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Strip images and large browser tool results from messages before sending to LLM
           // This prevents context limit issues from accumulated screenshots and page snapshots
-          const strippedMessagesForLLM = config.features.browserStreamingEnabled
-            ? stripImagesFromMessages(messages as UiMessage[])
-            : (messages as UiMessage[]);
+          const strippedMessagesForLLM = stripImagesFromMessages(
+            messages as UiMessage[],
+          );
 
           // Stream with AI SDK
           // Build streamText config conditionally
@@ -1349,29 +1349,27 @@ async function persistNewMessages(
 
     let messagesToStore = messagesToSave as UiMessage[];
 
-    if (config.features.browserStreamingEnabled) {
-      // Strip base64 images and large browser tool results before storing
-      if (context === "onFinish") {
-        // Log size reduction only for onFinish (where we have complete messages)
-        const beforeSize = estimateMessagesSize(messagesToSave);
-        messagesToStore = stripImagesFromMessages(messagesToSave);
-        const afterSize = estimateMessagesSize(messagesToStore);
+    // Strip base64 images and large browser tool results before storing
+    if (context === "onFinish") {
+      // Log size reduction only for onFinish (where we have complete messages)
+      const beforeSize = estimateMessagesSize(messagesToSave);
+      messagesToStore = stripImagesFromMessages(messagesToSave);
+      const afterSize = estimateMessagesSize(messagesToStore);
 
-        logger.info(
-          {
-            messageCount: messagesToSave.length,
-            beforeSizeKB: Math.round(beforeSize.length / 1024),
-            afterSizeKB: Math.round(afterSize.length / 1024),
-            savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
-            sizeEstimateReliable:
-              !beforeSize.isEstimated && !afterSize.isEstimated,
-          },
-          "[Chat] Stripped messages before saving to DB",
-        );
-      } else {
-        // For onError, just strip without detailed logging
-        messagesToStore = stripImagesFromMessages(messagesToStore);
-      }
+      logger.info(
+        {
+          messageCount: messagesToSave.length,
+          beforeSizeKB: Math.round(beforeSize.length / 1024),
+          afterSizeKB: Math.round(afterSize.length / 1024),
+          savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
+          sizeEstimateReliable:
+            !beforeSize.isEstimated && !afterSize.isEstimated,
+        },
+        "[Chat] Stripped messages before saving to DB",
+      );
+    } else {
+      // For onError, just strip without detailed logging
+      messagesToStore = stripImagesFromMessages(messagesToStore);
     }
 
     // Append only new messages with timestamps

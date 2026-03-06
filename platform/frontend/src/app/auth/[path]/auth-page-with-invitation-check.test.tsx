@@ -24,7 +24,7 @@ vi.mock("@/lib/backend-connectivity", () => ({
 // Mock config
 const mockConfig = {
   disableBasicAuth: false,
-  enterpriseLicenseActivated: false,
+  enterpriseFeatures: { core: false },
 };
 
 vi.mock("@/lib/config", () => ({
@@ -79,7 +79,7 @@ describe("AuthPageWithInvitationCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConfig.disableBasicAuth = false;
-    mockConfig.enterpriseLicenseActivated = false;
+    mockConfig.enterpriseFeatures.core = false;
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);

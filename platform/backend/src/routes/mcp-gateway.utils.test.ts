@@ -11,7 +11,7 @@ vi.mock("@/config", async (importOriginal) => {
   return {
     default: {
       ...actual.default,
-      enterpriseLicenseActivated: true,
+      enterpriseFeatures: { ...actual.default.enterpriseFeatures, core: true },
     },
   };
 });

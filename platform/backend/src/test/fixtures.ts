@@ -208,6 +208,7 @@ async function makeAgent(
     teams: [],
     labels: [],
     knowledgeBaseIds: [],
+    connectorIds: [],
   };
   return await AgentModel.create(
     {

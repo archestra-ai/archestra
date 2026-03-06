@@ -105,6 +105,7 @@ import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
+import { useConnectors } from "@/lib/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { cn } from "@/lib/utils";
 
@@ -577,6 +578,8 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders();
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const knowledgeBases = knowledgeBasesData?.data ?? [];
+  const { data: connectorsData } = useConnectors();
+  const connectors = connectorsData?.data ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
     includeKeyId: agentLlmApiKeyId,
@@ -628,6 +631,7 @@ export function AgentDialog({
   );
   const [scope, setScope] = useState<"personal" | "team" | "org">("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
+  const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
     useState(false);
 
@@ -680,6 +684,11 @@ export function AgentDialog({
             | string[]
             | undefined) ?? [],
         );
+        setConnectorIds(
+          ((agentData as Record<string, unknown>).connectorIds as
+            | string[]
+            | undefined) ?? [],
+        );
         // Scope
         setScope(
           ((agentData as Record<string, unknown>).scope as
@@ -713,6 +722,7 @@ export function AgentDialog({
         setConsiderContextUntrusted(false);
         setIdentityProviderId(null);
         setKnowledgeBaseIds([]);
+        setConnectorIds([]);
         setScope("personal");
         setIncomingEmailEnabled(false);
         setIncomingEmailSecurityMode("private");
@@ -937,6 +947,7 @@ export function AgentDialog({
             }),
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
+              connectorIds: connectorIds,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -966,6 +977,7 @@ export function AgentDialog({
           }),
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
+            connectorIds: connectorIds,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1028,6 +1040,7 @@ export function AgentDialog({
     incomingEmailAllowedDomain,
     identityProviderId,
     knowledgeBaseIds,
+    connectorIds,
     scope,
     agentType,
     agent,
@@ -1313,41 +1326,7 @@ export function AgentDialog({
               )}
             </div>
 
-            {/* Section 2: Prompts (Agent only) */}
-            {isInternalAgent && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">Prompts</h3>
-
-                {/* System Prompt (read-only for built-in) */}
-                <div className="space-y-2">
-                  <Label htmlFor="systemPrompt">System Prompt</Label>
-                  <Textarea
-                    id="systemPrompt"
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="Enter system prompt (instructions for the LLM)"
-                    className="min-h-[150px] font-mono"
-                    disabled={isBuiltIn}
-                  />
-                </div>
-
-                {/* User Prompt (hidden for built-in) */}
-                {!isBuiltIn && (
-                  <div className="space-y-2">
-                    <Label htmlFor="userPrompt">User Prompt</Label>
-                    <Textarea
-                      id="userPrompt"
-                      value={userPrompt}
-                      onChange={(e) => setUserPrompt(e.target.value)}
-                      placeholder="Enter user prompt (shown to user, sent to LLM)"
-                      className="min-h-[150px] font-mono"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Section 3: Capabilities (Tools, Subagents, Knowledge Base) */}
+            {/* Section 2: Capabilities (Tools, Subagents, Knowledge Sources) */}
             {showToolsAndSubagents && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
                 <h3 className="text-sm font-semibold">Capabilities</h3>
@@ -1381,13 +1360,13 @@ export function AgentDialog({
                   />
                 </div>
 
-                {/* Knowledge Bases */}
-                {knowledgeBases.length > 0 && (
+                {/* Knowledge Sources */}
+                {(knowledgeBases.length > 0 || connectors.length > 0) && (
                   <div className="space-y-2">
-                    <Label>Knowledge Bases</Label>
+                    <Label>Knowledge Sources</Label>
                     <p className="text-sm text-muted-foreground">
-                      Attach knowledge bases to enable RAG queries against
-                      indexed documents.
+                      Attach knowledge bases or connectors to enable RAG
+                      queries.
                     </p>
                     <Popover>
                       <PopoverTrigger asChild>
@@ -1395,75 +1374,196 @@ export function AgentDialog({
                           variant="outline"
                           className="w-full justify-between font-normal"
                         >
-                          {knowledgeBaseIds.length === 0
-                            ? "No Knowledge Bases"
-                            : `${knowledgeBaseIds.length} knowledge base${knowledgeBaseIds.length > 1 ? "s" : ""} selected`}
+                          {(() => {
+                            const totalSelected =
+                              knowledgeBaseIds.length + connectorIds.length;
+                            return totalSelected === 0
+                              ? "Select knowledge sources..."
+                              : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
+                          })()}
                           <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent
-                        className="w-[--radix-popover-trigger-width] p-0"
-                        align="start"
-                      >
+                      <PopoverContent className="w-96 p-0" align="start">
                         <Command>
-                          <CommandInput placeholder="Search knowledge bases..." />
+                          <CommandInput placeholder="Search knowledge sources..." />
                           <CommandList>
                             <CommandEmpty>
-                              No knowledge bases found.
+                              No knowledge sources found.
                             </CommandEmpty>
-                            <CommandGroup>
-                              {knowledgeBases.map((kb) => {
-                                const isSelected = knowledgeBaseIds.includes(
-                                  kb.id,
-                                );
-                                return (
-                                  <CommandItem
-                                    key={kb.id}
-                                    onSelect={() => {
-                                      setKnowledgeBaseIds((prev) =>
-                                        isSelected
-                                          ? prev.filter((id) => id !== kb.id)
-                                          : [...prev, kb.id],
-                                      );
-                                    }}
-                                  >
-                                    <div
-                                      className={cn(
-                                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
-                                        isSelected
-                                          ? "bg-primary border-primary text-primary-foreground"
-                                          : "opacity-50",
-                                      )}
+                            {knowledgeBases.length > 0 && (
+                              <CommandGroup heading="Knowledge Bases">
+                                {knowledgeBases.map((kb) => {
+                                  const isSelected = knowledgeBaseIds.includes(
+                                    kb.id,
+                                  );
+                                  const connectorTypes = [
+                                    ...new Set(
+                                      kb.connectors?.map(
+                                        (c: { connectorType: string }) =>
+                                          c.connectorType,
+                                      ) ?? [],
+                                    ),
+                                  ];
+                                  const visibleIcons = connectorTypes.slice(
+                                    0,
+                                    3,
+                                  );
+                                  const overflowCount =
+                                    connectorTypes.length - 3;
+                                  return (
+                                    <CommandItem
+                                      key={kb.id}
+                                      value={kb.name}
+                                      className="data-[selected=true]:bg-transparent"
+                                      onSelect={() => {
+                                        setKnowledgeBaseIds((prev) =>
+                                          isSelected
+                                            ? prev.filter((id) => id !== kb.id)
+                                            : [...prev, kb.id],
+                                        );
+                                      }}
                                     >
-                                      {isSelected && (
-                                        <CheckIcon className="h-3 w-3" />
+                                      <CheckIcon
+                                        className={cn(
+                                          "mr-2 h-4 w-4 shrink-0",
+                                          isSelected
+                                            ? "opacity-100"
+                                            : "opacity-0",
+                                        )}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="truncate text-sm">
+                                          {kb.name}
+                                        </div>
+                                        {kb.description && (
+                                          <div className="truncate text-xs text-muted-foreground">
+                                            {kb.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {connectorTypes.length > 0 && (
+                                        <div className="flex items-center -space-x-1 ml-2 shrink-0">
+                                          {visibleIcons.map((type: string) => (
+                                            <div
+                                              key={type}
+                                              className="rounded-full bg-muted p-0.5 ring-1 ring-background"
+                                            >
+                                              <ConnectorTypeIcon
+                                                type={type}
+                                                className="h-3.5 w-3.5"
+                                              />
+                                            </div>
+                                          ))}
+                                          {overflowCount > 0 && (
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div className="rounded-full bg-muted px-1 py-0.5 ring-1 ring-background text-[10px] font-medium text-muted-foreground">
+                                                    +{overflowCount}
+                                                  </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="right">
+                                                  {connectorTypes
+                                                    .slice(3)
+                                                    .join(", ")}
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          )}
+                                        </div>
                                       )}
-                                    </div>
-                                    <span className="flex-1">{kb.name}</span>
-                                    <div className="flex items-center gap-1 ml-2">
-                                      {[
-                                        ...new Set(
-                                          kb.connectors?.map(
-                                            (c: { connectorType: string }) =>
-                                              c.connectorType,
-                                          ) ?? [],
-                                        ),
-                                      ].map((type: string) => (
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            )}
+                            {connectors.length > 0 && (
+                              <CommandGroup heading="Connectors">
+                                {connectors.map((connector) => {
+                                  const isSelected = connectorIds.includes(
+                                    connector.id,
+                                  );
+                                  return (
+                                    <CommandItem
+                                      key={connector.id}
+                                      value={connector.name}
+                                      className="data-[selected=true]:bg-transparent"
+                                      onSelect={() => {
+                                        setConnectorIds((prev) =>
+                                          isSelected
+                                            ? prev.filter(
+                                                (id) => id !== connector.id,
+                                              )
+                                            : [...prev, connector.id],
+                                        );
+                                      }}
+                                    >
+                                      <CheckIcon
+                                        className={cn(
+                                          "mr-2 h-4 w-4 shrink-0",
+                                          isSelected
+                                            ? "opacity-100"
+                                            : "opacity-0",
+                                        )}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="truncate text-sm">
+                                          {connector.name}
+                                        </div>
+                                        <div className="truncate text-xs text-muted-foreground capitalize">
+                                          {connector.connectorType}
+                                        </div>
+                                      </div>
+                                      <div className="ml-2 shrink-0">
                                         <ConnectorTypeIcon
-                                          key={type}
-                                          type={type}
+                                          type={connector.connectorType}
                                           className="h-4 w-4"
                                         />
-                                      ))}
-                                    </div>
-                                  </CommandItem>
-                                );
-                              })}
-                            </CommandGroup>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            )}
                           </CommandList>
                         </Command>
                       </PopoverContent>
                     </Popover>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Section 3: Prompts (Agent only) */}
+            {isInternalAgent && (
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                <h3 className="text-sm font-semibold">Prompts</h3>
+
+                {/* System Prompt (read-only for built-in) */}
+                <div className="space-y-2">
+                  <Label htmlFor="systemPrompt">System Prompt</Label>
+                  <Textarea
+                    id="systemPrompt"
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder="Enter system prompt (instructions for the LLM)"
+                    className="min-h-[150px] font-mono"
+                    disabled={isBuiltIn}
+                  />
+                </div>
+
+                {/* User Prompt (hidden for built-in) */}
+                {!isBuiltIn && (
+                  <div className="space-y-2">
+                    <Label htmlFor="userPrompt">User Prompt</Label>
+                    <Textarea
+                      id="userPrompt"
+                      value={userPrompt}
+                      onChange={(e) => setUserPrompt(e.target.value)}
+                      placeholder="Enter user prompt (shown to user, sent to LLM)"
+                      className="min-h-[150px] font-mono"
+                    />
                   </div>
                 )}
               </div>

@@ -68,7 +68,7 @@ export function SchedulePicker({ form, name }: SchedulePickerProps) {
               }}
             >
               <FormControl>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a schedule" />
                 </SelectTrigger>
               </FormControl>
@@ -87,10 +87,10 @@ export function SchedulePicker({ form, name }: SchedulePickerProps) {
                 onChange={field.onChange}
               />
             )}
+            <FormDescription>
+              {humanReadable ?? "Cron expression for sync schedule."}
+            </FormDescription>
           </div>
-          <FormDescription>
-            {humanReadable ?? "Cron expression for sync schedule."}
-          </FormDescription>
           <FormMessage />
         </FormItem>
       )}

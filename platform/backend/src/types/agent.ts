@@ -142,6 +142,7 @@ export const SelectAgentSchema = createSelectSchema(
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
   knowledgeBaseIds: z.array(z.string()),
+  connectorIds: z.array(z.string()),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -156,6 +157,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     organizationId: z.string().optional(),
     scope: AgentScopeSchema,
     knowledgeBaseIds: z.array(z.string()).default([]),
+    connectorIds: z.array(z.string()).default([]),
   })
   .omit({
     id: true,
@@ -181,6 +183,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     scope: AgentScopeSchema,
     knowledgeBaseIds: z.array(z.string()),
+    connectorIds: z.array(z.string()),
   })
   .omit({
     id: true,

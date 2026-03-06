@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentConnectorAssignment } from "@/types";
 
@@ -63,6 +63,49 @@ class AgentConnectorAssignmentModel {
       .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
 
     return results.map((r) => r.connectorId);
+  }
+
+  static async syncForAgent(
+    agentId: string,
+    connectorIds: string[],
+  ): Promise<void> {
+    await db
+      .delete(schema.agentConnectorAssignmentsTable)
+      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+
+    if (connectorIds.length === 0) return;
+
+    await db
+      .insert(schema.agentConnectorAssignmentsTable)
+      .values(
+        connectorIds.map((connectorId) => ({
+          agentId,
+          connectorId,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  /**
+   * Batch fetch: for a list of agent IDs, return a map of agentId → connectorId[].
+   */
+  static async getConnectorIdsForAgents(
+    agentIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (agentIds.length === 0) return new Map();
+
+    const rows = await db
+      .select()
+      .from(schema.agentConnectorAssignmentsTable)
+      .where(inArray(schema.agentConnectorAssignmentsTable.agentId, agentIds));
+
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const list = map.get(row.agentId) ?? [];
+      list.push(row.connectorId);
+      map.set(row.agentId, list);
+    }
+    return map;
   }
 }
 

@@ -37008,6 +37008,12 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "connectorIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           }
                         },
                         "required": [
@@ -37038,7 +37044,8 @@
                           "tools",
                           "teams",
                           "labels",
-                          "knowledgeBaseIds"
+                          "knowledgeBaseIds",
+                          "connectorIds"
                         ],
                         "additionalProperties": false
                       }
@@ -37454,6 +37461,13 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "connectorIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -37782,6 +37796,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -37812,7 +37832,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -38402,6 +38423,12 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "connectorIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -38432,7 +38459,8 @@
                       "tools",
                       "teams",
                       "labels",
-                      "knowledgeBaseIds"
+                      "knowledgeBaseIds",
+                      "connectorIds"
                     ],
                     "additionalProperties": false
                   }
@@ -38977,6 +39005,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -39007,7 +39041,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -39551,6 +39586,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -39581,7 +39622,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -40137,6 +40179,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -40167,7 +40215,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -40533,6 +40582,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "connectorIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -40868,6 +40923,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -40898,7 +40959,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -41707,6 +41769,12 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "connectorIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         }
                       },
                       "required": [
@@ -41737,7 +41805,8 @@
                         "tools",
                         "teams",
                         "labels",
-                        "knowledgeBaseIds"
+                        "knowledgeBaseIds",
+                        "connectorIds"
                       ],
                       "additionalProperties": false
                     },
@@ -42350,6 +42419,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -42380,7 +42455,8 @@
                     "tools",
                     "teams",
                     "labels",
-                    "knowledgeBaseIds"
+                    "knowledgeBaseIds",
+                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }

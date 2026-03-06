@@ -118,7 +118,7 @@ export async function getAgentTypePermissionChecker(params: {
  *
  * - Admin (`agent:admin`) → always allowed
  * - `scope=org` → requires `admin`
- * - `scope=team` → requires `team-admin`
+ * - `scope=team` → requires `team-admin` + membership in at least one of the agent's teams
  * - `scope=personal` → requires authorship (authorId === userId)
  *
  * Throws ApiError(403) if the user lacks permission.
@@ -128,9 +128,19 @@ export function requireAgentModifyPermission(params: {
   agentType: AgentType;
   agentScope: AgentScope;
   agentAuthorId: string | null;
+  agentTeamIds: string[];
+  userTeamIds: string[];
   userId: string;
 }): void {
-  const { checker, agentType, agentScope, agentAuthorId, userId } = params;
+  const {
+    checker,
+    agentType,
+    agentScope,
+    agentAuthorId,
+    agentTeamIds,
+    userTeamIds,
+    userId,
+  } = params;
 
   // Admins bypass all checks
   if (checker.isAdmin(agentType)) {
@@ -142,14 +152,32 @@ export function requireAgentModifyPermission(params: {
       // Only admins can manage org-scoped agents (already checked above)
       throw new ApiError(403, "Only admins can manage org-scoped agents");
 
-    case "team":
+    case "team": {
       if (!checker.isTeamAdmin(agentType)) {
         throw new ApiError(
           403,
           "You need team-admin permission to manage team-scoped agents",
         );
       }
+      // team-admin must be a member of at least one of the agent's teams
+      if (agentTeamIds.length === 0) {
+        throw new ApiError(
+          403,
+          "You can only manage agents in teams you are a member of",
+        );
+      }
+      const userTeamIdSet = new Set(userTeamIds);
+      const isMemberOfAnyTeam = agentTeamIds.some((id) =>
+        userTeamIdSet.has(id),
+      );
+      if (!isMemberOfAnyTeam) {
+        throw new ApiError(
+          403,
+          "You can only manage agents in teams you are a member of",
+        );
+      }
       return;
+    }
 
     case "personal":
       if (agentAuthorId !== userId) {

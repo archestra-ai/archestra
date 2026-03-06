@@ -11,6 +11,7 @@ type Proxy = NonNullable<
 
 type LlmProxyActionsProps = {
   agent: Proxy;
+  canModify: boolean;
   onConnect: (agent: Pick<Proxy, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Proxy) => void;
   onDelete: (agentId: string) => void;
@@ -18,6 +19,7 @@ type LlmProxyActionsProps = {
 
 export function LlmProxyActions({
   agent,
+  canModify,
   onConnect,
   onEdit,
   onDelete,
@@ -42,6 +44,7 @@ export function LlmProxyActions({
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
+        disabled={!canModify}
         data-testid={`${E2eTestId.EditAgentButton}-${agent.name}`}
         onClick={(e) => {
           e.stopPropagation();
@@ -55,6 +58,7 @@ export function LlmProxyActions({
         aria-label="Delete"
         variant="outline"
         size="icon-sm"
+        disabled={!canModify}
         onClick={(e) => {
           e.stopPropagation();
           onDelete(agent.id);

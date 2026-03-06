@@ -10,7 +10,7 @@ import {
   context as otelContext,
   propagation,
 } from "@opentelemetry/api";
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX, SOURCE_HEADER } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import logger from "@/logging";
@@ -36,6 +36,8 @@ import {
 import {
   type Agent,
   ApiError,
+  type InteractionSource,
+  InteractionSourceSchema,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -87,6 +89,7 @@ export interface LLMProxyContext<TRequest> {
   resolvedUser?: { id: string; email: string; name: string } | null;
   sessionId?: string | null;
   sessionSource?: SessionSource;
+  source?: InteractionSource | null;
   executionId?: string;
   parentContext?: Context;
   teamIds?: string[];
@@ -149,6 +152,15 @@ export async function handleLLMProxy<
           }
         | undefined,
     );
+
+  // Extract interaction source (chat, chatops, email, etc.)
+  // Internal callers set X-Archestra-Source; external API requests default to "api".
+  const rawSource = utils.headers.metaHeader.getHeaderValue(
+    headersForExtraction,
+    SOURCE_HEADER,
+  );
+  const source: InteractionSource =
+    InteractionSourceSchema.safeParse(rawSource).data ?? "api";
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -537,6 +549,7 @@ export async function handleLLMProxy<
       resolvedUser,
       sessionId,
       sessionSource,
+      source,
       executionId,
       parentContext,
       teamIds,
@@ -599,6 +612,7 @@ async function handleStreaming<
     resolvedUser,
     sessionId,
     sessionSource,
+    source,
     executionId,
     parentContext,
     teamIds,
@@ -846,6 +860,7 @@ async function handleStreaming<
             userId,
             sessionId,
             sessionSource,
+            source,
             providerType: provider.interactionType,
             request: originalRequest,
             processedRequest: request,
@@ -900,6 +915,7 @@ async function handleNonStreaming<
     resolvedUser,
     sessionId,
     sessionSource,
+    source,
     executionId,
     parentContext,
     teamIds,
@@ -1042,6 +1058,7 @@ async function handleNonStreaming<
           userId,
           sessionId,
           sessionSource,
+          source,
           providerType: provider.interactionType,
           request: originalRequest,
           processedRequest: request,
@@ -1100,6 +1117,7 @@ async function handleNonStreaming<
         userId,
         sessionId,
         sessionSource,
+        source,
         providerType: provider.interactionType,
         request: originalRequest,
         processedRequest: request,

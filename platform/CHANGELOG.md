@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.57](https://github.com/archestra-ai/archestra/compare/platform-v1.0.56...platform-v1.0.57) (2026-03-05)
+
+
+### Features
+
+* chatops session grouping, source tracking, and logs UI improvements ([#3126](https://github.com/archestra-ai/archestra/issues/3126)) ([f902077](https://github.com/archestra-ai/archestra/commit/f90207785dc625e7f5410eda14ce13f9a0ed76f6))
+
+
+### Bug Fixes
+
+* reduce observability noise (auth logs, Sentry span sampling) ([#3127](https://github.com/archestra-ai/archestra/issues/3127)) ([21d5cc7](https://github.com/archestra-ai/archestra/commit/21d5cc75ad6c8b05e1e03557aa9eb31ff51e2970))
+
 ## [1.0.56](https://github.com/archestra-ai/archestra/compare/platform-v1.0.55...platform-v1.0.56) (2026-03-05)
 
 

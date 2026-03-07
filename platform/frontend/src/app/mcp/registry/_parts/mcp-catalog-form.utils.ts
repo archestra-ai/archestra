@@ -509,7 +509,7 @@ export function transformExternalCatalogToFormValues(
   }
 
   return {
-    name: server.name,
+    name: server.display_name || server.name,
     description: server.description || "",
     icon: server.icon ?? null,
     serverType: server.server.type as "remote" | "local",

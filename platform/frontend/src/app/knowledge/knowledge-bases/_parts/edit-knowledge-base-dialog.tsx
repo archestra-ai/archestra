@@ -22,7 +22,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useUpdateKnowledgeBase } from "@/lib/knowledge-base.query";
-import { VisibilitySelector } from "./visibility-selector";
+import {
+  type KnowledgeBaseVisibility,
+  VisibilitySelector,
+} from "./visibility-selector";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -42,9 +45,9 @@ export function EditKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateKnowledgeBase = useUpdateKnowledgeBase();
-  const [visibility, setVisibility] = useState<
-    "org-wide" | "team-scoped" | "auto-sync-permissions"
-  >(knowledgeBase.visibility);
+  const [visibility, setVisibility] = useState<KnowledgeBaseVisibility>(
+    knowledgeBase.visibility,
+  );
   const [teamIds, setTeamIds] = useState<string[]>(knowledgeBase.teamIds);
 
   const form = useForm<EditKnowledgeBaseFormValues>({

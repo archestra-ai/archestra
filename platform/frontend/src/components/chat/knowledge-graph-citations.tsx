@@ -38,12 +38,7 @@ interface ExtractedCitation {
 }
 
 function extractCitations(
-  parts: Array<{
-    type: string;
-    toolName?: string;
-    state?: string;
-    output?: unknown;
-  }>,
+  parts: KnowledgeGraphCitationsProps["parts"],
 ): ExtractedCitation[] {
   const seen = new Set<string>();
   const citations: ExtractedCitation[] = [];
@@ -101,7 +96,7 @@ function SourceIcon({ connectorType }: { connectorType: string | null }) {
   return <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />;
 }
 
-interface KnowledgeGraphCitationsProps {
+export interface KnowledgeGraphCitationsProps {
   parts: Array<{
     type: string;
     toolName?: string;

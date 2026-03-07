@@ -27,13 +27,27 @@ type EmbeddingModel = NonNullable<
   >["embeddingModel"]
 >;
 
-const EMBEDDING_MODEL_LABELS: Record<EmbeddingModel, string> = {
-  "text-embedding-3-small":
-    "text-embedding-3-small — Best cost/quality ratio (1536 dims)",
-  "text-embedding-3-large":
-    "text-embedding-3-large — Higher quality, 2x cost (3072 dims)",
-  "text-embedding-ada-002": "text-embedding-ada-002 — Legacy model (1536 dims)",
-};
+const EMBEDDING_MODELS: {
+  value: EmbeddingModel;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "text-embedding-3-small",
+    label: "text-embedding-3-small",
+    description: "Best cost/quality ratio (1536 dims)",
+  },
+  {
+    value: "text-embedding-3-large",
+    label: "text-embedding-3-large",
+    description: "Higher quality, 2x cost (3072 dims)",
+  },
+  {
+    value: "text-embedding-ada-002",
+    label: "text-embedding-ada-002",
+    description: "Legacy model (1536 dims)",
+  },
+];
 
 const DEFAULT_MODEL: EmbeddingModel = "text-embedding-3-small";
 
@@ -87,17 +101,19 @@ function KnowledgeSettingsContent() {
                   disabled={!hasPermission}
                 >
                   <SelectTrigger className="w-80">
-                    <SelectValue />
+                    <SelectValue placeholder="Select model">
+                      {embeddingModel}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {(
-                      Object.entries(EMBEDDING_MODEL_LABELS) as [
-                        EmbeddingModel,
-                        string,
-                      ][]
-                    ).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
+                    {EMBEDDING_MODELS.map((model) => (
+                      <SelectItem key={model.value} value={model.value}>
+                        <div className="flex flex-col">
+                          <span>{model.label}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {model.description}
+                          </span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

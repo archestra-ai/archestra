@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import type { KnowledgeGraphCitationsProps } from "@/components/chat/knowledge-graph-citations";
 import { KnowledgeGraphCitations } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
@@ -22,12 +23,7 @@ interface EditableAssistantMessageProps {
   text: string;
   isEditing: boolean;
   showActions: boolean;
-  citationParts?: Array<{
-    type: string;
-    toolName?: string;
-    state?: string;
-    output?: unknown;
-  }>;
+  citationParts?: KnowledgeGraphCitationsProps["parts"];
   editDisabled?: boolean;
   onStartEdit: (partKey: string) => void;
   onCancelEdit: () => void;

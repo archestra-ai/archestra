@@ -1,13 +1,26 @@
+import type { archestraApiTypes } from "@shared";
 import { Github } from "lucide-react";
+import type { ReactNode } from "react";
 
-const CONNECTOR_ICON_MAP: Record<string, string> = {
-  jira: "/icons/jira.png",
-  confluence: "/icons/confluence.png",
-  gitlab: "/icons/gitlab.png",
+type ConnectorType =
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
+
+type ConnectorIcon =
+  | { kind: "img"; src: string }
+  | { kind: "element"; render: (className?: string) => ReactNode };
+
+const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
+  jira: { kind: "img", src: "/icons/jira.png" },
+  confluence: { kind: "img", src: "/icons/confluence.png" },
+  github: {
+    kind: "element",
+    render: (className) => <Github className={className} />,
+  },
+  gitlab: { kind: "img", src: "/icons/gitlab.png" },
 };
 
 export function hasConnectorIcon(type: string): boolean {
-  return type in CONNECTOR_ICON_MAP || type === "github";
+  return type in CONNECTOR_ICON_MAP;
 }
 
 export function ConnectorTypeIcon({
@@ -17,12 +30,12 @@ export function ConnectorTypeIcon({
   type: string;
   className?: string;
 }) {
-  if (type === "github") {
-    return <Github className={className} />;
+  const icon = CONNECTOR_ICON_MAP[type as ConnectorType];
+  if (!icon) return null;
+
+  if (icon.kind === "element") {
+    return <>{icon.render(className)}</>;
   }
 
-  const src = CONNECTOR_ICON_MAP[type];
-  if (!src) return null;
-
-  return <img src={src} alt={type} className={className} />;
+  return <img src={icon.src} alt={type} className={className} />;
 }

@@ -39,10 +39,8 @@ import { SchedulePicker } from "./schedule-picker";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
-  "id" | "name" | "config" | "schedule" | "enabled"
-> & {
-  connectorType: string;
-};
+  "id" | "name" | "connectorType" | "config" | "schedule" | "enabled"
+>;
 
 interface EditConnectorFormValues {
   name: string;
@@ -221,7 +219,10 @@ export function EditConnectorDialog({
   );
 }
 
-function getEditUrlConfig(type: string): {
+type ConnectorType =
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
+
+function getEditUrlConfig(type: ConnectorType): {
   fieldName: string;
   label: string;
   placeholder: string;

@@ -78,7 +78,7 @@ function InviteByLinkCardContent({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <LinkIcon className="h-5 w-5" />
-          Invite Member by Link
+          Invite User by Link
         </CardTitle>
         <CardDescription>
           Generate an invitation link to share with the person you want to

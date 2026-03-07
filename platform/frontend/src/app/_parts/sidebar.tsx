@@ -29,6 +29,7 @@ import {
   COMMUNITY_GITHUB_URL,
   COMMUNITY_SLACK_URL,
 } from "@/components/community-links";
+import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
   SidebarContent,
@@ -451,8 +452,7 @@ export function AppSidebar() {
         )}
       </SidebarContent>
       <SidebarFooter>
-        {/* TODO: re-enable once security engine warnings are relevant for this branch */}
-        {/* <SidebarWarningsAccordion /> */}
+        <SidebarWarningsAccordion />
         <SignedIn>
           <SidebarGroup className="mt-auto">
             <SidebarGroupContent>

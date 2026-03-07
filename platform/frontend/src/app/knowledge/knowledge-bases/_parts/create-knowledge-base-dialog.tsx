@@ -20,7 +20,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useCreateKnowledgeBase } from "@/lib/knowledge-base.query";
-import { VisibilitySelector } from "./visibility-selector";
+import {
+  type KnowledgeBaseVisibility,
+  VisibilitySelector,
+} from "./visibility-selector";
 
 interface CreateKnowledgeBaseFormValues {
   name: string;
@@ -35,9 +38,8 @@ export function CreateKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createKnowledgeBase = useCreateKnowledgeBase();
-  const [visibility, setVisibility] = useState<
-    "org-wide" | "team-scoped" | "auto-sync-permissions"
-  >("org-wide");
+  const [visibility, setVisibility] =
+    useState<KnowledgeBaseVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const form = useForm<CreateKnowledgeBaseFormValues>({

@@ -1,32 +1,45 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { CheckIcon, ChevronDown, Globe, RefreshCw, Users } from "lucide-react";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useTeams } from "@/lib/team.query";
 
-const visibilityOptions = [
-  {
-    value: "org-wide" as const,
+export type KnowledgeBaseVisibility = NonNullable<
+  archestraApiTypes.CreateKnowledgeBaseData["body"]["visibility"]
+>;
+
+interface VisibilityOption {
+  label: string;
+  description: string;
+  icon: typeof Globe;
+}
+
+const VISIBILITY_OPTIONS: Record<KnowledgeBaseVisibility, VisibilityOption> = {
+  "org-wide": {
     label: "Organization",
     description: "Anyone in your org can access this knowledge base",
     icon: Globe,
   },
-  {
-    value: "team-scoped" as const,
+  "team-scoped": {
     label: "Teams",
     description: "Share knowledge base with selected teams",
     icon: Users,
   },
-  {
-    value: "auto-sync-permissions" as const,
+  "auto-sync-permissions": {
     label: "Auto Sync Permissions",
     description:
       "Automatically sync permissions from the source. Documents are only accessible to users who have permission in the source system.",
     icon: RefreshCw,
   },
-];
+};
+
+const visibilityEntries = Object.entries(VISIBILITY_OPTIONS) as [
+  KnowledgeBaseVisibility,
+  VisibilityOption,
+][];
 
 export function VisibilitySelector({
   visibility,
@@ -35,19 +48,15 @@ export function VisibilitySelector({
   onTeamIdsChange,
   showTeamRequired,
 }: {
-  visibility: "org-wide" | "team-scoped" | "auto-sync-permissions";
-  onVisibilityChange: (
-    visibility: "org-wide" | "team-scoped" | "auto-sync-permissions",
-  ) => void;
+  visibility: KnowledgeBaseVisibility;
+  onVisibilityChange: (visibility: KnowledgeBaseVisibility) => void;
   teamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
   showTeamRequired?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: teams } = useTeams();
-  const selected =
-    visibilityOptions.find((o) => o.value === visibility) ??
-    visibilityOptions[0];
+  const selected = VISIBILITY_OPTIONS[visibility];
 
   return (
     <div className="space-y-4">
@@ -56,15 +65,15 @@ export function VisibilitySelector({
 
         {expanded ? (
           <div className="space-y-1.5">
-            {visibilityOptions.map((option) => {
+            {visibilityEntries.map(([value, option]) => {
               const Icon = option.icon;
-              const isSelected = visibility === option.value;
+              const isSelected = visibility === value;
               return (
                 <button
-                  key={option.value}
+                  key={value}
                   type="button"
                   onClick={() => {
-                    onVisibilityChange(option.value);
+                    onVisibilityChange(value);
                     setExpanded(false);
                   }}
                   className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${

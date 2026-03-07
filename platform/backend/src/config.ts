@@ -703,10 +703,6 @@ const config = {
       k8sNodeHost:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST || undefined,
     },
-    connectorNamespace:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
-      DEFAULT_CONNECTOR_NAMESPACE,
-    connectorImage: getConnectorImage(),
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
@@ -776,6 +772,10 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
+    connectorNamespace:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
+      DEFAULT_CONNECTOR_NAMESPACE,
+    connectorImage: getConnectorImage(),
   },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",

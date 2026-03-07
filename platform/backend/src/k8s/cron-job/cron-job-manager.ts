@@ -24,7 +24,7 @@ class CronJobManager {
 
     try {
       const { kubeConfig } = loadKubeConfig();
-      const connectorNamespace = config.orchestrator.connectorNamespace;
+      const connectorNamespace = config.kb.connectorNamespace;
       const clients: K8sClients = createK8sClients(
         kubeConfig,
         connectorNamespace,
@@ -46,7 +46,7 @@ class CronJobManager {
     connectorId: string;
     schedule: string;
   }): Promise<void> {
-    const containerImage = config.orchestrator.connectorImage;
+    const containerImage = config.kb.connectorImage;
     if (!containerImage) {
       inProcessScheduler.schedule(params);
       return;
@@ -89,7 +89,7 @@ class CronJobManager {
   async deleteCronJob(connectorId: string): Promise<void> {
     inProcessScheduler.unschedule(connectorId);
 
-    if (!config.orchestrator.connectorImage) {
+    if (!config.kb.connectorImage) {
       return;
     }
 
@@ -116,7 +116,7 @@ class CronJobManager {
   }
 
   async suspendCronJob(connectorId: string): Promise<void> {
-    if (!config.orchestrator.connectorImage) {
+    if (!config.kb.connectorImage) {
       inProcessScheduler.suspend(connectorId);
       return;
     }
@@ -134,7 +134,7 @@ class CronJobManager {
   }
 
   async resumeCronJob(connectorId: string): Promise<void> {
-    if (!config.orchestrator.connectorImage) {
+    if (!config.kb.connectorImage) {
       inProcessScheduler.resume(connectorId);
       return;
     }
@@ -152,7 +152,7 @@ class CronJobManager {
     connectorId: string;
     continuationCount: number;
   }): Promise<void> {
-    const containerImage = config.orchestrator.connectorImage;
+    const containerImage = config.kb.connectorImage;
     if (!containerImage) {
       // In-process mode: continuation is handled by InProcessScheduler
       return;

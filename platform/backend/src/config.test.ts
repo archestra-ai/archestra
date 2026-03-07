@@ -907,7 +907,7 @@ describe("getCorsOrigins", () => {
   });
 });
 
-describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
+describe("getConnectorImage (config.kb.connectorImage)", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -927,7 +927,7 @@ describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
       "true";
 
     const { default: cfg } = await import("./config");
-    expect(cfg.orchestrator.connectorImage).toMatch(
+    expect(cfg.kb.connectorImage).toMatch(
       /^archestra\/platform:\d+\.\d+\.\d+$/,
     );
   });
@@ -936,12 +936,12 @@ describe("getConnectorImage (config.orchestrator.connectorImage)", () => {
     process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
 
     const { default: cfg } = await import("./config");
-    expect(cfg.orchestrator.connectorImage).toBe("");
+    expect(cfg.kb.connectorImage).toBe("");
   });
 
   test("should return empty string when K8s is not configured at all", async () => {
     const { default: cfg } = await import("./config");
-    expect(cfg.orchestrator.connectorImage).toBe("");
+    expect(cfg.kb.connectorImage).toBe("");
   });
 });
 

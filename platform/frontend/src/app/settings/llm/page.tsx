@@ -37,7 +37,12 @@ const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
   "1m": "Every month",
 };
 
-type CompressionMode = "disabled" | "organization" | "team";
+type CompressionScope = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateLlmSettingsData["body"]
+  >["compressionScope"]
+>;
+type CompressionMode = "disabled" | CompressionScope;
 
 const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
   disabled: "Disabled",
@@ -50,8 +55,8 @@ export default function CompressionPage() {
   const { data: teams = [] } = useTeams();
   const queryClient = useQueryClient();
 
-  const [compressionMode, setCompressionMode] = useState<CompressionMode
-  >("disabled");
+  const [compressionMode, setCompressionMode] =
+    useState<CompressionMode>("disabled");
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -84,10 +89,7 @@ export default function CompressionPage() {
     }
   }, [teams]);
 
-  const checkForChanges = (
-    mode: CompressionMode,
-    teamIds: string[],
-  ) => {
+  const checkForChanges = (mode: CompressionMode, teamIds: string[]) => {
     // Determine current mode from organization settings
     const currentMode =
       organization?.compressionScope === "organization"

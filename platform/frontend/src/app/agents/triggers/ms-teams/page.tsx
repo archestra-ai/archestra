@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import { ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -33,7 +34,7 @@ const msTeamsProviderConfig: ProviderConfig = {
   providerLabel: "MS Teams",
   providerIcon: "/icons/ms-teams.png",
   webhookPath: "/api/webhooks/chatops/ms-teams",
-  docsUrl: "https://archestra.ai/docs/platform-ms-teams",
+  docsUrl: getDocsUrl(DocsPage.PlatformMsTeams),
   slashCommand: "/select-agent",
   buildDeepLink: (binding) => {
     const channelName = encodeURIComponent(
@@ -75,7 +76,7 @@ export default function MsTeamsPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel="Microsoft Teams"
-        docsUrl="https://archestra.ai/docs/platform-ms-teams"
+        docsUrl={getDocsUrl(DocsPage.PlatformMsTeams)}
       >
         {isLocalDev ? (
           <SetupStep

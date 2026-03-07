@@ -1,8 +1,8 @@
 ---
 title: "Secrets Management"
-category: Archestra Platform
+category: Administration
 description: "Configure external secrets storage for sensitive data"
-order: 6
+order: 3
 lastUpdated: 2025-12-15
 ---
 

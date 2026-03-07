@@ -79,6 +79,14 @@ type TokenPriceData = {
 };
 type TeamData = archestraApiTypes.GetTeamsResponses["200"][number];
 type UsageStatus = "safe" | "warning" | "danger";
+type LimitEntityType = CreateLimitData["entityType"];
+type CreateLimitData = archestraApiTypes.CreateLimitData["body"];
+
+const LIMIT_ENTITY_TYPE_LABELS: Record<LimitEntityType, string> = {
+  team: "Team",
+  organization: "The whole organization",
+  agent: "Agent",
+};
 type LimitType = Pick<LimitData, "limitType">["limitType"];
 type TokenCostLimitType = Extract<LimitType, "token_cost">;
 type McpServerCallsLimitType = Extract<LimitType, "mcp_server_calls">;
@@ -124,14 +132,13 @@ function LimitInlineForm({
   organizationId: string;
 }) {
   const [formData, setFormData] = useState<{
-    entityType: "organization" | "team" | "agent";
+    entityType: LimitEntityType;
     entityId: string;
     mcpServerName: string;
     limitValue: string;
     model: string[];
   }>({
-    entityType:
-      (initialData?.entityType as "organization" | "team" | "agent") || "team",
+    entityType: (initialData?.entityType as LimitEntityType) || "team",
     entityId: initialData?.entityId || "",
     mcpServerName: initialData?.mcpServerName || "",
     limitValue: initialData?.limitValue?.toString() || "",
@@ -175,10 +182,10 @@ function LimitInlineForm({
               </Label>
               <Select
                 value={formData.entityType}
-                onValueChange={(value) =>
+                onValueChange={(value: LimitEntityType) =>
                   setFormData({
                     ...formData,
-                    entityType: value as "agent" | "organization" | "team",
+                    entityType: value,
                     entityId: "",
                   })
                 }
@@ -187,10 +194,13 @@ function LimitInlineForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="team">Team</SelectItem>
-                  <SelectItem value="organization">
-                    The whole organization
-                  </SelectItem>
+                  {Object.entries(LIMIT_ENTITY_TYPE_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>

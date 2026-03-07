@@ -110,7 +110,7 @@ function generateCustomRolesPermissionsTable(): string {
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Access Control"
-category: Archestra Platform
+category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 4
 lastUpdated: ${lastUpdated}

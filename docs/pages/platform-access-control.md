@@ -1,8 +1,8 @@
 ---
 title: "Access Control"
-category: Archestra Platform
+category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
-order: 4
+order: 1
 lastUpdated: 2026-03-07
 ---
 <!--

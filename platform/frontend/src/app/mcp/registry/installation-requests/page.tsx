@@ -20,10 +20,11 @@ import {
   useMcpServerInstallationRequests,
 } from "@/lib/mcp-server-installation-request.query";
 
+type RequestStatusFilter = "all" | "pending" | "approved" | "declined";
+
 export default function InstallationRequestsPage() {
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "pending" | "approved" | "declined"
-  >("all");
+  const [statusFilter, setStatusFilter] =
+    useState<RequestStatusFilter>("all");
 
   const { data: requests, isLoading } = useMcpServerInstallationRequests(
     statusFilter === "all" ? undefined : { status: statusFilter },
@@ -34,7 +35,7 @@ export default function InstallationRequestsPage() {
       <Tabs
         value={statusFilter}
         onValueChange={(v) =>
-          setStatusFilter(v as "all" | "pending" | "approved" | "declined")
+          setStatusFilter(v as RequestStatusFilter)
         }
         className="space-y-4"
       >

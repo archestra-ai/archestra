@@ -1,3 +1,4 @@
+import { DocsPage, getDocsUrl } from "@shared";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { EmailNotConfiguredMessage } from "./email-not-configured-message";
@@ -11,7 +12,7 @@ describe("EmailNotConfiguredMessage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /setup guide/i })).toHaveAttribute(
       "href",
-      "https://archestra.ai/docs/platform-agents#incoming-email",
+      getDocsUrl(DocsPage.PlatformAgentTriggersEmail),
     );
   });
 

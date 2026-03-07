@@ -1,7 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { archestraApiSdk, E2eTestId } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+} from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Globe, Plus, User, Users } from "lucide-react";
@@ -485,7 +490,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             Agents are internal AI assistants with system prompts, tools, and
             integrations like ChatOps, email, and A2A.{" "}
             <a
-              href="https://archestra.ai/docs/platform-agents"
+              href={getDocsUrl(DocsPage.PlatformAgents)}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

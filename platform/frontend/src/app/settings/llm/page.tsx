@@ -37,13 +37,20 @@ const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
   "1m": "Every month",
 };
 
+type CompressionMode = "disabled" | "organization" | "team";
+
+const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
+  disabled: "Disabled",
+  organization: "Organization level",
+  team: "Team level",
+};
+
 export default function CompressionPage() {
   const { data: organization } = useOrganization();
   const { data: teams = [] } = useTeams();
   const queryClient = useQueryClient();
 
-  const [compressionMode, setCompressionMode] = useState<
-    "disabled" | "organization" | "team"
+  const [compressionMode, setCompressionMode] = useState<CompressionMode
   >("disabled");
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
@@ -78,7 +85,7 @@ export default function CompressionPage() {
   }, [teams]);
 
   const checkForChanges = (
-    mode: "disabled" | "organization" | "team",
+    mode: CompressionMode,
     teamIds: string[],
   ) => {
     // Determine current mode from organization settings
@@ -183,9 +190,7 @@ export default function CompressionPage() {
             {({ hasPermission }) => (
               <Select
                 value={compressionMode}
-                onValueChange={(
-                  value: "disabled" | "organization" | "team",
-                ) => {
+                onValueChange={(value: CompressionMode) => {
                   setCompressionMode(value);
                   setHasChanges(checkForChanges(value, selectedTeamIds));
                 }}
@@ -195,11 +200,13 @@ export default function CompressionPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="disabled">Disabled</SelectItem>
-                  <SelectItem value="organization">
-                    Organization level
-                  </SelectItem>
-                  <SelectItem value="team">Team level</SelectItem>
+                  {Object.entries(COMPRESSION_MODE_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             )}

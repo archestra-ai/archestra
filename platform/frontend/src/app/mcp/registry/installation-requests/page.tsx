@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,11 +20,17 @@ import {
   type McpServerInstallationRequest,
   useMcpServerInstallationRequests,
 } from "@/lib/mcp-server-installation-request.query";
+import { installationRequestStatusConfig } from "./status-config";
+
+type RequestStatus = NonNullable<
+  NonNullable<
+    archestraApiTypes.GetMcpServerInstallationRequestsData["query"]
+  >["status"]
+>;
+type RequestStatusFilter = "all" | RequestStatus;
 
 export default function InstallationRequestsPage() {
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "pending" | "approved" | "declined"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<RequestStatusFilter>("all");
 
   const { data: requests, isLoading } = useMcpServerInstallationRequests(
     statusFilter === "all" ? undefined : { status: statusFilter },
@@ -33,9 +40,7 @@ export default function InstallationRequestsPage() {
     <div>
       <Tabs
         value={statusFilter}
-        onValueChange={(v) =>
-          setStatusFilter(v as "all" | "pending" | "approved" | "declined")
-        }
+        onValueChange={(v) => setStatusFilter(v as RequestStatusFilter)}
         className="space-y-4"
       >
         <TabsList>
@@ -130,25 +135,7 @@ export default function InstallationRequestsPage() {
 
 function RequestRow({ request }: { request: McpServerInstallationRequest }) {
   const router = useRouter();
-  const statusConfig = {
-    pending: {
-      icon: Clock,
-      color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-      label: "Pending",
-    },
-    approved: {
-      icon: CheckCircle,
-      color: "bg-green-500/10 text-green-500 border-green-500/20",
-      label: "Approved",
-    },
-    declined: {
-      icon: XCircle,
-      color: "bg-red-500/10 text-red-500 border-red-500/20",
-      label: "Declined",
-    },
-  };
-
-  const status = statusConfig[request.status as keyof typeof statusConfig];
+  const status = installationRequestStatusConfig[request.status];
   const StatusIcon = status.icon;
 
   return (

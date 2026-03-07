@@ -1,7 +1,38 @@
+import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../../consts";
 import { expect, test } from "../../fixtures";
 import { clickButton, navigateAndVerifyAuth } from "../../utils";
+
+/**
+ * Navigate to the users settings page and open the invite dialog.
+ * Returns the email input and generate button locators.
+ */
+async function openInviteDialog(
+  page: Page,
+  goToPage: (page: Page, path: string) => Promise<void>,
+) {
+  const inviteButton = page.getByRole("button", { name: /invite user/i });
+  await navigateAndVerifyAuth({
+    page,
+    path: "/settings/users",
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD,
+    verifyLocator: inviteButton,
+    goToPage,
+  });
+
+  await clickButton({ page, options: { name: /invite user/i } });
+  await page.waitForTimeout(500);
+
+  const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
+  await expect(emailInput).toBeVisible();
+
+  const generateButton = page.getByTestId(E2eTestId.GenerateInvitationButton);
+  await expect(generateButton).toBeVisible();
+
+  return { emailInput, generateButton };
+}
 
 test.describe(
   "Invitation functionality",
@@ -16,36 +47,14 @@ test.describe(
       page,
       goToPage,
     }) => {
-      // Navigate to the members settings page with polling retry
-      // Firefox/WebKit may need multiple attempts for React hydration and permission checks
-      const inviteButton = page.getByRole("button", {
-        name: /invite member/i,
-      });
-      await navigateAndVerifyAuth({
+      const { emailInput, generateButton } = await openInviteDialog(
         page,
-        path: "/settings/members",
-        email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
-        verifyLocator: inviteButton,
         goToPage,
-      });
+      );
 
-      // Click the "Invite Member" button to open the dialog
-      await clickButton({ page, options: { name: /invite member/i } });
-
-      // Wait for the dialog to open
-      await page.waitForTimeout(500);
-
-      // Fill in an invalid email
-      const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
-      await expect(emailInput).toBeVisible();
       await emailInput.fill("invalid-email");
 
       // The "Generate Invitation Link" button should be disabled for invalid email
-      const generateButton = page.getByTestId(
-        E2eTestId.GenerateInvitationButton,
-      );
-      await expect(generateButton).toBeVisible();
       await expect(generateButton).toBeDisabled();
     });
 
@@ -60,35 +69,13 @@ test.describe(
       const TEST_PASSWORD = "TestPassword123!";
 
       // PART 1: Generate the invitation link (as admin)
-      // Navigate with polling retry for Firefox/WebKit React hydration delays
-      const inviteButton = page.getByRole("button", {
-        name: /invite member/i,
-      });
-      await navigateAndVerifyAuth({
+      const { emailInput, generateButton } = await openInviteDialog(
         page,
-        path: "/settings/members",
-        email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
-        verifyLocator: inviteButton,
         goToPage,
-      });
+      );
 
-      // Click the "Invite Member" button to open the dialog
-      await clickButton({ page, options: { name: /invite member/i } });
-
-      // Wait for the dialog to open
-      await page.waitForTimeout(500);
-
-      // Fill in the email input
-      const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
-      await expect(emailInput).toBeVisible();
       await emailInput.fill(TEST_EMAIL);
 
-      // Click the "Generate Invitation Link" button
-      const generateButton = page.getByTestId(
-        E2eTestId.GenerateInvitationButton,
-      );
-      await expect(generateButton).toBeVisible();
       await expect(generateButton).toBeEnabled();
       await generateButton.click();
 
@@ -175,7 +162,7 @@ test.describe(
 
         // PART 3: Verify the new user is listed in members (back to admin context)
         // Go back to the admin page and verify the new member appears
-        await goToPage(page, "/settings/members");
+        await goToPage(page, "/settings/users");
         await page.waitForTimeout(1000);
 
         // Look for the new user in the members list

@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
@@ -134,7 +135,7 @@ export function MsTeamsSetupDialog({
           Follow these steps to connect your Archestra agents to Microsoft
           Teams. Find out more in our{" "}
           <a
-            href="https://archestra.ai/docs/platform-ms-teams"
+            href={getDocsUrl(DocsPage.PlatformMsTeams)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary underline hover:no-underline"

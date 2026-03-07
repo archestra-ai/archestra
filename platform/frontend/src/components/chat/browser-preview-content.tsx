@@ -29,7 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { useBrowserStream } from "@/hooks/use-browser-stream";
+import { useBrowserStream } from "@/lib/browser-stream.hook";
 import { useConversation, useHasPlaywrightMcpTools } from "@/lib/chat.query";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "../loading";

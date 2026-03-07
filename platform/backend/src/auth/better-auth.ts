@@ -76,7 +76,12 @@ export const auth: any = betterAuth({
       ac,
       dynamicAccessControl: {
         enabled: true,
-        maximumRolesPerOrganization: 50, // Configurable limit for custom roles
+        /**
+         * By default, the maximum number of roles that can be created for an organization is infinite
+         * You can also pass a function that returns a number.
+         * https://better-auth.com/docs/plugins/organization#maximumrolesperorganization
+         */
+        // maximumRolesPerOrganization: 50,
         validateRoleName: async (roleName: string) => {
           // Role names must be lowercase alphanumeric with underscores
           if (!/^[a-z0-9_]+$/.test(roleName)) {

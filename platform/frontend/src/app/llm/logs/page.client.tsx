@@ -5,6 +5,7 @@ import { Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { LogsEmptyState } from "@/components/logs-empty-state";
 import { Savings } from "@/components/savings";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
@@ -374,7 +375,7 @@ function SessionsTable({
     [updateUrlParams],
   );
 
-  const { data: sessionsResponse } = useInteractionSessions({
+  const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
@@ -393,7 +394,6 @@ function SessionsTable({
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
-
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
@@ -466,11 +466,11 @@ function SessionsTable({
       </div>
 
       {!sessions || sessions.length === 0 ? (
-        <p className="text-muted-foreground">
-          {hasFilters
-            ? "No sessions match your filters. Try adjusting your search."
-            : "No sessions found"}
-        </p>
+        <LogsEmptyState
+          isLoading={isFetching}
+          hasFilters={hasFilters}
+          emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
+        />
       ) : (
         <div className="w-full space-y-4">
           <div className="overflow-hidden rounded-md border">

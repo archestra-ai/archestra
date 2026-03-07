@@ -231,7 +231,7 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
-      // Mock admin user with organization update permission
+      // Mock admin user with securitySettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: true,
         isPending: false,
@@ -261,7 +261,7 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
-      // Mock non-admin user without organization update permission
+      // Mock non-admin user without securitySettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: false,
         isPending: false,

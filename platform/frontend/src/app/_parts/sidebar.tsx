@@ -151,8 +151,8 @@ const contentNavGroups: NavGroup[] = [
               pathname.startsWith("/llm/providers"),
           },
           {
-            title: "Cost & Limits",
-            url: "/llm/cost",
+            title: "Costs & Limits",
+            url: "/llm/costs",
           },
         ],
       },
@@ -191,7 +191,7 @@ const contentNavGroups: NavGroup[] = [
       },
       {
         title: "Settings",
-        url: "/settings",
+        url: "/settings/account",
         icon: Settings,
         customIsActive: (pathname: string) => pathname.startsWith("/settings"),
       },

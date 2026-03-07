@@ -1,6 +1,9 @@
 "use client";
 
+import { Plus } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth.query";
 
 export default function McpCatalogLayout({
@@ -9,8 +12,11 @@ export default function McpCatalogLayout({
   children: React.ReactNode;
 }) {
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
+
+  const pathname = usePathname();
+  const isRegistryPage = pathname === "/mcp/registry";
 
   return (
     <PageLayout
@@ -26,13 +32,19 @@ export default function McpCatalogLayout({
             : "view your installation requests and their status"}
         </>
       }
-      tabs={[
-        { label: "Registry", href: "/mcp/registry" },
-        {
-          label: "Installation Requests",
-          href: "/mcp/registry/installation-requests",
-        },
-      ]}
+      actionButton={
+        isRegistryPage ? (
+          <PermissionButton
+            permissions={{ mcpRegistry: ["create"] }}
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent("mcp-registry:create"))
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add MCP Server
+          </PermissionButton>
+        ) : undefined
+      }
     >
       {children}
     </PageLayout>

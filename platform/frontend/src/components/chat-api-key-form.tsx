@@ -3,7 +3,9 @@
 import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
+  DocsPage,
   E2eTestId,
+  getDocsUrl,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
@@ -478,7 +480,10 @@ export function ChatApiKeyForm({
           <p className="text-xs text-muted-foreground">
             Controls who can use this key.{" "}
             <Link
-              href="https://archestra.ai/docs/platform-llm-proxy-authentication#api-key-scoping"
+              href={getDocsUrl(
+                DocsPage.PlatformLlmProxyAuthentication,
+                "api-key-scoping",
+              )}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

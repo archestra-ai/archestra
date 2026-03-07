@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { type ThemeMetadata, themes } from "@/config/themes";
+import { type ThemeMetadata, themes } from "@/themes";
 
 interface ThemeSelectorProps {
   selectedTheme: OrganizationTheme | undefined;
@@ -36,7 +36,7 @@ export function ThemeSelector({
           {themes.map((theme) => (
             <div key={theme.id} className="flex-1">
               <WithPermissions
-                permissions={{ organization: ["update"] }}
+                permissions={{ appearance: ["update"] }}
                 noPermissionHandle="tooltip"
                 key={theme.id}
               >

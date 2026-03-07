@@ -49,54 +49,42 @@ const McpServerInstallationRequestNoteSchema = z.object({
   createdAt: z.string(),
 });
 
+const extendedFields = {
+  status: McpServerInstallationRequestStatusSchema,
+  customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
+  notes: z.array(McpServerInstallationRequestNoteSchema).nullable(),
+};
+
 export const SelectMcpServerInstallationRequestSchema = createSelectSchema(
   schema.mcpServerInstallationRequestsTable,
-).extend({
-  notes: z.array(McpServerInstallationRequestNoteSchema).nullable(),
-  customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
-});
+  extendedFields,
+);
 
 export const InsertMcpServerInstallationRequestSchema = createInsertSchema(
   schema.mcpServerInstallationRequestsTable,
-)
-  .extend({
-    notes: z
-      .array(McpServerInstallationRequestNoteSchema)
-      .nullable()
-      .optional(),
-    status: McpServerInstallationRequestStatusSchema.optional(),
-    customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
-  })
-  .omit({
-    id: true,
-    createdAt: true,
-    updatedAt: true,
-    requestedBy: true,
-    status: true,
-    reviewedBy: true,
-    reviewedAt: true,
-    adminResponse: true,
-    notes: true,
-  });
+  extendedFields,
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  requestedBy: true,
+  status: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  adminResponse: true,
+  notes: true,
+});
 
 export const UpdateMcpServerInstallationRequestSchema = createUpdateSchema(
   schema.mcpServerInstallationRequestsTable,
-)
-  .extend({
-    notes: z
-      .array(McpServerInstallationRequestNoteSchema)
-      .nullable()
-      .optional(),
-    status: McpServerInstallationRequestStatusSchema.optional(),
-    customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
-  })
-  .omit({
-    id: true,
-    createdAt: true,
-    updatedAt: true,
-    externalCatalogId: true,
-    requestedBy: true,
-  });
+  extendedFields,
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  externalCatalogId: true,
+  requestedBy: true,
+});
 
 export type McpServerInstallationRequestStatus = z.infer<
   typeof McpServerInstallationRequestStatusSchema

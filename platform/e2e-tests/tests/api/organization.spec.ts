@@ -45,7 +45,7 @@ const cleanupLogo = async (
     await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization",
+      urlSuffix: "/api/organization/appearance",
       data: { logo: null },
     });
   } catch (error) {
@@ -63,7 +63,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: INVALID_BASE64_PAYLOAD },
         ignoreStatusCheck: true,
       });
@@ -79,7 +79,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: NON_PNG_BASE64 },
         ignoreStatusCheck: true,
       });
@@ -95,7 +95,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: INVALID_JPEG_BASE64 },
         ignoreStatusCheck: true,
       });
@@ -113,7 +113,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: oversizedLogo },
         ignoreStatusCheck: true,
       });
@@ -131,7 +131,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: VALID_PNG_BASE64 },
       });
 
@@ -155,7 +155,7 @@ test.describe("Organization API logo validation", () => {
       await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: VALID_PNG_BASE64 },
       });
 
@@ -163,7 +163,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization",
+        urlSuffix: "/api/organization/appearance",
         data: { logo: null },
       });
 

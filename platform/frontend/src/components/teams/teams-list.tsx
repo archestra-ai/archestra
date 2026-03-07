@@ -160,7 +160,8 @@ export function TeamsList() {
             <div>
               <CardTitle>Teams</CardTitle>
               <CardDescription>
-                Manage teams to organize access to profiles and MCP servers
+                Manage teams to organize access to Agents, MCP Gateways, LLM
+                Proxies, and MCP servers
               </CardDescription>
             </div>
             <PermissionButton

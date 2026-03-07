@@ -50,6 +50,10 @@ export const formSchema = z
     labels: z
       .array(z.object({ key: z.string(), value: z.string() }))
       .optional(),
+    // Scope for catalog item visibility
+    scope: z.enum(["personal", "team", "org"]).optional(),
+    // Team IDs for team-scoped items
+    teams: z.array(z.string()).optional(),
   })
   .refine(
     (data) => {

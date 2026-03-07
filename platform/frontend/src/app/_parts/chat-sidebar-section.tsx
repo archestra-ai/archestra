@@ -90,10 +90,10 @@ export function ChatSidebarSection() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: canUpdateConversation } = useHasPermissions({
-    conversation: ["update"],
+    chat: ["update"],
   });
   const { data: canDeleteConversation } = useHasPermissions({
-    conversation: ["delete"],
+    chat: ["delete"],
   });
 
   // Track conversations with recently auto-generated titles for animation

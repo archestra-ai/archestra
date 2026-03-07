@@ -1,6 +1,11 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { CodeText } from "@/components/code-text";
@@ -230,7 +235,10 @@ export function ProxyConnectionInstructions({
         </p>
         <p className="text-sm text-muted-foreground">
           <a
-            href="https://archestra.ai/docs/platform-llm-proxy-authentication#jwks-external-identity-provider"
+            href={getDocsUrl(
+              DocsPage.PlatformLlmProxyAuthentication,
+              "jwks-external-identity-provider",
+            )}
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"

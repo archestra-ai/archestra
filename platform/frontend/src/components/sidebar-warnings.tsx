@@ -19,7 +19,7 @@ export function SidebarWarnings() {
     useDefaultCredentialsEnabled();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   const { data: canUpdateOrg } = useHasPermissions({
-    organization: ["update"],
+    securitySettings: ["update"],
   });
 
   const isPermissive = features?.globalToolPolicy === "permissive";

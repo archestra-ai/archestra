@@ -28,6 +28,7 @@ export { default as KnowledgeBaseModel } from "./knowledge-base";
 export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connector";
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
+export { default as McpCatalogTeamModel } from "./mcp-catalog-team";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";

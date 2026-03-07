@@ -275,14 +275,24 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
-  UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMembers: "getOrganizationMembers",
   DeletePendingSignupMember: "deletePendingSignupMember",
+  CompleteOnboarding: "completeOnboarding",
 
-  // Appearance Routes (public/unauthenticated)
+  // Appearance Routes
   GetPublicAppearance: "getPublicAppearance",
+  UpdateAppearance: "updateAppearance",
+
+  // Security Settings Routes
+  UpdateSecuritySettings: "updateSecuritySettings",
+
+  // LLM Settings Routes (organization-level)
+  UpdateLlmSettings: "updateLlmSettings",
+
+  // Knowledge Settings Routes (organization-level)
+  UpdateKnowledgeSettings: "updateKnowledgeSettings",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",

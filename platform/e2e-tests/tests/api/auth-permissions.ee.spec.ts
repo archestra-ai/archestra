@@ -37,7 +37,7 @@ test.describe("Auth Permissions API - Custom Roles", () => {
       name: `test_permissions_role_${Date.now()}`,
       permission: {
         agent: ["read"],
-        tool: ["read"],
+        toolPolicy: ["read"],
       },
     });
     const createdRole = await createResponse.json();
@@ -48,7 +48,7 @@ test.describe("Auth Permissions API - Custom Roles", () => {
       makeApiRequest,
       data: {
         permissions: {
-          organization: ["read", "update", "delete"],
+          organization: ["update", "delete"],
         },
       },
     });

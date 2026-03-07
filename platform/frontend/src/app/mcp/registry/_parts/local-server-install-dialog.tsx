@@ -97,6 +97,10 @@ interface LocalServerInstallDialogProps {
   existingTeamId?: string | null;
   /** When true, shows re-authentication mode (info banner, different title) */
   isReauth?: boolean;
+  /** Pre-select a specific team in the credential type selector */
+  preselectedTeamId?: string | null;
+  /** When true, only personal installation is allowed */
+  personalOnly?: boolean;
 }
 
 export function LocalServerInstallDialog({
@@ -108,6 +112,8 @@ export function LocalServerInstallDialog({
   isReinstall = false,
   existingTeamId,
   isReauth = false,
+  preselectedTeamId,
+  personalOnly: personalOnlyProp = false,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -351,8 +357,10 @@ export function LocalServerInstallDialog({
             isReinstall={isReinstall}
             existingTeamId={existingTeamId}
             personalOnly={
-              catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
+              personalOnlyProp ||
+              (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false)
             }
+            preselectedTeamId={preselectedTeamId}
           />
 
           {useVaultSecrets && credentialType === "personal" && (
@@ -395,7 +403,7 @@ export function LocalServerInstallDialog({
               {/* Non-secret Environment Variables (always editable) */}
               {nonSecretEnvVars.length > 0 && (
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Configuration</h3>
+                  <h3 className="text-sm font-medium sr-only">Configuration</h3>
                   {nonSecretEnvVars.map((env) => (
                     <div key={env.key} className="space-y-2">
                       {env.type === "boolean" ? (

@@ -26,62 +26,7 @@ const nextConfig: NextConfig = {
     keepAlive: true,
   },
   async redirects() {
-    return [
-      {
-        source: "/agent-triggers/:path*",
-        destination: "/agents/triggers/:path*",
-        permanent: true,
-      },
-      {
-        source: "/mcp-catalog/registry",
-        destination: "/mcp/registry",
-        permanent: true,
-      },
-      {
-        source: "/mcp-catalog/installation-requests/:path*",
-        destination: "/mcp/registry/installation-requests/:path*",
-        permanent: true,
-      },
-      { source: "/mcp-catalog", destination: "/mcp/registry", permanent: true },
-      {
-        source: "/mcp-gateways",
-        destination: "/mcp/gateways",
-        permanent: true,
-      },
-      {
-        source: "/tool-policies",
-        destination: "/mcp/tool-policies",
-        permanent: true,
-      },
-      {
-        source: "/llm-proxies/provider-settings",
-        destination: "/llm/providers",
-        permanent: true,
-      },
-      { source: "/llm-proxies", destination: "/llm/proxies", permanent: true },
-      {
-        source: "/cost/:path*",
-        destination: "/llm/cost/:path*",
-        permanent: true,
-      },
-      { source: "/cost", destination: "/llm/cost", permanent: true },
-      {
-        source: "/logs/llm-proxy/:path*",
-        destination: "/llm/logs/:path*",
-        permanent: true,
-      },
-      { source: "/logs/llm-proxy", destination: "/llm/logs", permanent: true },
-      {
-        source: "/logs/mcp-gateway/:path*",
-        destination: "/mcp/logs/:path*",
-        permanent: true,
-      },
-      {
-        source: "/logs/mcp-gateway",
-        destination: "/mcp/logs",
-        permanent: true,
-      },
-    ];
+    return [];
   },
   async rewrites() {
     const backendUrl =

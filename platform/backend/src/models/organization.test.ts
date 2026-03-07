@@ -2,7 +2,7 @@ import { DEFAULT_THEME_ID } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { UpdateOrganizationSchema } from "@/types";
+import { UpdateAppearanceSchema } from "@/types";
 import OrganizationModel from "./organization";
 
 // Minimal valid 1x1 transparent PNG (Base64-encoded)
@@ -247,9 +247,9 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("patch logoDark validation (via UpdateOrganizationSchema)", () => {
+  describe("patch logoDark validation (via UpdateAppearanceSchema)", () => {
     const parseLogoDarkField = (logoDark: string | null) =>
-      UpdateOrganizationSchema.shape.logoDark.safeParse(logoDark);
+      UpdateAppearanceSchema.shape.logoDark.safeParse(logoDark);
 
     test("should accept null", () => {
       const result = parseLogoDarkField(null);
@@ -269,9 +269,9 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("patch logo validation (via UpdateOrganizationSchema)", () => {
+  describe("patch logo validation (via UpdateAppearanceSchema)", () => {
     const parseLogoField = (logo: string | null) =>
-      UpdateOrganizationSchema.shape.logo.safeParse(logo);
+      UpdateAppearanceSchema.shape.logo.safeParse(logo);
 
     describe("MIME type validation", () => {
       test("should reject non-PNG data URI prefix", () => {

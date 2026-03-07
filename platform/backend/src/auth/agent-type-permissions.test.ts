@@ -261,7 +261,7 @@ describe("hasAnyAgentTypeReadPermission", () => {
     // Role with permissions only on non-agent-type resources
     await makeCustomRole(org.id, {
       role: "tool_only",
-      permission: { tool: ["read", "create"] },
+      permission: { toolPolicy: ["read", "create"] },
     });
     await makeMember(user.id, org.id, { role: "tool_only" });
 
@@ -453,7 +453,7 @@ describe("getAgentTypePermissionChecker", () => {
     const org = await makeOrganization();
     await makeCustomRole(org.id, {
       role: "tool_only",
-      permission: { tool: ["read"] },
+      permission: { toolPolicy: ["read"] },
     });
     await makeMember(user.id, org.id, { role: "tool_only" });
 

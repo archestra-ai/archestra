@@ -1,8 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import {
   archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
   getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
@@ -1090,7 +1092,7 @@ export function AgentDialog({
             <p className="text-sm text-muted-foreground">
               {agent.description}.{" "}
               <a
-                href="https://archestra.ai/docs/platform-built-in-agents-policy-config"
+                href={getDocsUrl(DocsPage.PlatformBuiltInAgentsPolicyConfig)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline"
@@ -1140,10 +1142,6 @@ export function AgentDialog({
               {isInternalAgent && !isBuiltIn && (
                 <div className="space-y-2">
                   <Label htmlFor="agentDescription">Description</Label>
-                  <p className="text-sm text-muted-foreground">
-                    A brief summary of what this agent does. Helps other agents
-                    quickly understand if this agent is relevant for their task.
-                  </p>
                   <Textarea
                     id="agentDescription"
                     value={description}
@@ -1213,11 +1211,9 @@ export function AgentDialog({
                 <div className="space-y-2">
                   <Label>LLM Configuration</Label>
                   <p className="text-sm text-muted-foreground">
-                    {!llmModel
-                      ? "If nothing selected, best model from user\u2019s keys is used (org-wide \u2192 team \u2192 personal)."
-                      : selectedApiKey && selectedApiKey.scope !== "org_wide"
-                        ? "Selected key will be available to everyone who has access to this agent."
-                        : null}
+                    {selectedApiKey && selectedApiKey.scope !== "org_wide"
+                      ? "Selected key will be available to everyone who has access to this agent."
+                      : null}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Model Selector - uses the same Dialog-based ModelSelector as prompt input */}
@@ -1342,7 +1338,26 @@ export function AgentDialog({
               )}
             </div>
 
-            {/* Section 2: Capabilities (Tools, Subagents, Knowledge Sources) */}
+            {/* Section 2: Instruction (Agent only) */}
+            {isInternalAgent && (
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                <h3 className="text-sm font-semibold">Instruction</h3>
+
+                {/* Instruction (read-only for built-in) */}
+                <div className="space-y-2">
+                  <Textarea
+                    id="systemPrompt"
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder="Enter instruction for the LLM"
+                    className="min-h-[150px] font-mono"
+                    disabled={isBuiltIn}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
             {showToolsAndSubagents && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
                 <h3 className="text-sm font-semibold">Capabilities</h3>
@@ -1817,7 +1832,10 @@ export function AgentDialog({
                                 configured, MCP clients can authenticate using
                                 JWTs issued by this IdP.{" "}
                                 <a
-                                  href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
+                                  href={getDocsUrl(
+                                    DocsPage.McpAuthentication,
+                                    "external-idp-jwks",
+                                  )}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="underline"

@@ -54,9 +54,7 @@ export async function addCustomSelfHostedCatalogItem({
   await addButton.waitFor({ state: "visible", timeout: 30_000 });
   await addButton.click();
 
-  await page
-    .getByRole("button", { name: "Self-hosted (orchestrated by" })
-    .click();
+  await page.getByRole("button", { name: "Self-hosted" }).click();
   await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
   await page.getByRole("textbox", { name: "Command *" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");

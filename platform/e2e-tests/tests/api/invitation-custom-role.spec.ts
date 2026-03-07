@@ -29,7 +29,7 @@ test.describe("Invitation Custom Role Assignment", () => {
       name: `invite_role_${Date.now()}`,
       permission: {
         agent: ["read"],
-        tool: ["read"],
+        toolPolicy: ["read"],
       },
     });
     const customRole = await roleResponse.json();

@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+--> statement-breakpoint
 CREATE TABLE "agent_connector_assignment" (
 	"agent_id" uuid NOT NULL,
 	"connector_id" uuid NOT NULL,
@@ -33,7 +35,7 @@ CREATE TABLE "kb_chunks" (
 	"content" text NOT NULL,
 	"chunk_index" integer NOT NULL,
 	"embedding" vector(1536),
-	"search_vector" "tsvector",
+	"search_vector" tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
 	"acl" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
@@ -119,4 +121,8 @@ CREATE INDEX "kb_connector_assignment_kb_id_idx" ON "knowledge_base_connector_as
 CREATE INDEX "kb_connector_assignment_connector_id_idx" ON "knowledge_base_connector_assignment" USING btree ("connector_id");--> statement-breakpoint
 CREATE INDEX "knowledge_base_connectors_organization_id_idx" ON "knowledge_base_connectors" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "knowledge_bases_organization_id_idx" ON "knowledge_bases" USING btree ("organization_id");--> statement-breakpoint
-ALTER TABLE "organization" ADD CONSTRAINT "organization_embedding_api_key_secret_id_secret_id_fk" FOREIGN KEY ("embedding_api_key_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "organization" ADD CONSTRAINT "organization_embedding_api_key_secret_id_secret_id_fk" FOREIGN KEY ("embedding_api_key_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "kb_chunks_embedding_idx" ON "kb_chunks" USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);--> statement-breakpoint
+CREATE INDEX "kb_chunks_search_vector_idx" ON "kb_chunks" USING gin ("search_vector");--> statement-breakpoint
+CREATE INDEX "kb_chunks_acl_idx" ON "kb_chunks" USING gin ("acl" jsonb_path_ops);--> statement-breakpoint
+CREATE INDEX "kb_documents_embedding_status_idx" ON "kb_documents" ("embedding_status") WHERE "embedding_status" != 'completed';

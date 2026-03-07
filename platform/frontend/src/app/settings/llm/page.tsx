@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { type archestraApiTypes, archestraApiSdk } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +22,21 @@ import {
   useUpdateLlmSettings,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
+
+type LimitCleanupInterval = NonNullable<
+  NonNullable<archestraApiTypes.UpdateLlmSettingsData["body"]>["limitCleanupInterval"]
+>;
+
+const CLEANUP_INTERVAL_OPTIONS: {
+  value: LimitCleanupInterval;
+  label: string;
+}[] = [
+  { value: "1h", label: "Every hour" },
+  { value: "12h", label: "Every 12 hours" },
+  { value: "24h", label: "Every 24 hours" },
+  { value: "1w", label: "Every week" },
+  { value: "1m", label: "Every month" },
+];
 
 export default function CompressionPage() {
   const { data: organization } = useOrganization();
@@ -230,14 +245,9 @@ export default function CompressionPage() {
             {({ hasPermission }) => (
               <Select
                 value={organization?.limitCleanupInterval || "1h"}
-                onValueChange={(value) => {
+                onValueChange={(value: LimitCleanupInterval) => {
                   updateLlmSettingsMutation.mutate({
-                    limitCleanupInterval: value as
-                      | "1h"
-                      | "12h"
-                      | "24h"
-                      | "1w"
-                      | "1m",
+                    limitCleanupInterval: value,
                   });
                 }}
                 disabled={updateLlmSettingsMutation.isPending || !hasPermission}
@@ -246,11 +256,11 @@ export default function CompressionPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1h">Every hour</SelectItem>
-                  <SelectItem value="12h">Every 12 hours</SelectItem>
-                  <SelectItem value="24h">Every 24 hours</SelectItem>
-                  <SelectItem value="1w">Every week</SelectItem>
-                  <SelectItem value="1m">Every month</SelectItem>
+                  {CLEANUP_INTERVAL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}

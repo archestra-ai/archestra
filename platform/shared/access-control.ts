@@ -19,8 +19,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
    * (organization, member, invitation, team, ac). We override some of these below
    * to add "read" or extra actions that better-auth doesn't include by default.
    *
-   * "organization" is intentionally NOT overridden — it's a better-auth internal
-   * resource not exposed to users. Its actions come solely from defaultStatements.
+   * "organization" is explicitly listed at the bottom for type safety but is a
+   * better-auth internal resource not exposed to users.
    */
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
@@ -57,6 +57,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   secret: ["read", "update"],
   appearance: ["read", "update"],
   securitySettings: ["read", "update"],
+
+  // better-auth internal resource — not exposed to users, kept for ACL compatibility
+  organization: ["update", "delete"],
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {

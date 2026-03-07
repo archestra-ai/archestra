@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, type archestraApiTypes, getDocsUrl } from "@shared";
+import { type archestraApiTypes, DocsPage, getDocsUrl } from "@shared";
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";

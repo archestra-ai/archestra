@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, type archestraApiTypes, getDocsUrl } from "@shared";
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -50,7 +50,11 @@ const slackProviderConfig: ProviderConfig = {
   },
 };
 
-type SlackConnectionMode = "socket" | "webhook";
+type SlackConnectionMode = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
+  >["connectionMode"]
+>;
 
 export default function SlackPage() {
   const publicBaseUrl = usePublicBaseUrl();

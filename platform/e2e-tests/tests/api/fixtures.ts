@@ -837,6 +837,7 @@ const updateLlmSettings = async (
   updates: {
     convertToolResultsToToon?: boolean;
     compressionScope?: "organization" | "team";
+    limitCleanupInterval?: "1h" | "12h" | "24h" | "1w" | "1m";
   },
 ) =>
   makeApiRequest({

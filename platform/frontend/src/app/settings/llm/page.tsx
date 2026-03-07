@@ -53,7 +53,7 @@ const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
 
 export default function LlmSettingsPage() {
   const { data: organization } = useOrganization();
-  const { data: teams = [] } = useTeams();
+  const { data: teams } = useTeams();
   const queryClient = useQueryClient();
 
   const [compressionMode, setCompressionMode] =
@@ -69,13 +69,14 @@ export default function LlmSettingsPage() {
 
   // Sync state when both organization and teams data are loaded
   useEffect(() => {
-    if (!organization) return;
+    if (!organization || !teams) return;
     if (organization.compressionScope === "organization") {
       setCompressionMode(
         organization.convertToolResultsToToon ? "organization" : "disabled",
       );
     } else {
-      setCompressionMode("team");
+      // Fall back to "disabled" if scope is "team" but no teams exist
+      setCompressionMode(teams.length > 0 ? "team" : "disabled");
     }
     setCleanupInterval(
       (organization.limitCleanupInterval as LimitCleanupInterval) || "1h",
@@ -86,18 +87,22 @@ export default function LlmSettingsPage() {
     setSelectedTeamIds(enabledTeams);
   }, [organization, teams]);
 
+  const loadedTeams = teams ?? [];
+
   // Determine if anything has changed from server state
   const serverCompressionMode: CompressionMode =
     organization?.compressionScope === "organization"
       ? organization?.convertToolResultsToToon
         ? "organization"
         : "disabled"
-      : "team";
+      : loadedTeams.length > 0
+        ? "team"
+        : "disabled";
 
   const serverCleanupInterval =
     (organization?.limitCleanupInterval as LimitCleanupInterval) || "1h";
 
-  const serverTeamIds = teams
+  const serverTeamIds = loadedTeams
     .filter((team) => team.convertToolResultsToToon)
     .map((team) => team.id)
     .sort();
@@ -139,7 +144,7 @@ export default function LlmSettingsPage() {
             })
             .then(() =>
               Promise.all(
-                teams.map((team) =>
+                loadedTeams.map((team) =>
                   archestraApiSdk.updateTeam({
                     path: { id: team.id },
                     body: {
@@ -180,7 +185,7 @@ export default function LlmSettingsPage() {
     setCompressionMode(serverCompressionMode);
     setCleanupInterval(serverCleanupInterval);
     setSelectedTeamIds(
-      teams
+      loadedTeams
         .filter((team) => team.convertToolResultsToToon)
         .map((team) => team.id),
     );
@@ -224,7 +229,7 @@ export default function LlmSettingsPage() {
         {compressionMode === "team" && (
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Select teams</CardTitle>
-            {teams.length === 0 ? (
+            {loadedTeams.length === 0 ? (
               <p className="text-sm text-muted-foreground w-48">
                 No teams available
               </p>
@@ -234,7 +239,7 @@ export default function LlmSettingsPage() {
                   value={selectedTeamIds}
                   onValueChange={setSelectedTeamIds}
                   placeholder="Select teams..."
-                  items={teams.map((team) => ({
+                  items={loadedTeams.map((team) => ({
                     value: team.id,
                     label: team.name,
                   }))}
